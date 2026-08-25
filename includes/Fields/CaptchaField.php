@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -73,18 +73,18 @@ class CaptchaField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $site_key = get_option('forge_forms_recaptcha_site_key', '');
+        $site_key = get_option('fabricator_forms_recaptcha_site_key', '');
         if ($site_key === '') {
-            return '<div class="forge-field forge-field--captcha">'
-                . '<p class="forge-notice">' . esc_html(__('reCAPTCHA: Please enter the site key in the plugin settings.', 'formfabricator')) . '</p>'
+            return '<div class="fabricator-field fabricator-field--captcha">'
+                . '<p class="fabricator-notice">' . esc_html(__('reCAPTCHA: Please enter the site key in the plugin settings.', 'formfabricator')) . '</p>'
                 . '</div>';
         }
 
-        $inner = '<div class="forge-captcha-gate" data-sitekey="' . esc_attr($site_key) . '">'
-            . '<button type="button" class="forge-captcha-activate">'
+        $inner = '<div class="fabricator-captcha-gate" data-sitekey="' . esc_attr($site_key) . '">'
+            . '<button type="button" class="fabricator-captcha-activate">'
             . esc_html__('Load CAPTCHA', 'formfabricator')
             . '</button>'
-            . '<p class="forge-field-hint">'
+            . '<p class="fabricator-field-hint">'
             . esc_html__('This loads a script from Google (reCAPTCHA) once activated.', 'formfabricator')
             . '</p>'
             . '</div>';
@@ -114,7 +114,7 @@ class CaptchaField extends BaseField
      */
     public function validate(mixed $value, array $config): bool|string
     {
-        $secret = get_option('forge_forms_recaptcha_secret_key', '');
+        $secret = get_option('fabricator_forms_recaptcha_secret_key', '');
         if ($secret === '' || empty($value)) {
             return __('Please confirm the CAPTCHA.', 'formfabricator');
         }
@@ -126,13 +126,13 @@ class CaptchaField extends BaseField
             'body'    => [
                 'secret'   => $secret,
                 'response' => sanitize_text_field((string)$value),
-                'remoteip' => sanitize_text_field((string)\ForgeForms\Utils\ClientIp::resolve()),
+                'remoteip' => sanitize_text_field((string)\FabricatorForms\Utils\ClientIp::resolve()),
             ],
             ]
         );
 
         if (is_wp_error($response)) {
-            \ForgeForms\forge_log('ForgeForms CaptchaField: reCAPTCHA request failed — ' . $response->get_error_message());
+            \FabricatorForms\fabricator_log('FabricatorForms CaptchaField: reCAPTCHA request failed — ' . $response->get_error_message());
             return __('CAPTCHA verification could not be completed. Please try again.', 'formfabricator');
         }
 

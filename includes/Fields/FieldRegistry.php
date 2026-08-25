@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -98,8 +98,8 @@ class FieldRegistry
         if (isset(self::$types[$type]) && self::$types[$type] !== $class) {
             // Discovery order isn't guaranteed, so a slug collision would otherwise
             // silently pick a non-deterministic "winner". Fail loudly instead.
-            \ForgeForms\forge_log(
-                'ForgeForms FieldRegistry: duplicate field type "' . $type . '" registered by '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms FieldRegistry: duplicate field type "' . $type . '" registered by '
                 . $class . ' (already registered by ' . self::$types[$type] . ') — keeping the first registration.'
             );
             return;
@@ -168,8 +168,8 @@ class FieldRegistry
             // Typo guard: getType() is authoritative, FIELD_MAP's slug is just documentation.
             $mappedSlug = substr((string) strrchr(self::FIELD_MAP[$shortName] ?? '', ':'), 1);
             if ($mappedSlug !== '' && $mappedSlug !== $realSlug) {
-                \ForgeForms\forge_log(
-                    'ForgeForms FieldRegistry: ' . $shortName . '::getType() is "' . $realSlug
+                \FabricatorForms\fabricator_log(
+                    'FabricatorForms FieldRegistry: ' . $shortName . '::getType() is "' . $realSlug
                     . '" but FIELD_MAP declares "' . $mappedSlug . '" — update FIELD_MAP to match.'
                 );
             }

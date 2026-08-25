@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -36,8 +36,8 @@ class HtmlField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-field--html { font-size: 14px; line-height: 1.7; color: var(--forge-text); }
-.forge-field--html a { color: var(--forge-accent); }
+.fabricator-field--html { font-size: 14px; line-height: 1.7; color: var(--fabricator-text); }
+.fabricator-field--html a { color: var(--fabricator-accent); }
 CSS;
     }
 
@@ -227,7 +227,7 @@ CSS;
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         $html = self::kses($config['html_content'] ?? '');
-        return '<div class="forge-field forge-field--html" data-field-id="'
+        return '<div class="fabricator-field fabricator-field--html" data-field-id="'
             . esc_attr($field_id) . '">'
             . $html
             . '</div>';

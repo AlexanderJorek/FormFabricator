@@ -11,7 +11,7 @@ import * as pdfjsLib from '../../vendor/pdfjs/pdf.mjs';
    server-rendered HTML fragment before it's assigned to innerHTML. Defense
    in depth — the fragment is already escaped/kses'd server-side in
    Verificationpage.php. */
-function _forgeSanitizeFragment(html) {
+function _fabricatorSanitizeFragment(html) {
     html = String(html || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     html = html.replace(/[\s\/]+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
     html = html.replace(/\b(href|src)\s*=\s*(["'])\s*(?:javascript|vbscript)\s*:[^"']*\2/gi, '$1=$2#$2');
@@ -20,12 +20,12 @@ function _forgeSanitizeFragment(html) {
 
 /* ── Particle canvas on the PHP-rendered canvas element ── */
 document.addEventListener('DOMContentLoaded', function () {
-    var canvas = document.getElementById('forge-particle-canvas');
+    var canvas = document.getElementById('fabricator-particle-canvas');
     if (!canvas) { return; }
 
     var ctx   = canvas.getContext('2d');
     var mouse = { x: -9999, y: -9999 };
-    var _ah   = getComputedStyle(document.documentElement).getPropertyValue('--forge-admin-accent').trim() || '#2271b1';
+    var _ah   = getComputedStyle(document.documentElement).getPropertyValue('--fabricator-admin-accent').trim() || '#2271b1';
     var _rgb  = function (h) { return parseInt(h.slice(1,3),16)+','+parseInt(h.slice(3,5),16)+','+parseInt(h.slice(5,7),16); };
     var COLOR = _rgb(_ah);
     var LINK  = 150, SPEED = 1.0;
@@ -103,10 +103,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
 const Y_THRESHOLD = 3;
 
-/* Set PDF.js worker — local file only, no CDN. window.ForgeVerifier is populated by a classic
+/* Set PDF.js worker — local file only, no CDN. window.FabricatorVerifier is populated by a classic
    inline script (wp_localize_script has no module equivalent); safe to read here since module
    top-level code always runs after classic scripts. */
-const workerSrc = window.ForgeVerifier && window.ForgeVerifier.pdfJsWorker;
+const workerSrc = window.FabricatorVerifier && window.FabricatorVerifier.pdfJsWorker;
 if (!workerSrc) {
     console.error('[FormFabricator] pdfJsWorker is not set. PDF.js worker may be missing.');
 } else {
@@ -115,31 +115,31 @@ if (!workerSrc) {
 
 /* ── Per-PDF inline progress cards ── */
 
-function _forgeCardPdfName(url) {
+function _fabricatorCardPdfName(url) {
     try { return decodeURIComponent(url.split('/').pop().split('?')[0]); } catch (_) { return url; }
 }
 
-function _forgeCreateProgressCard(name) {
+function _fabricatorCreateProgressCard(name) {
     var card = document.createElement('div');
-    card.className = 'forge-vpc';
-    var i18n = (window.ForgeVerifier && window.ForgeVerifier.i18n) || {};
+    card.className = 'fabricator-vpc';
+    var i18n = (window.FabricatorVerifier && window.FabricatorVerifier.i18n) || {};
     card.innerHTML =
-        '<div class="forge-vpc__header">' +
-            '<span class="forge-vpc__icon"><span class="dashicons dashicons-pdf"></span></span>' +
-            '<span class="forge-vpc__name"></span>' +
+        '<div class="fabricator-vpc__header">' +
+            '<span class="fabricator-vpc__icon"><span class="dashicons dashicons-pdf"></span></span>' +
+            '<span class="fabricator-vpc__name"></span>' +
         '</div>' +
-        '<div class="forge-vpc__step">' + (i18n.loading || 'Loading…') + '</div>' +
-        '<div class="forge-vpc__bar-wrap">' +
-            '<div class="forge-vpc__bar" style="width:0%"></div>' +
+        '<div class="fabricator-vpc__step">' + (i18n.loading || 'Loading…') + '</div>' +
+        '<div class="fabricator-vpc__bar-wrap">' +
+            '<div class="fabricator-vpc__bar" style="width:0%"></div>' +
         '</div>' +
-        '<div class="forge-vpc__foot">' +
-            '<span class="forge-vpc__pct">0 %</span>' +
-            '<span class="forge-vpc__elapsed"></span>' +
+        '<div class="fabricator-vpc__foot">' +
+            '<span class="fabricator-vpc__pct">0 %</span>' +
+            '<span class="fabricator-vpc__elapsed"></span>' +
         '</div>';
     // Set via textContent rather than interpolating into the innerHTML string
     // above — doesn't depend on Verificationpage.php's sanitize_file_name()
     // upstream remaining the only source of this value forever.
-    var nameEl = card.querySelector('.forge-vpc__name');
+    var nameEl = card.querySelector('.fabricator-vpc__name');
     if (nameEl) nameEl.textContent = name;
     return card;
 }
@@ -151,10 +151,10 @@ function _forgeCreateProgressCard(name) {
    number than what's already shown — even a legitimate one from a different
    phase — must never visually move the bar backward. The step *text* always
    updates; only the bar/percentage is clamped. */
-function _forgeUpdateCard(card, step, pct) {
-    var s = card.querySelector('.forge-vpc__step');
-    var b = card.querySelector('.forge-vpc__bar');
-    var p = card.querySelector('.forge-vpc__pct');
+function _fabricatorUpdateCard(card, step, pct) {
+    var s = card.querySelector('.fabricator-vpc__step');
+    var b = card.querySelector('.fabricator-vpc__bar');
+    var p = card.querySelector('.fabricator-vpc__pct');
     var shown = Math.max(pct, parseFloat(card.dataset.maxPct || '0'));
     card.dataset.maxPct = String(shown);
     if (s) s.textContent = step;
@@ -163,10 +163,10 @@ function _forgeUpdateCard(card, step, pct) {
 }
 
 /* ── Queue of PDFs to verify, localized once by Verificationpage.php's upload handler
-   (ForgeVerifierQueueData) rather than pushed via per-file inline <script> tags. ── */
-window.FORGE_VERIFICATION_QUEUE = window.ForgeVerifierQueueData || [];
+   (FabricatorVerifierQueueData) rather than pushed via per-file inline <script> tags. ── */
+window.FABRICATOR_VERIFICATION_QUEUE = window.FabricatorVerifierQueueData || [];
 
-/* Server-side rate-limits forge_verify_push_lines to 1 call per 5 seconds per
+/* Server-side rate-limits fabricator_verify_push_lines to 1 call per 5 seconds per
    user (see Admin/Verificationpage.php). Batch-scanning several PDFs kicks
    off processPdf() for each one back-to-back, with no natural stagger
    between their resulting server calls, so without this gate most of a
@@ -176,65 +176,65 @@ window.FORGE_VERIFICATION_QUEUE = window.ForgeVerifierQueueData || [];
    — not chained after the previous response arrives, which (given slow
    requests) would compound into "request duration + 5s" per file instead
    of a flat 5s. */
-var _forgeNextPushSlotAt = 0; // epoch ms
-var _forgePushSlotGapMs  = 5200; // grows on an actual 429 — see forceNextSlotLater() below
+var _fabricatorNextPushSlotAt = 0; // epoch ms
+var _fabricatorPushSlotGapMs  = 5200; // grows on an actual 429 — see forceNextSlotLater() below
 
-/* Caps concurrent forge_serve_pdf downloads (pdf.js issues these internally, so there's no
+/* Caps concurrent fabricator_serve_pdf downloads (pdf.js issues these internally, so there's no
    response to reject-and-retry the way the verify call has — gated here instead). */
-var FORGE_MAX_CONCURRENT_LOADS = 3;
-var _forgeActiveLoads = 0;
-var _forgeLoadQueue   = [];
+var FABRICATOR_MAX_CONCURRENT_LOADS = 3;
+var _fabricatorActiveLoads = 0;
+var _fabricatorLoadQueue   = [];
 
-function _forgeAcquireLoadSlot() {
+function _fabricatorAcquireLoadSlot() {
     return new Promise(function (resolve) {
         function tryAcquire() {
-            if (_forgeActiveLoads < FORGE_MAX_CONCURRENT_LOADS) {
-                _forgeActiveLoads++;
+            if (_fabricatorActiveLoads < FABRICATOR_MAX_CONCURRENT_LOADS) {
+                _fabricatorActiveLoads++;
                 resolve();
             } else {
-                _forgeLoadQueue.push(tryAcquire);
+                _fabricatorLoadQueue.push(tryAcquire);
             }
         }
         tryAcquire();
     });
 }
 
-function _forgeReleaseLoadSlot() {
-    _forgeActiveLoads--;
-    var next = _forgeLoadQueue.shift();
+function _fabricatorReleaseLoadSlot() {
+    _fabricatorActiveLoads--;
+    var next = _fabricatorLoadQueue.shift();
     if (next) next();
 }
 
 /* Caps concurrent verify requests client-side too — the server's own cap can't stop the client
    from optimistically showing "analyzing" the instant a request is sent, before it's accepted. */
-var FORGE_MAX_CONCURRENT_VERIFIES = 3;
-var _forgeActiveVerifies = 0;
-var _forgeVerifyQueue    = [];
+var FABRICATOR_MAX_CONCURRENT_VERIFIES = 3;
+var _fabricatorActiveVerifies = 0;
+var _fabricatorVerifyQueue    = [];
 
-function _forgeAcquireVerifySlot() {
+function _fabricatorAcquireVerifySlot() {
     return new Promise(function (resolve) {
         function tryAcquire() {
-            if (_forgeActiveVerifies < FORGE_MAX_CONCURRENT_VERIFIES) {
-                _forgeActiveVerifies++;
+            if (_fabricatorActiveVerifies < FABRICATOR_MAX_CONCURRENT_VERIFIES) {
+                _fabricatorActiveVerifies++;
                 resolve();
             } else {
-                _forgeVerifyQueue.push(tryAcquire);
+                _fabricatorVerifyQueue.push(tryAcquire);
             }
         }
         tryAcquire();
     });
 }
 
-function _forgeReleaseVerifySlot() {
-    _forgeActiveVerifies--;
-    var next = _forgeVerifyQueue.shift();
+function _fabricatorReleaseVerifySlot() {
+    _fabricatorActiveVerifies--;
+    var next = _fabricatorVerifyQueue.shift();
     if (next) next();
 }
 
 /* Waits out $waitMs, invoking onTick(remainingMs) roughly once a second so the
    UI can show a live countdown instead of a number that's stale the instant
    it's shown. */
-function _forgeCountdown(waitMs, onTick) {
+function _fabricatorCountdown(waitMs, onTick) {
     if (waitMs <= 0) { return Promise.resolve(); }
     return new Promise(function (resolve) {
         var target = Date.now() + waitMs;
@@ -251,11 +251,11 @@ function _forgeCountdown(waitMs, onTick) {
     });
 }
 
-function _forgeThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestStart) {
+function _fabricatorThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestStart) {
     var now  = Date.now();
-    var wait = Math.max(0, _forgeNextPushSlotAt - now);
-    _forgeNextPushSlotAt = Math.max(_forgeNextPushSlotAt, now) + _forgePushSlotGapMs;
-    return (wait > 0 && onWaitTick ? _forgeCountdown(wait, onWaitTick) : new Promise(function (r) { setTimeout(r, wait); }))
+    var wait = Math.max(0, _fabricatorNextPushSlotAt - now);
+    _fabricatorNextPushSlotAt = Math.max(_fabricatorNextPushSlotAt, now) + _fabricatorPushSlotGapMs;
+    return (wait > 0 && onWaitTick ? _fabricatorCountdown(wait, onWaitTick) : new Promise(function (r) { setTimeout(r, wait); }))
         .then(function () {
             if (onRequestStart) { onRequestStart(); }
             return fetch(ajaxUrl, { method: 'POST', body: formData, credentials: 'same-origin' });
@@ -266,29 +266,29 @@ function _forgeThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestStart)
    (clock drift, network jitter, or a queued PHP worker under load can all
    delay arrival past the intended slot). Only grows when there's evidence
    the current gap wasn't enough, and pushes every waiting file out too. */
-function _forgeWidenPushSlotGap() {
-    _forgePushSlotGapMs = Math.min(15000, _forgePushSlotGapMs + 2000);
-    _forgeNextPushSlotAt = Math.max(_forgeNextPushSlotAt, Date.now() + _forgePushSlotGapMs);
+function _fabricatorWidenPushSlotGap() {
+    _fabricatorPushSlotGapMs = Math.min(15000, _fabricatorPushSlotGapMs + 2000);
+    _fabricatorNextPushSlotAt = Math.max(_fabricatorNextPushSlotAt, Date.now() + _fabricatorPushSlotGapMs);
 }
 
-window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
+window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
     if (!pdfInfo) return;
 
     const pdfUrl   = typeof pdfInfo === 'string' ? pdfInfo : pdfInfo.url;
     const pdfToken = typeof pdfInfo === 'string' ? null    : (pdfInfo.token || null);
-    const pdfName  = typeof pdfInfo === 'string' ? _forgeCardPdfName(pdfInfo) : (pdfInfo.name || _forgeCardPdfName(pdfInfo.url));
+    const pdfName  = typeof pdfInfo === 'string' ? _fabricatorCardPdfName(pdfInfo) : (pdfInfo.name || _fabricatorCardPdfName(pdfInfo.url));
     if (!pdfUrl) return;
 
-    const container = document.getElementById('forge-pdf-verification-results') || document.body;
+    const container = document.getElementById('fabricator-pdf-verification-results') || document.body;
     const name      = pdfName;
-    const card      = _forgeCreateProgressCard(name);
+    const card      = _fabricatorCreateProgressCard(name);
     container.appendChild(card);
     var _pollTimer  = null;
     function stopPoll() { if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; } }
 
     /* Elapsed timer */
     const t0 = Date.now();
-    const elapsedEl = card.querySelector('.forge-vpc__elapsed');
+    const elapsedEl = card.querySelector('.fabricator-vpc__elapsed');
     const elapsedTimer = setInterval(function () {
         if (elapsedEl) elapsedEl.textContent = ((Date.now() - t0) / 1000).toFixed(1) + ' s';
     }, 100);
@@ -311,19 +311,19 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
         return 42 + Math.round((Math.max(0, Math.min(100, rawPct)) / 100) * 53);
     }
 
-    var i18n = (window.ForgeVerifier && window.ForgeVerifier.i18n) || {};
+    var i18n = (window.FabricatorVerifier && window.FabricatorVerifier.i18n) || {};
     // Destroyed in the finally block below — pdf.js keeps decoded pages/worker state alive until .destroy().
     let pdf;
     let loadingTask;
     try {
-        var queuedForLoad = _forgeActiveLoads >= FORGE_MAX_CONCURRENT_LOADS;
+        var queuedForLoad = _fabricatorActiveLoads >= FABRICATOR_MAX_CONCURRENT_LOADS;
         if (queuedForLoad) {
-            _forgeUpdateCard(card, i18n.queued_for_download || 'Waiting to download…', 1);
-            card.classList.add('forge-vpc--queued');
+            _fabricatorUpdateCard(card, i18n.queued_for_download || 'Waiting to download…', 1);
+            card.classList.add('fabricator-vpc--queued');
         }
-        await _forgeAcquireLoadSlot();
-        if (queuedForLoad) { card.classList.remove('forge-vpc--queued'); }
-        _forgeUpdateCard(card, i18n.pdf_loading || 'Loading PDF…', 2);
+        await _fabricatorAcquireLoadSlot();
+        if (queuedForLoad) { card.classList.remove('fabricator-vpc--queued'); }
+        _fabricatorUpdateCard(card, i18n.pdf_loading || 'Loading PDF…', 2);
         try {
             // pdf.js 6.x removed eval()/Function() usage entirely, so CVE-2024-4367's isEvalSupported:false
             // workaround no longer applies (that option no longer exists).
@@ -336,12 +336,12 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
                 if (!progressData || !progressData.total) { return; }
                 var frac = Math.min(1, progressData.loaded / progressData.total);
                 var downloadMsg = (i18n.downloading || 'Downloading… (%1$d%%)').replace('%1$d', Math.round(frac * 100));
-                _forgeUpdateCard(card, downloadMsg, 2 + Math.round(frac * 10));
+                _fabricatorUpdateCard(card, downloadMsg, 2 + Math.round(frac * 10));
             };
             pdf = await loadingTask.promise;
         } finally {
             // Released once the file transfer settles, not tied to the extraction loop below.
-            _forgeReleaseLoadSlot();
+            _fabricatorReleaseLoadSlot();
         }
         const allLines = [];
 
@@ -349,7 +349,7 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
             var pagePct = 12 + Math.round((pageNum - 1) / pdf.numPages * 28);
             var pageMsg = (i18n.page_reading || 'Reading page %1$d of %2$d…')
                 .replace('%1$d', pageNum).replace('%2$d', pdf.numPages);
-            _forgeUpdateCard(card, pageMsg, pagePct);
+            _fabricatorUpdateCard(card, pageMsg, pagePct);
             const page    = await pdf.getPage(pageNum);
             const content = await page.getTextContent();
 
@@ -376,14 +376,14 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
             }));
         }
 
-        const ajaxUrl = window.ForgeVerifier && window.ForgeVerifier.ajaxUrl;
+        const ajaxUrl = window.FabricatorVerifier && window.FabricatorVerifier.ajaxUrl;
         if (!ajaxUrl) { done(); return allLines; }
 
         const formData = new FormData();
-        formData.append('action',      'forge_verify_push_lines');
+        formData.append('action',      'fabricator_verify_push_lines');
         formData.append('pdf_token',   pdfToken || '');
         formData.append('visualLines', JSON.stringify(allLines));
-        formData.append('nonce',       (window.ForgeVerifier && window.ForgeVerifier.nonce) || '');
+        formData.append('nonce',       (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
 
         /* Poll server-side progress only once the request actually goes out
            (see onRequestStart) — polling during the throttle wait would just
@@ -395,15 +395,15 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
             lastServerPct = 0;
             _pollTimer = setInterval(function () {
                 var pf = new FormData();
-                pf.append('action', 'forge_verify_progress');
+                pf.append('action', 'fabricator_verify_progress');
                 pf.append('token',  pdfToken);
-                pf.append('nonce',  (window.ForgeVerifier && window.ForgeVerifier.nonce) || '');
+                pf.append('nonce',  (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
                 fetch(ajaxUrl, { method: 'POST', body: pf, credentials: 'same-origin' })
                     .then(function (r) { return r.json(); })
                     .then(function (d) {
                         if (d.success && d.data && d.data.step && d.data.pct > lastServerPct) {
                             lastServerPct = d.data.pct;
-                            _forgeUpdateCard(card, d.data.step, remapServerPct(d.data.pct));
+                            _fabricatorUpdateCard(card, d.data.step, remapServerPct(d.data.pct));
                         }
                     })
                     .catch(function () {});
@@ -414,35 +414,35 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
             function onWaitTick(waitMs) {
                 var waitMsg = (i18n.queued || 'Waiting in queue (%1$ds)…')
                     .replace('%1$d', Math.ceil(waitMs / 1000));
-                _forgeUpdateCard(card, waitMsg, 40);
-                card.classList.add('forge-vpc--queued');
+                _fabricatorUpdateCard(card, waitMsg, 40);
+                card.classList.add('fabricator-vpc--queued');
             }
             function onRequestStart() {
-                card.classList.remove('forge-vpc--queued');
-                _forgeUpdateCard(card, i18n.text_extracted || 'Text extracted — server analyzing…', 42);
+                card.classList.remove('fabricator-vpc--queued');
+                _fabricatorUpdateCard(card, i18n.text_extracted || 'Text extracted — server analyzing…', 42);
                 startProgressPoll();
             }
 
-            var queuedForVerify = _forgeActiveVerifies >= FORGE_MAX_CONCURRENT_VERIFIES;
+            var queuedForVerify = _fabricatorActiveVerifies >= FABRICATOR_MAX_CONCURRENT_VERIFIES;
             if (queuedForVerify) {
-                _forgeUpdateCard(card, i18n.queued_for_verify || 'Waiting for a free verification slot…', 40);
-                card.classList.add('forge-vpc--queued');
+                _fabricatorUpdateCard(card, i18n.queued_for_verify || 'Waiting for a free verification slot…', 40);
+                card.classList.add('fabricator-vpc--queued');
             }
-            await _forgeAcquireVerifySlot();
-            if (queuedForVerify) { card.classList.remove('forge-vpc--queued'); }
+            await _fabricatorAcquireVerifySlot();
+            if (queuedForVerify) { card.classList.remove('fabricator-vpc--queued'); }
 
             // The throttle gate above schedules slots with a margin, but the actual
             // request can still land inside another one's window — client/server
             // clock drift, network jitter, or the PHP worker itself being queued
             // under load from a large batch. Retry a 429 instead of failing the
-            // file outright; _forgeWidenPushSlotGap() also grows the gap for every
+            // file outright; _fabricatorWidenPushSlotGap() also grows the gap for every
             // remaining file in the batch so repeat collisions become less likely.
             // Verify slot is held through every retry below, not just the first attempt.
             var res;
             try {
                 var maxAttempts = 5;
                 for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-                    res = await _forgeThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestStart);
+                    res = await _fabricatorThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestStart);
                     if (res.status !== 429 || attempt === maxAttempts) { break; }
                     stopPoll();
 
@@ -456,24 +456,24 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
                     } catch (_) { /* not JSON or already consumed — fall through to generic retry */ }
 
                     if (busyRetryAfter !== null) {
-                        card.classList.add('forge-vpc--queued');
-                        await _forgeCountdown(busyRetryAfter * 1000, function (remainingMs) {
+                        card.classList.add('fabricator-vpc--queued');
+                        await _fabricatorCountdown(busyRetryAfter * 1000, function (remainingMs) {
                             var busyMsg = (i18n.server_busy_retry || 'Server busy — retrying in %1$ds…')
                                 .replace('%1$d', Math.ceil(remainingMs / 1000));
-                            _forgeUpdateCard(card, busyMsg, 40);
+                            _fabricatorUpdateCard(card, busyMsg, 40);
                         });
                     } else {
-                        _forgeWidenPushSlotGap();
-                        _forgeUpdateCard(card, i18n.rate_limited_retry || 'Rate limited — retrying…', 40);
-                        card.classList.add('forge-vpc--queued');
+                        _fabricatorWidenPushSlotGap();
+                        _fabricatorUpdateCard(card, i18n.rate_limited_retry || 'Rate limited — retrying…', 40);
+                        card.classList.add('fabricator-vpc--queued');
                     }
                 }
             } finally {
                 // Rendering the result below is pure client-side work — no need to hold the slot for it.
-                _forgeReleaseVerifySlot();
+                _fabricatorReleaseVerifySlot();
             }
             stopPoll();
-            _forgeUpdateCard(card, i18n.processing || 'Processing response…', 98);
+            _fabricatorUpdateCard(card, i18n.processing || 'Processing response…', 98);
             const rawText = await res.text();
 
             let json = null;
@@ -481,34 +481,34 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
                 json = JSON.parse(rawText);
             } catch (_) {
                 console.error('[FormFabricator] Non-JSON response (HTTP ' + res.status + ') for', pdfUrl, '\n', rawText);
-                _forgeUpdateCard(card, (i18n.server_error || 'Server error (HTTP %d)').replace('%d', res.status), 100);
-                card.classList.add('forge-vpc--error');
+                _fabricatorUpdateCard(card, (i18n.server_error || 'Server error (HTTP %d)').replace('%d', res.status), 100);
+                card.classList.add('fabricator-vpc--error');
                 done();
                 return allLines;
             }
 
-            _forgeUpdateCard(card, i18n.done || 'Done', 100);
+            _fabricatorUpdateCard(card, i18n.done || 'Done', 100);
             done();
 
             if (json.success === true && json.data && typeof json.data.html === 'string') {
                 // Server-rendered fragment: every dynamic value in it is passed through
                 // esc_html()/wp_kses() in Verificationpage.php before reaching here;
-                // _forgeSanitizeFragment() is an additional client-side backstop.
+                // _fabricatorSanitizeFragment() is an additional client-side backstop.
                 const tmp = document.createElement('div');
-                tmp.innerHTML = _forgeSanitizeFragment(json.data.html);
+                tmp.innerHTML = _fabricatorSanitizeFragment(json.data.html);
                 card.parentNode.replaceChild(tmp.firstElementChild || tmp, card);
             } else {
                 console.error('[FormFabricator] Server returned error:', json);
-                card.classList.add('forge-vpc--error');
+                card.classList.add('fabricator-vpc--error');
                 var msg = (json.data && json.data.message) || (i18n.unknown_error || 'Unknown server error');
-                var stepEl = card.querySelector('.forge-vpc__step');
+                var stepEl = card.querySelector('.fabricator-vpc__step');
                 if (stepEl) stepEl.textContent = (i18n.error_prefix || 'Error: ') + msg;
             }
         } catch (err) {
             stopPoll();
             console.error('[FormFabricator] Fetch error for', pdfUrl, err);
-            _forgeUpdateCard(card, i18n.network_error || 'Network error', 100);
-            card.classList.add('forge-vpc--error');
+            _fabricatorUpdateCard(card, i18n.network_error || 'Network error', 100);
+            card.classList.add('fabricator-vpc--error');
             done();
         }
 
@@ -516,8 +516,8 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
     } catch (e) {
         stopPoll();
         console.error('[FormFabricator] Error parsing PDF', pdfUrl, e);
-        _forgeUpdateCard(card, (i18n.pdf_load_error || 'PDF load error: ') + e.message, 100);
-        card.classList.add('forge-vpc--error');
+        _fabricatorUpdateCard(card, (i18n.pdf_load_error || 'PDF load error: ') + e.message, 100);
+        card.classList.add('fabricator-vpc--error');
         done();
         return [];
     } finally {
@@ -531,11 +531,11 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
 };
 
 /* Process any PDFs queued before this script loaded */
-if (window.FORGE_VERIFICATION_QUEUE.length) {
-    window.FORGE_VERIFICATION_QUEUE.forEach(function (item) {
-        Promise.resolve(window.FORGE_VERIFICATION_PROCESS_PDF(item)).catch(function (err) {
+if (window.FABRICATOR_VERIFICATION_QUEUE.length) {
+    window.FABRICATOR_VERIFICATION_QUEUE.forEach(function (item) {
+        Promise.resolve(window.FABRICATOR_VERIFICATION_PROCESS_PDF(item)).catch(function (err) {
             console.error('[FormFabricator] Unhandled error processing queued PDF', item, err);
         });
     });
-    window.FORGE_VERIFICATION_QUEUE = [];
+    window.FABRICATOR_VERIFICATION_QUEUE = [];
 }

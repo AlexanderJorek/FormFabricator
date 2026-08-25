@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -36,76 +36,76 @@ class SelectField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-select { cursor: pointer; }
-.forge-select-wrap { position: relative; }
-.forge-select-custom {
+.fabricator-select { cursor: pointer; }
+.fabricator-select-wrap { position: relative; }
+.fabricator-select-custom {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    height: var(--forge-input-height);
+    height: var(--fabricator-input-height);
     padding: 0 12px;
-    border: 1px solid var(--forge-border-input);
-    border-radius: var(--forge-radius);
-    background: var(--forge-bg);
-    color: var(--forge-text);
-    font-size: var(--forge-font-size);
-    font-family: var(--forge-font);
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
+    background: var(--fabricator-bg);
+    color: var(--fabricator-text);
+    font-size: var(--fabricator-font-size);
+    font-family: var(--fabricator-font);
     cursor: pointer;
     user-select: none;
     outline: none;
     transition: border-color .15s, box-shadow .15s;
 }
-.forge-select-custom:focus,
-.forge-select-custom[aria-expanded="true"] {
-    border-color: var(--forge-accent);
+.fabricator-select-custom:focus,
+.fabricator-select-custom[aria-expanded="true"] {
+    border-color: var(--fabricator-accent);
     box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--forge-accent) 15%, transparent);
+        color-mix(in srgb, var(--fabricator-accent) 15%, transparent);
 }
-.forge-select-display {
+.fabricator-select-display {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.forge-select-display--placeholder { color: var(--forge-text-muted); }
-.forge-select-arrow {
+.fabricator-select-display--placeholder { color: var(--fabricator-text-muted); }
+.fabricator-select-arrow {
     font-size: 24px;
-    color: var(--forge-text-muted);
+    color: var(--fabricator-text-muted);
     transition: transform .15s;
     flex-shrink: 0;
 }
-.forge-select-custom[aria-expanded="true"] .forge-select-arrow {
+.fabricator-select-custom[aria-expanded="true"] .fabricator-select-arrow {
     transform: rotate(180deg);
 }
-.forge-select-panel {
+.fabricator-select-panel {
     display: none;
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
     right: 0;
-    background: var(--forge-bg);
-    border: 1px solid var(--forge-border-input);
-    border-radius: var(--forge-radius);
+    background: var(--fabricator-bg);
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
     box-shadow: 0 4px 12px rgba(0,0,0,.1);
     z-index: 999;
     max-height: 260px;
     overflow-y: auto;
 }
-.forge-select-custom[aria-expanded="true"] .forge-select-panel { display: block; }
-.forge-select-option {
+.fabricator-select-custom[aria-expanded="true"] .fabricator-select-panel { display: block; }
+.fabricator-select-option {
     padding: 9px 12px;
     cursor: pointer;
-    font-size: var(--forge-font-size);
-    color: var(--forge-text);
-    border-bottom: 1px solid var(--forge-border);
+    font-size: var(--fabricator-font-size);
+    color: var(--fabricator-text);
+    border-bottom: 1px solid var(--fabricator-border);
     transition: background .1s;
 }
-.forge-select-option:last-child { border-bottom: none; }
-.forge-select-option:hover,
-.forge-select-option--focused { background: var(--forge-accent-light); }
-.forge-select-option--selected { font-weight: 600; color: var(--forge-accent); }
-.forge-select-option--placeholder { color: var(--forge-text-muted); }
+.fabricator-select-option:last-child { border-bottom: none; }
+.fabricator-select-option:hover,
+.fabricator-select-option--focused { background: var(--fabricator-accent-light); }
+.fabricator-select-option--selected { font-weight: 600; color: var(--fabricator-accent); }
+.fabricator-select-option--placeholder { color: var(--fabricator-text-muted); }
 CSS;
     }
 
@@ -143,28 +143,28 @@ CSS;
     {
         return <<<'JS'
         function (root) {
-            root.querySelectorAll('select.forge-select').forEach(function (native) {
-                if (native.dataset.forgeSelectInit) return;
-                native.dataset.forgeSelectInit = '1';
-                native.classList.add('forge-select-native');
+            root.querySelectorAll('select.fabricator-select').forEach(function (native) {
+                if (native.dataset.fabricatorSelectInit) return;
+                native.dataset.fabricatorSelectInit = '1';
+                native.classList.add('fabricator-select-native');
                 var wrap = document.createElement('div');
-                wrap.className = 'forge-select-wrap';
+                wrap.className = 'fabricator-select-wrap';
                 native.parentNode.insertBefore(wrap, native);
                 wrap.appendChild(native);
                 var custom = document.createElement('div');
-                custom.className = 'forge-select-custom';
+                custom.className = 'fabricator-select-custom';
                 custom.tabIndex  = 0;
                 custom.setAttribute('role', 'combobox');
                 custom.setAttribute('aria-expanded', 'false');
                 custom.setAttribute('aria-haspopup', 'listbox');
                 var display = document.createElement('span');
-                display.className = 'forge-select-display';
+                display.className = 'fabricator-select-display';
                 var arrow = document.createElement('span');
-                arrow.className   = 'forge-select-arrow';
+                arrow.className   = 'fabricator-select-arrow';
                 arrow.textContent = '▾';
                 arrow.setAttribute('aria-hidden', 'true');
                 var panel = document.createElement('div');
-                panel.className = 'forge-select-panel';
+                panel.className = 'fabricator-select-panel';
                 panel.setAttribute('role', 'listbox');
                 custom.appendChild(display); custom.appendChild(arrow); custom.appendChild(panel);
                 wrap.appendChild(custom);
@@ -172,12 +172,12 @@ CSS;
                     panel.innerHTML = '';
                     Array.from(native.options).forEach(function (opt) {
                         var item = document.createElement('div');
-                        item.className = 'forge-select-option';
+                        item.className = 'fabricator-select-option';
                         item.textContent = opt.text;
                         item.dataset.value = opt.value;
                         item.setAttribute('role', 'option');
-                        if (!opt.value) item.classList.add('forge-select-option--placeholder');
-                        if (opt.selected) item.classList.add('forge-select-option--selected');
+                        if (!opt.value) item.classList.add('fabricator-select-option--placeholder');
+                        if (opt.selected) item.classList.add('fabricator-select-option--selected');
                         item.addEventListener('click', function (e) {
                             e.stopPropagation();
                             native.value = opt.value;
@@ -190,24 +190,24 @@ CSS;
                 }
                 function syncDisplay() {
                     var sel = native.options[native.selectedIndex];
-                    panel.querySelectorAll('.forge-select-option').forEach(function (el) {
-                        el.classList.toggle('forge-select-option--selected', el.dataset.value === native.value);
+                    panel.querySelectorAll('.fabricator-select-option').forEach(function (el) {
+                        el.classList.toggle('fabricator-select-option--selected', el.dataset.value === native.value);
                     });
                     if (sel && sel.value) {
                         display.textContent = sel.text;
-                        display.classList.remove('forge-select-display--placeholder');
+                        display.classList.remove('fabricator-select-display--placeholder');
                     } else {
                         display.textContent = sel ? sel.text : '';
-                        display.classList.add('forge-select-display--placeholder');
+                        display.classList.add('fabricator-select-display--placeholder');
                     }
                     var otherInput = wrap.nextElementSibling;
-                    if (otherInput && otherInput.classList.contains('forge-other-input')) {
+                    if (otherInput && otherInput.classList.contains('fabricator-other-input')) {
                         otherInput.style.display = native.value === '__other__' ? '' : 'none';
                     }
                 }
                 function open() {
                     custom.setAttribute('aria-expanded', 'true');
-                    document.querySelectorAll('.forge-select-custom[aria-expanded="true"]').forEach(function (o) {
+                    document.querySelectorAll('.fabricator-select-custom[aria-expanded="true"]').forEach(function (o) {
                         if (o !== custom) o.setAttribute('aria-expanded', 'false');
                     });
                 }
@@ -270,7 +270,7 @@ CSS;
         }
 
         $inner = '<select id="' . esc_attr($field_id) . '" name="' . esc_attr($field_id)
-            . '" class="forge-input forge-select" autocomplete="off"' . $req . '>';
+            . '" class="fabricator-input fabricator-select" autocomplete="off"' . $req . '>';
         $inner .= '<option value="">' . esc_html__('— Please select —', 'formfabricator') . '</option>';
         foreach ($options as $opt) {
             $opt_val   = is_array($opt) ? ($opt['value'] ?? '') : $opt;
@@ -289,7 +289,7 @@ CSS;
         if (!empty($config['other_option'])) {
             $show  = (string)($value ?? '') === '__other__' ? '' : ' style="display:none"';
             $inner .= '<input type="text" name="' . esc_attr($field_id) . '_other"'
-                . ' class="forge-input forge-other-input" value="' . esc_attr($other_text) . '"'
+                . ' class="fabricator-input fabricator-other-input" value="' . esc_attr($other_text) . '"'
                 . ' placeholder="' . esc_attr__('Please specify', 'formfabricator') . '"' . $show
                 . self::otherInputAttrs($config) . '>';
         }

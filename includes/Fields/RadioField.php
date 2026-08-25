@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -36,53 +36,53 @@ class RadioField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-radio-group {
+.fabricator-radio-group {
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
-.forge-radio-group--horizontal {
+.fabricator-radio-group--horizontal {
     flex-direction: row;
     flex-wrap: wrap;
     gap: 16px;
 }
-.forge-radio-label {
+.fabricator-radio-label {
     display: flex;
     align-items: center;
     gap: 9px;
     cursor: pointer;
     font-size: 14px;
-    color: var(--forge-text);
+    color: var(--fabricator-text);
     line-height: 1.4;
     user-select: none;
 }
-.forge-radio-label input[type="radio"] {
+.fabricator-radio-label input[type="radio"] {
     appearance: none;
     -webkit-appearance: none;
     width: 18px;
     height: 18px;
     flex-shrink: 0;
-    border: 2px solid var(--forge-border-input);
+    border: 2px solid var(--fabricator-border-input);
     border-radius: 50%;
-    background: var(--forge-bg);
+    background: var(--fabricator-bg);
     cursor: pointer;
     transition: border-color .15s, background .15s, box-shadow .15s;
     position: relative;
 }
-.forge-radio-label input[type="radio"]:checked {
-    border-color: var(--forge-accent);
-    background: var(--forge-accent);
-    box-shadow: inset 0 0 0 3px var(--forge-bg);
+.fabricator-radio-label input[type="radio"]:checked {
+    border-color: var(--fabricator-accent);
+    background: var(--fabricator-accent);
+    box-shadow: inset 0 0 0 3px var(--fabricator-bg);
 }
-.forge-radio-label input[type="radio"]:focus-visible {
+.fabricator-radio-label input[type="radio"]:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--forge-accent) 25%, transparent);
+        color-mix(in srgb, var(--fabricator-accent) 25%, transparent);
 }
-.forge-radio-label:hover input[type="radio"]:not(:checked) {
-    border-color: var(--forge-accent);
+.fabricator-radio-label:hover input[type="radio"]:not(:checked) {
+    border-color: var(--fabricator-accent);
 }
-.forge-other-input { margin-top: 4px; }
+.fabricator-other-input { margin-top: 4px; }
 CSS;
     }
 
@@ -122,8 +122,8 @@ CSS;
         function (root) {
             root.querySelectorAll('input[value="__other__"]').forEach(function (inp) {
                 inp.addEventListener('change', function () {
-                    var wrap  = this.closest('.forge-radio-group, .forge-checkbox-group');
-                    var other = wrap && wrap.querySelector('.forge-other-input');
+                    var wrap  = this.closest('.fabricator-radio-group, .fabricator-checkbox-group');
+                    var other = wrap && wrap.querySelector('.fabricator-other-input');
                     if (!other) return;
                     other.style.display = this.checked ? '' : 'none';
                 });
@@ -171,14 +171,14 @@ CSS;
             }
         }
 
-        $layout = !empty($config['layout']) ? ' forge-radio-group--horizontal' : '';
-        $inner  = '<div class="forge-radio-group' . $layout . '" role="group">';
+        $layout = !empty($config['layout']) ? ' fabricator-radio-group--horizontal' : '';
+        $inner  = '<div class="fabricator-radio-group' . $layout . '" role="group">';
         foreach ($options as $i => $opt) {
             $opt_val   = is_array($opt) ? ($opt['value'] ?? '') : $opt;
             $opt_label = is_array($opt) ? ($opt['label'] ?? $opt_val) : $opt;
             $id_i      = $field_id . '-' . $i;
             $checked   = checked((string)($value ?? ''), (string)$opt_val, false);
-            $inner .= '<label class="forge-radio-label">'
+            $inner .= '<label class="fabricator-radio-label">'
                 . '<input type="radio" id="' . esc_attr($id_i)
                 . '" name="' . esc_attr($field_id)
                 . '" value="' . esc_attr((string)$opt_val) . '" autocomplete="off"'
@@ -187,7 +187,7 @@ CSS;
         if (!empty($config['other_option'])) {
             $other_id  = $field_id . '-other';
             $other_chk = checked((string)($value ?? ''), '__other__', false);
-            $inner .= '<label class="forge-radio-label">'
+            $inner .= '<label class="fabricator-radio-label">'
                 . '<input type="radio" id="' . esc_attr($other_id) . '" name="' . esc_attr($field_id) . '"'
                 . ' value="__other__" autocomplete="off"' . $other_chk . $req . '> '
                 . esc_html__('Other…', 'formfabricator') . '</label>';
@@ -195,7 +195,7 @@ CSS;
         if (!empty($config['other_option'])) {
             $show = (string)($value ?? '') === '__other__' ? '' : ' style="display:none"';
             $inner .= '<input type="text" name="' . esc_attr($field_id) . '_other"'
-                . ' class="forge-input forge-other-input" value="' . esc_attr($other_text) . '"'
+                . ' class="fabricator-input fabricator-other-input" value="' . esc_attr($other_text) . '"'
                 . ' placeholder="' . esc_attr__('Please specify', 'formfabricator') . '"' . $show
                 . self::otherInputAttrs($config) . '>';
         }

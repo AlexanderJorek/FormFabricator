@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -36,73 +36,73 @@ class GroupField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-field-group { margin: 8px 0 var(--forge-gap); }
-.forge-group-header {
+.fabricator-field-group { margin: 8px 0 var(--fabricator-gap); }
+.fabricator-group-header {
     padding: 10px 14px;
-    border-left: 3px solid var(--forge-accent);
-    background: var(--forge-accent-light);
-    border-radius: 0 var(--forge-radius) var(--forge-radius) 0;
+    border-left: 3px solid var(--fabricator-accent);
+    background: var(--fabricator-accent-light);
+    border-radius: 0 var(--fabricator-radius) var(--fabricator-radius) 0;
     margin-bottom: 14px;
 }
-.forge-group-title {
+.fabricator-group-title {
     font-size: 14px;
     font-weight: 700;
-    color: var(--forge-text);
+    color: var(--fabricator-text);
     line-height: 1.3;
     margin: 0 0 2px;
 }
-.forge-group-desc {
+.fabricator-group-desc {
     font-size: 13px;
-    color: var(--forge-text-muted);
+    color: var(--fabricator-text-muted);
     line-height: 1.5;
     margin: 0;
 }
-.forge-group-copies { display: flex; flex-direction: column; gap: 12px; }
-.forge-group-copy {
-    border: 1px solid var(--forge-border);
-    border-radius: var(--forge-radius);
+.fabricator-group-copies { display: flex; flex-direction: column; gap: 12px; }
+.fabricator-group-copy {
+    border: 1px solid var(--fabricator-border);
+    border-radius: var(--fabricator-radius);
     padding: 16px 16px 4px;
 }
-.forge-group-copy-hdr {
+.fabricator-group-copy-hdr {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 12px;
 }
-.forge-group-copy-num {
+.fabricator-group-copy-num {
     font-size: 11px;
     font-weight: 700;
-    color: var(--forge-text-subtle);
+    color: var(--fabricator-text-subtle);
     text-transform: uppercase;
     letter-spacing: .06em;
 }
-.forge-group-copy-remove {
+.fabricator-group-copy-remove {
     background: none;
-    border: 1px solid var(--forge-error);
-    color: var(--forge-error);
-    border-radius: var(--forge-radius-sm);
+    border: 1px solid var(--fabricator-error);
+    color: var(--fabricator-error);
+    border-radius: var(--fabricator-radius-sm);
     padding: 3px 10px;
     font-size: 12px;
     cursor: pointer;
     transition: background .1s;
 }
-.forge-group-copy-remove:hover { background: var(--forge-error-bg); }
-.forge-group-add-btn {
+.fabricator-group-copy-remove:hover { background: var(--fabricator-error-bg); }
+.fabricator-group-add-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     margin-top: 10px;
     padding: 7px 16px;
-    background: var(--forge-bg);
-    border: 1px dashed var(--forge-accent);
-    color: var(--forge-accent);
-    border-radius: var(--forge-radius);
+    background: var(--fabricator-bg);
+    border: 1px dashed var(--fabricator-accent);
+    color: var(--fabricator-accent);
+    border-radius: var(--fabricator-radius);
     font-size: 13px;
-    font-family: var(--forge-font);
+    font-family: var(--fabricator-font);
     cursor: pointer;
     transition: background .1s;
 }
-.forge-group-add-btn:hover { background: var(--forge-accent-light); }
+.fabricator-group-add-btn:hover { background: var(--fabricator-accent-light); }
 CSS;
     }
 
@@ -162,7 +162,7 @@ CSS;
                     continue;
                 }
 
-                $handler = \ForgeForms\Fields\FieldRegistry::get($child_type);
+                $handler = \FabricatorForms\Fields\FieldRegistry::get($child_type);
                 if (!$handler) {
                     continue;
                 }
@@ -252,9 +252,9 @@ CSS;
     {
         $desc = $config['description'] ?? '';
         $desc_html = $desc !== ''
-            ? '<p class="forge-field-description">' . esc_html($desc) . '</p>'
+            ? '<p class="fabricator-field-description">' . esc_html($desc) . '</p>'
             : '';
-        return '<div class="forge-field-group" data-field-id="' . esc_attr($field_id) . '">'
+        return '<div class="fabricator-field-group" data-field-id="' . esc_attr($field_id) . '">'
             . $desc_html;
     }
 

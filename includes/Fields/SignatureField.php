@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -44,18 +44,18 @@ class SignatureField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-signature-wrap {
-    border: 1px solid var(--forge-border-input);
-    border-radius: var(--forge-radius);
+.fabricator-signature-wrap {
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
     overflow: hidden;
     background: #ffffff;
 }
-.forge-signature-wrap:has(.forge-signature-canvas:focus) {
-    border-color: var(--forge-accent);
+.fabricator-signature-wrap:has(.fabricator-signature-canvas:focus) {
+    border-color: var(--fabricator-accent);
     box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--forge-accent) 15%, transparent);
+        color-mix(in srgb, var(--fabricator-accent) 15%, transparent);
 }
-.forge-signature-canvas {
+.fabricator-signature-canvas {
     display: block;
     width: 100%;
     cursor: crosshair;
@@ -67,44 +67,44 @@ class SignatureField extends BaseField
     -webkit-user-select: none;
     user-select: none;
 }
-.forge-signature-toolbar {
+.fabricator-signature-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 6px 10px;
-    background: var(--forge-bg-subtle);
-    border-top: 1px solid var(--forge-border);
+    background: var(--fabricator-bg-subtle);
+    border-top: 1px solid var(--fabricator-border);
 }
-.forge-signature-clear {
+.fabricator-signature-clear {
     -webkit-appearance: none;
     appearance: none;
     background: transparent !important;
-    border: 1px solid var(--forge-border-input);
-    border-radius: var(--forge-radius-sm);
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius-sm);
     padding: 5px 6px;
     cursor: pointer;
-    color: var(--forge-text-muted);
+    color: var(--fabricator-text-muted);
     line-height: 1;
     transition: border-color .1s;
 }
-.forge-signature-clear:hover,
-.forge-signature-clear:active,
-.forge-signature-clear:focus {
+.fabricator-signature-clear:hover,
+.fabricator-signature-clear:active,
+.fabricator-signature-clear:focus {
     background: transparent !important;
     outline: none !important;
     box-shadow: none !important;
 }
-.forge-signature-clear:hover {
-    border-color: var(--forge-text-muted);
-    color: var(--forge-text);
+.fabricator-signature-clear:hover {
+    border-color: var(--fabricator-text-muted);
+    color: var(--fabricator-text);
 }
-.forge-signature-clear svg {
+.fabricator-signature-clear svg {
     display: block;
     width: 14px; height: 14px;
     fill: currentColor;
     overflow: visible;
 }
-.forge-signature-hint { font-size: 12px; color: var(--forge-text-subtle); }
+.fabricator-signature-hint { font-size: 12px; color: var(--fabricator-text-subtle); }
 CSS;
     }
 
@@ -143,11 +143,11 @@ CSS;
         return <<<'JS'
         function (root) {
             function initSignature(wrap) {
-                if (wrap._forgeCanvasInited) return;
-                wrap._forgeCanvasInited = true;
-                var canvas   = wrap.querySelector('.forge-signature-canvas');
+                if (wrap._fabricatorCanvasInited) return;
+                wrap._fabricatorCanvasInited = true;
+                var canvas   = wrap.querySelector('.fabricator-signature-canvas');
                 var input    = wrap.querySelector('input[type="hidden"]');
-                var clearBtn = wrap.querySelector('.forge-signature-clear');
+                var clearBtn = wrap.querySelector('.fabricator-signature-clear');
                 if (!canvas || !input) return;
                 var ctx     = canvas.getContext('2d');
                 var stroke  = parseFloat(wrap.dataset.stroke || '2');
@@ -236,7 +236,7 @@ CSS;
                     }).observe(canvas);
                 }
             }
-            (root || document).querySelectorAll('.forge-signature-wrap').forEach(initSignature);
+            (root || document).querySelectorAll('.fabricator-signature-wrap').forEach(initSignature);
         }
         JS;
     }
@@ -257,20 +257,20 @@ CSS;
         $stroke    = (float)($config['stroke_width'] ?? 2);
         $fmt       = $config['export_format'] ?? 'png';
 
-        $inner = '<div class="forge-signature-wrap"' . $req
+        $inner = '<div class="fabricator-signature-wrap"' . $req
             . ' data-field-id="' . esc_attr($field_id) . '"'
             . ' data-stroke="' . esc_attr((string)$stroke) . '"'
             . ' data-format="' . esc_attr($fmt) . '">'
-            . '<canvas id="' . esc_attr($canvas_id) . '" class="forge-signature-canvas"'
+            . '<canvas id="' . esc_attr($canvas_id) . '" class="fabricator-signature-canvas"'
             . ' width="500" height="' . $height . '"'
             . ' style="height:' . $height . 'px"'
             . ' tabindex="0"'
             . ' aria-label="' . esc_attr($config['label'] ?? __('Signature', 'formfabricator')) . '"></canvas>'
-            . '<div class="forge-signature-toolbar">'
-            . '<button type="button" class="forge-signature-clear"'
+            . '<div class="fabricator-signature-toolbar">'
+            . '<button type="button" class="fabricator-signature-clear"'
             . ' data-canvas="' . esc_attr($canvas_id) . '" title="' . esc_attr__('Clear', 'formfabricator') . '" aria-label="' . esc_attr__('Clear signature', 'formfabricator') . '">'
             . self::ICON_RESET . '</button>'
-            . '<span class="forge-signature-hint">' . esc_html__('Sign here', 'formfabricator') . '</span>'
+            . '<span class="fabricator-signature-hint">' . esc_html__('Sign here', 'formfabricator') . '</span>'
             . '</div>'
             . '<input type="hidden" name="' . esc_attr($field_id) . '" id="' . esc_attr($field_id) . '-data"'
             . ' value="' . esc_attr((string)($value ?? '')) . '">'
@@ -291,13 +291,21 @@ CSS;
     }
 
     /**
-     * Signature values are data URIs â€” excluded from the HMAC seal text.
+     * Signature values are data URIs — excluded from the HMAC seal text.
      *
      * @return bool
      */
     public function includeValueInSeal(): bool
     {
         return false;
+    }
+
+    // The only input in a signature field is type="hidden" (canvas.toDataURL() written
+    // to it on stroke-end); front.js's generic empty-check only looks at non-hidden
+    // inputs, so without this override a signed field is always reported as empty.
+    public function getClientEmptyCheck(): array
+    {
+        return ['fn' => "function(f){var i=f.querySelector('input[type=\"hidden\"]');return !i||i.value==='';}"];
     }
 
     /**

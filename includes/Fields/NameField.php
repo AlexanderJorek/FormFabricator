@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -51,26 +51,26 @@ class NameField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-name-group {
+.fabricator-name-group {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
     align-items: flex-start;
 }
-.forge-name-sub {
+.fabricator-name-sub {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-width: 130px;
 }
-.forge-name-sub--prefix {
+.fabricator-name-sub--prefix {
     flex: 0 0 auto;
     min-width: 0;
     width: 110px;
 }
-.forge-name-sub--prefix .forge-input { width: 100%; }
+.fabricator-name-sub--prefix .fabricator-input { width: 100%; }
 @media (max-width: 600px) {
-    .forge-name-group { flex-direction: column; }
+    .fabricator-name-group { flex-direction: column; }
 }
 CSS;
     }
@@ -138,7 +138,7 @@ CSS;
         }
 
         $val   = is_array($value) ? $value : [];
-        $inner = '<div class="forge-name-group">';
+        $inner = '<div class="fabricator-name-group">';
 
         foreach (self::SUBFIELDS as $sf) {
             $k = $sf['key'];
@@ -151,14 +151,14 @@ CSS;
             $req   = !empty($config[$k . '_required']) ? ' required aria-required="true"' : '';
             $ac    = esc_attr($this->autocompleteToken($k));
 
-            $req_star = !empty($config[$k . '_required']) ? ' <span class="forge-required" aria-hidden="true">*</span>' : '';
-            $sub_class = !empty($sf['is_select']) ? ' forge-name-sub--prefix' : '';
-            $inner .= '<div class="forge-name-sub' . $sub_class . '">'
-                . '<label class="forge-sub-label">' . $label . $req_star . '</label>';
+            $req_star = !empty($config[$k . '_required']) ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
+            $sub_class = !empty($sf['is_select']) ? ' fabricator-name-sub--prefix' : '';
+            $inner .= '<div class="fabricator-name-sub' . $sub_class . '">'
+                . '<label class="fabricator-sub-label">' . $label . $req_star . '</label>';
             if (!empty($sf['is_select'])) {
                 $cur    = esc_attr((string)($val[$k] ?? ''));
                 $inner .= '<select name="' . esc_attr($field_id) . '[' . $k . ']"'
-                    . ' class="forge-input forge-name-prefix" aria-label="' . esc_attr($label_raw) . '"'
+                    . ' class="fabricator-input fabricator-name-prefix" aria-label="' . esc_attr($label_raw) . '"'
                     . ' autocomplete="' . $ac . '"' . $req . '>';
                 foreach (self::prefixOptions() as $opt) {
                     $inner .= '<option value="' . esc_attr($opt) . '"' . selected($cur, $opt, false) . '>'
@@ -167,11 +167,11 @@ CSS;
                 $inner .= '</select>';
             } else {
                 $inner .= '<input type="text" name="' . esc_attr($field_id) . '[' . $k . ']"'
-                    . ' class="forge-input" placeholder="' . $ph . '"'
+                    . ' class="fabricator-input" placeholder="' . $ph . '"'
                     . ' value="' . esc_attr((string)($val[$k] ?? '')) . '"'
                     . ' autocomplete="' . $ac . '"' . $req . '>';
             }
-            $inner .= '<div class="forge-field-error forge-sub-error"></div>';
+            $inner .= '<div class="fabricator-field-error fabricator-sub-error"></div>';
             $inner .= '</div>';
         }
 

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Utils;
+namespace FabricatorForms\Utils;
 
 defined('ABSPATH') || exit;
 
@@ -42,7 +42,7 @@ class RateLimiter
     {
         global $wpdb;
 
-        $opt        = 'forge_rl_' . $key;
+        $opt        = 'fabricator_rl_' . $key;
         $now        = time();
         $new_expiry = $now + $window_seconds;
 
@@ -105,7 +105,7 @@ class RateLimiter
     {
         global $wpdb;
 
-        $opt = 'forge_rl_' . $key;
+        $opt = 'fabricator_rl_' . $key;
         // Same direct-query rationale as increment() above: this option is never
         // autoloaded/cached via get_option(), it's a private counter row this class owns exclusively.
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see comment above
@@ -118,7 +118,7 @@ class RateLimiter
         return max(0, $expiry - time());
     }
 
-    // WP-Cron callback (hourly): deletes any forge_rl_* option row whose window has expired. Each distinct
+    // WP-Cron callback (hourly): deletes any fabricator_rl_* option row whose window has expired. Each distinct
     // rate-limit bucket (IP+form combination) leaves a permanent wp_options row once written, since
     // increment() only ever resets/increments a row in place and never deletes it — without this sweep,
     // buckets accumulate forever.
@@ -127,13 +127,13 @@ class RateLimiter
         global $wpdb;
 
         $now = time();
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk sweep of this class's own private forge_rl_* option rows (never read via get_option()/cached); WP-Cron cleanup, not request-path caching concern.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk sweep of this class's own private fabricator_rl_* option rows (never read via get_option()/cached); WP-Cron cleanup, not request-path caching concern.
         $wpdb->query(
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->options}
                  WHERE option_name LIKE %s
                    AND CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED) <= %d",
-                $wpdb->esc_like('forge_rl_') . '%',
+                $wpdb->esc_like('fabricator_rl_') . '%',
                 $now
             )
         );

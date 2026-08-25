@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Utils;
+namespace FabricatorForms\Utils;
 
 defined('ABSPATH') || exit;
 
@@ -38,7 +38,7 @@ class SingleUseToken
     {
         global $wpdb;
 
-        $opt    = 'forge_su_' . $key;
+        $opt    = 'fabricator_su_' . $key;
         $expiry = time() + $ttl_seconds;
 
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic claim requires a direct query; option is never autoloaded/cached via get_option().
@@ -65,23 +65,23 @@ class SingleUseToken
     {
         global $wpdb;
 
-        $opt = 'forge_su_' . $key;
+        $opt = 'fabricator_su_' . $key;
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see claim() above; this option is never autoloaded/cached via get_option().
         $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s", $opt));
         wp_cache_delete($opt, 'options');
     }
 
-    // WP-Cron callback (hourly): deletes any forge_su_* option row whose TTL has expired.
+    // WP-Cron callback (hourly): deletes any fabricator_su_* option row whose TTL has expired.
     public static function cronSweepExpired(): void
     {
         global $wpdb;
 
         $now = time();
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk sweep of this class's own private forge_su_* option rows (never read via get_option()/cached); WP-Cron cleanup, not request-path caching concern.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk sweep of this class's own private fabricator_su_* option rows (never read via get_option()/cached); WP-Cron cleanup, not request-path caching concern.
         $wpdb->query(
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(option_value AS UNSIGNED) <= %d",
-                $wpdb->esc_like('forge_su_') . '%',
+                $wpdb->esc_like('fabricator_su_') . '%',
                 $now
             )
         );

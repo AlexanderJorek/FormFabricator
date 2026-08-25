@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -38,44 +38,44 @@ class ConsentField extends BaseField
         // phpcs:disable Generic.Files.LineLength -- the checkbox-checkmark background-image is an
         // inline SVG data URI; splitting it across lines risks corrupting the encoded markup.
         return <<<'CSS'
-.forge-consent-label {
+.fabricator-consent-label {
     display: flex;
     align-items: flex-start;
     gap: 10px;
     cursor: pointer;
     font-size: 14px;
-    color: var(--forge-text);
+    color: var(--fabricator-text);
     line-height: 1.6;
     user-select: none;
 }
-.forge-consent-label input[type="checkbox"] {
+.fabricator-consent-label input[type="checkbox"] {
     appearance: none;
     -webkit-appearance: none;
     width: 18px;
     height: 18px;
     flex-shrink: 0;
-    border: 2px solid var(--forge-border-input);
-    border-radius: var(--forge-radius-sm);
-    background: var(--forge-bg);
+    border: 2px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius-sm);
+    background: var(--fabricator-bg);
     cursor: pointer;
     transition: border-color .15s, background .15s;
     margin-top: 3px;
 }
-.forge-consent-label input[type="checkbox"]:checked {
-    border-color: var(--forge-accent);
-    background: var(--forge-accent);
+.fabricator-consent-label input[type="checkbox"]:checked {
+    border-color: var(--fabricator-accent);
+    background: var(--fabricator-accent);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10'%3E%3Cpolyline points='1,5 4.5,8.5 11,1' stroke='%23ffffff' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
     background-size: 11px 9px;
 }
-.forge-consent-label input[type="checkbox"]:focus-visible {
+.fabricator-consent-label input[type="checkbox"]:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--forge-accent) 25%, transparent);
+        color-mix(in srgb, var(--fabricator-accent) 25%, transparent);
 }
-.forge-consent-text a { color: var(--forge-accent); text-decoration: underline; }
-.forge-consent-text a:hover { color: var(--forge-accent-dark); }
+.fabricator-consent-text a { color: var(--fabricator-accent); text-decoration: underline; }
+.fabricator-consent-text a:hover { color: var(--fabricator-accent-dark); }
 CSS;
         // phpcs:enable Generic.Files.LineLength
     }
@@ -119,10 +119,10 @@ CSS;
         $checked = !empty($value) ? ' checked' : '';
         $text    = wp_kses_post($config['consent_text'] ?? __('I agree.', 'formfabricator'));
 
-        $inner = '<label class="forge-consent-label">'
+        $inner = '<label class="fabricator-consent-label">'
             . '<input type="checkbox" id="' . esc_attr($field_id)
             . '" name="' . esc_attr($field_id) . '" value="1"' . $checked . $req . '>'
-            . '<span class="forge-consent-text">' . $text . '</span>'
+            . '<span class="fabricator-consent-text">' . $text . '</span>'
             . '</label>';
 
         return $this->wrap($field_id, $config, $inner);

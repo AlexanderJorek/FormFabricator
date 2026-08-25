@@ -10,10 +10,10 @@
 'use strict';
 
 /* Localized strings from FormEditor.php::builderI18n() (wp_localize_script,
-   handle 'forge-forms-builder'). Every lookup below falls back to an English
-   literal — matching the ForgeForms.i18n pattern in front.js — so the builder
+   handle 'fabricator-forms-builder'). Every lookup below falls back to an English
+   literal — matching the FabricatorForms.i18n pattern in front.js — so the builder
    still renders (in English) if localization ever fails to load. */
-var _i18n = (window.ForgeBuilderI18n && window.ForgeBuilderI18n.i18n) || {};
+var _i18n = (window.FabricatorBuilderI18n && window.FabricatorBuilderI18n.i18n) || {};
 
 /* Merges a localized {code: name} map (possibly empty/partial) on top of an
    English-literal fallback map — ES5 for-in loop to match this file's style
@@ -103,7 +103,7 @@ function makeSortable(list, handleSel, rowSel, onReorder) {
     });
 }
 
-var AJAX_URL       = '/wp-admin/admin-ajax.php';
+var AJAX_URL       = ''; /* set from data-ajax-url (admin_url('admin-ajax.php')) before any request fires */
 var NONCE          = '';
 var FORM_ID        = 0;
 var FORM_SNAPSHOT   = ''; /* optimistic-concurrency token echoed back on save */
@@ -112,7 +112,7 @@ var TYPE_COLOR_MAP  = {};
 var _lastRenderedFieldsJson = null; /* dirty-check cache for renderFieldList */
 
 /* Client-side mirror of the form's JSON structure as read/written by
-   includes/Admin/FormEditor.php (see `data-form` on #forge-editor for the
+   includes/Admin/FormEditor.php (see `data-form` on #fabricator-editor for the
    initial payload, and bindSave() below for the save payload). `fields`
    entries are plain objects keyed by field type + settings; a field with
    type === 'group' additionally has a `children` array of the same shape
@@ -130,8 +130,8 @@ var state = {
 };
 var _dirty = false;
 var _bypassUnload = false;
-window.forgeBypassUnload  = function () { _bypassUnload = true; };
-window.forgeGuardedReload = function () {
+window.fabricatorBypassUnload  = function () { _bypassUnload = true; };
+window.fabricatorGuardedReload = function () {
     if (!_dirty) { location.reload(); return; }
     showUnsavedDialog(function () { _bypassUnload = true; location.reload(); });
 };
@@ -149,11 +149,11 @@ window.addEventListener('beforeunload', function (e) {
 /* ── Unsaved-changes guard: custom modal for in-page navigations ── */
 function showUnsavedDialog(onDiscard) {
     var backdrop = document.createElement('div');
-    backdrop.className = 'forge-modal-backdrop';
+    backdrop.className = 'fabricator-modal-backdrop';
     backdrop.style.cssText = 'display:flex;z-index:1000000;';
 
     var box = document.createElement('div');
-    box.className = 'forge-modal-box';
+    box.className = 'fabricator-modal-box';
     box.style.cssText = 'max-width:400px;padding:28px 28px 22px;';
     box.innerHTML =
         '<h2 style="margin:0 0 10px;font-size:16px;display:flex;align-items:center;gap:8px;">' +
@@ -163,17 +163,17 @@ function showUnsavedDialog(onDiscard) {
             escHtml(_i18n.unsavedBody || 'This form has unsaved changes. Leave anyway?') +
         '</p>' +
         '<div style="display:flex;gap:8px;justify-content:space-between;">' +
-            '<button class="button forge-guard-stay">' + escHtml(_i18n.stay || 'Stay') + '</button>' +
-            '<button class="button forge-guard-discard" style="color:#d63638;border-color:#d63638;">' + escHtml(_i18n.leave || 'Leave') + '</button>' +
+            '<button class="button fabricator-guard-stay">' + escHtml(_i18n.stay || 'Stay') + '</button>' +
+            '<button class="button fabricator-guard-discard" style="color:#d63638;border-color:#d63638;">' + escHtml(_i18n.leave || 'Leave') + '</button>' +
         '</div>';
 
     backdrop.appendChild(box);
     document.body.appendChild(backdrop);
 
-    box.querySelector('.forge-guard-stay').addEventListener('click', function () {
+    box.querySelector('.fabricator-guard-stay').addEventListener('click', function () {
         if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
     });
-    box.querySelector('.forge-guard-discard').addEventListener('click', function () {
+    box.querySelector('.fabricator-guard-discard').addEventListener('click', function () {
         _bypassUnload = true;
         if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
         onDiscard();
@@ -196,8 +196,8 @@ document.addEventListener('click', function (e) {
     if (!a) { return; }
     var href = a.getAttribute('href');
     if (!href || href.charAt(0) === '#' || a.target === '_blank') { return; }
-    /* Skip links inside the forge editor wrap (canvas, modals, etc.) */
-    if (a.closest('.forge-editor-wrap, .forge-modal-backdrop')) { return; }
+    /* Skip links inside the fabricator editor wrap (canvas, modals, etc.) */
+    if (a.closest('.fabricator-editor-wrap, .fabricator-modal-backdrop')) { return; }
     e.preventDefault();
     showUnsavedDialog(function () { window.location.href = href; });
 }, true);
@@ -258,7 +258,7 @@ var pendingY        = 0;
  * Bootstrap
  * ================================================================ */
 document.addEventListener('DOMContentLoaded', function () {
-    var el = document.getElementById('forge-editor');
+    var el = document.getElementById('fabricator-editor');
     if (el) {
         try {
             var fd  = JSON.parse(el.dataset.form    || '{}');
@@ -296,8 +296,8 @@ document.addEventListener('DOMContentLoaded', function () {
         var rules = '';
         for (var t in TYPE_COLOR_MAP) {
             if (Object.prototype.hasOwnProperty.call(TYPE_COLOR_MAP, t)) {
-                rules += '.forge-field-row[data-type="' + t + '"],'
-                       + '.forge-child-row[data-type="' + t + '"]{border-left-color:'
+                rules += '.fabricator-field-row[data-type="' + t + '"],'
+                       + '.fabricator-child-row[data-type="' + t + '"]{border-left-color:'
                        + TYPE_COLOR_MAP[t] + ';}';
             }
         }
@@ -332,7 +332,7 @@ document.addEventListener('DOMContentLoaded', function () {
  * Field List
  * ================================================================ */
 function renderFieldList() {
-    var list = document.getElementById('forge-field-list');
+    var list = document.getElementById('fabricator-field-list');
     if (!list) return;
     var json = JSON.stringify(state.fields);
     if (json === _lastRenderedFieldsJson) return;
@@ -346,9 +346,9 @@ function renderFieldList() {
 
     if (state.fields.length === 0) {
         var empty = document.createElement('div');
-        empty.className = 'forge-empty-canvas';
+        empty.className = 'fabricator-empty-canvas';
         empty.innerHTML =
-            '<div class="forge-empty-icon"><i class="fa-solid fa-layer-group"></i></div>' +
+            '<div class="fabricator-empty-icon"><i class="fa-solid fa-layer-group"></i></div>' +
             '<h2 style="font-size:16px;font-weight:700;color:#1d2327;margin:0;">' + escHtml(_i18n.noFieldsYetTitle || 'No fields yet') + '</h2>' +
             '<p>' + escHtml(_i18n.addFirstFieldHtml || 'Add your first field via') + ' <strong>' + escHtml(_i18n.addFieldTitle || 'Add field') + '</strong></p>';
         list.appendChild(empty);
@@ -362,7 +362,7 @@ function renderFieldList() {
 function buildFieldRow(field, idx) {
     if (field.type === 'group') { return buildGroupRow(field, idx); }
     var row      = document.createElement('div');
-    row.className    = 'forge-field-row';
+    row.className    = 'fabricator-field-row';
     row.draggable    = true;
     row.dataset.idx  = idx;
     row.dataset.type = field.type || '';
@@ -372,28 +372,28 @@ function buildFieldRow(field, idx) {
     var icon      = pal ? pal.icon  : 'fa-solid fa-square';
     var typeLabel = pal ? pal.label : field.type;
     var condBadge = (field.conditions && field.conditions.rules && field.conditions.rules.length)
-        ? ' <i class="fa-solid fa-code-branch forge-cond-badge" title="' + escHtml(_i18n.conditionsActive || 'Conditions active') + '"></i>' : '';
+        ? ' <i class="fa-solid fa-code-branch fabricator-cond-badge" title="' + escHtml(_i18n.conditionsActive || 'Conditions active') + '"></i>' : '';
     row.innerHTML =
-        '<div class="forge-row-handle"><i class="fa-solid fa-grip-vertical"></i></div>' +
-        '<div class="forge-row-icon"><i class="' + escHtml(icon) + '"></i></div>' +
-        '<div class="forge-row-info">' +
-            '<div class="forge-row-label">' + escHtml(field.label || (_i18n.noLabel || '(no label)')) + condBadge + '</div>' +
-            '<div class="forge-row-type">' + escHtml(typeLabel) + '</div>' +
+        '<div class="fabricator-row-handle"><i class="fa-solid fa-grip-vertical"></i></div>' +
+        '<div class="fabricator-row-icon"><i class="' + escHtml(icon) + '"></i></div>' +
+        '<div class="fabricator-row-info">' +
+            '<div class="fabricator-row-label">' + escHtml(field.label || (_i18n.noLabel || '(no label)')) + condBadge + '</div>' +
+            '<div class="fabricator-row-type">' + escHtml(typeLabel) + '</div>' +
         '</div>' +
-        '<span class="forge-row-id">{' + escHtml(field.id || '') + '}</span>' +
-        '<div class="forge-row-actions">' +
-            '<button class="forge-row-btn forge-row-edit"      title="' + escHtml(_i18n.edit || 'Edit') + '"><i class="fa-solid fa-pen-to-square"></i></button>' +
-            '<button class="forge-row-btn forge-row-duplicate" title="' + escHtml(_i18n.duplicate || 'Duplicate') + '"><i class="fa-solid fa-copy"></i></button>' +
-            '<button class="forge-row-btn forge-row-delete"    title="' + escHtml(_i18n.remove || 'Remove') + '"><i class="fa-solid fa-trash"></i></button>' +
+        '<span class="fabricator-row-id">{' + escHtml(field.id || '') + '}</span>' +
+        '<div class="fabricator-row-actions">' +
+            '<button class="fabricator-row-btn fabricator-row-edit"      title="' + escHtml(_i18n.edit || 'Edit') + '"><i class="fa-solid fa-pen-to-square"></i></button>' +
+            '<button class="fabricator-row-btn fabricator-row-duplicate" title="' + escHtml(_i18n.duplicate || 'Duplicate') + '"><i class="fa-solid fa-copy"></i></button>' +
+            '<button class="fabricator-row-btn fabricator-row-delete"    title="' + escHtml(_i18n.remove || 'Remove') + '"><i class="fa-solid fa-trash"></i></button>' +
         '</div>';
 
     row.addEventListener('click', function (e) {
-        if (e.target.closest('.forge-row-delete') ||
-            e.target.closest('.forge-row-duplicate')) return;
+        if (e.target.closest('.fabricator-row-delete') ||
+            e.target.closest('.fabricator-row-duplicate')) return;
         openSettingsModal(parseInt(row.dataset.idx, 10));
     });
 
-    var rowIdBadge = row.querySelector('.forge-row-id');
+    var rowIdBadge = row.querySelector('.fabricator-row-id');
     if (rowIdBadge) {
         rowIdBadge.addEventListener('click', function (e) {
             e.stopPropagation();
@@ -406,7 +406,7 @@ function buildFieldRow(field, idx) {
         });
     }
 
-    row.querySelector('.forge-row-duplicate').addEventListener('click', function (e) {
+    row.querySelector('.fabricator-row-duplicate').addEventListener('click', function (e) {
         e.stopPropagation();
         var i  = parseInt(row.dataset.idx, 10);
         var cl = JSON.parse(JSON.stringify(state.fields[i]));
@@ -415,7 +415,7 @@ function buildFieldRow(field, idx) {
         renderFieldList();
     });
 
-    row.querySelector('.forge-row-delete').addEventListener('click', function (e) {
+    row.querySelector('.fabricator-row-delete').addEventListener('click', function (e) {
         e.stopPropagation();
         var di = parseInt(row.dataset.idx, 10);
         var df = state.fields[di];
@@ -453,7 +453,7 @@ function buildFieldRow(field, idx) {
         if (pct < 0.25) {
             if (dropSideMode !== 'left' || dropSideTargetIdx !== tIdx) {
                 clearDropIndicators();
-                row.classList.add('forge-drop-left');
+                row.classList.add('fabricator-drop-left');
                 activeDropIndicatorEl = row;
                 dropSideMode      = 'left';
                 dropSideTargetIdx = tIdx;
@@ -462,7 +462,7 @@ function buildFieldRow(field, idx) {
         } else if (pct > 0.75) {
             if (dropSideMode !== 'right' || dropSideTargetIdx !== tIdx) {
                 clearDropIndicators();
-                row.classList.add('forge-drop-right');
+                row.classList.add('fabricator-drop-right');
                 activeDropIndicatorEl = row;
                 dropSideMode      = 'right';
                 dropSideTargetIdx = tIdx;
@@ -495,8 +495,8 @@ function buildFieldRow(field, idx) {
             dropSideMode = null; dropSideTargetIdx = null;
             cachedMidpoints = []; rafPending = false;
             clearDropIndicators(); hideDropLine();
-            var lEl = document.getElementById('forge-field-list');
-            if (lEl) lEl.classList.remove('forge-drag-active');
+            var lEl = document.getElementById('fabricator-field-list');
+            if (lEl) lEl.classList.remove('fabricator-drag-active');
             renderFieldList(); return;
         }
         e.preventDefault();
@@ -515,8 +515,8 @@ function buildFieldRow(field, idx) {
 
         clearDropIndicators();
         hideDropLine();
-        var listEl = document.getElementById('forge-field-list');
-        if (listEl) { listEl.classList.remove('forge-drag-active'); }
+        var listEl = document.getElementById('fabricator-field-list');
+        if (listEl) { listEl.classList.remove('fabricator-drag-active'); }
 
         if (srcIdx === targetIdx) { renderFieldList(); return; }
 
@@ -570,14 +570,14 @@ function buildFieldRow(field, idx) {
         setTimeout(function () {
             /* Hide from grid flow AND mark class so cacheMidpoints excludes it */
             row.style.display = 'none';
-            row.classList.add('forge-row-dragging');
-            var listEl = document.getElementById('forge-field-list');
+            row.classList.add('fabricator-row-dragging');
+            var listEl = document.getElementById('fabricator-field-list');
             if (listEl) {
                 if (dragBrokenPartnerIdx !== null) {
-                    var pEl = listEl.querySelector('.forge-field-row[data-idx="' + dragBrokenPartnerIdx + '"]');
+                    var pEl = listEl.querySelector('.fabricator-field-row[data-idx="' + dragBrokenPartnerIdx + '"]');
                     if (pEl) pEl.dataset.cols = 12;
                 }
-                listEl.classList.add('forge-drag-active');
+                listEl.classList.add('fabricator-drag-active');
             }
             cacheMidpoints();
         }, 0);
@@ -601,8 +601,8 @@ function buildFieldRow(field, idx) {
         rafPending           = false;
         clearDropIndicators();
         hideDropLine();
-        var listEl = document.getElementById('forge-field-list');
-        if (listEl) listEl.classList.remove('forge-drag-active');
+        var listEl = document.getElementById('fabricator-field-list');
+        if (listEl) listEl.classList.remove('fabricator-drag-active');
         renderFieldList();
     });
 
@@ -614,7 +614,7 @@ function buildFieldRow(field, idx) {
  * ================================================================ */
 function buildGroupRow(field, idx) {
     var row      = document.createElement('div');
-    row.className    = 'forge-field-row forge-field-row--group';
+    row.className    = 'fabricator-field-row fabricator-field-row--group';
     row.draggable    = true;
     row.dataset.idx  = idx;
     row.dataset.type = 'group';
@@ -623,44 +623,44 @@ function buildGroupRow(field, idx) {
 
     /* ---- Compact header bar ---- */
     var hdr = document.createElement('div');
-    hdr.className = 'forge-group-row-hdr';
+    hdr.className = 'fabricator-group-row-hdr';
     hdr.innerHTML =
-        '<div class="forge-row-handle"><i class="fa-solid fa-grip-vertical"></i></div>' +
-        '<div class="forge-row-icon"><i class="fa-solid fa-layer-group"></i></div>' +
-        '<div class="forge-row-info">' +
-            '<div class="forge-row-label">' + escHtml(field.label || (_i18n.noLabel || '(no label)')) + '</div>' +
-            '<div class="forge-row-type">' + escHtml(_i18n.fieldGroupType || 'Field group') + '</div>' +
+        '<div class="fabricator-row-handle"><i class="fa-solid fa-grip-vertical"></i></div>' +
+        '<div class="fabricator-row-icon"><i class="fa-solid fa-layer-group"></i></div>' +
+        '<div class="fabricator-row-info">' +
+            '<div class="fabricator-row-label">' + escHtml(field.label || (_i18n.noLabel || '(no label)')) + '</div>' +
+            '<div class="fabricator-row-type">' + escHtml(_i18n.fieldGroupType || 'Field group') + '</div>' +
         '</div>' +
-        '<div class="forge-row-actions">' +
-            '<button class="forge-row-btn forge-row-edit"   title="' + escHtml(_i18n.settingsLabel || 'Settings') + '"><i class="fa-solid fa-pen-to-square"></i></button>' +
-            '<button class="forge-row-btn forge-row-delete" title="' + escHtml(_i18n.remove || 'Remove') + '"><i class="fa-solid fa-trash"></i></button>' +
+        '<div class="fabricator-row-actions">' +
+            '<button class="fabricator-row-btn fabricator-row-edit"   title="' + escHtml(_i18n.settingsLabel || 'Settings') + '"><i class="fa-solid fa-pen-to-square"></i></button>' +
+            '<button class="fabricator-row-btn fabricator-row-delete" title="' + escHtml(_i18n.remove || 'Remove') + '"><i class="fa-solid fa-trash"></i></button>' +
         '</div>';
     row.appendChild(hdr);
 
     /* Click anywhere on the header (except delete) opens settings */
     hdr.addEventListener('click', function (e) {
-        if (e.target.closest('.forge-row-delete')) return;
+        if (e.target.closest('.fabricator-row-delete')) return;
         openSettingsModal(parseInt(row.dataset.idx, 10));
     });
 
     /* ---- Always-open children drop zone ---- */
     var zone = document.createElement('div');
-    zone.className = 'forge-group-zone';
+    zone.className = 'fabricator-group-zone';
 
     var childList = document.createElement('div');
-    childList.className = 'forge-group-children-list';
+    childList.className = 'fabricator-group-children-list';
     zone.appendChild(childList);
 
     var addChildBtn = document.createElement('button');
     addChildBtn.type      = 'button';
-    addChildBtn.className = 'forge-group-add-child-btn';
+    addChildBtn.className = 'fabricator-group-add-child-btn';
     addChildBtn.innerHTML = '<i class="fa-solid fa-plus"></i> ' + escHtml(_i18n.addFieldsToGroup || 'Add fields to group');
     zone.appendChild(addChildBtn);
     row.appendChild(zone);
 
     /* Helpers scoped to this group's childList closure */
     function childBeforeY(y) {
-        var rows = childList.querySelectorAll('.forge-child-row');
+        var rows = childList.querySelectorAll('.fabricator-child-row');
         var best = null, bestDist = Infinity;
         for (var i = 0; i < rows.length; i++) {
             var box = rows[i].getBoundingClientRect();
@@ -672,7 +672,7 @@ function buildGroupRow(field, idx) {
     function childInsertIdx(gi, target) {
         var ch = (state.fields[gi] && state.fields[gi].children) || [];
         if (!target || target.atEnd) return ch.length;
-        var rows = childList.querySelectorAll('.forge-child-row');
+        var rows = childList.querySelectorAll('.fabricator-child-row');
         for (var k = 0; k < rows.length; k++) { if (rows[k] === target.beforeEl) return k; }
         return ch.length;
     }
@@ -683,7 +683,7 @@ function buildGroupRow(field, idx) {
         var currentField = state.fields[currentIdx];
         if (!currentField) return;
         var children = currentField.children || [];
-        zone.classList.toggle('forge-group-zone--empty', children.length === 0);
+        zone.classList.toggle('fabricator-group-zone--empty', children.length === 0);
         children.forEach(function (child, ci) {
             var childRow = buildChildRow(child, ci, currentIdx, renderChildList);
             childRow.dataset.cols = child.cols || 12;
@@ -705,12 +705,12 @@ function buildGroupRow(field, idx) {
                     childRow.style.display = 'none';
                     /* Sync data-cols on siblings without rebuilding — preserves drag ghost */
                     var stCh = (state.fields[gi] && state.fields[gi].children) || [];
-                    var domRows = childList.querySelectorAll('.forge-child-row');
+                    var domRows = childList.querySelectorAll('.fabricator-child-row');
                     domRows.forEach(function (cr, k) {
                         if (stCh[k]) cr.dataset.cols = stCh[k].cols || 12;
                     });
-                    var listEl = document.getElementById('forge-field-list');
-                    if (listEl) listEl.classList.add('forge-drag-active');
+                    var listEl = document.getElementById('fabricator-field-list');
+                    if (listEl) listEl.classList.add('fabricator-drag-active');
                     cacheMidpoints();
                 }, 0);
             });
@@ -722,8 +722,8 @@ function buildGroupRow(field, idx) {
                 }
                 childDropSideMode = null; childDropTgtIdx = null; childGroupDropTarget = null;
                 clearGroupDropIndicators();
-                var listEl = document.getElementById('forge-field-list');
-                if (listEl) listEl.classList.remove('forge-drag-active');
+                var listEl = document.getElementById('fabricator-field-list');
+                if (listEl) listEl.classList.remove('fabricator-drag-active');
                 hideDropLine(); cachedMidpoints = []; rafPending = false;
                 renderFieldList();
             });
@@ -755,21 +755,21 @@ function buildGroupRow(field, idx) {
                 if (pct < 0.25) {
                     e.preventDefault(); e.stopPropagation();
                     clearGroupDropIndicators();
-                    childRow.classList.add('forge-drop-left');
+                    childRow.classList.add('fabricator-drop-left');
                     activeGroupDropIndicatorEl = childRow;
                     childDropSideMode = 'left'; childDropTgtIdx = ci;
                     childGroupDropTarget = null;
                     hideDropLine();
-                    zone.classList.remove('forge-group-zone--hover');
+                    zone.classList.remove('fabricator-group-zone--hover');
                 } else if (pct > 0.75) {
                     e.preventDefault(); e.stopPropagation();
                     clearGroupDropIndicators();
-                    childRow.classList.add('forge-drop-right');
+                    childRow.classList.add('fabricator-drop-right');
                     activeGroupDropIndicatorEl = childRow;
                     childDropSideMode = 'right'; childDropTgtIdx = ci;
                     childGroupDropTarget = null;
                     hideDropLine();
-                    zone.classList.remove('forge-group-zone--hover');
+                    zone.classList.remove('fabricator-group-zone--hover');
                 } else {
                     /* Center: clear side indicators, let event bubble to zone for drop line */
                     if (childDropTgtIdx === ci) {
@@ -794,7 +794,7 @@ function buildGroupRow(field, idx) {
                     var srcF = state.fields[dragSrcIdx];
                     if (!srcF || NO_GROUP_TYPES.indexOf(srcF.type) !== -1) return;
                     e.preventDefault(); e.stopPropagation();
-                    hideDropLine(); zone.classList.remove('forge-group-zone--hover');
+                    hideDropLine(); zone.classList.remove('fabricator-group-zone--hover');
                     var from  = dragSrcIdx;
                     var mode  = childDropSideMode;
                     var tci   = childDropTgtIdx;
@@ -812,8 +812,8 @@ function buildGroupRow(field, idx) {
                     repairPairs();
                     dropSideMode = null; dropSideTargetIdx = null;
                     dropLineTarget = null; cachedMidpoints = []; rafPending = false;
-                    var lEl = document.getElementById('forge-field-list');
-                    if (lEl) lEl.classList.remove('forge-drag-active');
+                    var lEl = document.getElementById('fabricator-field-list');
+                    if (lEl) lEl.classList.remove('fabricator-drag-active');
                     renderFieldList();
                     return;
                 }
@@ -835,8 +835,8 @@ function buildGroupRow(field, idx) {
                     if (mode2 === 'left') { chArr2.splice(tci2, 0, item); }
                     else                  { chArr2.splice(tci2 + 1, 0, item); }
                     repairGroupPairs(gi);
-                    var listEl2 = document.getElementById('forge-field-list');
-                    if (listEl2) listEl2.classList.remove('forge-drag-active');
+                    var listEl2 = document.getElementById('fabricator-field-list');
+                    if (listEl2) listEl2.classList.remove('fabricator-drag-active');
                     hideDropLine(); cachedMidpoints = []; rafPending = false;
                     renderFieldList();
                 }
@@ -847,11 +847,11 @@ function buildGroupRow(field, idx) {
     }
     renderChildList();
 
-    hdr.querySelector('.forge-row-edit').addEventListener('click', function (e) {
+    hdr.querySelector('.fabricator-row-edit').addEventListener('click', function (e) {
         e.stopPropagation();
         openSettingsModal(parseInt(row.dataset.idx, 10), null);
     });
-    hdr.querySelector('.forge-row-delete').addEventListener('click', function (e) {
+    hdr.querySelector('.fabricator-row-delete').addEventListener('click', function (e) {
         e.stopPropagation();
         state.fields.splice(parseInt(row.dataset.idx, 10), 1);
         renderFieldList();
@@ -875,7 +875,7 @@ function buildGroupRow(field, idx) {
             if (!srcField || NO_GROUP_TYPES.indexOf(srcField.type) !== -1) return;
             e.preventDefault(); e.stopPropagation();
             dropLineTarget = null; /* prevent applyDropLine from overriding group line */
-            zone.classList.add('forge-group-zone--hover');
+            zone.classList.add('fabricator-group-zone--hover');
             var bef = childBeforeY(e.clientY);
             childGroupDropTarget = bef ? { beforeEl: bef } : { atEnd: true };
             showGroupDropLine(childList, bef);
@@ -889,7 +889,7 @@ function buildGroupRow(field, idx) {
 
     zone.addEventListener('dragleave', function (e) {
         if (!zone.contains(e.relatedTarget)) {
-            zone.classList.remove('forge-group-zone--hover');
+            zone.classList.remove('fabricator-group-zone--hover');
             childGroupDropTarget = null;
             hideDropLine();
         }
@@ -897,7 +897,7 @@ function buildGroupRow(field, idx) {
 
     zone.addEventListener('drop', function (e) {
         var currentGi = parseInt(row.dataset.idx, 10);
-        zone.classList.remove('forge-group-zone--hover');
+        zone.classList.remove('fabricator-group-zone--hover');
         clearGroupDropIndicators();
         hideDropLine();
 
@@ -918,8 +918,8 @@ function buildGroupRow(field, idx) {
             dropSideMode = null; dropSideTargetIdx = null;
             dropLineTarget = null; cachedMidpoints = []; rafPending = false;
             clearDropIndicators();
-            var lEl = document.getElementById('forge-field-list');
-            if (lEl) lEl.classList.remove('forge-drag-active');
+            var lEl = document.getElementById('fabricator-field-list');
+            if (lEl) lEl.classList.remove('fabricator-drag-active');
             repairPairs();
             renderFieldList();
             return;
@@ -939,8 +939,8 @@ function buildGroupRow(field, idx) {
                 repairGroupPairs(currentGi);
             }
             childGroupDropTarget = null;
-            var lEl2 = document.getElementById('forge-field-list');
-            if (lEl2) lEl2.classList.remove('forge-drag-active');
+            var lEl2 = document.getElementById('fabricator-field-list');
+            if (lEl2) lEl2.classList.remove('fabricator-drag-active');
             cachedMidpoints = []; rafPending = false;
             renderFieldList();
             return;
@@ -963,9 +963,9 @@ function buildGroupRow(field, idx) {
         e.dataTransfer.setData('text/plain', String(dragSrcIdx));
         setTimeout(function () {
             row.style.display = 'none';
-            row.classList.add('forge-row-dragging');
-            var listEl = document.getElementById('forge-field-list');
-            if (listEl) listEl.classList.add('forge-drag-active');
+            row.classList.add('fabricator-row-dragging');
+            var listEl = document.getElementById('fabricator-field-list');
+            if (listEl) listEl.classList.add('fabricator-drag-active');
             cacheMidpoints();
         }, 0);
     });
@@ -975,8 +975,8 @@ function buildGroupRow(field, idx) {
         dropSideMode = null; dropSideTargetIdx = null;
         dropLineTarget = null; cachedMidpoints = []; rafPending = false;
         clearDropIndicators(); hideDropLine();
-        var listEl = document.getElementById('forge-field-list');
-        if (listEl) listEl.classList.remove('forge-drag-active');
+        var listEl = document.getElementById('fabricator-field-list');
+        if (listEl) listEl.classList.remove('fabricator-drag-active');
         renderFieldList();
     });
 
@@ -985,32 +985,32 @@ function buildGroupRow(field, idx) {
 
 function buildChildRow(child, childIdx, groupIdx, onRerender) {
     var row = document.createElement('div');
-    row.className    = 'forge-child-row';
+    row.className    = 'fabricator-child-row';
     row.dataset.type = child.type || '';
 
     var pal       = findPaletteItem(child.type);
     var icon      = pal ? pal.icon  : 'fa-solid fa-square';
     var typeLabel = pal ? pal.label : child.type;
     row.innerHTML =
-        '<div class="forge-child-row-icon"><i class="' + escHtml(icon) + '"></i></div>' +
-        '<div class="forge-child-row-info">' +
-            '<div class="forge-child-row-label">' + escHtml(child.label || (_i18n.noLabel || '(no label)')) + '</div>' +
-            '<div class="forge-child-row-type">'  + escHtml(typeLabel) + '</div>' +
+        '<div class="fabricator-child-row-icon"><i class="' + escHtml(icon) + '"></i></div>' +
+        '<div class="fabricator-child-row-info">' +
+            '<div class="fabricator-child-row-label">' + escHtml(child.label || (_i18n.noLabel || '(no label)')) + '</div>' +
+            '<div class="fabricator-child-row-type">'  + escHtml(typeLabel) + '</div>' +
         '</div>' +
-        '<div class="forge-row-actions">' +
-            '<button class="forge-row-btn forge-row-edit"   title="' + escHtml(_i18n.edit || 'Edit') + '"><i class="fa-solid fa-pen-to-square"></i></button>' +
-            '<button class="forge-row-btn forge-row-delete" title="' + escHtml(_i18n.remove || 'Remove') + '"><i class="fa-solid fa-trash"></i></button>' +
+        '<div class="fabricator-row-actions">' +
+            '<button class="fabricator-row-btn fabricator-row-edit"   title="' + escHtml(_i18n.edit || 'Edit') + '"><i class="fa-solid fa-pen-to-square"></i></button>' +
+            '<button class="fabricator-row-btn fabricator-row-delete" title="' + escHtml(_i18n.remove || 'Remove') + '"><i class="fa-solid fa-trash"></i></button>' +
         '</div>';
 
     row.addEventListener('click', function (e) {
-        if (e.target.closest('.forge-row-delete')) return;
+        if (e.target.closest('.fabricator-row-delete')) return;
         openSettingsModal(groupIdx, { groupIdx: groupIdx, childIdx: childIdx });
     });
-    row.querySelector('.forge-row-edit').addEventListener('click', function (e) {
+    row.querySelector('.fabricator-row-edit').addEventListener('click', function (e) {
         e.stopPropagation();
         openSettingsModal(groupIdx, { groupIdx: groupIdx, childIdx: childIdx });
     });
-    row.querySelector('.forge-row-delete').addEventListener('click', function (e) {
+    row.querySelector('.fabricator-row-delete').addEventListener('click', function (e) {
         e.stopPropagation();
         state.fields[groupIdx].children.splice(childIdx, 1);
         if (onRerender) onRerender();
@@ -1023,7 +1023,7 @@ function buildChildRow(child, childIdx, groupIdx, onRerender) {
  * Drag & Drop
  * ================================================================ */
 function initDragDrop() {
-    var list = document.getElementById('forge-field-list');
+    var list = document.getElementById('fabricator-field-list');
     if (!list) return;
 
     list.addEventListener('dragover', function (e) {
@@ -1055,7 +1055,7 @@ function initDragDrop() {
         e.preventDefault();
         rafPending = false;
         hideDropLine();
-        list.classList.remove('forge-drag-active');
+        list.classList.remove('fabricator-drag-active');
 
         /* Child dragged OUT of group → becomes a top-level field.
            This branch fires when a group-child row is dropped on the
@@ -1163,14 +1163,14 @@ var activeGroupDropIndicatorEl = null;
 
 function clearDropIndicators() {
     if (activeDropIndicatorEl) {
-        activeDropIndicatorEl.classList.remove('forge-drop-left', 'forge-drop-right');
+        activeDropIndicatorEl.classList.remove('fabricator-drop-left', 'fabricator-drop-right');
         activeDropIndicatorEl = null;
     }
 }
 
 function clearGroupDropIndicators() {
     if (activeGroupDropIndicatorEl) {
-        activeGroupDropIndicatorEl.classList.remove('forge-drop-left', 'forge-drop-right');
+        activeGroupDropIndicatorEl.classList.remove('fabricator-drop-left', 'fabricator-drop-right');
         activeGroupDropIndicatorEl = null;
     }
 }
@@ -1178,7 +1178,7 @@ function clearGroupDropIndicators() {
 function applyDropLine() {
     rafPending = false;
     if ((dragSrcIdx === null && dragChildSrc === null) || dropSideMode !== null) return;
-    var list = document.getElementById('forge-field-list');
+    var list = document.getElementById('fabricator-field-list');
     if (!list) return;
     var beforeEl = getAfterFromCache(pendingY);
     dropLineTarget = beforeEl ? { beforeEl: beforeEl } : { atEnd: true };
@@ -1200,7 +1200,7 @@ function getAfterFromCache(y) {
 function showDropLine(list, beforeEl) {
     if (!dropLineEl) {
         dropLineEl = document.createElement('div');
-        dropLineEl.className = 'forge-drop-line';
+        dropLineEl.className = 'fabricator-drop-line';
         document.body.appendChild(dropLineEl);
     }
     var listRect = list.getBoundingClientRect();
@@ -1208,7 +1208,7 @@ function showDropLine(list, beforeEl) {
     if (beforeEl) {
         y = beforeEl.getBoundingClientRect().top; /* CSS translateY(-50%) centres it in the gap */
     } else {
-        var rows = list.querySelectorAll('.forge-field-row:not(.forge-row-dragging)');
+        var rows = list.querySelectorAll('.fabricator-field-row:not(.fabricator-row-dragging)');
         y = rows.length
             ? rows[rows.length - 1].getBoundingClientRect().bottom + 2
             : listRect.top;
@@ -1226,7 +1226,7 @@ function hideDropLine() {
 function showGroupDropLine(childListEl, beforeEl) {
     if (!dropLineEl) {
         dropLineEl = document.createElement('div');
-        dropLineEl.className = 'forge-drop-line';
+        dropLineEl.className = 'fabricator-drop-line';
         document.body.appendChild(dropLineEl);
     }
     var listRect = childListEl.getBoundingClientRect();
@@ -1234,7 +1234,7 @@ function showGroupDropLine(childListEl, beforeEl) {
     if (beforeEl) {
         y = beforeEl.getBoundingClientRect().top;
     } else {
-        var rows = childListEl.querySelectorAll('.forge-child-row');
+        var rows = childListEl.querySelectorAll('.fabricator-child-row');
         y = rows.length
             ? rows[rows.length - 1].getBoundingClientRect().bottom + 2
             : listRect.bottom;
@@ -1261,10 +1261,10 @@ function isSecondInPair(idx) {
 }
 
 function cacheMidpoints() {
-    var list = document.getElementById('forge-field-list');
+    var list = document.getElementById('fabricator-field-list');
     if (!list) return;
     cachedMidpoints = [];
-    var rows = list.querySelectorAll('.forge-field-row:not(.forge-row-dragging)');
+    var rows = list.querySelectorAll('.fabricator-field-row:not(.fabricator-row-dragging)');
     for (var i = 0; i < rows.length; i++) {
         var r   = rows[i];
         var idx = parseInt(r.dataset.idx, 10);
@@ -1278,7 +1278,7 @@ function cacheMidpoints() {
  * Add-field button
  * ================================================================ */
 function bindAddFieldButton() {
-    var btn = document.getElementById('forge-add-field-btn');
+    var btn = document.getElementById('fabricator-add-field-btn');
     if (btn) btn.addEventListener('click', openFieldPickerModal);
 }
 
@@ -1287,32 +1287,32 @@ function bindAddFieldButton() {
  * ================================================================ */
 function createFieldPickerModal() {
     fieldPickerModal           = document.createElement('div');
-    fieldPickerModal.id        = 'forge-field-modal';
-    fieldPickerModal.className = 'forge-modal-backdrop';
+    fieldPickerModal.id        = 'fabricator-field-modal';
+    fieldPickerModal.className = 'fabricator-modal-backdrop';
     fieldPickerModal.hidden    = true;
     fieldPickerModal.innerHTML =
-        '<div class="forge-modal" role="dialog" aria-modal="true">' +
-            '<div class="forge-modal-header">' +
-                '<h2 class="forge-modal-title">' + escHtml(_i18n.addFieldTitle || 'Add field') + '</h2>' +
-                '<button class="forge-modal-close" type="button">&#x2715;</button>' +
+        '<div class="fabricator-modal" role="dialog" aria-modal="true">' +
+            '<div class="fabricator-modal-header">' +
+                '<h2 class="fabricator-modal-title">' + escHtml(_i18n.addFieldTitle || 'Add field') + '</h2>' +
+                '<button class="fabricator-modal-close" type="button">&#x2715;</button>' +
             '</div>' +
-            '<div class="forge-modal-search">' +
-                '<input id="forge-field-search" type="text" placeholder="' + escHtml(_i18n.searchFieldType || 'Search field type…') + '" autocomplete="off" />' +
+            '<div class="fabricator-modal-search">' +
+                '<input id="fabricator-field-search" type="text" placeholder="' + escHtml(_i18n.searchFieldType || 'Search field type…') + '" autocomplete="off" />' +
             '</div>' +
-            '<div class="forge-modal-body" id="forge-field-modal-body"></div>' +
+            '<div class="fabricator-modal-body" id="fabricator-field-modal-body"></div>' +
         '</div>';
     document.body.appendChild(fieldPickerModal);
 
-    fieldPickerModal.querySelector('.forge-modal-close').addEventListener('click', closeFieldPickerModal);
+    fieldPickerModal.querySelector('.fabricator-modal-close').addEventListener('click', closeFieldPickerModal);
     fieldPickerModal.addEventListener('click', function (e) { if (e.target === fieldPickerModal) closeFieldPickerModal(); });
-    fieldPickerModal.querySelector('#forge-field-search').addEventListener('input', function () {
+    fieldPickerModal.querySelector('#fabricator-field-search').addEventListener('input', function () {
         renderFieldPickerGroups(this.value);
     });
 
     /* Single delegated click listener on the body — no per-card listeners. */
-    var pickerBody = fieldPickerModal.querySelector('#forge-field-modal-body');
+    var pickerBody = fieldPickerModal.querySelector('#fabricator-field-modal-body');
     pickerBody.addEventListener('click', function (e) {
-        var card = e.target.closest('.forge-modal-card');
+        var card = e.target.closest('.fabricator-modal-card');
         if (!card) return;
         var type = card.dataset.type;
         if (!type) return;
@@ -1330,23 +1330,23 @@ function buildPickerFragment(groups, filterFn) {
         if (!items.length) return;
         hasItems = true;
         var hdr = document.createElement('div');
-        hdr.className = 'forge-modal-group-label';
+        hdr.className = 'fabricator-modal-group-label';
         if (group.color) {
-            hdr.innerHTML = '<span class="forge-palette-dot" style="background:' + escHtml(group.color) + '"></span>' + escHtml(group.label);
+            hdr.innerHTML = '<span class="fabricator-palette-dot" style="background:' + escHtml(group.color) + '"></span>' + escHtml(group.label);
         } else {
             hdr.textContent = group.label;
         }
         frag.appendChild(hdr);
         var grid = document.createElement('div');
-        grid.className = 'forge-modal-grid';
+        grid.className = 'fabricator-modal-grid';
         items.forEach(function (item) {
             var card = document.createElement('button');
             card.type          = 'button';
-            card.className     = 'forge-modal-card';
+            card.className     = 'fabricator-modal-card';
             card.dataset.type  = item.type;
             card.innerHTML =
-                '<span class="forge-modal-card-icon"><i class="' + escHtml(item.icon) + '"></i></span>' +
-                '<span class="forge-modal-card-label">' + escHtml(item.label) + '</span>';
+                '<span class="fabricator-modal-card-icon"><i class="' + escHtml(item.icon) + '"></i></span>' +
+                '<span class="fabricator-modal-card-label">' + escHtml(item.label) + '</span>';
             grid.appendChild(card);
         });
         frag.appendChild(grid);
@@ -1355,7 +1355,7 @@ function buildPickerFragment(groups, filterFn) {
 }
 
 function renderFieldPickerGroups(query) {
-    var body = document.getElementById('forge-field-modal-body');
+    var body = document.getElementById('fabricator-field-modal-body');
     if (!body) return;
     body.innerHTML = '';
     var q = query.toLowerCase().trim();
@@ -1386,7 +1386,7 @@ function renderFieldPickerGroups(query) {
 
     if (!body.children.length) {
         var msg = document.createElement('p');
-        msg.className   = 'forge-modal-empty';
+        msg.className   = 'fabricator-modal-empty';
         msg.textContent = _i18n.noFieldsFound || 'No fields found.';
         body.appendChild(msg);
     }
@@ -1397,7 +1397,7 @@ function openFieldPickerModal() {
     renderFieldPickerGroups('');
     fieldPickerModal.hidden = false;
     document.body.style.overflow = 'hidden';
-    var inp = fieldPickerModal.querySelector('#forge-field-search');
+    var inp = fieldPickerModal.querySelector('#fabricator-field-search');
     if (inp) { inp.value = ''; setTimeout(function () { inp.focus(); }, 50); }
     document.addEventListener('keydown', onFieldPickerEsc);
 }
@@ -1446,50 +1446,50 @@ function addField(type, targetGroup) {
  * ================================================================ */
 function createSettingsModal() {
     settingsModal           = document.createElement('div');
-    settingsModal.id        = 'forge-settings-modal';
-    settingsModal.className = 'forge-modal-backdrop';
+    settingsModal.id        = 'fabricator-settings-modal';
+    settingsModal.className = 'fabricator-modal-backdrop';
     settingsModal.hidden    = true;
     settingsModal.innerHTML =
-        '<div class="forge-modal forge-modal--settings" role="dialog" aria-modal="true">' +
-            '<div class="forge-modal-header">' +
-                '<div class="forge-settings-titlerow">' +
-                    '<span class="forge-settings-field-icon"></span>' +
-                    '<h2 class="forge-modal-title" id="forge-sp-title">' + escHtml(_i18n.fieldSettingsTitle || 'Field settings') + '</h2>' +
+        '<div class="fabricator-modal fabricator-modal--settings" role="dialog" aria-modal="true">' +
+            '<div class="fabricator-modal-header">' +
+                '<div class="fabricator-settings-titlerow">' +
+                    '<span class="fabricator-settings-field-icon"></span>' +
+                    '<h2 class="fabricator-modal-title" id="fabricator-sp-title">' + escHtml(_i18n.fieldSettingsTitle || 'Field settings') + '</h2>' +
                 '</div>' +
-                '<button class="forge-field-id-chip" id="forge-sp-id-chip" type="button" title="' + escHtml(_i18n.copyFieldId || 'Copy field ID') + '"></button>' +
-                '<button class="forge-modal-close" type="button">&#x2715;</button>' +
+                '<button class="fabricator-field-id-chip" id="fabricator-sp-id-chip" type="button" title="' + escHtml(_i18n.copyFieldId || 'Copy field ID') + '"></button>' +
+                '<button class="fabricator-modal-close" type="button">&#x2715;</button>' +
             '</div>' +
-            '<div class="forge-stab-bar">' +
-                '<button class="forge-stab forge-stab-active" data-stab="general">' + escHtml(_i18n.tabGeneral || 'General') + '</button>' +
-                '<button class="forge-stab" data-stab="advanced">' + escHtml(_i18n.tabAdvanced || 'Advanced') + '</button>' +
-                '<button class="forge-stab" data-stab="conditions">' + escHtml(_i18n.tabConditions || 'Conditions') + '</button>' +
+            '<div class="fabricator-stab-bar">' +
+                '<button class="fabricator-stab fabricator-stab-active" data-stab="general">' + escHtml(_i18n.tabGeneral || 'General') + '</button>' +
+                '<button class="fabricator-stab" data-stab="advanced">' + escHtml(_i18n.tabAdvanced || 'Advanced') + '</button>' +
+                '<button class="fabricator-stab" data-stab="conditions">' + escHtml(_i18n.tabConditions || 'Conditions') + '</button>' +
             '</div>' +
-            '<div class="forge-modal-body forge-settings-body">' +
-                '<div id="forge-stab-general"    class="forge-stab-panel forge-stab-active"></div>' +
-                '<div id="forge-stab-advanced"   class="forge-stab-panel"></div>' +
-                '<div id="forge-stab-conditions" class="forge-stab-panel"></div>' +
+            '<div class="fabricator-modal-body fabricator-settings-body">' +
+                '<div id="fabricator-stab-general"    class="fabricator-stab-panel fabricator-stab-active"></div>' +
+                '<div id="fabricator-stab-advanced"   class="fabricator-stab-panel"></div>' +
+                '<div id="fabricator-stab-conditions" class="fabricator-stab-panel"></div>' +
             '</div>' +
-            '<div class="forge-settings-footer">' +
-                '<button class="forge-btn-primary" id="forge-sp-done">' + escHtml(_i18n.done || 'Done') + '</button>' +
+            '<div class="fabricator-settings-footer">' +
+                '<button class="fabricator-btn-primary" id="fabricator-sp-done">' + escHtml(_i18n.done || 'Done') + '</button>' +
             '</div>' +
         '</div>';
     document.body.appendChild(settingsModal);
 
-    settingsModal.querySelector('.forge-modal-close').addEventListener('click', closeSettingsModal);
-    settingsModal.querySelector('#forge-sp-done').addEventListener('click', closeSettingsModal);
+    settingsModal.querySelector('.fabricator-modal-close').addEventListener('click', closeSettingsModal);
+    settingsModal.querySelector('#fabricator-sp-done').addEventListener('click', closeSettingsModal);
     settingsModal.addEventListener('click', function (e) { if (e.target === settingsModal) closeSettingsModal(); });
 
     /* Cache tab buttons and panels once — they never change after creation. */
-    var stabBtns   = Array.from(settingsModal.querySelectorAll('.forge-stab'));
-    var stabPanels = Array.from(settingsModal.querySelectorAll('.forge-stab-panel'));
+    var stabBtns   = Array.from(settingsModal.querySelectorAll('.fabricator-stab'));
+    var stabPanels = Array.from(settingsModal.querySelectorAll('.fabricator-stab-panel'));
 
     stabBtns.forEach(function (btn) {
         btn.addEventListener('click', function () {
-            stabBtns.forEach(function (b)   { b.classList.remove('forge-stab-active'); });
-            stabPanels.forEach(function (p) { p.classList.remove('forge-stab-active'); });
-            btn.classList.add('forge-stab-active');
-            var panel = document.getElementById('forge-stab-' + btn.dataset.stab);
-            if (panel) panel.classList.add('forge-stab-active');
+            stabBtns.forEach(function (b)   { b.classList.remove('fabricator-stab-active'); });
+            stabPanels.forEach(function (p) { p.classList.remove('fabricator-stab-active'); });
+            btn.classList.add('fabricator-stab-active');
+            var panel = document.getElementById('fabricator-stab-' + btn.dataset.stab);
+            if (panel) panel.classList.add('fabricator-stab-active');
         });
     });
     settingsModal._stabBtns   = stabBtns;
@@ -1511,12 +1511,12 @@ function openSettingsModal(idx, ctx) {
     var pal = findPaletteItem(field.type);
     if (pal && pal.noPanel) return;
 
-    settingsModal._stabBtns.forEach(function (b)   { b.classList.remove('forge-stab-active'); });
-    settingsModal._stabPanels.forEach(function (p)  { p.classList.remove('forge-stab-active'); });
-    settingsModal._stabBtns[0].classList.add('forge-stab-active');   /* "Allgemein" is always first */
-    settingsModal._stabPanels[0].classList.add('forge-stab-active');
+    settingsModal._stabBtns.forEach(function (b)   { b.classList.remove('fabricator-stab-active'); });
+    settingsModal._stabPanels.forEach(function (p)  { p.classList.remove('fabricator-stab-active'); });
+    settingsModal._stabBtns[0].classList.add('fabricator-stab-active');   /* "Allgemein" is always first */
+    settingsModal._stabPanels[0].classList.add('fabricator-stab-active');
 
-    var idChip = document.getElementById('forge-sp-id-chip');
+    var idChip = document.getElementById('fabricator-sp-id-chip');
     if (idChip) {
         idChip.textContent = '{' + field.id + '}';
         idChip.onclick = function () {
@@ -1550,9 +1550,9 @@ function buildSettingsTabs(idx, overrideField) {
     var field = overrideField || state.fields[idx];
     var pal   = findPaletteItem(field.type);
 
-    document.getElementById('forge-sp-title').textContent =
+    document.getElementById('fabricator-sp-title').textContent =
         (pal ? pal.label : field.type) + ' ' + (_i18n.editFieldSuffix || 'Edit');
-    settingsModal.querySelector('.forge-settings-field-icon').innerHTML =
+    settingsModal.querySelector('.fabricator-settings-field-icon').innerHTML =
         '<i class="' + escHtml(pal ? pal.icon : 'fa-solid fa-square') + '"></i>';
 
     buildGeneralTab(idx, field, pal);
@@ -1562,7 +1562,7 @@ function buildSettingsTabs(idx, overrideField) {
 
 /* ---- General tab ---- */
 function buildGeneralTab(idx, field, pal) {
-    var panel  = document.getElementById('forge-stab-general');
+    var panel  = document.getElementById('fabricator-stab-general');
     panel.innerHTML = '';
     var schema = (pal && pal.generalSchema) ? pal.generalSchema : [];
 
@@ -1575,9 +1575,9 @@ function buildGeneralTab(idx, field, pal) {
         } else {
             state.fields[idx][key] = val;
             if (key === 'label') {
-                var rowEl = document.querySelector('.forge-field-row[data-idx="' + idx + '"] .forge-row-label');
+                var rowEl = document.querySelector('.fabricator-field-row[data-idx="' + idx + '"] .fabricator-row-label');
                 if (rowEl) {
-                    var badge = rowEl.querySelector('.forge-cond-badge');
+                    var badge = rowEl.querySelector('.fabricator-cond-badge');
                     rowEl.textContent = val || (_i18n.noLabel || '(no label)');
                     if (badge) rowEl.appendChild(badge);
                 }
@@ -1626,7 +1626,7 @@ function buildGeneralTab(idx, field, pal) {
                     change(schema_entry.key, v);
                     if (schema_entry.rebuild) {
                         /* rebuild on blur only — not on every keystroke */
-                        var inp = document.getElementById('forge-sp-' + schema_entry.key);
+                        var inp = document.getElementById('fabricator-sp-' + schema_entry.key);
                         if (inp && !inp._rebuildBound) {
                             inp._rebuildBound = true;
                             inp.addEventListener('blur', function () {
@@ -1738,9 +1738,9 @@ function buildGeneralTab(idx, field, pal) {
         } else if (s.type === 'pill3') {
             (function (schema_entry) {
                 var pillRow = document.createElement('div');
-                pillRow.className = 'forge-sp-row';
+                pillRow.className = 'fabricator-sp-row';
                 var lbl = document.createElement('div');
-                lbl.className   = 'forge-sp-label';
+                lbl.className   = 'fabricator-sp-label';
                 lbl.textContent = schema_entry.label || '';
                 pillRow.appendChild(lbl);
                 var pill = mkSeg(
@@ -1761,9 +1761,9 @@ function buildGeneralTab(idx, field, pal) {
         } else if (s.type === 'pill_multi') {
             (function (schema_entry) {
                 var pillRow = document.createElement('div');
-                pillRow.className = 'forge-sp-row';
+                pillRow.className = 'fabricator-sp-row';
                 var lbl = document.createElement('div');
-                lbl.className   = 'forge-sp-label';
+                lbl.className   = 'fabricator-sp-label';
                 lbl.textContent = schema_entry.label || '';
                 pillRow.appendChild(lbl);
                 var curArr = Array.isArray(cur) ? cur.slice() : (cur ? [cur] : []);
@@ -1808,9 +1808,9 @@ var FIELD_ADVANCED_BLOCKS = {
         spSectionTitle(panel, _i18n.countryFilter || 'Country filter');
 
         var modeRow = document.createElement('div');
-        modeRow.className = 'forge-sp-row';
+        modeRow.className = 'fabricator-sp-row';
         var modeLbl = document.createElement('div');
-        modeLbl.className   = 'forge-sp-label';
+        modeLbl.className   = 'fabricator-sp-label';
         modeLbl.textContent = _i18n.countryFilter || 'Country filter';
         modeRow.appendChild(modeLbl);
 
@@ -1845,7 +1845,7 @@ var FIELD_ADVANCED_BLOCKS = {
         spSectionTitle(panel, _i18n.formatValidation || 'Format validation');
 
         var phoneModeRow = document.createElement('div');
-        phoneModeRow.className = 'forge-sp-row';
+        phoneModeRow.className = 'fabricator-sp-row';
 
         var phoneExtraSection = document.createElement('div');
 
@@ -1855,7 +1855,7 @@ var FIELD_ADVANCED_BLOCKS = {
 
             if (mode === 'any') {
                 var hint = document.createElement('p');
-                hint.className   = 'forge-sp-hint';
+                hint.className   = 'fabricator-sp-hint';
                 hint.textContent = _i18n.phoneAnyFormatHint || 'Any valid format: min. 7 digits, optionally with + and country code.';
                 phoneExtraSection.appendChild(hint);
                 phoneExtraSection.hidden = false;
@@ -1865,7 +1865,7 @@ var FIELD_ADVANCED_BLOCKS = {
             if (mode === 'countries') {
                 phoneExtraSection.hidden = false;
                 var subRow = document.createElement('div');
-                subRow.className = 'forge-sp-row';
+                subRow.className = 'fabricator-sp-row';
                 var subPill = mkSeg(
                     ['allow', 'disallow'],
                     [_i18n.allowed || 'Allowed', _i18n.disallowed || 'Disallowed'],
@@ -1900,7 +1900,7 @@ var FIELD_ADVANCED_BLOCKS = {
 
 /* ---- Advanced tab ---- */
 function buildAdvancedTab(idx, field) {
-    var panel = document.getElementById('forge-stab-advanced');
+    var panel = document.getElementById('fabricator-stab-advanced');
     panel.innerHTML = '';
 
     function change(key, val) {
@@ -1913,16 +1913,16 @@ function buildAdvancedTab(idx, field) {
     }
 
     var idRow = document.createElement('div');
-    idRow.className = 'forge-sp-row';
+    idRow.className = 'fabricator-sp-row';
     var idLbl = document.createElement('label');
-    idLbl.className   = 'forge-sp-label';
+    idLbl.className   = 'fabricator-sp-label';
     idLbl.textContent = _i18n.fieldIdLabel || 'Field ID';
-    idLbl.htmlFor     = 'forge-sp-field-id';
+    idLbl.htmlFor     = 'fabricator-sp-field-id';
     idRow.appendChild(idLbl);
     var idInp = document.createElement('input');
     idInp.type       = 'text';
-    idInp.id         = 'forge-sp-field-id';
-    idInp.className  = 'forge-sp-input forge-sp-field-id';
+    idInp.id         = 'fabricator-sp-field-id';
+    idInp.className  = 'fabricator-sp-input fabricator-sp-field-id';
     idInp.value      = field.id || '';
     idInp.spellcheck = false;
     idInp.addEventListener('input', function () {
@@ -1934,16 +1934,16 @@ function buildAdvancedTab(idx, field) {
         target.id = slug || generateId(field.type);
         var hintCode = idRow.querySelector('code');
         if (hintCode) hintCode.textContent = '{' + target.id + '}';
-        var chip = document.getElementById('forge-sp-id-chip');
+        var chip = document.getElementById('fabricator-sp-id-chip');
         if (chip && chip.textContent.trim() !== (_i18n.copied || 'copied')) chip.textContent = '{' + target.id + '}';
         if (!settingsCtx) {
-            var rowIdBadge = document.querySelector('.forge-field-row[data-idx="' + idx + '"] .forge-row-id');
+            var rowIdBadge = document.querySelector('.fabricator-field-row[data-idx="' + idx + '"] .fabricator-row-id');
             if (rowIdBadge) rowIdBadge.textContent = '{' + target.id + '}';
         }
     });
     idRow.appendChild(idInp);
     var idHint = document.createElement('p');
-    idHint.className = 'forge-sp-hint';
+    idHint.className = 'fabricator-sp-hint';
     idHint.innerHTML = escHtml(_i18n.useEmailsHint || 'Use in emails:') + ' <code>{' + escHtml(field.id) + '}</code>';
     idRow.appendChild(idHint);
     panel.appendChild(idRow);
@@ -1993,7 +1993,7 @@ function buildAdvancedTab(idx, field) {
         advSchema.forEach(function (s) {
             if (s.type === 'notice') {
                 var nEl = document.createElement('div');
-                nEl.className = 'forge-sp-notice forge-sp-notice--' + (s.level || 'info');
+                nEl.className = 'fabricator-sp-notice fabricator-sp-notice--' + (s.level || 'info');
                 nEl.textContent = s.text || '';
                 panel.appendChild(nEl);
                 return;
@@ -2003,7 +2003,7 @@ function buildAdvancedTab(idx, field) {
                 if (s.label) spSectionTitle(panel, s.label);
 
                 var pillRow = document.createElement('div');
-                pillRow.className = 'forge-sp-row';
+                pillRow.className = 'fabricator-sp-row';
                 var curVal = advField[s.key] !== undefined ? advField[s.key] : (s.values ? s.values[0] : '');
                 /* Capture s in closure so the onChange sees the right schema entry */
                 (function (entry) {
@@ -2079,7 +2079,7 @@ function buildAdvancedTab(idx, field) {
 
 /* ---- Conditions tab ---- */
 function buildConditionsTab(idx, field) {
-    var panel = document.getElementById('forge-stab-conditions');
+    var panel = document.getElementById('fabricator-stab-conditions');
     panel.innerHTML = '';
 
     /* Resolve which object holds the conditions — group child or top-level field */
@@ -2098,7 +2098,7 @@ function buildConditionsTab(idx, field) {
     var cond = condOwner.conditions;
 
     var sentenceRow = document.createElement('div');
-    sentenceRow.className = 'forge-cond-sentence';
+    sentenceRow.className = 'fabricator-cond-sentence';
     sentenceRow.appendChild(mkSeg(
         ['show', 'hide'],
         [_i18n.condShow || 'Show', _i18n.condHide || 'Hide'],
@@ -2116,11 +2116,11 @@ function buildConditionsTab(idx, field) {
     panel.appendChild(sentenceRow);
 
     var body = document.createElement('div');
-    body.className = 'forge-cond-body';
+    body.className = 'fabricator-cond-body';
     panel.appendChild(body);
 
     var rulesList = document.createElement('div');
-    rulesList.className = 'forge-cond-rules';
+    rulesList.className = 'fabricator-cond-rules';
     body.appendChild(rulesList);
 
     function rebuildRules() {
@@ -2134,11 +2134,11 @@ function buildConditionsTab(idx, field) {
         var CHOICE_TYPES = ['select', 'radio', 'checkbox', 'multivalue'];
 
         var row = document.createElement('div');
-        row.className = 'forge-cond-rule';
+        row.className = 'fabricator-cond-rule';
 
         /* Left content: two plain rows */
         var content = document.createElement('div');
-        content.className = 'forge-cond-rule-content';
+        content.className = 'fabricator-cond-rule-content';
         row.appendChild(content);
 
         /* Collect all referenceable fields: top-level + group children (flattened) */
@@ -2164,10 +2164,10 @@ function buildConditionsTab(idx, field) {
 
         /* Row 1: field selector + operator selector */
         var topRow = document.createElement('div');
-        topRow.className = 'forge-cond-rule-top';
+        topRow.className = 'fabricator-cond-rule-top';
 
         var fieldSel = document.createElement('select');
-        fieldSel.className = 'forge-cond-sel';
+        fieldSel.className = 'fabricator-cond-sel';
         if (!others.length) {
             var placeholder = document.createElement('option');
             placeholder.textContent = _i18n.noOtherFields || '(no other fields)';
@@ -2195,7 +2195,7 @@ function buildConditionsTab(idx, field) {
 
         /* Row 2: value area (mode pill + control) */
         var valArea = document.createElement('div');
-        valArea.className = 'forge-cond-val-area';
+        valArea.className = 'fabricator-cond-val-area';
         content.appendChild(valArea);
 
         var OPTION_OPERATORS = [
@@ -2262,14 +2262,14 @@ function buildConditionsTab(idx, field) {
                         rebuildValueCtrl();
                     }
                 );
-                modeToggle.className += ' forge-cond-mode-seg';
+                modeToggle.className += ' fabricator-cond-mode-seg';
                 valArea.appendChild(modeToggle);
             }
 
             if (isChoice && rule.use_option) {
                 /* Dropdown of the field's saved options */
                 var optSel = document.createElement('select');
-                optSel.className = 'forge-cond-sel forge-cond-opt-sel';
+                optSel.className = 'fabricator-cond-sel fabricator-cond-opt-sel';
                 var blank = document.createElement('option');
                 blank.value = ''; blank.textContent = _i18n.chooseOption || 'Choose option';
                 if (!rule.value) blank.selected = true;
@@ -2288,7 +2288,7 @@ function buildConditionsTab(idx, field) {
                 /* Free text / number input */
                 var inp = document.createElement('input');
                 inp.type        = 'text';
-                inp.className   = 'forge-cond-val';
+                inp.className   = 'fabricator-cond-val';
                 inp.value       = rule.value || '';
                 inp.placeholder = _i18n.valueWord || 'Value';
                 inp.addEventListener('input', function () { rule.value = this.value; });
@@ -2312,7 +2312,7 @@ function buildConditionsTab(idx, field) {
         /* ---- Delete — right-side trash button ---- */
         var rm = document.createElement('button');
         rm.type      = 'button';
-        rm.className = 'forge-cond-rm';
+        rm.className = 'fabricator-cond-rm';
         rm.title     = _i18n.removeCondition || 'Remove condition';
         rm.innerHTML = '<i class="fa-solid fa-trash"></i>';
         rm.addEventListener('click', function () { cond.rules.splice(ri, 1); rebuildRules(); });
@@ -2325,7 +2325,7 @@ function buildConditionsTab(idx, field) {
 
     var addBtn = document.createElement('button');
     addBtn.type      = 'button';
-    addBtn.className = 'forge-cond-add';
+    addBtn.className = 'fabricator-cond-add';
     addBtn.innerHTML = '<i class="fa-solid fa-plus"></i> ' + escHtml(_i18n.addCondition || 'Add condition');
     addBtn.addEventListener('click', function () {
         var SKIP = ['group', 'html', 'pagebreak'];
@@ -2350,22 +2350,22 @@ function buildConditionsTab(idx, field) {
  * ================================================================ */
 function spRow(parent, key, label, type, value, onChange, hint) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
     var lbl = document.createElement('label');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label;
-    lbl.htmlFor     = 'forge-sp-' + key;
+    lbl.htmlFor     = 'fabricator-sp-' + key;
     row.appendChild(lbl);
     var inp = document.createElement('input');
     inp.type      = type || 'text';
-    inp.id        = 'forge-sp-' + key;
-    inp.className = 'forge-sp-input';
+    inp.id        = 'fabricator-sp-' + key;
+    inp.className = 'fabricator-sp-input';
     inp.value     = value !== null && value !== undefined ? String(value) : '';
     inp.addEventListener('input', function () { onChange(this.value); });
     row.appendChild(inp);
     if (hint) {
         var h = document.createElement('p');
-        h.className   = 'forge-sp-hint';
+        h.className   = 'fabricator-sp-hint';
         h.textContent = hint;
         row.appendChild(h);
     }
@@ -2374,21 +2374,21 @@ function spRow(parent, key, label, type, value, onChange, hint) {
 
 function spMediaUpload(parent, key, label, value, onChange, hint) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
 
     var lbl = document.createElement('label');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label;
-    lbl.htmlFor     = 'forge-sp-' + key;
+    lbl.htmlFor     = 'fabricator-sp-' + key;
     row.appendChild(lbl);
 
     var wrap = document.createElement('div');
-    wrap.className = 'forge-sp-media-wrap';
+    wrap.className = 'fabricator-sp-media-wrap';
 
     var inp = document.createElement('input');
     inp.type        = 'text';
-    inp.id          = 'forge-sp-' + key;
-    inp.className   = 'forge-sp-input forge-sp-media-url';
+    inp.id          = 'fabricator-sp-' + key;
+    inp.className   = 'fabricator-sp-input fabricator-sp-media-url';
     inp.value       = value || '';
     inp.placeholder = 'https://…';
     inp.addEventListener('input', function () { onChange(this.value); updateThumb(); });
@@ -2396,7 +2396,7 @@ function spMediaUpload(parent, key, label, value, onChange, hint) {
 
     var btn = document.createElement('button');
     btn.type      = 'button';
-    btn.className = 'button forge-sp-media-btn';
+    btn.className = 'button fabricator-sp-media-btn';
     btn.innerHTML = '<i class="fa-solid fa-photo-film"></i> ' + escHtml(_i18n.mediaLibrary || 'Media library');
     btn.addEventListener('click', function () {
         if (typeof wp === 'undefined' || !wp.media) {
@@ -2422,7 +2422,7 @@ function spMediaUpload(parent, key, label, value, onChange, hint) {
     wrap.appendChild(btn);
 
     var thumb = document.createElement('img');
-    thumb.className     = 'forge-sp-media-thumb';
+    thumb.className     = 'fabricator-sp-media-thumb';
     thumb.alt           = '';
     thumb.style.display = value ? 'block' : 'none';
     if (value) { thumb.src = value; }
@@ -2438,7 +2438,7 @@ function spMediaUpload(parent, key, label, value, onChange, hint) {
 
     if (hint) {
         var h = document.createElement('p');
-        h.className   = 'forge-sp-hint';
+        h.className   = 'fabricator-sp-hint';
         h.textContent = hint;
         row.appendChild(h);
     }
@@ -2447,22 +2447,22 @@ function spMediaUpload(parent, key, label, value, onChange, hint) {
 
 function spTextarea(parent, key, label, value, onChange, hint) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
     var lbl = document.createElement('label');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label;
-    lbl.htmlFor     = 'forge-sp-' + key;
+    lbl.htmlFor     = 'fabricator-sp-' + key;
     row.appendChild(lbl);
     var ta = document.createElement('textarea');
-    ta.id        = 'forge-sp-' + key;
-    ta.className = 'forge-sp-input';
+    ta.id        = 'fabricator-sp-' + key;
+    ta.className = 'fabricator-sp-input';
     ta.rows      = 4;
     ta.value     = value || '';
     ta.addEventListener('input', function () { onChange(this.value); });
     row.appendChild(ta);
     if (hint) {
         var h = document.createElement('p');
-        h.className   = 'forge-sp-hint';
+        h.className   = 'fabricator-sp-hint';
         h.textContent = hint;
         row.appendChild(h);
     }
@@ -2476,10 +2476,10 @@ function spTextarea(parent, key, label, value, onChange, hint) {
    position onward. */
 function spPageNamesList(parent, key, label, values, onChange, hint, fieldIdx) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
 
     var lbl = document.createElement('div');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label;
     row.appendChild(lbl);
 
@@ -2491,20 +2491,20 @@ function spPageNamesList(parent, key, label, values, onChange, hint, fieldIdx) {
     while (names.length < pageCount) { names.push(''); }
 
     var listEl = document.createElement('div');
-    listEl.className = 'forge-sp-page-names-list';
+    listEl.className = 'fabricator-sp-page-names-list';
     for (var i = 0; i < pageCount; i++) {
         (function (idx) {
             var itemRow = document.createElement('div');
-            itemRow.className = 'forge-sp-page-name-row';
+            itemRow.className = 'fabricator-sp-page-name-row';
 
             var numTag = document.createElement('span');
-            numTag.className   = 'forge-sp-page-name-num';
+            numTag.className   = 'fabricator-sp-page-name-num';
             numTag.textContent = String(idx + 1);
             itemRow.appendChild(numTag);
 
             var inp = document.createElement('input');
             inp.type        = 'text';
-            inp.className   = 'forge-sp-input';
+            inp.className   = 'fabricator-sp-input';
             inp.value       = names[idx] || '';
             inp.placeholder = (_i18n.pagePrefix || 'Page ') + (idx + 1);
             inp.addEventListener('input', function () {
@@ -2520,7 +2520,7 @@ function spPageNamesList(parent, key, label, values, onChange, hint, fieldIdx) {
 
     if (hint) {
         var h = document.createElement('p');
-        h.className   = 'forge-sp-hint';
+        h.className   = 'fabricator-sp-hint';
         h.textContent = hint;
         row.appendChild(h);
     }
@@ -2530,7 +2530,7 @@ function spPageNamesList(parent, key, label, values, onChange, hint, fieldIdx) {
 /* Toggle switch — used for all simple on/off settings fields */
 function spInfoIcon(text) {
     var wrap = document.createElement('span');
-    wrap.className = 'forge-info-icon';
+    wrap.className = 'fabricator-info-icon';
     wrap.setAttribute('aria-label', text);
     wrap.setAttribute('role', 'button');
     wrap.setAttribute('tabindex', '0');
@@ -2541,10 +2541,10 @@ function spInfoIcon(text) {
     // Appended to <body> (not `wrap`) and position:fixed, because the settings
     // modal has overflow:hidden for its rounded corners — an absolutely-positioned
     // descendant tooltip gets silently clipped there instead of floating above the
-    // modal, the same problem forge-access-dropdown (FormSettings.php) already
+    // modal, the same problem fabricator-access-dropdown (FormSettings.php) already
     // solves the same way.
     var tip = document.createElement('span');
-    tip.className   = 'forge-info-tooltip';
+    tip.className   = 'fabricator-info-tooltip';
     tip.textContent = text;
     document.body.appendChild(tip);
 
@@ -2554,13 +2554,13 @@ function spInfoIcon(text) {
         // Render off-screen first so its real height can be measured before placing it.
         tip.style.left = '-9999px';
         tip.style.top  = '-9999px';
-        tip.classList.add('forge-info-tooltip--visible');
+        tip.classList.add('fabricator-info-tooltip--visible');
         var tipRect = tip.getBoundingClientRect();
         tip.style.top  = (r.top - tipRect.height - 6) + 'px';
         tip.style.left = (r.right - tipRect.width) + 'px';
     }
     function show() { position(); }
-    function hide() { tip.classList.remove('forge-info-tooltip--visible'); open = false; }
+    function hide() { tip.classList.remove('fabricator-info-tooltip--visible'); open = false; }
 
     wrap.addEventListener('mouseenter', show);
     wrap.addEventListener('mouseleave', hide);
@@ -2596,26 +2596,26 @@ function spInfoIcon(text) {
 
 function spCheckbox(parent, key, label, checked, onChange, disclaimer) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-toggle-row';
+    row.className = 'fabricator-sp-toggle-row';
 
     var toggleLbl = document.createElement('label');
-    toggleLbl.className = 'forge-toggle';
-    toggleLbl.htmlFor   = 'forge-sp-' + key;
+    toggleLbl.className = 'fabricator-toggle';
+    toggleLbl.htmlFor   = 'fabricator-sp-' + key;
 
     var inp = document.createElement('input');
     inp.type    = 'checkbox';
-    inp.id      = 'forge-sp-' + key;
+    inp.id      = 'fabricator-sp-' + key;
     inp.checked = !!checked;
     inp.addEventListener('change', function () { onChange(this.checked); });
     toggleLbl.appendChild(inp);
 
     var slider = document.createElement('span');
-    slider.className = 'forge-toggle-slider';
+    slider.className = 'fabricator-toggle-slider';
     toggleLbl.appendChild(slider);
 
     var textLbl = document.createElement('label');
-    textLbl.className   = 'forge-toggle-label';
-    textLbl.htmlFor     = 'forge-sp-' + key;
+    textLbl.className   = 'fabricator-toggle-label';
+    textLbl.htmlFor     = 'fabricator-sp-' + key;
     textLbl.textContent = label;
     if (disclaimer) {
         textLbl.appendChild(spInfoIcon(disclaimer));
@@ -2628,33 +2628,33 @@ function spCheckbox(parent, key, label, checked, onChange, disclaimer) {
 
 function spCheckboxHint(parent, key, label, hint, checked, onChange) {
     var wrap = document.createElement('div');
-    wrap.className = 'forge-sp-toggle-row forge-sp-toggle-row--hint';
+    wrap.className = 'fabricator-sp-toggle-row fabricator-sp-toggle-row--hint';
 
     var left = document.createElement('div');
-    left.className = 'forge-sp-toggle-row-text';
+    left.className = 'fabricator-sp-toggle-row-text';
     var textLbl = document.createElement('label');
-    textLbl.className   = 'forge-toggle-label';
-    textLbl.htmlFor     = 'forge-sp-' + key;
+    textLbl.className   = 'fabricator-toggle-label';
+    textLbl.htmlFor     = 'fabricator-sp-' + key;
     textLbl.textContent = label;
     left.appendChild(textLbl);
     if (hint) {
         var hintEl = document.createElement('div');
-        hintEl.className   = 'forge-sp-hint';
+        hintEl.className   = 'fabricator-sp-hint';
         hintEl.textContent = hint;
         left.appendChild(hintEl);
     }
 
     var toggleLbl = document.createElement('label');
-    toggleLbl.className = 'forge-toggle';
-    toggleLbl.htmlFor   = 'forge-sp-' + key;
+    toggleLbl.className = 'fabricator-toggle';
+    toggleLbl.htmlFor   = 'fabricator-sp-' + key;
     var inp = document.createElement('input');
     inp.type    = 'checkbox';
-    inp.id      = 'forge-sp-' + key;
+    inp.id      = 'fabricator-sp-' + key;
     inp.checked = !!checked;
     inp.addEventListener('change', function () { onChange(this.checked); });
     toggleLbl.appendChild(inp);
     var slider = document.createElement('span');
-    slider.className = 'forge-toggle-slider';
+    slider.className = 'fabricator-toggle-slider';
     toggleLbl.appendChild(slider);
 
     wrap.appendChild(left);
@@ -2664,15 +2664,15 @@ function spCheckboxHint(parent, key, label, hint, checked, onChange) {
 
 function spSelect(parent, key, label, options, value, onChange) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
     var lbl = document.createElement('label');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label;
-    lbl.htmlFor     = 'forge-sp-' + key;
+    lbl.htmlFor     = 'fabricator-sp-' + key;
     row.appendChild(lbl);
     var sel = document.createElement('select');
-    sel.id        = 'forge-sp-' + key;
-    sel.className = 'forge-sp-input';
+    sel.id        = 'fabricator-sp-' + key;
+    sel.className = 'fabricator-sp-input';
     options.forEach(function (opt) {
         var o = document.createElement('option');
         o.value       = opt.value !== undefined ? opt.value : opt;
@@ -2686,7 +2686,7 @@ function spSelect(parent, key, label, options, value, onChange) {
 }
 
 /* Country names for IBAN-capable countries. English literal fallback map —
-   the actual values used at runtime come from window.ForgeBuilderI18n.countryNames
+   the actual values used at runtime come from window.FabricatorBuilderI18n.countryNames
    (FormEditor.php::builderI18n(), which reuses the same __() msgids as
    SepaField::ibanCountryOptions()); this object only fills in if that ever
    fails to load. */
@@ -2707,14 +2707,14 @@ var COUNTRY_NAMES_EN = {
     SI:'Slovenia',SK:'Slovakia',SM:'San Marino',SV:'El Salvador',TN:'Tunisia',
     TR:'Turkey',UA:'Ukraine',VA:'Vatican City',VG:'British Virgin Islands',XK:'Kosovo'
 };
-var COUNTRY_NAMES = mergeI18nMap(COUNTRY_NAMES_EN, (window.ForgeBuilderI18n && window.ForgeBuilderI18n.countryNames) || {});
+var COUNTRY_NAMES = mergeI18nMap(COUNTRY_NAMES_EN, (window.FabricatorBuilderI18n && window.FabricatorBuilderI18n.countryNames) || {});
 
 function spCountryTags(parent, key, label, values, onChange) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
 
     var lbl = document.createElement('div');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label;
     row.appendChild(lbl);
 
@@ -2723,16 +2723,16 @@ function spCountryTags(parent, key, label, values, onChange) {
      * Clicking anywhere in the box focuses the search input.
      */
     var box = document.createElement('div');
-    box.className = 'forge-ctag-box';
+    box.className = 'fabricator-ctag-box';
 
     var search = document.createElement('input');
     search.type        = 'text';
     search.placeholder = _i18n.searchCountry || 'Search and add country…';
-    search.className   = 'forge-ctag-search';
+    search.className   = 'fabricator-ctag-search';
     search.autocomplete = 'off';
 
     var dropdown = document.createElement('div');
-    dropdown.className = 'forge-ctag-dropdown';
+    dropdown.className = 'fabricator-ctag-dropdown';
     dropdown.hidden    = true;
 
     /* Clicking the box background focuses the search input */
@@ -2744,21 +2744,21 @@ function spCountryTags(parent, key, label, values, onChange) {
 
     function chip(cc) {
         var c = document.createElement('span');
-        c.className = 'forge-ctag-chip';
+        c.className = 'fabricator-ctag-chip';
 
         var code = document.createElement('span');
-        code.className   = 'forge-ctag-chip-code';
+        code.className   = 'fabricator-ctag-chip-code';
         code.textContent = cc;
         c.appendChild(code);
 
         var name = document.createElement('span');
-        name.className   = 'forge-ctag-chip-name';
+        name.className   = 'fabricator-ctag-chip-name';
         name.textContent = COUNTRY_NAMES[cc] || '';
         c.appendChild(name);
 
         var rm = document.createElement('button');
         rm.type      = 'button';
-        rm.className = 'forge-ctag-rm';
+        rm.className = 'fabricator-ctag-rm';
         rm.setAttribute('aria-label', _i18n.removeAriaLabel || 'Remove');
         rm.innerHTML = '&times;';
         rm.addEventListener('mousedown', function (e) {
@@ -2818,12 +2818,12 @@ function spCountryTags(parent, key, label, values, onChange) {
 
         matches.forEach(function (cc) {
             var opt = document.createElement('div');
-            opt.className = 'forge-ctag-opt';
+            opt.className = 'fabricator-ctag-opt';
             var codeSpan = document.createElement('span');
-            codeSpan.className   = 'forge-ctag-opt-code';
+            codeSpan.className   = 'fabricator-ctag-opt-code';
             codeSpan.textContent = cc;
             var nameSpan = document.createElement('span');
-            nameSpan.className   = 'forge-ctag-opt-name';
+            nameSpan.className   = 'fabricator-ctag-opt-name';
             nameSpan.textContent = COUNTRY_NAMES[cc] || '';
             opt.appendChild(codeSpan);
             opt.appendChild(nameSpan);
@@ -2875,7 +2875,7 @@ function spCountryTags(parent, key, label, values, onChange) {
 
 /* Calling codes for phone country filter — stored value is the code string e.g. '+49'.
    English literal fallback map; runtime values come from
-   window.ForgeBuilderI18n.phoneCodes (FormEditor.php::builderI18n()). */
+   window.FabricatorBuilderI18n.phoneCodes (FormEditor.php::builderI18n()). */
 var PHONE_CALLING_CODES_EN = {
     '+1':   'USA / Canada',   '+7':   'Russia',         '+20':  'Egypt',
     '+27':  'South Africa',   '+30':  'Greece',         '+31':  'Netherlands',
@@ -2900,28 +2900,28 @@ var PHONE_CALLING_CODES_EN = {
     '+386': 'Slovenia',       '+420': 'Czechia',        '+421': 'Slovakia',
     '+423': 'Liechtenstein'
 };
-var PHONE_CALLING_CODES = mergeI18nMap(PHONE_CALLING_CODES_EN, (window.ForgeBuilderI18n && window.ForgeBuilderI18n.phoneCodes) || {});
+var PHONE_CALLING_CODES = mergeI18nMap(PHONE_CALLING_CODES_EN, (window.FabricatorBuilderI18n && window.FabricatorBuilderI18n.phoneCodes) || {});
 
 function spCallingCodeTags(parent, key, label, values, onChange) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
 
     var lbl = document.createElement('div');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label || '';
     row.appendChild(lbl);
 
     var box = document.createElement('div');
-    box.className = 'forge-ctag-box';
+    box.className = 'fabricator-ctag-box';
 
     var search = document.createElement('input');
     search.type         = 'text';
     search.placeholder  = (_i18n.searchDialCode || 'Search dial code (+49)…');
-    search.className    = 'forge-ctag-search';
+    search.className    = 'fabricator-ctag-search';
     search.autocomplete = 'off';
 
     var dropdown = document.createElement('div');
-    dropdown.className = 'forge-ctag-dropdown';
+    dropdown.className = 'fabricator-ctag-dropdown';
     dropdown.hidden    = true;
 
     box.addEventListener('mousedown', function (e) {
@@ -2932,21 +2932,21 @@ function spCallingCodeTags(parent, key, label, values, onChange) {
 
     function chip(code) {
         var c = document.createElement('span');
-        c.className = 'forge-ctag-chip';
+        c.className = 'fabricator-ctag-chip';
 
         var codeSpan = document.createElement('span');
-        codeSpan.className   = 'forge-ctag-chip-code';
+        codeSpan.className   = 'fabricator-ctag-chip-code';
         codeSpan.textContent = code;
         c.appendChild(codeSpan);
 
         var nameSpan = document.createElement('span');
-        nameSpan.className   = 'forge-ctag-chip-name';
+        nameSpan.className   = 'fabricator-ctag-chip-name';
         nameSpan.textContent = PHONE_CALLING_CODES[code] || '';
         c.appendChild(nameSpan);
 
         var rm = document.createElement('button');
         rm.type      = 'button';
-        rm.className = 'forge-ctag-rm';
+        rm.className = 'fabricator-ctag-rm';
         rm.setAttribute('aria-label', _i18n.removeAriaLabel || 'Remove');
         rm.innerHTML = '&times;';
         rm.addEventListener('mousedown', function (e) {
@@ -2998,12 +2998,12 @@ function spCallingCodeTags(parent, key, label, values, onChange) {
 
         matches.forEach(function (code) {
             var opt = document.createElement('div');
-            opt.className = 'forge-ctag-opt';
+            opt.className = 'fabricator-ctag-opt';
             var cSpan = document.createElement('span');
-            cSpan.className   = 'forge-ctag-opt-code';
+            cSpan.className   = 'fabricator-ctag-opt-code';
             cSpan.textContent = code;
             var nSpan = document.createElement('span');
-            nSpan.className   = 'forge-ctag-opt-name';
+            nSpan.className   = 'fabricator-ctag-opt-name';
             nSpan.textContent = PHONE_CALLING_CODES[code] || '';
             opt.appendChild(cSpan);
             opt.appendChild(nSpan);
@@ -3058,10 +3058,10 @@ function spCallingCodeTags(parent, key, label, values, onChange) {
  */
 function spOptionsList(parent, key, label, values, onChange) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
 
     var titleRow = document.createElement('div');
-    titleRow.className = 'forge-sp-label';
+    titleRow.className = 'fabricator-sp-label';
     titleRow.textContent = label;
     row.appendChild(titleRow);
 
@@ -3075,7 +3075,7 @@ function spOptionsList(parent, key, label, values, onChange) {
     });
 
     var colHeader = document.createElement('div');
-    colHeader.className = 'forge-sp-option-cols-header';
+    colHeader.className = 'fabricator-sp-option-cols-header';
     colHeader.innerHTML =
         '<span></span>' +
         '<span>' + escHtml(_i18n.optionLabelPlaceholder || 'Label') + '</span>' +
@@ -3085,23 +3085,23 @@ function spOptionsList(parent, key, label, values, onChange) {
     row.appendChild(colHeader);
 
     var listEl = document.createElement('div');
-    listEl.className = 'forge-sp-options-list';
+    listEl.className = 'fabricator-sp-options-list';
 
     function rebuild() {
         listEl.innerHTML = '';
         opts.forEach(function (opt, i) {
             var optRow = document.createElement('div');
-            optRow.className = 'forge-sp-option-row';
+            optRow.className = 'fabricator-sp-option-row';
 
             /* Drag handle */
             var handle = document.createElement('span');
-            handle.className = 'forge-sp-opt-handle';
+            handle.className = 'fabricator-sp-opt-handle';
             handle.innerHTML = '<i class="fa-solid fa-grip-vertical"></i>';
             optRow.appendChild(handle);
 
             var labelInp = document.createElement('input');
             labelInp.type        = 'text';
-            labelInp.className   = 'forge-sp-opt-label';
+            labelInp.className   = 'fabricator-sp-opt-label';
             labelInp.value       = opt.label;
             labelInp.placeholder = _i18n.optionLabelPlaceholder || 'Label';
             labelInp.addEventListener('input', function () {
@@ -3115,7 +3115,7 @@ function spOptionsList(parent, key, label, values, onChange) {
                    value is left alone. */
                 if (!opts[i].value || opts[i].value === slugify(this.value.slice(0, -1))) {
                     opts[i].value = slugify(this.value);
-                    var vi = optRow.querySelector('.forge-sp-opt-value');
+                    var vi = optRow.querySelector('.fabricator-sp-opt-value');
                     if (vi) vi.value = opts[i].value;
                 }
                 onChange(opts.slice());
@@ -3124,7 +3124,7 @@ function spOptionsList(parent, key, label, values, onChange) {
 
             var valueInp = document.createElement('input');
             valueInp.type        = 'text';
-            valueInp.className   = 'forge-sp-opt-value';
+            valueInp.className   = 'fabricator-sp-opt-value';
             valueInp.value       = opt.value;
             valueInp.placeholder = _i18n.optionValuePlaceholder || 'value';
             valueInp.addEventListener('input', function () {
@@ -3136,7 +3136,7 @@ function spOptionsList(parent, key, label, values, onChange) {
             /* Default-selected star toggle */
             var starBtn = document.createElement('button');
             starBtn.type      = 'button';
-            starBtn.className = 'forge-sp-opt-star' + (opt['default'] ? ' forge-sp-opt-star--active' : '');
+            starBtn.className = 'fabricator-sp-opt-star' + (opt['default'] ? ' fabricator-sp-opt-star--active' : '');
             starBtn.title     = _i18n.preselected || 'Preselected';
             starBtn.innerHTML = opt['default']
                 ? '<i class="fa-solid fa-star"></i>'
@@ -3152,7 +3152,7 @@ function spOptionsList(parent, key, label, values, onChange) {
 
             var rm = document.createElement('button');
             rm.type      = 'button';
-            rm.className = 'forge-sp-option-remove';
+            rm.className = 'fabricator-sp-option-remove';
             rm.innerHTML = '<i class="fa-solid fa-trash"></i>';
             rm.addEventListener('click', function () { opts.splice(i, 1); rebuild(); onChange(opts.slice()); });
             optRow.appendChild(rm);
@@ -3162,7 +3162,7 @@ function spOptionsList(parent, key, label, values, onChange) {
         });
     }
     rebuild();
-    makeSortable(listEl, '.forge-sp-opt-handle', '.forge-sp-option-row', function (rows) {
+    makeSortable(listEl, '.fabricator-sp-opt-handle', '.fabricator-sp-option-row', function (rows) {
         var reordered = rows.map(function (r) { return opts[parseInt(r.dataset.optIdx, 10)]; });
         opts.length = 0;
         reordered.forEach(function (o) { opts.push(o); });
@@ -3173,14 +3173,14 @@ function spOptionsList(parent, key, label, values, onChange) {
 
     var addBtn = document.createElement('button');
     addBtn.type      = 'button';
-    addBtn.className = 'forge-sp-add-option';
+    addBtn.className = 'fabricator-sp-add-option';
     addBtn.innerHTML = '<i class="fa-solid fa-plus"></i> ' + escHtml(_i18n.addOption || 'Add option');
     addBtn.addEventListener('click', function () {
         var n = opts.length + 1;
         opts.push({ value: 'option-' + n, label: 'Option ' + n, 'default': false });
         rebuild();
         onChange(opts.slice());
-        var inputs = listEl.querySelectorAll('.forge-sp-opt-label');
+        var inputs = listEl.querySelectorAll('.fabricator-sp-opt-label');
         if (inputs.length) inputs[inputs.length - 1].focus();
     });
     row.appendChild(addBtn);
@@ -3190,9 +3190,9 @@ function spOptionsList(parent, key, label, values, onChange) {
 /* Labeled segmented control for a boolean field value */
 function spBoolSeg(parent, key, label, value, falseLabel, trueLabel, onChange, swap) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
     var lbl = document.createElement('div');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label;
     row.appendChild(lbl);
     var vals   = swap ? ['1', '0'] : ['0', '1'];
@@ -3203,20 +3203,20 @@ function spBoolSeg(parent, key, label, value, falseLabel, trueLabel, onChange, s
 
 function spSectionTitle(parent, text) {
     var t = document.createElement('div');
-    t.className   = 'forge-sp-section-title';
+    t.className   = 'fabricator-sp-section-title';
     t.textContent = text;
     parent.appendChild(t);
 }
 
 function spLimitRow(parent, typeKey, label, countKey, typeVal, countVal, onChange) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
     var lbl = document.createElement('div');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label;
     row.appendChild(lbl);
     var inner = document.createElement('div');
-    inner.className = 'forge-sp-limit-row';
+    inner.className = 'fabricator-sp-limit-row';
     var pill = mkSeg(['chars', 'words'], [_i18n.unitChars || 'Characters', _i18n.unitWords || 'Words'], typeVal || 'chars', function (v) {
         onChange(v, inp.value);
     });
@@ -3227,11 +3227,11 @@ function spLimitRow(parent, typeKey, label, countKey, typeVal, countVal, onChang
     /* Must match BaseField::OTHER_TEXT_HARD_CAP — a value configured above this
        is silently clamped server-side, so don't let the admin set one here. */
     inp.max         = '5000';
-    inp.className   = 'forge-sp-input';
+    inp.className   = 'fabricator-sp-input';
     inp.value       = countVal !== null && countVal !== undefined ? String(countVal) : '';
     inp.placeholder = '∞';
     inp.addEventListener('input', function () {
-        var curType = pill.querySelector('.forge-seg-btn.forge-seg-active');
+        var curType = pill.querySelector('.fabricator-seg-btn.fabricator-seg-active');
         onChange(curType ? curType.dataset.value : 'chars', this.value);
     });
     inner.appendChild(inp);
@@ -3241,7 +3241,7 @@ function spLimitRow(parent, typeKey, label, countKey, typeVal, countVal, onChang
 
 function spNotice(parent, text, level) {
     var el = document.createElement('div');
-    el.className   = 'forge-sp-notice forge-sp-notice--' + (level || 'info');
+    el.className   = 'fabricator-sp-notice fabricator-sp-notice--' + (level || 'info');
     el.textContent = text;
     parent.appendChild(el);
 }
@@ -3252,20 +3252,20 @@ function spHtmlEditor(parent, key, label, value, onChange, opts) {
     var showToggle = opts.showToggle !== false;
 
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
 
     var hdr = document.createElement('div');
-    hdr.className = 'forge-sp-html-hdr';
+    hdr.className = 'fabricator-sp-html-hdr';
 
     if (label) {
         var lbl = document.createElement('div');
-        lbl.className   = 'forge-sp-label';
+        lbl.className   = 'fabricator-sp-label';
         lbl.textContent = label;
         hdr.appendChild(lbl);
     }
 
     var ta = document.createElement('textarea');
-    ta.className  = 'forge-sp-input forge-sp-html-textarea';
+    ta.className  = 'fabricator-sp-input fabricator-sp-html-textarea';
     ta.rows       = 8;
     ta.value      = value || '';
     ta.spellcheck = false;
@@ -3273,14 +3273,14 @@ function spHtmlEditor(parent, key, label, value, onChange, opts) {
     var previewDiv;
     if (showToggle) {
         var modeBar = document.createElement('div');
-        modeBar.className = 'forge-sp-html-modebar';
+        modeBar.className = 'fabricator-sp-html-modebar';
         var modePill = mkSeg(['code', 'preview'], [_i18n.modeCode || 'Code', _i18n.modePreview || 'Preview'], 'code', switchMode);
         modeBar.appendChild(modePill);
         hdr.appendChild(modeBar);
 
         // Sandboxed iframe (no allow-scripts), not innerHTML — avoids a stored self-XSS between admin accounts.
         previewDiv = document.createElement('iframe');
-        previewDiv.className = 'forge-sp-html-preview';
+        previewDiv.className = 'fabricator-sp-html-preview';
         previewDiv.setAttribute('sandbox', 'allow-same-origin');
         previewDiv.hidden    = true;
         previewDiv.srcdoc    = value || '';
@@ -3338,17 +3338,17 @@ function spHtmlFieldEditor(parent, key, label, value, onChange) {
 
     /* Header row: label + Visuell|Code pill */
     var hdrWrap = document.createElement('div');
-    hdrWrap.className = 'forge-sp-row';
+    hdrWrap.className = 'fabricator-sp-row';
     var hdr = document.createElement('div');
-    hdr.className = 'forge-sp-html-hdr';
+    hdr.className = 'fabricator-sp-html-hdr';
     if (label) {
         var lbl = document.createElement('div');
-        lbl.className   = 'forge-sp-label';
+        lbl.className   = 'fabricator-sp-label';
         lbl.textContent = label;
         hdr.appendChild(lbl);
     }
     var modeBar = document.createElement('div');
-    modeBar.className = 'forge-sp-html-modebar';
+    modeBar.className = 'fabricator-sp-html-modebar';
     modeBar.appendChild(mkSeg(['text', 'html'], [_i18n.modeVisual || 'Visual', _i18n.modeCode || 'Code'], 'text', function (v) {
         currentMode = v;
         renderEditor();
@@ -3382,17 +3382,17 @@ function spHtmlFieldEditor(parent, key, label, value, onChange) {
 
 function spRichTextEditor(parent, key, label, value, onChange, opts) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
 
     if (label) {
         var lbl = document.createElement('div');
-        lbl.className   = 'forge-sp-label';
+        lbl.className   = 'fabricator-sp-label';
         lbl.textContent = label;
         row.appendChild(lbl);
     }
 
     var toolbar = document.createElement('div');
-    toolbar.className = 'forge-sp-richtext-toolbar';
+    toolbar.className = 'fabricator-sp-richtext-toolbar';
     var commands = [
         ['bold', _i18n.rtBold || 'Bold', 'fa-bold'],
         ['italic', _i18n.rtItalic || 'Italic', 'fa-italic'],
@@ -3404,7 +3404,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
     commands.forEach(function (cmd) {
         var btn = document.createElement('button');
         btn.type      = 'button';
-        btn.className = 'forge-sp-richtext-btn';
+        btn.className = 'fabricator-sp-richtext-btn';
         btn.title     = cmd[1];
         btn.innerHTML = '<i class="fa-solid ' + cmd[2] + '"></i>';
         btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
@@ -3425,7 +3425,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
     row.appendChild(toolbar);
 
     var iframe = document.createElement('iframe');
-    iframe.className = 'forge-sp-input forge-sp-richtext-editor';
+    iframe.className = 'fabricator-sp-input fabricator-sp-richtext-editor';
     iframe.setAttribute('sandbox', 'allow-same-origin');
     iframe.setAttribute('title', label || (_i18n.message || 'Message'));
     row.appendChild(iframe);
@@ -3478,7 +3478,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
             setTimeout(function () { loadDoc(html); }, 0);
             return;
         }
-        // id="forge-editor-preview-style" marks this block as display-only scaffolding for the
+        // id="fabricator-editor-preview-style" marks this block as display-only scaffolding for the
         // small editor widget itself (padding/font/margin-reset so the iframe preview looks
         // sensible) — never part of the admin's actual authored content. cleanRichDoc() strips
         // any element carrying this id before either serialization mode runs. This matters most
@@ -3502,9 +3502,9 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
         // reloaded (e.g. reopening the modal, switching Code -> Visual), and since saving now
         // correctly strips this scaffold (see above), reload has nothing to carry it forward with.
         // Without this, the editor silently falls back to unstyled browser defaults on reload.
-        if (!doc.getElementById('forge-editor-preview-style')) {
+        if (!doc.getElementById('fabricator-editor-preview-style')) {
             var scaffold = doc.createElement('style');
-            scaffold.id = 'forge-editor-preview-style';
+            scaffold.id = 'fabricator-editor-preview-style';
             scaffold.textContent = 'html,body{margin:0;}'
                 + 'body{padding:10px 12px;box-sizing:border-box;'
                 + 'font-family:-apple-system,Segoe UI,Arial,sans-serif;'
@@ -3560,10 +3560,10 @@ function cleanRichDoc(doc) {
     // The editor's own display-only scaffold (see loadDoc()) — never part of the admin's actual
     // authored content, and must not survive into either the fragment or the full-document
     // serialization below (the latter is what notification emails are literally sent as).
-    var editorStyle = doc.getElementById('forge-editor-preview-style');
+    var editorStyle = doc.getElementById('fabricator-editor-preview-style');
     if (editorStyle) { editorStyle.remove(); }
     // loadDoc() also sets overflow-x:hidden directly on <html>/<body> (inline style, not the
-    // <style id="forge-editor-preview-style"> tag above) purely so a wide email table doesn't
+    // <style id="fabricator-editor-preview-style"> tag above) purely so a wide email table doesn't
     // force an unwanted vertical scrollbar in the small editor widget. That's editor scaffolding
     // too and must not leak into the stored/sent document.
     [doc.documentElement, doc.body].forEach(function (el) {
@@ -3636,18 +3636,18 @@ function normalizeNotifBodyFields(notif) {
 /* Rating icon row: select (icon type) + half-values pill in one line */
 function spIconRow(parent, iconKey, label, options, iconVal, halfKey, halfVal, onChange) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-row';
+    row.className = 'fabricator-sp-row';
 
     var lbl = document.createElement('div');
-    lbl.className   = 'forge-sp-label';
+    lbl.className   = 'fabricator-sp-label';
     lbl.textContent = label;
     row.appendChild(lbl);
 
     var inner = document.createElement('div');
-    inner.className = 'forge-sp-icon-row';
+    inner.className = 'fabricator-sp-icon-row';
 
     var sel = document.createElement('select');
-    sel.className = 'forge-sp-input';
+    sel.className = 'fabricator-sp-input';
     options.forEach(function (opt) {
         var o = document.createElement('option');
         o.value       = opt.value !== undefined ? opt.value : opt;
@@ -3663,7 +3663,7 @@ function spIconRow(parent, iconKey, label, options, iconVal, halfKey, halfVal, o
     );
 
     sel.addEventListener('change', function () {
-        var active = halfPill.querySelector('.forge-seg-btn.forge-seg-active');
+        var active = halfPill.querySelector('.fabricator-seg-btn.fabricator-seg-active');
         onChange(this.value, active ? active.dataset.value === '1' : false);
     });
 
@@ -3676,13 +3676,13 @@ function spIconRow(parent, iconKey, label, options, iconVal, halfKey, halfVal, o
 /* Time format + prefill in one row */
 function spTimeRow(parent, formatKey, prefillKey, formatVal, prefillVal, onChange) {
     var row = document.createElement('div');
-    row.className = 'forge-sp-time-row';
+    row.className = 'fabricator-sp-time-row';
 
     /* Left: Format pill */
     var fmtWrap = document.createElement('div');
-    fmtWrap.className = 'forge-sp-time-fmt';
+    fmtWrap.className = 'fabricator-sp-time-fmt';
     var fmtLbl = document.createElement('div');
-    fmtLbl.className   = 'forge-sp-label';
+    fmtLbl.className   = 'fabricator-sp-label';
     fmtLbl.textContent = _i18n.formatLabel || 'Format';
     fmtWrap.appendChild(fmtLbl);
     var fmtPill = mkSeg(['0', '1'], [_i18n.format24h || '24h', _i18n.format12h || '12h (AM/PM)'], formatVal ? '1' : '0', function (v) {
@@ -3692,22 +3692,22 @@ function spTimeRow(parent, formatKey, prefillKey, formatVal, prefillVal, onChang
 
     /* Right: Prefill toggle */
     var prefillWrap = document.createElement('div');
-    prefillWrap.className = 'forge-sp-time-prefill';
+    prefillWrap.className = 'fabricator-sp-time-prefill';
     var toggleLbl = document.createElement('label');
-    toggleLbl.className = 'forge-toggle';
+    toggleLbl.className = 'fabricator-toggle';
     var prefillChk = document.createElement('input');
     prefillChk.type    = 'checkbox';
     prefillChk.checked = !!prefillVal;
     prefillChk.addEventListener('change', function () {
-        var active = fmtPill.querySelector('.forge-seg-btn.forge-seg-active');
+        var active = fmtPill.querySelector('.fabricator-seg-btn.fabricator-seg-active');
         onChange(active ? active.dataset.value === '1' : false, this.checked);
     });
     toggleLbl.appendChild(prefillChk);
     var slider = document.createElement('span');
-    slider.className = 'forge-toggle-slider';
+    slider.className = 'fabricator-toggle-slider';
     toggleLbl.appendChild(slider);
     var textLbl = document.createElement('label');
-    textLbl.className   = 'forge-toggle-label';
+    textLbl.className   = 'fabricator-toggle-label';
     textLbl.textContent = _i18n.prefillNow || 'Prefill now';
     prefillWrap.appendChild(toggleLbl);
     prefillWrap.appendChild(textLbl);
@@ -3736,20 +3736,20 @@ function spRatingPreview(parent, field) {
     var customUrl = custom ? field.custom_icon_url : '';
 
     var wrap = document.createElement('div');
-    wrap.className = 'forge-sp-rating-preview';
+    wrap.className = 'fabricator-sp-rating-preview';
 
     var filledFull = Math.floor(max * 0.6);
     var filledHalf = half && (filledFull < max) ? 1 : 0;
 
     for (var i = 1; i <= max; i++) {
         var outer = document.createElement('span');
-        outer.className = 'forge-sp-rating-star';
+        outer.className = 'fabricator-sp-rating-star';
 
         var isFull     = i <= filledFull;
         var isHalfStep = !isFull && half && (i === filledFull + 1) && filledHalf;
 
         if (customUrl) {
-            outer.className += ' forge-sp-rating-img-star';
+            outer.className += ' fabricator-sp-rating-img-star';
             var baseImg = document.createElement('img');
             baseImg.src    = customUrl;
             baseImg.width  = 24;
@@ -3757,22 +3757,22 @@ function spRatingPreview(parent, field) {
             baseImg.style.opacity = isFull ? '1' : '0.25';
             outer.appendChild(baseImg);
             if (isHalfStep) {
-                outer.className += ' forge-sp-rating-half';
+                outer.className += ' fabricator-sp-rating-half';
                 var clipImg = document.createElement('img');
                 clipImg.src       = customUrl;
                 clipImg.width     = 24;
                 clipImg.height    = 24;
-                clipImg.className = 'forge-sp-rating-half-fill';
+                clipImg.className = 'fabricator-sp-rating-half-fill';
                 outer.appendChild(clipImg);
             }
         } else if (isHalfStep) {
-            outer.className += ' forge-sp-rating-half';
+            outer.className += ' fabricator-sp-rating-half';
             var baseSpan = document.createElement('span');
             baseSpan.textContent      = glyph;
             baseSpan.style.opacity    = '0.2';
             outer.appendChild(baseSpan);
             var clipSpan = document.createElement('span');
-            clipSpan.className   = 'forge-sp-rating-half-fill';
+            clipSpan.className   = 'fabricator-sp-rating-half-fill';
             clipSpan.textContent = glyph;
             outer.appendChild(clipSpan);
         } else {
@@ -3795,27 +3795,27 @@ function spSubfields(parent, items, field, change) {
     spSectionTitle(parent, _i18n.subfieldsSection || 'Subfields');
 
     var wrap = document.createElement('div');
-    wrap.className = 'forge-sp-subfields';
+    wrap.className = 'fabricator-sp-subfields';
 
     items.forEach(function (item) {
         var k = item.key;
 
         var card = document.createElement('div');
-        card.className = 'forge-sp-subfield-card';
+        card.className = 'fabricator-sp-subfield-card';
 
         var isEnabled = item.optional ? field[k + '_enabled'] !== false : true;
         if (item.optional && !isEnabled) {
-            card.classList.add('forge-sp-subfield--off');
+            card.classList.add('fabricator-sp-subfield--off');
         }
 
         /* ---- header: [toggle] [name] [chevron] ---- */
         var header = document.createElement('div');
-        header.className = 'forge-sp-subfield-hdr';
+        header.className = 'fabricator-sp-subfield-hdr';
 
         /* Enable toggle on the LEFT — always shown, stop-propagation so it
            doesn't fire the accordion toggle handler on the header */
         var togWrap = document.createElement('label');
-        togWrap.className = 'forge-toggle forge-toggle--sm';
+        togWrap.className = 'fabricator-toggle fabricator-toggle--sm';
         togWrap.title     = _i18n.enableSubfield || 'Enable subfield';
         togWrap.addEventListener('click', function (e) { e.stopPropagation(); });
         var togInp = document.createElement('input');
@@ -3826,7 +3826,7 @@ function spSubfields(parent, items, field, change) {
                 var v = this.checked;
                 if (optional) {
                     change(sfKey + '_enabled', v);
-                    cardEl.classList.toggle('forge-sp-subfield--off', !v);
+                    cardEl.classList.toggle('fabricator-sp-subfield--off', !v);
                 }
             });
         }(card, k, item.optional));
@@ -3837,18 +3837,18 @@ function spSubfields(parent, items, field, change) {
         }
         togWrap.appendChild(togInp);
         var togSlider = document.createElement('span');
-        togSlider.className = 'forge-toggle-slider';
+        togSlider.className = 'fabricator-toggle-slider';
         togWrap.appendChild(togSlider);
         header.appendChild(togWrap);
 
         var nameLbl = document.createElement('span');
-        nameLbl.className   = 'forge-sp-subfield-name';
+        nameLbl.className   = 'fabricator-sp-subfield-name';
         nameLbl.textContent = item.label;
         header.appendChild(nameLbl);
 
         /* Chevron on the RIGHT */
         var chevron = document.createElement('span');
-        chevron.className = 'forge-sp-subfield-chevron';
+        chevron.className = 'fabricator-sp-subfield-chevron';
         chevron.innerHTML = '<i class="fa-solid fa-chevron-down"></i>';
         header.appendChild(chevron);
 
@@ -3856,17 +3856,17 @@ function spSubfields(parent, items, field, change) {
 
         /* ---- body (collapsed by default) ---- */
         var body = document.createElement('div');
-        body.className = 'forge-sp-subfield-body forge-sp-subfield-body--collapsed';
+        body.className = 'fabricator-sp-subfield-body fabricator-sp-subfield-body--collapsed';
 
         /* Label */
         var lblRow = document.createElement('div');
-        lblRow.className = 'forge-sp-subrow';
+        lblRow.className = 'fabricator-sp-subrow';
         var lblLabel = document.createElement('label');
-        lblLabel.className   = 'forge-sp-sublabel';
+        lblLabel.className   = 'fabricator-sp-sublabel';
         lblLabel.textContent = _i18n.labelField || 'Label';
         var lblInp = document.createElement('input');
         lblInp.type      = 'text';
-        lblInp.className = 'forge-sp-input';
+        lblInp.className = 'fabricator-sp-input';
         lblInp.value     = field[k + '_label'] !== undefined ? field[k + '_label'] : item.label;
         (function (sfKey) {
             lblInp.addEventListener('input', function () { change(sfKey + '_label', this.value); });
@@ -3878,13 +3878,13 @@ function spSubfields(parent, items, field, change) {
         /* Placeholder (skip for prefix select) */
         if (!item.is_select) {
             var phRow = document.createElement('div');
-            phRow.className = 'forge-sp-subrow';
+            phRow.className = 'fabricator-sp-subrow';
             var phLabel = document.createElement('label');
-            phLabel.className   = 'forge-sp-sublabel';
+            phLabel.className   = 'fabricator-sp-sublabel';
             phLabel.textContent = _i18n.placeholderLabel || 'Placeholder';
             var phInp = document.createElement('input');
             phInp.type      = 'text';
-            phInp.className = 'forge-sp-input';
+            phInp.className = 'fabricator-sp-input';
             phInp.value     = field[k + '_placeholder'] || '';
             (function (sfKey) {
                 phInp.addEventListener('input', function () { change(sfKey + '_placeholder', this.value); });
@@ -3896,9 +3896,9 @@ function spSubfields(parent, items, field, change) {
 
         /* Required toggle */
         var reqRow = document.createElement('div');
-        reqRow.className = 'forge-sp-toggle-row forge-sp-subrow-toggle';
+        reqRow.className = 'fabricator-sp-toggle-row fabricator-sp-subrow-toggle';
         var reqTogWrap = document.createElement('label');
-        reqTogWrap.className = 'forge-toggle';
+        reqTogWrap.className = 'fabricator-toggle';
         var reqInp = document.createElement('input');
         reqInp.type    = 'checkbox';
         reqInp.checked = !!field[k + '_required'];
@@ -3907,10 +3907,10 @@ function spSubfields(parent, items, field, change) {
         }(k));
         reqTogWrap.appendChild(reqInp);
         var reqSlider = document.createElement('span');
-        reqSlider.className = 'forge-toggle-slider';
+        reqSlider.className = 'fabricator-toggle-slider';
         reqTogWrap.appendChild(reqSlider);
         var reqLabel = document.createElement('label');
-        reqLabel.className   = 'forge-toggle-label';
+        reqLabel.className   = 'fabricator-toggle-label';
         reqLabel.textContent = _i18n.requiredField || 'Required field';
         reqRow.appendChild(reqTogWrap);
         reqRow.appendChild(reqLabel);
@@ -3920,8 +3920,8 @@ function spSubfields(parent, items, field, change) {
 
         /* Accordion toggle on header click */
         header.addEventListener('click', function () {
-            var collapsed = body.classList.toggle('forge-sp-subfield-body--collapsed');
-            chevron.classList.toggle('forge-sp-subfield-chevron--up', !collapsed);
+            var collapsed = body.classList.toggle('fabricator-sp-subfield-body--collapsed');
+            chevron.classList.toggle('fabricator-sp-subfield-chevron--up', !collapsed);
         });
 
         wrap.appendChild(card);
@@ -3937,17 +3937,17 @@ var notifModal    = null;
 var notifModalIdx = null;
 
 function renderNotifications() {
-    var panel = document.getElementById('forge-notifications-panel');
+    var panel = document.getElementById('fabricator-notifications-panel');
     if (!panel) return;
     panel.innerHTML = '';
 
     var list = document.createElement('div');
-    list.id = 'forge-notif-list';
+    list.id = 'fabricator-notif-list';
     if (state.notifications.length === 0) {
         var empty = document.createElement('div');
-        empty.className = 'forge-empty-canvas';
+        empty.className = 'fabricator-empty-canvas';
         empty.innerHTML =
-            '<div class="forge-empty-icon"><i class="fa-solid fa-bell"></i></div>' +
+            '<div class="fabricator-empty-icon"><i class="fa-solid fa-bell"></i></div>' +
             '<p>' + escHtml(_i18n.noNotificationsHtml || 'No notifications yet. Click') + ' <strong>' + escHtml(_i18n.addNotification || 'Add notification') + '</strong>.</p>';
         list.appendChild(empty);
     } else {
@@ -3958,10 +3958,10 @@ function renderNotifications() {
     panel.appendChild(list);
 
     var bar = document.createElement('div');
-    bar.id = 'forge-add-notif-bar';
+    bar.id = 'fabricator-add-notif-bar';
     var addBtn = document.createElement('button');
     addBtn.type      = 'button';
-    addBtn.id        = 'forge-add-notif-btn';
+    addBtn.id        = 'fabricator-add-notif-btn';
     addBtn.innerHTML = '<i class="fa-solid fa-plus"></i> ' + escHtml(_i18n.addNotification || 'Add notification');
     addBtn.addEventListener('click', function () {
         markDirty();
@@ -3983,29 +3983,29 @@ function renderNotifications() {
 
 function buildNotifRow(notif, idx) {
     var row = document.createElement('div');
-    row.className = 'forge-field-row';
+    row.className = 'fabricator-field-row';
 
     var recipientText = notif.recipient_mode === 'routing'
         ? (_i18n.routingActive || 'Routing active')
         : (notif.to || '');
 
     row.innerHTML =
-        '<div class="forge-row-handle" style="visibility:hidden"><i class="fa-solid fa-grip-vertical"></i></div>' +
-        '<div class="forge-row-icon"><i class="fa-solid fa-bell"></i></div>' +
-        '<div class="forge-row-info">' +
-            '<div class="forge-row-label">' + escHtml(notif.name || (_i18n.noName || '(no name)')) + '</div>' +
-            '<div class="forge-row-type">' + escHtml(recipientText) + '</div>' +
+        '<div class="fabricator-row-handle" style="visibility:hidden"><i class="fa-solid fa-grip-vertical"></i></div>' +
+        '<div class="fabricator-row-icon"><i class="fa-solid fa-bell"></i></div>' +
+        '<div class="fabricator-row-info">' +
+            '<div class="fabricator-row-label">' + escHtml(notif.name || (_i18n.noName || '(no name)')) + '</div>' +
+            '<div class="fabricator-row-type">' + escHtml(recipientText) + '</div>' +
         '</div>' +
-        '<div class="forge-row-actions">' +
-            '<button class="forge-row-btn forge-row-edit"   title="' + escHtml(_i18n.edit || 'Edit') + '"><i class="fa-solid fa-pen-to-square"></i></button>' +
-            '<button class="forge-row-btn forge-row-delete" title="' + escHtml(_i18n.remove || 'Remove') + '"><i class="fa-solid fa-trash"></i></button>' +
+        '<div class="fabricator-row-actions">' +
+            '<button class="fabricator-row-btn fabricator-row-edit"   title="' + escHtml(_i18n.edit || 'Edit') + '"><i class="fa-solid fa-pen-to-square"></i></button>' +
+            '<button class="fabricator-row-btn fabricator-row-delete" title="' + escHtml(_i18n.remove || 'Remove') + '"><i class="fa-solid fa-trash"></i></button>' +
         '</div>';
 
     row.addEventListener('click', function (e) {
-        if (e.target.closest('.forge-row-delete')) return;
+        if (e.target.closest('.fabricator-row-delete')) return;
         openNotifModal(idx);
     });
-    row.querySelector('.forge-row-delete').addEventListener('click', function (e) {
+    row.querySelector('.fabricator-row-delete').addEventListener('click', function (e) {
         e.stopPropagation();
         markDirty();
         state.notifications.splice(idx, 1);
@@ -4017,44 +4017,44 @@ function buildNotifRow(notif, idx) {
 
 function createNotifModal() {
     notifModal           = document.createElement('div');
-    notifModal.id        = 'forge-notif-modal';
-    notifModal.className = 'forge-modal-backdrop';
+    notifModal.id        = 'fabricator-notif-modal';
+    notifModal.className = 'fabricator-modal-backdrop';
     notifModal.hidden    = true;
     notifModal.innerHTML =
-        '<div class="forge-modal forge-modal--settings" role="dialog" aria-modal="true">' +
-            '<div class="forge-modal-header">' +
-                '<div class="forge-settings-titlerow">' +
-                    '<span class="forge-settings-field-icon"><i class="fa-solid fa-bell"></i></span>' +
-                    '<input type="text" id="forge-notif-name-inp" class="forge-notif-modal-name" placeholder="' + escHtml(_i18n.notificationPlaceholder || 'Notification') + '">' +
+        '<div class="fabricator-modal fabricator-modal--settings" role="dialog" aria-modal="true">' +
+            '<div class="fabricator-modal-header">' +
+                '<div class="fabricator-settings-titlerow">' +
+                    '<span class="fabricator-settings-field-icon"><i class="fa-solid fa-bell"></i></span>' +
+                    '<input type="text" id="fabricator-notif-name-inp" class="fabricator-notif-modal-name" placeholder="' + escHtml(_i18n.notificationPlaceholder || 'Notification') + '">' +
                 '</div>' +
-                '<button class="forge-modal-close" type="button">&#x2715;</button>' +
+                '<button class="fabricator-modal-close" type="button">&#x2715;</button>' +
             '</div>' +
-            '<div class="forge-stab-bar">' +
-                '<button class="forge-stab forge-stab-active" data-nstab="recipient">' + escHtml(_i18n.tabRecipient || 'Recipient') + '</button>' +
-                '<button class="forge-stab" data-nstab="content">' + escHtml(_i18n.tabContent || 'Content') + '</button>' +
-                '<button class="forge-stab" data-nstab="sender">' + escHtml(_i18n.tabSender || 'Sender') + '</button>' +
+            '<div class="fabricator-stab-bar">' +
+                '<button class="fabricator-stab fabricator-stab-active" data-nstab="recipient">' + escHtml(_i18n.tabRecipient || 'Recipient') + '</button>' +
+                '<button class="fabricator-stab" data-nstab="content">' + escHtml(_i18n.tabContent || 'Content') + '</button>' +
+                '<button class="fabricator-stab" data-nstab="sender">' + escHtml(_i18n.tabSender || 'Sender') + '</button>' +
             '</div>' +
-            '<div class="forge-modal-body forge-settings-body">' +
-                '<div id="forge-nstab-recipient" class="forge-stab-panel forge-stab-active"></div>' +
-                '<div id="forge-nstab-content"   class="forge-stab-panel"></div>' +
-                '<div id="forge-nstab-sender"    class="forge-stab-panel"></div>' +
+            '<div class="fabricator-modal-body fabricator-settings-body">' +
+                '<div id="fabricator-nstab-recipient" class="fabricator-stab-panel fabricator-stab-active"></div>' +
+                '<div id="fabricator-nstab-content"   class="fabricator-stab-panel"></div>' +
+                '<div id="fabricator-nstab-sender"    class="fabricator-stab-panel"></div>' +
             '</div>' +
-            '<div class="forge-settings-footer">' +
-                '<button class="forge-btn-primary" id="forge-notif-done">' + escHtml(_i18n.done || 'Done') + '</button>' +
+            '<div class="fabricator-settings-footer">' +
+                '<button class="fabricator-btn-primary" id="fabricator-notif-done">' + escHtml(_i18n.done || 'Done') + '</button>' +
             '</div>' +
         '</div>';
     document.body.appendChild(notifModal);
-    notifModal.querySelector('.forge-modal-close').addEventListener('click', closeNotifModal);
-    notifModal.querySelector('#forge-notif-done').addEventListener('click', closeNotifModal);
+    notifModal.querySelector('.fabricator-modal-close').addEventListener('click', closeNotifModal);
+    notifModal.querySelector('#fabricator-notif-done').addEventListener('click', closeNotifModal);
     notifModal.addEventListener('click', function (e) { if (e.target === notifModal) closeNotifModal(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !notifModal.hidden) closeNotifModal(); });
-    notifModal.querySelectorAll('.forge-stab').forEach(function (btn) {
+    notifModal.querySelectorAll('.fabricator-stab').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            notifModal.querySelectorAll('.forge-stab').forEach(function (b) { b.classList.remove('forge-stab-active'); });
-            notifModal.querySelectorAll('.forge-stab-panel').forEach(function (p) { p.classList.remove('forge-stab-active'); });
-            btn.classList.add('forge-stab-active');
-            var p = document.getElementById('forge-nstab-' + btn.dataset.nstab);
-            if (p) p.classList.add('forge-stab-active');
+            notifModal.querySelectorAll('.fabricator-stab').forEach(function (b) { b.classList.remove('fabricator-stab-active'); });
+            notifModal.querySelectorAll('.fabricator-stab-panel').forEach(function (p) { p.classList.remove('fabricator-stab-active'); });
+            btn.classList.add('fabricator-stab-active');
+            var p = document.getElementById('fabricator-nstab-' + btn.dataset.nstab);
+            if (p) p.classList.add('fabricator-stab-active');
         });
     });
 }
@@ -4066,12 +4066,12 @@ function openNotifModal(idx) {
     var notif = state.notifications[idx];
 
     /* Reset to first tab */
-    notifModal.querySelectorAll('.forge-stab').forEach(function (b) { b.classList.remove('forge-stab-active'); });
-    notifModal.querySelectorAll('.forge-stab-panel').forEach(function (p) { p.classList.remove('forge-stab-active'); });
-    notifModal.querySelector('[data-nstab="recipient"]').classList.add('forge-stab-active');
-    document.getElementById('forge-nstab-recipient').classList.add('forge-stab-active');
+    notifModal.querySelectorAll('.fabricator-stab').forEach(function (b) { b.classList.remove('fabricator-stab-active'); });
+    notifModal.querySelectorAll('.fabricator-stab-panel').forEach(function (p) { p.classList.remove('fabricator-stab-active'); });
+    notifModal.querySelector('[data-nstab="recipient"]').classList.add('fabricator-stab-active');
+    document.getElementById('fabricator-nstab-recipient').classList.add('fabricator-stab-active');
 
-    var nameInp = document.getElementById('forge-notif-name-inp');
+    var nameInp = document.getElementById('fabricator-notif-name-inp');
     nameInp.value  = notif.name || '';
     nameInp.oninput = function () { markDirty(); state.notifications[notifModalIdx].name = this.value; };
 
@@ -4092,21 +4092,21 @@ function closeNotifModal() {
 }
 
 function buildNotifRecipientTab(notif) {
-    var panel = document.getElementById('forge-nstab-recipient');
+    var panel = document.getElementById('fabricator-nstab-recipient');
     panel.innerHTML = '';
 
     var mode = notif.recipient_mode || 'single';
 
     /* Mode pill + enabled toggle in one row */
     var modeRow = document.createElement('div');
-    modeRow.className = 'forge-sp-row';
+    modeRow.className = 'fabricator-sp-row';
     var modeLbl = document.createElement('div');
-    modeLbl.className   = 'forge-sp-label';
+    modeLbl.className   = 'fabricator-sp-label';
     modeLbl.textContent = _i18n.recipientMode || 'Recipient mode';
     modeRow.appendChild(modeLbl);
 
     var modeCtrl = document.createElement('div');
-    modeCtrl.className = 'forge-sp-row-ctrl';
+    modeCtrl.className = 'fabricator-sp-row-ctrl';
     modeCtrl.appendChild(mkSeg(
         ['single', 'routing'], [_i18n.modeDirect || 'Direct', _i18n.modeRouting || 'Routing'], mode,
         function (v) {
@@ -4119,11 +4119,11 @@ function buildNotifRecipientTab(notif) {
     modeCtrl.appendChild(modeCtrlSpacer);
 
     /* Enabled toggle — inline right */
-    var enabledId  = 'forge-sp-notif-enabled-' + notifModalIdx;
+    var enabledId  = 'fabricator-sp-notif-enabled-' + notifModalIdx;
     var toggleWrap = document.createElement('div');
-    toggleWrap.className = 'forge-sp-inline-toggle';
+    toggleWrap.className = 'fabricator-sp-inline-toggle';
     var toggleEl = document.createElement('label');
-    toggleEl.className = 'forge-toggle';
+    toggleEl.className = 'fabricator-toggle';
     toggleEl.htmlFor   = enabledId;
     var toggleInp = document.createElement('input');
     toggleInp.type    = 'checkbox';
@@ -4134,11 +4134,11 @@ function buildNotifRecipientTab(notif) {
     });
     toggleEl.appendChild(toggleInp);
     var toggleSlider = document.createElement('span');
-    toggleSlider.className = 'forge-toggle-slider';
+    toggleSlider.className = 'fabricator-toggle-slider';
     toggleEl.appendChild(toggleSlider);
     toggleWrap.appendChild(toggleEl);
     var toggleLabel = document.createElement('label');
-    toggleLabel.className   = 'forge-sp-inline-toggle-label';
+    toggleLabel.className   = 'fabricator-sp-inline-toggle-label';
     toggleLabel.htmlFor     = enabledId;
     toggleLabel.textContent = _i18n.activeLabel || 'Active';
     toggleWrap.appendChild(toggleLabel);
@@ -4146,7 +4146,7 @@ function buildNotifRecipientTab(notif) {
 
     modeRow.appendChild(modeCtrl);
     var modeHint = document.createElement('div');
-    modeHint.className   = 'forge-sp-hint';
+    modeHint.className   = 'fabricator-sp-hint';
     modeHint.textContent = mode === 'single'
         ? (_i18n.singleModeHint || 'All entries are sent to a fixed address.')
         : (_i18n.routingModeHint || 'The email address is chosen based on field conditions.');
@@ -4163,7 +4163,7 @@ function buildNotifRecipientTab(notif) {
         var rules = notif.routing_rules;
 
         var rulesWrap = document.createElement('div');
-        rulesWrap.className = 'forge-notif-routing';
+        rulesWrap.className = 'fabricator-notif-routing';
         panel.appendChild(rulesWrap);
 
         var CHOICE_TYPES  = ['select', 'radio', 'checkbox', 'multivalue'];
@@ -4175,18 +4175,18 @@ function buildNotifRecipientTab(notif) {
 
             rules.forEach(function (rule, ri) {
                 var rr = document.createElement('div');
-                rr.className = 'forge-cond-rule';
+                rr.className = 'fabricator-cond-rule';
 
                 var content = document.createElement('div');
-                content.className = 'forge-cond-rule-content';
+                content.className = 'fabricator-cond-rule-content';
                 rr.appendChild(content);
 
                 /* Row 1: field selector + operator selector */
                 var topRow = document.createElement('div');
-                topRow.className = 'forge-cond-rule-top';
+                topRow.className = 'fabricator-cond-rule-top';
 
                 var fSel = document.createElement('select');
-                fSel.className = 'forge-cond-sel';
+                fSel.className = 'fabricator-cond-sel';
                 var SKIP_E = ['group', 'html', 'pagebreak'];
                 var eligible = [];
                 state.fields.forEach(function (f) {
@@ -4222,7 +4222,7 @@ function buildNotifRecipientTab(notif) {
 
                 /* Row 2: value area */
                 var valArea = document.createElement('div');
-                valArea.className = 'forge-cond-val-area';
+                valArea.className = 'fabricator-cond-val-area';
                 content.appendChild(valArea);
 
                 function getCtrl() {
@@ -4265,12 +4265,12 @@ function buildNotifRecipientTab(notif) {
                                 rebuildOpSel(rule.use_option);
                                 rebuildValCtrl();
                             });
-                        modePill.className += ' forge-cond-mode-seg';
+                        modePill.className += ' fabricator-cond-mode-seg';
                         valArea.appendChild(modePill);
                     }
                     if (choice && rule.use_option) {
                         var optSel = document.createElement('select');
-                        optSel.className = 'forge-cond-sel forge-cond-opt-sel';
+                        optSel.className = 'fabricator-cond-sel fabricator-cond-opt-sel';
                         var blank = document.createElement('option');
                         blank.value = ''; blank.textContent = _i18n.chooseOption || 'Choose option';
                         if (!rule.value) blank.selected = true;
@@ -4287,7 +4287,7 @@ function buildNotifRecipientTab(notif) {
                         valArea.appendChild(optSel);
                     } else {
                         var inp = document.createElement('input');
-                        inp.type = 'text'; inp.className = 'forge-cond-val';
+                        inp.type = 'text'; inp.className = 'fabricator-cond-val';
                         inp.value = rule.value || ''; inp.placeholder = _i18n.valueWord || 'Value';
                         inp.addEventListener('input', function () { rule.value = this.value; });
                         valArea.appendChild(inp);
@@ -4306,13 +4306,13 @@ function buildNotifRecipientTab(notif) {
 
                 /* Email target */
                 var emailRow = document.createElement('div');
-                emailRow.className = 'forge-notif-routing-email-row';
+                emailRow.className = 'fabricator-notif-routing-email-row';
                 var arrowSpan = document.createElement('span');
-                arrowSpan.className   = 'forge-notif-routing-arrow';
+                arrowSpan.className   = 'fabricator-notif-routing-arrow';
                 arrowSpan.textContent = _i18n.arrowTo || '→ To:';
                 emailRow.appendChild(arrowSpan);
                 var emailInp = document.createElement('input');
-                emailInp.type = 'text'; emailInp.className = 'forge-cond-val';
+                emailInp.type = 'text'; emailInp.className = 'fabricator-cond-val';
                 emailInp.value = rule.email || ''; emailInp.placeholder = _i18n.emailPlaceholder || 'Email';
                 emailInp.addEventListener('input', function () { rules[ri].email = this.value; });
                 emailRow.appendChild(emailInp);
@@ -4320,7 +4320,7 @@ function buildNotifRecipientTab(notif) {
 
                 /* Delete */
                 var rm = document.createElement('button');
-                rm.type = 'button'; rm.className = 'forge-cond-rm'; rm.title = _i18n.removeRule || 'Remove rule';
+                rm.type = 'button'; rm.className = 'fabricator-cond-rm'; rm.title = _i18n.removeRule || 'Remove rule';
                 rm.innerHTML = '<i class="fa-solid fa-trash"></i>';
                 rm.addEventListener('click', function () {
                     rules.splice(ri, 1);
@@ -4333,7 +4333,7 @@ function buildNotifRecipientTab(notif) {
             });
 
             var addRule = document.createElement('button');
-            addRule.type = 'button'; addRule.className = 'forge-cond-add';
+            addRule.type = 'button'; addRule.className = 'fabricator-cond-add';
             addRule.innerHTML = '<i class="fa-solid fa-plus"></i> ' + escHtml(_i18n.addRule || 'Add rule');
             addRule.addEventListener('click', function () {
                 var SKIP_R = ['group', 'html', 'pagebreak'];
@@ -4362,7 +4362,7 @@ function buildNotifRecipientTab(notif) {
 }
 
 function buildNotifContentTab(notif) {
-    var panel = document.getElementById('forge-nstab-content');
+    var panel = document.getElementById('fabricator-nstab-content');
     panel.innerHTML = '';
 
     spRow(panel, 'notif-subject', _i18n.subject || 'Subject', 'text', notif.subject || '',
@@ -4373,12 +4373,12 @@ function buildNotifContentTab(notif) {
        never persisted, so every fresh load defaults to Visual. */
     var isHtml = !!notif.body_html;
     var bodyWrap = document.createElement('div');
-    bodyWrap.className = 'forge-sp-row';
+    bodyWrap.className = 'fabricator-sp-row';
 
     var bodyHdr = document.createElement('div');
-    bodyHdr.className = 'forge-sp-html-hdr';
+    bodyHdr.className = 'fabricator-sp-html-hdr';
     var bodyLbl = document.createElement('div');
-    bodyLbl.className = 'forge-sp-label'; bodyLbl.textContent = _i18n.message || 'Message';
+    bodyLbl.className = 'fabricator-sp-label'; bodyLbl.textContent = _i18n.message || 'Message';
     bodyHdr.appendChild(bodyLbl);
     var typePill = mkSeg(['text','html'], ['Visuell','Code'], isHtml ? 'html' : 'text', function (v) {
         var notif = state.notifications[notifModalIdx];
@@ -4386,7 +4386,7 @@ function buildNotifContentTab(notif) {
         buildNotifContentTab(notif);
     });
     var modeBar = document.createElement('div');
-    modeBar.className = 'forge-sp-html-modebar';
+    modeBar.className = 'fabricator-sp-html-modebar';
     modeBar.appendChild(typePill);
     bodyHdr.appendChild(modeBar);
     bodyWrap.appendChild(bodyHdr);
@@ -4403,7 +4403,7 @@ function buildNotifContentTab(notif) {
 
     /* Attachments section */
     var attachSep = document.createElement('div');
-    attachSep.className   = 'forge-sp-section-sep';
+    attachSep.className   = 'fabricator-sp-section-sep';
     attachSep.textContent = _i18n.attachments || 'Attachments';
     panel.appendChild(attachSep);
 
@@ -4419,7 +4419,7 @@ function buildNotifContentTab(notif) {
 }
 
 function buildNotifSenderTab(notif) {
-    var panel = document.getElementById('forge-nstab-sender');
+    var panel = document.getElementById('fabricator-nstab-sender');
     panel.innerHTML = '';
 
     function sr(key, label, hint) {
@@ -4440,41 +4440,41 @@ var submitModal = null;
 
 function createSubmitModal() {
     submitModal           = document.createElement('div');
-    submitModal.id        = 'forge-submit-modal';
-    submitModal.className = 'forge-modal-backdrop';
+    submitModal.id        = 'fabricator-submit-modal';
+    submitModal.className = 'fabricator-modal-backdrop';
     submitModal.hidden    = true;
     submitModal.innerHTML =
-        '<div class="forge-modal forge-modal--settings" role="dialog" aria-modal="true">' +
-            '<div class="forge-modal-header">' +
-                '<div class="forge-settings-titlerow">' +
-                    '<span class="forge-settings-field-icon"><i class="fa-solid fa-paper-plane"></i></span>' +
-                    '<span class="forge-settings-field-label">' + escHtml(_i18n.submitButtonTitle || 'Submit button') + '</span>' +
+        '<div class="fabricator-modal fabricator-modal--settings" role="dialog" aria-modal="true">' +
+            '<div class="fabricator-modal-header">' +
+                '<div class="fabricator-settings-titlerow">' +
+                    '<span class="fabricator-settings-field-icon"><i class="fa-solid fa-paper-plane"></i></span>' +
+                    '<span class="fabricator-settings-field-label">' + escHtml(_i18n.submitButtonTitle || 'Submit button') + '</span>' +
                 '</div>' +
-                '<button class="forge-modal-close" type="button">&#x2715;</button>' +
+                '<button class="fabricator-modal-close" type="button">&#x2715;</button>' +
             '</div>' +
-            '<div class="forge-stab-bar">' +
-                '<button class="forge-stab forge-stab-active" data-smtab="labels">' + escHtml(_i18n.tabLabels || 'Labeling') + '</button>' +
-                '<button class="forge-stab" data-smtab="conditions">' + escHtml(_i18n.tabConditions || 'Conditions') + '</button>' +
+            '<div class="fabricator-stab-bar">' +
+                '<button class="fabricator-stab fabricator-stab-active" data-smtab="labels">' + escHtml(_i18n.tabLabels || 'Labeling') + '</button>' +
+                '<button class="fabricator-stab" data-smtab="conditions">' + escHtml(_i18n.tabConditions || 'Conditions') + '</button>' +
             '</div>' +
-            '<div class="forge-modal-body forge-settings-body">' +
-                '<div id="forge-smtab-labels"     class="forge-stab-panel forge-stab-active"></div>' +
-                '<div id="forge-smtab-conditions" class="forge-stab-panel"></div>' +
+            '<div class="fabricator-modal-body fabricator-settings-body">' +
+                '<div id="fabricator-smtab-labels"     class="fabricator-stab-panel fabricator-stab-active"></div>' +
+                '<div id="fabricator-smtab-conditions" class="fabricator-stab-panel"></div>' +
             '</div>' +
-            '<div class="forge-settings-footer">' +
-                '<button class="forge-btn-primary" id="forge-submit-done">' + escHtml(_i18n.done || 'Done') + '</button>' +
+            '<div class="fabricator-settings-footer">' +
+                '<button class="fabricator-btn-primary" id="fabricator-submit-done">' + escHtml(_i18n.done || 'Done') + '</button>' +
             '</div>' +
         '</div>';
     document.body.appendChild(submitModal);
-    submitModal.querySelector('.forge-modal-close').addEventListener('click', closeSubmitModal);
-    submitModal.querySelector('#forge-submit-done').addEventListener('click', closeSubmitModal);
+    submitModal.querySelector('.fabricator-modal-close').addEventListener('click', closeSubmitModal);
+    submitModal.querySelector('#fabricator-submit-done').addEventListener('click', closeSubmitModal);
     submitModal.addEventListener('click', function (e) { if (e.target === submitModal) closeSubmitModal(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !submitModal.hidden) closeSubmitModal(); });
-    submitModal.querySelectorAll('.forge-stab').forEach(function (btn) {
+    submitModal.querySelectorAll('.fabricator-stab').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            submitModal.querySelectorAll('.forge-stab').forEach(function (b) { b.classList.remove('forge-stab-active'); });
-            submitModal.querySelectorAll('.forge-stab-panel').forEach(function (p) { p.classList.remove('forge-stab-active'); });
-            btn.classList.add('forge-stab-active');
-            document.getElementById('forge-smtab-' + btn.dataset.smtab).classList.add('forge-stab-active');
+            submitModal.querySelectorAll('.fabricator-stab').forEach(function (b) { b.classList.remove('fabricator-stab-active'); });
+            submitModal.querySelectorAll('.fabricator-stab-panel').forEach(function (p) { p.classList.remove('fabricator-stab-active'); });
+            btn.classList.add('fabricator-stab-active');
+            document.getElementById('fabricator-smtab-' + btn.dataset.smtab).classList.add('fabricator-stab-active');
         });
     });
 }
@@ -4484,10 +4484,10 @@ function openSubmitModal() {
     if (!submitModal) return;
 
     /* Reset to first tab */
-    submitModal.querySelectorAll('.forge-stab').forEach(function (b) { b.classList.remove('forge-stab-active'); });
-    submitModal.querySelectorAll('.forge-stab-panel').forEach(function (p) { p.classList.remove('forge-stab-active'); });
-    submitModal.querySelector('[data-smtab="labels"]').classList.add('forge-stab-active');
-    document.getElementById('forge-smtab-labels').classList.add('forge-stab-active');
+    submitModal.querySelectorAll('.fabricator-stab').forEach(function (b) { b.classList.remove('fabricator-stab-active'); });
+    submitModal.querySelectorAll('.fabricator-stab-panel').forEach(function (p) { p.classList.remove('fabricator-stab-active'); });
+    submitModal.querySelector('[data-smtab="labels"]').classList.add('fabricator-stab-active');
+    document.getElementById('fabricator-smtab-labels').classList.add('fabricator-stab-active');
 
     buildSubmitLabelsTab();
     buildSubmitConditionsTab();
@@ -4504,7 +4504,7 @@ function closeSubmitModal() {
 }
 
 function buildSubmitLabelsTab() {
-    var panel = document.getElementById('forge-smtab-labels');
+    var panel = document.getElementById('fabricator-smtab-labels');
     panel.innerHTML = '';
     var s = state.settings;
 
@@ -4522,7 +4522,7 @@ function buildSubmitLabelsTab() {
 }
 
 function buildSubmitConditionsTab() {
-    var panel = document.getElementById('forge-smtab-conditions');
+    var panel = document.getElementById('fabricator-smtab-conditions');
     panel.innerHTML = '';
     var s = state.settings;
     if (!s.submit_conditions) {
@@ -4532,7 +4532,7 @@ function buildSubmitConditionsTab() {
 
     /* Sentence: Schaltfläche anzeigen wenn [all|any] ... */
     var smSentence = document.createElement('div');
-    smSentence.className = 'forge-cond-sentence';
+    smSentence.className = 'fabricator-cond-sentence';
     smSentence.appendChild(mkSpan((_i18n.showButtonWhen || 'Show button when') + ' '));
     smSentence.appendChild(mkSeg(
         ['all', 'any'], [_i18n.condAll || 'all', _i18n.condAny || 'any'],
@@ -4543,11 +4543,11 @@ function buildSubmitConditionsTab() {
     panel.appendChild(smSentence);
 
     var smBody = document.createElement('div');
-    smBody.className = 'forge-cond-body';
+    smBody.className = 'fabricator-cond-body';
     panel.appendChild(smBody);
 
     var smRulesList = document.createElement('div');
-    smRulesList.className = 'forge-cond-rules';
+    smRulesList.className = 'fabricator-cond-rules';
     smBody.appendChild(smRulesList);
 
     function smRebuildRules() {
@@ -4560,10 +4560,10 @@ function buildSubmitConditionsTab() {
     function smBuildRuleRow(rule, ri) {
         var CHOICE_TYPES = ['select', 'radio', 'checkbox', 'multivalue'];
         var rr = document.createElement('div');
-        rr.className = 'forge-cond-rule';
+        rr.className = 'fabricator-cond-rule';
 
         var content = document.createElement('div');
-        content.className = 'forge-cond-rule-content';
+        content.className = 'fabricator-cond-rule-content';
         rr.appendChild(content);
 
         var SKIP_SC = ['group', 'html', 'pagebreak'];
@@ -4579,10 +4579,10 @@ function buildSubmitConditionsTab() {
         });
 
         var topRow = document.createElement('div');
-        topRow.className = 'forge-cond-rule-top';
+        topRow.className = 'fabricator-cond-rule-top';
 
         var fSel = document.createElement('select');
-        fSel.className = 'forge-cond-sel';
+        fSel.className = 'fabricator-cond-sel';
         if (!eligible.length) {
             var ph = document.createElement('option');
             ph.textContent = _i18n.noFields || '(no fields)';
@@ -4611,7 +4611,7 @@ function buildSubmitConditionsTab() {
         content.appendChild(topRow);
 
         var valArea = document.createElement('div');
-        valArea.className = 'forge-cond-val-area';
+        valArea.className = 'fabricator-cond-val-area';
         content.appendChild(valArea);
 
         function smGetField() {
@@ -4653,12 +4653,12 @@ function buildSubmitConditionsTab() {
                         smRebuildOpSel(rule.use_option);
                         smRebuildValCtrl();
                     });
-                modePill.className += ' forge-cond-mode-seg';
+                modePill.className += ' fabricator-cond-mode-seg';
                 valArea.appendChild(modePill);
             }
             if (choice && rule.use_option) {
                 var optSel = document.createElement('select');
-                optSel.className = 'forge-cond-sel forge-cond-opt-sel';
+                optSel.className = 'fabricator-cond-sel fabricator-cond-opt-sel';
                 var blank = document.createElement('option');
                 blank.value = ''; blank.textContent = _i18n.chooseOption || 'Choose option';
                 if (!rule.value) blank.selected = true;
@@ -4675,7 +4675,7 @@ function buildSubmitConditionsTab() {
                 valArea.appendChild(optSel);
             } else {
                 var inp = document.createElement('input');
-                inp.type = 'text'; inp.className = 'forge-cond-val';
+                inp.type = 'text'; inp.className = 'fabricator-cond-val';
                 inp.value = rule.value || ''; inp.placeholder = _i18n.valueWord || 'Value';
                 inp.addEventListener('input', function () { rule.value = this.value; });
                 valArea.appendChild(inp);
@@ -4693,7 +4693,7 @@ function buildSubmitConditionsTab() {
         smRebuildValCtrl();
 
         var rm = document.createElement('button');
-        rm.type = 'button'; rm.className = 'forge-cond-rm'; rm.title = _i18n.removeCondition || 'Remove condition';
+        rm.type = 'button'; rm.className = 'fabricator-cond-rm'; rm.title = _i18n.removeCondition || 'Remove condition';
         rm.innerHTML = '<i class="fa-solid fa-trash"></i>';
         rm.addEventListener('click', function () { cond.rules.splice(ri, 1); smRebuildRules(); });
         rr.appendChild(rm);
@@ -4704,7 +4704,7 @@ function buildSubmitConditionsTab() {
     smRebuildRules();
 
     var smAddBtn = document.createElement('button');
-    smAddBtn.type = 'button'; smAddBtn.className = 'forge-cond-add';
+    smAddBtn.type = 'button'; smAddBtn.className = 'fabricator-cond-add';
     smAddBtn.innerHTML = '<i class="fa-solid fa-plus"></i> ' + escHtml(_i18n.addCondition || 'Add condition');
     smAddBtn.addEventListener('click', function () {
         var SKIP_SM = ['group', 'html', 'pagebreak'];
@@ -4724,7 +4724,7 @@ function buildSubmitConditionsTab() {
 }
 
 function renderSubmitPreview() {
-    var bar = document.getElementById('forge-submit-preview-bar');
+    var bar = document.getElementById('fabricator-submit-preview-bar');
     if (!bar) return;
     var label = state.settings.submit_label || (_i18n.submitLabel || 'Submit');
     var cond  = state.settings.submit_conditions;
@@ -4732,27 +4732,27 @@ function renderSubmitPreview() {
 
     bar.innerHTML = '';
     var wrap = document.createElement('div');
-    wrap.className = 'forge-submit-preview';
+    wrap.className = 'fabricator-submit-preview';
     wrap.title     = _i18n.configureButton || 'Configure button';
     wrap.addEventListener('click', openSubmitModal);
 
     var btnPreview = document.createElement('button');
     btnPreview.type      = 'button';
-    btnPreview.className = 'forge-submit-preview-btn';
+    btnPreview.className = 'fabricator-submit-preview-btn';
     btnPreview.textContent = label;
     btnPreview.tabIndex  = -1;
     wrap.appendChild(btnPreview);
 
     if (condActive) {
         var badge = document.createElement('span');
-        badge.className   = 'forge-submit-cond-badge';
+        badge.className   = 'fabricator-submit-cond-badge';
         badge.title       = _i18n.visibilityConditionsActive || 'Visibility: conditions active';
         badge.innerHTML   = '<i class="fa-solid fa-eye-slash"></i> ' + escHtml(_i18n.conditionalBadge || 'conditional');
         wrap.appendChild(badge);
     }
 
     var gear = document.createElement('span');
-    gear.className = 'forge-submit-preview-gear';
+    gear.className = 'fabricator-submit-preview-gear';
     gear.innerHTML = '<i class="fa-solid fa-gear"></i>';
     wrap.appendChild(gear);
 
@@ -4763,21 +4763,21 @@ function renderSubmitPreview() {
  * Canvas tabs / form name / save
  * ================================================================ */
 function bindCanvasTabs() {
-    var tabs = document.querySelectorAll('.forge-tab-btn');
+    var tabs = document.querySelectorAll('.fabricator-tab-btn');
     tabs.forEach(function (btn) {
         btn.addEventListener('click', function () {
-            tabs.forEach(function (b) { b.classList.remove('forge-tab-active'); });
-            btn.classList.add('forge-tab-active');
+            tabs.forEach(function (b) { b.classList.remove('fabricator-tab-active'); });
+            btn.classList.add('fabricator-tab-active');
             var target = btn.dataset.tab;
-            document.querySelectorAll('.forge-tab-panel').forEach(function (p) {
-                p.classList.toggle('forge-panel-active', p.id === target);
+            document.querySelectorAll('.fabricator-tab-panel').forEach(function (p) {
+                p.classList.toggle('fabricator-panel-active', p.id === target);
             });
         });
     });
 }
 
 function bindFormName() {
-    var inp = document.getElementById('forge-form-name');
+    var inp = document.getElementById('fabricator-form-name');
     if (!inp) return;
     inp.value = state.formName;
     inp.addEventListener('input', function () { state.formName = this.value; markDirty(); });
@@ -4790,22 +4790,22 @@ function setSaveStatus(status, state, msg) {
     status.className = '';
     status.innerHTML = '';
     if (state === 'saving') {
-        status.className = 'forge-ss--saving';
-        status.innerHTML = '<span class="forge-spinner"></span> ' + escHtml(_i18n.saving || 'Saving…');
+        status.className = 'fabricator-ss--saving';
+        status.innerHTML = '<span class="fabricator-spinner"></span> ' + escHtml(_i18n.saving || 'Saving…');
     } else if (state === 'ok') {
-        status.className = 'forge-ss--ok';
+        status.className = 'fabricator-ss--ok';
         status.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + escHtml(_i18n.saved || 'Saved');
-        status._fadeTimer = setTimeout(function () { status.classList.add('forge-ss--fade'); }, 2200);
+        status._fadeTimer = setTimeout(function () { status.classList.add('fabricator-ss--fade'); }, 2200);
         status._clearTimer = setTimeout(function () { status.className = ''; status.innerHTML = ''; }, 2600);
     } else if (state === 'err') {
-        status.className = 'forge-ss--err';
+        status.className = 'fabricator-ss--err';
         status.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + escHtml(msg || (_i18n.errorGeneric || 'Error'));
     }
 }
 
 function bindSave() {
-    var btn    = document.getElementById('forge-save-btn');
-    var status = document.getElementById('forge-save-status');
+    var btn    = document.getElementById('fabricator-save-btn');
+    var status = document.getElementById('fabricator-save-status');
     if (!btn) return;
     btn.addEventListener('click', function () {
         btn.disabled = true;
@@ -4816,7 +4816,7 @@ function bindSave() {
             snapshot: FORM_SNAPSHOT,
         };
         var fd = new FormData();
-        fd.append('action',    'forge_forms_save_form');
+        fd.append('action',    'fabricator_forms_save_form');
         fd.append('nonce',     NONCE);
         /* btoa() only accepts Latin1; encodeURIComponent+unescape re-encodes the
            UTF-8 JSON string into a Latin1-safe byte sequence first so field
@@ -4852,13 +4852,13 @@ function b64JsonEncode(value) {
 }
 
 function bindPreview() {
-    var btn = document.getElementById('forge-preview-btn');
+    var btn = document.getElementById('fabricator-preview-btn');
     if (!btn) return;
     btn.addEventListener('click', function () {
         btn.disabled = true;
-        btn.innerHTML = '<span class="forge-spinner"></span> ' + escHtml(_i18n.previewLabel || 'Preview');
+        btn.innerHTML = '<span class="fabricator-spinner"></span> ' + escHtml(_i18n.previewLabel || 'Preview');
         var fd = new FormData();
-        fd.append('action',   'forge_forms_preview');
+        fd.append('action',   'fabricator_forms_preview');
         fd.append('nonce',    NONCE);
         fd.append('form_id',  FORM_ID);
         fd.append('fields',   b64JsonEncode(state.fields));
@@ -4894,17 +4894,17 @@ function bindPreview() {
  */
 function mkSeg(values, labels, current, onChange) {
     var wrap = document.createElement('div');
-    wrap.className = 'forge-seg';
+    wrap.className = 'fabricator-seg';
 
     values.forEach(function (val, i) {
         var btn = document.createElement('button');
         btn.type      = 'button';
-        btn.className = 'forge-seg-btn' + (val === current ? ' forge-seg-active' : '');
+        btn.className = 'fabricator-seg-btn' + (val === current ? ' fabricator-seg-active' : '');
         btn.textContent = labels[i];
         btn.dataset.value = val;
         btn.addEventListener('click', function () {
-            wrap.querySelectorAll('.forge-seg-btn').forEach(function (b) { b.classList.remove('forge-seg-active'); });
-            btn.classList.add('forge-seg-active');
+            wrap.querySelectorAll('.fabricator-seg-btn').forEach(function (b) { b.classList.remove('fabricator-seg-active'); });
+            btn.classList.add('fabricator-seg-active');
             onChange(val);
         });
         wrap.appendChild(btn);
@@ -4916,19 +4916,19 @@ function mkSeg(values, labels, current, onChange) {
 /* Multi-select pill: each button toggles independently; current is an array. */
 function mkSegMulti(values, labels, current, onChange) {
     var wrap = document.createElement('div');
-    wrap.className = 'forge-seg';
+    wrap.className = 'fabricator-seg';
 
     values.forEach(function (val, i) {
         var btn = document.createElement('button');
         btn.type        = 'button';
-        btn.className   = 'forge-seg-btn' + (current.indexOf(val) !== -1 ? ' forge-seg-active' : '');
+        btn.className   = 'fabricator-seg-btn' + (current.indexOf(val) !== -1 ? ' fabricator-seg-active' : '');
         btn.textContent = labels[i];
         btn.dataset.value = val;
         btn.addEventListener('click', function () {
             var idx2 = current.indexOf(val);
             if (idx2 === -1) { current.push(val); }
             else             { current.splice(idx2, 1); }
-            btn.classList.toggle('forge-seg-active', current.indexOf(val) !== -1);
+            btn.classList.toggle('fabricator-seg-active', current.indexOf(val) !== -1);
             onChange(current.slice());
         });
         wrap.appendChild(btn);
@@ -4939,7 +4939,7 @@ function mkSegMulti(values, labels, current, onChange) {
 
 function mkSel(values, labels, selected, onChange) {
     var sel = document.createElement('select');
-    sel.className = 'forge-cond-sel';
+    sel.className = 'fabricator-cond-sel';
     values.forEach(function (v, i) {
         var o = document.createElement('option');
         o.value       = v;

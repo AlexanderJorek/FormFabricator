@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -144,13 +144,13 @@ abstract class BaseField
     {
         return ['rule' => 'other-text-word-limit', 'fn' => <<<'JS'
             function (fieldEl) {
-                var inp = fieldEl.querySelector('.forge-other-input[data-word-limit]');
+                var inp = fieldEl.querySelector('.fabricator-other-input[data-word-limit]');
                 if (!inp || !inp.value.trim()) return null;
                 var limit = parseInt(inp.dataset.wordLimit, 10);
                 if (!limit) return null;
                 var count = inp.value.trim().split(/\s+/).filter(Boolean).length;
                 if (count <= limit) return null;
-                var _i18n = window.ForgeForms && window.ForgeForms.i18n;
+                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                 return ((_i18n && _i18n.other_word_limit_exceeded) || 'Please enter at most %1$d words for "Other" (currently: %2$d).')
                     .replace('%1$d', limit).replace('%2$d', count);
             }
@@ -400,13 +400,13 @@ abstract class BaseField
     }
 
     // Client-side empty-check function; [] uses the generic fallback (first
-    // visible input non-empty). Collected into window.ForgeEmptyChecks.
+    // visible input non-empty). Collected into window.FabricatorEmptyChecks.
     public function getClientEmptyCheck(): array
     {
         return [];
     }
 
-    // Client-side validation rules, collected into window.ForgeValidators.
+    // Client-side validation rules, collected into window.FabricatorValidators.
     // Required/empty is handled implicitly — only declare FORMAT rules here.
     public function getClientValidation(): array
     {
@@ -417,7 +417,7 @@ abstract class BaseField
      * Returns the client-side initialisation script for this field type.
      *
      * Return a JS function string: function(root) { ... }
-     * Collected by Assets::enqueueFront() into window.ForgeFieldInits.
+     * Collected by Assets::enqueueFront() into window.FabricatorFieldInits.
      *
      * @return string
      */
@@ -536,9 +536,9 @@ abstract class BaseField
      *
      * @param array $field Normalized entry from FieldRegistry::mapSubmission().
      */
-    protected function pdf(array $field): \ForgeForms\PDF\PdfDescriptor
+    protected function pdf(array $field): \FabricatorForms\PDF\PdfDescriptor
     {
-        return new \ForgeForms\PDF\PdfDescriptor(
+        return new \FabricatorForms\PDF\PdfDescriptor(
             esc_html((string)($field['value'] ?? ''))
         );
     }
@@ -641,22 +641,22 @@ abstract class BaseField
         $required    = !empty($config['required']);
         $hide_label  = !empty($config['hide_label']);
         $description = esc_html($config['description'] ?? '');
-        $req_attr    = $required ? ' <span class="forge-required" aria-hidden="true">*</span>' : '';
-        $req_class   = $required ? ' forge-required-field' : '';
-        $desc_html   = $description !== '' ? '<p class="forge-field-description">' . $description . '</p>' : '';
+        $req_attr    = $required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
+        $req_class   = $required ? ' fabricator-required-field' : '';
+        $desc_html   = $description !== '' ? '<p class="fabricator-field-description">' . $description . '</p>' : '';
 
-        $label_html = (!$hide_label && $label !== '') ? '<label class="forge-label" for="' . esc_attr($field_id) . '">' . $label . $req_attr . '</label>' : '';
+        $label_html = (!$hide_label && $label !== '') ? '<label class="fabricator-label" for="' . esc_attr($field_id) . '">' . $label . $req_attr . '</label>' : '';
 
         $client_rules  = $this->getClientValidation();
         $validate_attr = !empty($client_rules) ? ' data-validate="' . esc_attr(wp_json_encode(array_column($client_rules, 'rule'))) . '"' : '';
 
-        return '<div class="forge-field forge-field--' . esc_attr($config['type'] ?? 'text')
+        return '<div class="fabricator-field fabricator-field--' . esc_attr($config['type'] ?? 'text')
             . $req_class . ' ' . esc_attr($extra_class) . '" data-field-id="' . esc_attr($field_id) . '"'
             . $validate_attr . '>'
             . $label_html
             . $desc_html
             . $inner
-            . '<div class="forge-field-error" id="' . esc_attr($field_id)
+            . '<div class="fabricator-field-error" id="' . esc_attr($field_id)
             . '-error" role="alert" aria-live="polite"></div>'
             . '</div>';
     }
@@ -677,7 +677,7 @@ abstract class BaseField
             'id'          => $field_id,
             'name'        => $field_id,
             'placeholder' => $config['placeholder'] ?? '',
-            'class'       => 'forge-input',
+            'class'       => 'fabricator-input',
             ],
             $extra
         );

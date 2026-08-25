@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Utils;
+namespace FabricatorForms\Utils;
 
 defined('ABSPATH') || exit;
 
@@ -47,10 +47,10 @@ class ConcurrencySlot
     {
         global $wpdb;
 
-        $prefix = 'forge_cs_' . $bucket . '_';
+        $prefix = 'fabricator_cs_' . $bucket . '_';
         $now    = time();
 
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- counts this class's own private forge_cs_* rows; never autoloaded/cached via get_option(), and a fresh read is required every call (this is the whole point of the check).
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- counts this class's own private fabricator_cs_* rows; never autoloaded/cached via get_option(), and a fresh read is required every call (this is the whole point of the check).
         $active = (int) $wpdb->get_var(
             $wpdb->prepare(
                 "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(option_value AS UNSIGNED) > %d",
@@ -93,13 +93,13 @@ class ConcurrencySlot
     {
         global $wpdb;
 
-        $opt = 'forge_cs_' . $bucket . '_' . $token;
+        $opt = 'fabricator_cs_' . $bucket . '_' . $token;
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see acquire() above; this option is never autoloaded/cached via get_option().
         $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s", $opt));
         wp_cache_delete($opt, 'options');
     }
 
-    // WP-Cron callback (hourly): deletes any forge_cs_* option row whose TTL has expired, for the
+    // WP-Cron callback (hourly): deletes any fabricator_cs_* option row whose TTL has expired, for the
     // rare case a holder died without ever reaching its release() (crash, OOM-killed worker,
     // request that bypassed the shutdown hook entirely).
     public static function cronSweepExpired(): void
@@ -107,11 +107,11 @@ class ConcurrencySlot
         global $wpdb;
 
         $now = time();
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk sweep of this class's own private forge_cs_* option rows (never read via get_option()/cached); WP-Cron cleanup, not request-path caching concern.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk sweep of this class's own private fabricator_cs_* option rows (never read via get_option()/cached); WP-Cron cleanup, not request-path caching concern.
         $wpdb->query(
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(option_value AS UNSIGNED) <= %d",
-                $wpdb->esc_like('forge_cs_') . '%',
+                $wpdb->esc_like('fabricator_cs_') . '%',
                 $now
             )
         );

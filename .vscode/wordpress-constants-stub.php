@@ -30,4 +30,4 @@ define('WP_DEBUG_DISPLAY', false);
  * It is intentionally absent from the codebase itself; every real use is
  * guarded with defined(). Stubbed here only so Intelephense can resolve it.
  */
-define('FORGE_SEAL_MASTER_KEY', '');
+define('FABRICATOR_SEAL_MASTER_KEY', '');

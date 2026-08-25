@@ -5,31 +5,31 @@
  */
 (function ($) {
     'use strict';
-    var pageData = window.ForgeSettingsPage || {};
+    var pageData = window.FabricatorSettingsPage || {};
     var I18N   = pageData.i18n   || {};
     var NONCES = pageData.nonces || {};
     var DATA   = pageData.data   || {};
 
         jQuery(function ($) {
-function forgeLuminance(hex) {
+function fabricatorLuminance(hex) {
     var r = parseInt(hex.slice(1, 3), 16);
     var g = parseInt(hex.slice(3, 5), 16);
     var b = parseInt(hex.slice(5, 7), 16);
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 try {
-    $('.forge-iris-input').wpColorPicker({
+    $('.fabricator-iris-input').wpColorPicker({
         change: function (event, ui) {
             var hex = ui.color.toString();
             var id  = this.id;
             if (id === 'admin_accent') {
-                var lum = forgeLuminance(hex);
-                document.documentElement.style.setProperty('--forge-admin-accent', hex);
-                document.documentElement.style.setProperty('--forge-accent-text', lum > 0.55 ? '#1d2327' : '#ffffff');
-                document.documentElement.style.setProperty('--forge-admin-accent-fg', lum > 0.55 ? '#1d2327' : hex);
+                var lum = fabricatorLuminance(hex);
+                document.documentElement.style.setProperty('--fabricator-admin-accent', hex);
+                document.documentElement.style.setProperty('--fabricator-accent-text', lum > 0.55 ? '#1d2327' : '#ffffff');
+                document.documentElement.style.setProperty('--fabricator-admin-accent-fg', lum > 0.55 ? '#1d2327' : hex);
             } else if (id === 'hover_color') {
-                document.documentElement.style.setProperty('--forge-hover-color', hex);
-                document.documentElement.style.setProperty('--forge-hover-color-fg', forgeLuminance(hex) > 0.55 ? '#1d2327' : hex);
+                document.documentElement.style.setProperty('--fabricator-hover-color', hex);
+                document.documentElement.style.setProperty('--fabricator-hover-color-fg', fabricatorLuminance(hex) > 0.55 ? '#1d2327' : hex);
             }
         },
     });
@@ -42,19 +42,19 @@ try {
                UI-only — the real boundary is server-side (manage_options
                checks in the AJAX handlers) — but re-hide on tamper anyway. */
             if (!DATA.isFullAdmin) {
-                var adminOnlySel = '.forge-settings-card--security, ' +
-                    '#forge-access-tile-btn, #forge-reset-tile-btn';
+                var adminOnlySel = '.fabricator-settings-card--security, ' +
+                    '#fabricator-access-tile-btn, #fabricator-reset-tile-btn';
                 /* Modal overlays for the hidden tiles — toggled via the same
                    bare hidden attribute, but not nested inside a card. */
                 var adminOnlyOverlayIds = [
-                    'forge-key-overlay', 'forge-key-view-overlay',
-                    'forge-reset-overlay', 'forge-key-dl-overlay',
-                    'forge-master-key-overlay', 'forge-legacy-key-overlay',
-                    'forge-access-overlay'
+                    'fabricator-key-overlay', 'fabricator-key-view-overlay',
+                    'fabricator-reset-overlay', 'fabricator-key-dl-overlay',
+                    'fabricator-master-key-overlay', 'fabricator-legacy-key-overlay',
+                    'fabricator-access-overlay'
                 ];
                 function rehideAdminCards() {
                     document.querySelectorAll(adminOnlySel).forEach(function (el) {
-                        var card = el.closest('.forge-settings-card') || el;
+                        var card = el.closest('.fabricator-settings-card') || el;
                         if (!card.hidden) card.hidden = true;
                     });
                     adminOnlyOverlayIds.forEach(function (id) {
@@ -71,22 +71,22 @@ try {
             }
 
             /* ── Factory-reset modal ── */
-            var overlay   = document.getElementById('forge-reset-overlay');
-            var chk       = document.getElementById('forge-reset-delete-forms');
-            var confirmBtn = document.getElementById('forge-reset-confirm');
+            var overlay   = document.getElementById('fabricator-reset-overlay');
+            var chk       = document.getElementById('fabricator-reset-delete-forms');
+            var confirmBtn = document.getElementById('fabricator-reset-confirm');
             var countdownTimer = null;
 
             var confirmed = false;
 
-            document.getElementById('forge-reset-tile-btn').addEventListener('click', function () {
+            document.getElementById('fabricator-reset-tile-btn').addEventListener('click', function () {
                 chk.checked = false;
                 confirmed = false;
                 resetConfirmBtn();
                 overlay.hidden = false;
-                document.getElementById('forge-reset-cancel').focus();
+                document.getElementById('fabricator-reset-cancel').focus();
             });
 
-            document.getElementById('forge-reset-cancel').addEventListener('click', closeModal);
+            document.getElementById('fabricator-reset-cancel').addEventListener('click', closeModal);
 
             overlay.addEventListener('click', function (e) {
                 if (e.target === overlay) closeModal();
@@ -109,7 +109,7 @@ try {
                 confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + I18N.resetting;
 
                 $.post(ajaxurl, {
-                    action:    'forge_forms_factory_reset',
+                    action:    'fabricator_forms_factory_reset',
                     nonce:     NONCES.factoryReset,
                     del_forms: chk.checked ? '1' : '0'
                 }, function (res) {
@@ -161,17 +161,17 @@ try {
 
         /* ── Key-rotation modal ── */
         (function () {
-            var keyOverlay  = document.getElementById('forge-key-overlay');
-            var triggerBtn  = document.getElementById('forge-rotate-key-trigger');
-            var cancelBtn   = document.getElementById('forge-key-cancel');
-            var confirmBtn  = document.getElementById('forge-key-confirm');
-            var pwInput     = document.getElementById('forge_key_pw');
-            var pw2Input    = document.getElementById('forge_key_pw2');
-            var chk         = document.getElementById('forge_key_compromised');
-            var cmpHint     = document.getElementById('forge-key-compromised-hint');
-            var errList     = document.getElementById('forge-key-pw-errors');
-            var bars        = document.querySelectorAll('#forge-key-strength span');
-            var modalMsg    = document.getElementById('forge-key-modal-msg');
+            var keyOverlay  = document.getElementById('fabricator-key-overlay');
+            var triggerBtn  = document.getElementById('fabricator-rotate-key-trigger');
+            var cancelBtn   = document.getElementById('fabricator-key-cancel');
+            var confirmBtn  = document.getElementById('fabricator-key-confirm');
+            var pwInput     = document.getElementById('fabricator_key_pw');
+            var pw2Input    = document.getElementById('fabricator_key_pw2');
+            var chk         = document.getElementById('fabricator_key_compromised');
+            var cmpHint     = document.getElementById('fabricator-key-compromised-hint');
+            var errList     = document.getElementById('fabricator-key-pw-errors');
+            var bars        = document.querySelectorAll('#fabricator-key-strength span');
+            var modalMsg    = document.getElementById('fabricator-key-modal-msg');
 
             if (!triggerBtn) { return; }
 
@@ -191,7 +191,7 @@ try {
                 var passed = rs.filter(function (r) { return r.ok; }).length;
 
                 bars.forEach(function (b, i) {
-                    b.className = i < passed ? 'forge-key-bar-' + Math.min(passed, 5) : '';
+                    b.className = i < passed ? 'fabricator-key-bar-' + Math.min(passed, 5) : '';
                 });
 
                 errList.innerHTML = '';
@@ -248,7 +248,7 @@ try {
                 confirmBtn.disabled = true;
 
                 var fd = new FormData();
-                fd.append('action',               'forge_forms_rotate_key');
+                fd.append('action',               'fabricator_forms_rotate_key');
                 fd.append('nonce',                NONCES.rotate);
                 fd.append('key_password',         pwInput.value);
                 fd.append('key_password_confirm', pw2Input.value);
@@ -286,11 +286,11 @@ try {
 
         /* ── Key-download modal ── */
         function showKeyDownloadModal(keyData) {
-            var dlOverlay  = document.getElementById('forge-key-dl-overlay');
-            var dlUuid     = document.getElementById('forge-key-dl-uuid');
-            var dlDate     = document.getElementById('forge-key-dl-date');
-            var dlBtn      = document.getElementById('forge-key-dl-btn');
-            var dlConfirm  = document.getElementById('forge-key-dl-confirm');
+            var dlOverlay  = document.getElementById('fabricator-key-dl-overlay');
+            var dlUuid     = document.getElementById('fabricator-key-dl-uuid');
+            var dlDate     = document.getElementById('fabricator-key-dl-date');
+            var dlBtn      = document.getElementById('fabricator-key-dl-btn');
+            var dlConfirm  = document.getElementById('fabricator-key-dl-confirm');
             if (!dlOverlay) { location.reload(); return; }
 
             dlUuid.textContent    = keyData.uuid || '—';
@@ -333,15 +333,15 @@ try {
 
         /* ── Legacy-key import modal ── */
         (function () {
-            var overlay       = document.getElementById('forge-legacy-key-overlay');
-            var trigger       = document.getElementById('forge-legacy-key-trigger');
-            var cancelBtn     = document.getElementById('forge-legacy-key-cancel');
-            var confirmBtn    = document.getElementById('forge-legacy-key-confirm');
-            var textarea      = document.getElementById('forge-legacy-key-json');
-            var errEl         = document.getElementById('forge-legacy-key-error');
-            var mismatchMsg   = document.getElementById('forge-legacy-key-mismatch-msg');
-            var forceBtn      = document.getElementById('forge-legacy-key-force');
-            var radioRotated = document.getElementById('forge-legacy-status-rotated');
+            var overlay       = document.getElementById('fabricator-legacy-key-overlay');
+            var trigger       = document.getElementById('fabricator-legacy-key-trigger');
+            var cancelBtn     = document.getElementById('fabricator-legacy-key-cancel');
+            var confirmBtn    = document.getElementById('fabricator-legacy-key-confirm');
+            var textarea      = document.getElementById('fabricator-legacy-key-json');
+            var errEl         = document.getElementById('fabricator-legacy-key-error');
+            var mismatchMsg   = document.getElementById('fabricator-legacy-key-mismatch-msg');
+            var forceBtn      = document.getElementById('fabricator-legacy-key-force');
+            var radioRotated = document.getElementById('fabricator-legacy-status-rotated');
             if (!trigger) { return; }
 
             function open() {
@@ -371,9 +371,9 @@ try {
                 confirmBtn.disabled = true;
                 errEl.style.display       = 'none';
                 mismatchMsg.style.display = 'none';
-                var statusRadio = overlay.querySelector('input[name="forge_legacy_status"]:checked');
+                var statusRadio = overlay.querySelector('input[name="fabricator_legacy_status"]:checked');
                 var fd = new FormData();
-                fd.append('action',      'forge_add_legacy_key');
+                fd.append('action',      'fabricator_add_legacy_key');
                 fd.append('nonce',       DATA.legacyKeyNonce);
                 fd.append('key_json',    textarea.value);
                 fd.append('key_status',  statusRadio ? statusRadio.value : 'rotated-legacy');
@@ -416,7 +416,7 @@ try {
 
         /* ── Blocking setup overlay ── */
         (function () {
-            var blocker     = document.getElementById('forge-setup-blocker');
+            var blocker     = document.getElementById('fabricator-setup-blocker');
             if (!blocker) { return; } // already setup_done, element not rendered
 
             // Scope backdrop to the WP content area, not the full viewport.
@@ -433,9 +433,9 @@ try {
             positionBlocker();
             window.addEventListener('resize', positionBlocker);
 
-            var btnDefault  = document.getElementById('forge-blocker-default');
-            var btnSecure   = document.getElementById('forge-blocker-secure');
-            var blockerErr  = document.getElementById('forge-blocker-error');
+            var btnDefault  = document.getElementById('fabricator-blocker-default');
+            var btnSecure   = document.getElementById('fabricator-blocker-secure');
+            var blockerErr  = document.getElementById('fabricator-blocker-error');
 
             // Card hover effect.
             [btnDefault, btnSecure].forEach(function (btn) {
@@ -446,17 +446,17 @@ try {
                     btn.style.borderColor = '#dcdcde';
                 });
             });
-            var secActions    = document.getElementById('forge-security-actions');
-            var mkStep        = document.getElementById('forge-blocker-mk-step');
-            var mkLine        = document.getElementById('forge-blocker-mk-line');
-            var mkBack        = document.getElementById('forge-blocker-mk-back');
-            var mkConfirm     = document.getElementById('forge-blocker-mk-confirm');
-            var mkError       = document.getElementById('forge-blocker-mk-error');
-            var readyStep     = document.getElementById('forge-blocker-ready-step');
-            var readyConfirm  = document.getElementById('forge-blocker-ready-confirm');
-            var readyError    = document.getElementById('forge-blocker-ready-error');
+            var secActions    = document.getElementById('fabricator-security-actions');
+            var mkStep        = document.getElementById('fabricator-blocker-mk-step');
+            var mkLine        = document.getElementById('fabricator-blocker-mk-line');
+            var mkBack        = document.getElementById('fabricator-blocker-mk-back');
+            var mkConfirm     = document.getElementById('fabricator-blocker-mk-confirm');
+            var mkError       = document.getElementById('fabricator-blocker-mk-error');
+            var readyStep     = document.getElementById('fabricator-blocker-ready-step');
+            var readyConfirm  = document.getElementById('fabricator-blocker-ready-confirm');
+            var readyError    = document.getElementById('fabricator-blocker-ready-error');
 
-            var step1Div = document.getElementById('forge-blocker-step1');
+            var step1Div = document.getElementById('fabricator-blocker-step1');
 
             function showBlockerError(msg) {
                 blockerErr.textContent   = msg;
@@ -504,7 +504,7 @@ try {
             if (setupState === 'masterkey') {
                 // Encryption chosen but master key not in wp-config.php yet.
                 showMkStep(''); // immediate — define line filled in on response
-                postBlocker('forge_setup_get_master_key', null, function (data) {
+                postBlocker('fabricator_setup_get_master_key', null, function (data) {
                     if (data.success) {
                         mkLine.textContent = data.data.define_line;
                         mkConfirm.disabled = false;
@@ -523,7 +523,7 @@ try {
                     btnDefault.disabled = true;
                     btnSecure.disabled  = true;
                     blockerErr.style.display = 'none';
-                    postBlocker('forge_setup_keep_default', null, function (data) {
+                    postBlocker('fabricator_setup_keep_default', null, function (data) {
                         if (data.success) {
                             finishSetup(data);
                         } else {
@@ -539,7 +539,7 @@ try {
                 btnSecure.addEventListener('click', function () {
                     blockerErr.style.display = 'none';
                     showMkStep(''); // immediate transition; define line filled in on response
-                    postBlocker('forge_setup_get_master_key', null, function (data) {
+                    postBlocker('fabricator_setup_get_master_key', null, function (data) {
                         if (!data.success) {
                             // Roll back to step 1 on error.
                             mkStep.style.display = 'none';
@@ -557,7 +557,7 @@ try {
             if (mkBack) {
                 mkBack.addEventListener('click', function () {
                     mkBack.disabled = true;
-                    postBlocker('forge_setup_reset_choice', null, function () {
+                    postBlocker('fabricator_setup_reset_choice', null, function () {
                         mkBack.disabled = false;
                         mkStep.style.display = 'none';
                         showStep1();
@@ -573,7 +573,7 @@ try {
                 mkConfirm.addEventListener('click', function () {
                     mkConfirm.disabled    = true;
                     mkError.style.display = 'none';
-                    postBlocker('forge_setup_confirm_secure', null, function (data) {
+                    postBlocker('fabricator_setup_confirm_secure', null, function (data) {
                         if (!data.success) {
                             mkConfirm.disabled    = false;
                             mkError.textContent   = (data.data && data.data.message) || I18N.error;
@@ -590,7 +590,7 @@ try {
                 readyConfirm.addEventListener('click', function () {
                     readyConfirm.disabled    = true;
                     readyError.style.display = 'none';
-                    postBlocker('forge_setup_confirm_secure', null, function (data) {
+                    postBlocker('fabricator_setup_confirm_secure', null, function (data) {
                         if (!data.success) {
                             readyConfirm.disabled    = false;
                             readyError.textContent   = (data.data && data.data.message) || I18N.error;
@@ -606,14 +606,14 @@ try {
 
         /* ── Encryption upgrade (Standard → AES-256-GCM) ── */
         (function () {
-            var upgradeBtn = document.getElementById('forge-upgrade-enc-btn');
+            var upgradeBtn = document.getElementById('fabricator-upgrade-enc-btn');
             if (!upgradeBtn) { return; }
 
-            var mkOverlay = document.getElementById('forge-master-key-overlay');
-            var mkLine    = document.getElementById('forge-master-key-line');
-            var mkConfirm = document.getElementById('forge-master-key-confirm');
-            var mkCancel  = document.getElementById('forge-master-key-cancel');
-            var mkError   = document.getElementById('forge-master-key-error');
+            var mkOverlay = document.getElementById('fabricator-master-key-overlay');
+            var mkLine    = document.getElementById('fabricator-master-key-line');
+            var mkConfirm = document.getElementById('fabricator-master-key-confirm');
+            var mkCancel  = document.getElementById('fabricator-master-key-cancel');
+            var mkError   = document.getElementById('fabricator-master-key-error');
 
             function openMkModal(defineLine) {
                 mkLine.textContent    = defineLine || '…';
@@ -627,7 +627,7 @@ try {
                 upgradeBtn.disabled = true;
                 openMkModal('');
                 var fd = new FormData();
-                fd.append('action', 'forge_setup_get_master_key');
+                fd.append('action', 'fabricator_setup_get_master_key');
                 fd.append('nonce',  DATA.setupNonce);
                 fetch(ajaxurl, { method: 'POST', body: fd })
                     .then(function (r) { return r.json(); })
@@ -658,7 +658,7 @@ try {
                 mkConfirm.disabled    = true;
                 mkError.style.display = 'none';
                 var fd = new FormData();
-                fd.append('action', 'forge_setup_confirm_secure');
+                fd.append('action', 'fabricator_setup_confirm_secure');
                 fd.append('nonce',  DATA.setupNonce);
                 fetch(ajaxurl, { method: 'POST', body: fd })
                     .then(function (r) { return r.json(); })
@@ -686,7 +686,7 @@ try {
 
         /* ── Fake-password: remove readonly on focus so managers can't pre-fill ── */
         (function () {
-            document.querySelectorAll('.forge-fake-password').forEach(function (el) {
+            document.querySelectorAll('.fabricator-fake-password').forEach(function (el) {
                 el.addEventListener('focus', function () { el.removeAttribute('readonly'); });
             });
         }());
@@ -695,12 +695,12 @@ try {
            language's text is pre-rendered server-side into the data attribute)
            and copy-to-clipboard ── */
         (function () {
-            var overlay  = document.getElementById('forge-privacy-text-overlay');
-            var trigger  = document.getElementById('forge-privacy-text-trigger');
-            var closeBtn = document.getElementById('forge-privacy-text-close');
-            var box      = document.getElementById('forge-privacy-text-box');
-            var input    = document.getElementById('forge-privacy-text-lang-input');
-            var list     = document.getElementById('forge-privacy-lang-list');
+            var overlay  = document.getElementById('fabricator-privacy-text-overlay');
+            var trigger  = document.getElementById('fabricator-privacy-text-trigger');
+            var closeBtn = document.getElementById('fabricator-privacy-text-close');
+            var box      = document.getElementById('fabricator-privacy-text-box');
+            var input    = document.getElementById('fabricator-privacy-text-lang-input');
+            var list     = document.getElementById('fabricator-privacy-lang-list');
             /* Trigger/overlay markup is only rendered server-side for full admins;
                bail out for everyone else instead of throwing on the null ref. */
             if (!overlay || !trigger || !closeBtn || !box || !input || !list) { return; }
@@ -721,7 +721,7 @@ try {
             try { texts = JSON.parse(box.dataset.privacyTexts || '{}'); } catch (e) { texts = {}; }
 
             /* ── Searchable language combobox ── */
-            var options = Array.prototype.slice.call(list.querySelectorAll('.forge-combobox-option'));
+            var options = Array.prototype.slice.call(list.querySelectorAll('.fabricator-combobox-option'));
 
             function selectLanguage(opt) {
                 input.value = opt.textContent.trim();
@@ -775,13 +775,13 @@ try {
                 });
             });
             document.addEventListener('click', function (e) {
-                if (!list.hidden && !e.target.closest('#forge-privacy-lang-combobox')) {
+                if (!list.hidden && !e.target.closest('#fabricator-privacy-lang-combobox')) {
                     closeCombobox();
                 }
             });
 
-            var copyBtn  = document.getElementById('forge-privacy-text-copy');
-            var copiedEl = document.getElementById('forge-privacy-text-copied');
+            var copyBtn  = document.getElementById('fabricator-privacy-text-copy');
+            var copiedEl = document.getElementById('fabricator-privacy-text-copied');
             if (copyBtn) {
                 copyBtn.addEventListener('click', function () {
                     var done = function () {
@@ -803,9 +803,9 @@ try {
 
         /* ── Key-view modal ── */
         (function () {
-            var viewOverlay = document.getElementById('forge-key-view-overlay');
-            var viewTrigger = document.getElementById('forge-key-view-trigger');
-            var viewClose   = document.getElementById('forge-key-view-close');
+            var viewOverlay = document.getElementById('fabricator-key-view-overlay');
+            var viewTrigger = document.getElementById('fabricator-key-view-trigger');
+            var viewClose   = document.getElementById('fabricator-key-view-close');
             /* viewOverlay markup is only rendered server-side for full admins;
                bail out for everyone else instead of throwing on the null ref. */
             if (!viewTrigger || !viewOverlay || !viewClose) { return; }
@@ -833,26 +833,26 @@ try {
                 ['settings',        I18N.permSettings],
             ];
 
-            var overlay    = document.getElementById('forge-access-overlay');
-            var loading    = document.getElementById('forge-access-loading');
-            var content    = document.getElementById('forge-access-content');
-            var rolesHead  = document.getElementById('forge-access-roles-head');
-            var rolesBody  = document.getElementById('forge-access-roles-body');
-            var usersHead  = document.getElementById('forge-access-users-head');
-            var usersBody  = document.getElementById('forge-access-users-body');
-            var noUsers    = document.getElementById('forge-access-no-users');
-            var searchInput = document.getElementById('forge-access-user-search');
-            var dropdown   = document.getElementById('forge-access-user-dropdown');
-            var saveBtn    = document.getElementById('forge-access-save');
-            var cancelBtn  = document.getElementById('forge-access-cancel');
-            var errorEl    = document.getElementById('forge-access-error');
+            var overlay    = document.getElementById('fabricator-access-overlay');
+            var loading    = document.getElementById('fabricator-access-loading');
+            var content    = document.getElementById('fabricator-access-content');
+            var rolesHead  = document.getElementById('fabricator-access-roles-head');
+            var rolesBody  = document.getElementById('fabricator-access-roles-body');
+            var usersHead  = document.getElementById('fabricator-access-users-head');
+            var usersBody  = document.getElementById('fabricator-access-users-body');
+            var noUsers    = document.getElementById('fabricator-access-no-users');
+            var searchInput = document.getElementById('fabricator-access-user-search');
+            var dropdown   = document.getElementById('fabricator-access-user-dropdown');
+            var saveBtn    = document.getElementById('fabricator-access-save');
+            var cancelBtn  = document.getElementById('fabricator-access-cancel');
+            var errorEl    = document.getElementById('fabricator-access-error');
 
             /* roles  = { slug: { view_forms: bool, ... } }
                users  = [{ id, name, perms: { view_forms: bool, ... } }]
                roleNames = { slug: label } */
             var roles = {}, roleNames = {}, users = [], userList = [];
 
-            document.getElementById('forge-access-tile-btn').addEventListener('click', function () {
+            document.getElementById('fabricator-access-tile-btn').addEventListener('click', function () {
                 var d    = DATA.accessData || {};
                 roles     = d.roles      || {};
                 roleNames = d.role_names || {};
@@ -895,12 +895,12 @@ try {
                     thName.textContent = isUsers
                         ? I18N.userLabel
                         : I18N.roleLabel;
-                    thName.className = 'forge-access-th forge-access-th--name';
+                    thName.className = 'fabricator-access-th fabricator-access-th--name';
                     head.appendChild(thName);
                     CAPS.forEach(function (cap) {
                         var th = document.createElement('th');
                         th.textContent = cap[1];
-                        th.className = 'forge-access-th forge-access-th--cap';
+                        th.className = 'fabricator-access-th fabricator-access-th--cap';
                         head.appendChild(th);
                     });
                 });
@@ -918,24 +918,24 @@ try {
                     var isAdmin = slug === 'administrator';
                     var perms   = roles[slug] || emptyPerms();
                     var tr = document.createElement('tr');
-                    tr.className = 'forge-access-row';
+                    tr.className = 'fabricator-access-row';
 
                     var tdName = document.createElement('td');
-                    tdName.className = 'forge-access-td forge-access-td--name';
+                    tdName.className = 'fabricator-access-td fabricator-access-td--name';
                     tdName.textContent = roleNames[slug];
                     tr.appendChild(tdName);
 
                     CAPS.forEach(function (cap) {
                         var td = document.createElement('td');
-                        td.className = 'forge-access-td forge-access-td--cap';
+                        td.className = 'fabricator-access-td fabricator-access-td--cap';
                         if (isAdmin) {
                             var icon = document.createElement('i');
-                            icon.className = 'fa-solid fa-check forge-access-always';
+                            icon.className = 'fa-solid fa-check fabricator-access-always';
                             td.appendChild(icon);
                         } else {
                             var cb = document.createElement('input');
                             cb.type = 'checkbox';
-                            cb.className = 'forge-access-cb';
+                            cb.className = 'fabricator-access-cb';
                             cb.checked = !!perms[cap[0]];
                             (function (s, key) {
                                 cb.addEventListener('change', function () {
@@ -952,17 +952,17 @@ try {
             }
 
             function renderUsers() {
-                Array.from(usersBody.querySelectorAll('tr.forge-u-row')).forEach(function (r) { r.remove(); });
+                Array.from(usersBody.querySelectorAll('tr.fabricator-u-row')).forEach(function (r) { r.remove(); });
                 noUsers.style.display = users.length ? 'none' : '';
                 users.forEach(function (u, i) {
                     var tr = document.createElement('tr');
-                    tr.className = 'forge-access-row forge-u-row';
+                    tr.className = 'fabricator-access-row fabricator-u-row';
 
                     var tdName = document.createElement('td');
-                    tdName.className = 'forge-access-td forge-access-td--name';
+                    tdName.className = 'fabricator-access-td fabricator-access-td--name';
                     var nameBtn = document.createElement('button');
                     nameBtn.type = 'button';
-                    nameBtn.className = 'forge-access-name-btn';
+                    nameBtn.className = 'fabricator-access-name-btn';
                     nameBtn.title = I18N.clickToRemove;
                     nameBtn.textContent = u.name;
                     (function (idx) {
@@ -977,10 +977,10 @@ try {
 
                     CAPS.forEach(function (cap) {
                         var td = document.createElement('td');
-                        td.className = 'forge-access-td forge-access-td--cap';
+                        td.className = 'fabricator-access-td fabricator-access-td--cap';
                         var cb = document.createElement('input');
                         cb.type = 'checkbox';
-                        cb.className = 'forge-access-cb';
+                        cb.className = 'fabricator-access-cb';
                         cb.checked = !!(u.perms && u.perms[cap[0]]);
                         (function (userObj, key) {
                             cb.addEventListener('change', function () {
@@ -1024,7 +1024,7 @@ try {
                 }
                 list.forEach(function (u) {
                     var item = document.createElement('div');
-                    item.className = 'forge-access-dropdown-item';
+                    item.className = 'fabricator-access-dropdown-item';
 
                     var nameSpan = document.createElement('span');
                     nameSpan.textContent = u.name;
@@ -1032,7 +1032,7 @@ try {
 
                     var inlineAdd = document.createElement('button');
                     inlineAdd.type = 'button';
-                    inlineAdd.className = 'forge-access-inline-add';
+                    inlineAdd.className = 'fabricator-access-inline-add';
                     inlineAdd.textContent = '+ ' + I18N.addLabel;
                     inlineAdd.addEventListener('mousedown', function (e) {
                         e.preventDefault();
@@ -1082,7 +1082,7 @@ try {
                     });
                 });
                 jQuery.post(ajaxurl, {
-                    action: 'forge_save_access_settings',
+                    action: 'fabricator_save_access_settings',
                     nonce: DATA.accessNonce,
                     roles: rolesData,
                     users: usersData
@@ -1111,15 +1111,15 @@ try {
             }
         }());
 
-        /* ---- AJAX save for #forge-settings-form (no page reload) ---- */
+        /* ---- AJAX save for #fabricator-settings-form (no page reload) ---- */
         (function(){
-            var form = document.getElementById('forge-settings-form');
+            var form = document.getElementById('fabricator-settings-form');
             if (!form) return;
             function showNotice(msg, isError) {
-                var existing = document.querySelector('.forge-settings-notice');
+                var existing = document.querySelector('.fabricator-settings-notice');
                 if (existing) existing.remove();
                 var n = document.createElement('div');
-                n.className = 'forge-settings-notice forge-settings-notice--'
+                n.className = 'fabricator-settings-notice fabricator-settings-notice--'
                     + (isError ? 'error' : 'success');
                 n.innerHTML = '<i class="fa-solid fa-'
                     + (isError ? 'circle-xmark' : 'circle-check') + '"></i> ' + msg;
@@ -1137,9 +1137,9 @@ try {
                 e.preventDefault();
                 var btn = form.querySelector('button[type="submit"]');
                 var origHtml = btn ? btn.innerHTML : '';
-                if (btn) { btn.disabled = true; btn.innerHTML = '<span class="forge-spinner"></span> ' + I18N.saving; }
+                if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fabricator-spinner"></span> ' + I18N.saving; }
                 var fd = new FormData(form);
-                fd.set('action', 'forge_save_general_settings');
+                fd.set('action', 'fabricator_save_general_settings');
                 requestAnimationFrame(function(){ requestAnimationFrame(function(){
                 fetch(ajaxurl, {method:'POST', body:fd})
                     .then(function(r){ return r.json(); })

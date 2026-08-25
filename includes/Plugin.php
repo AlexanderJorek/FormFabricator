@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms;
+namespace FabricatorForms;
 
 defined('ABSPATH') || exit;
 
@@ -28,7 +28,7 @@ defined('ABSPATH') || exit;
  *
  * @param string $message The message to log.
  */
-function forge_log(string $message): void
+function fabricator_log(string $message): void
 {
     if (defined('WP_DEBUG') && WP_DEBUG) {
         // This is the plugin's shared WP_DEBUG-gated logging helper, called from many files;
@@ -72,12 +72,12 @@ class Plugin
         // alone isn't a trust boundary, so this allowlist decides what actually
         // gets included. FieldRegistry.php must load first so the constant exists.
         // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded literal path, not attacker- or request-influenced.
-        include_once FORGE_FORMS_PATH . 'includes/Fields/FieldRegistry.php';
+        include_once FABRICATOR_FORMS_PATH . 'includes/Fields/FieldRegistry.php';
         // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded literal path, not attacker- or request-influenced.
-        include_once FORGE_FORMS_PATH . 'includes/Fields/BaseField.php';
-        $knownFieldClasses = array_flip(array_keys(\ForgeForms\Fields\FieldRegistry::FIELD_MAP));
+        include_once FABRICATOR_FORMS_PATH . 'includes/Fields/BaseField.php';
+        $knownFieldClasses = array_flip(array_keys(\FabricatorForms\Fields\FieldRegistry::FIELD_MAP));
         $fieldFiles = [];
-        foreach (glob(FORGE_FORMS_PATH . 'includes/Fields/*Field.php') ?: [] as $path) {
+        foreach (glob(FABRICATOR_FORMS_PATH . 'includes/Fields/*Field.php') ?: [] as $path) {
             $basename = basename($path, '.php');
             if (isset($knownFieldClasses[$basename])) {
                 $fieldFiles[] = 'Fields/' . $basename . '.php';
@@ -106,7 +106,7 @@ class Plugin
 
         foreach ($files as $file) {
             // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file is drawn from the hardcoded $files array above (every entry already ends in .php); nothing here is attacker- or request-influenced.
-            include_once FORGE_FORMS_PATH . 'includes/' . $file;
+            include_once FABRICATOR_FORMS_PATH . 'includes/' . $file;
         }
 
         if (is_admin()) {
@@ -121,7 +121,7 @@ class Plugin
             }
             foreach ($adminFiles as $file) {
                 // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file is drawn from the hardcoded $adminFiles array above (every entry already ends in .php); nothing here is attacker- or request-influenced.
-                include_once FORGE_FORMS_PATH . 'includes/' . $file;
+                include_once FABRICATOR_FORMS_PATH . 'includes/' . $file;
             }
         }
     }
@@ -141,25 +141,25 @@ class Plugin
         add_action('init', [Fields\FieldRegistry::class, 'registerDefaults']);
 
         /* Shortcodes */
-        add_shortcode('forge_form', [Form\FormRenderer::class, 'shortcode']);
-        add_shortcode('forge_form_select', [Admin\FormSelectList::class, 'shortcode']);
+        add_shortcode('fabricator_form', [Form\FormRenderer::class, 'shortcode']);
+        add_shortcode('fabricator_form_select', [Admin\FormSelectList::class, 'shortcode']);
 
         /* AJAX form submission */
-        add_action('wp_ajax_forge_forms_submit', [Form\FormProcessor::class, 'handle']);
-        add_action('wp_ajax_nopriv_forge_forms_submit', [Form\FormProcessor::class, 'handle']);
+        add_action('wp_ajax_fabricator_forms_submit', [Form\FormProcessor::class, 'handle']);
+        add_action('wp_ajax_nopriv_fabricator_forms_submit', [Form\FormProcessor::class, 'handle']);
 
-        /* Mints a fresh forge_nonce/forge_submission_token pair; not embedded in cacheable form HTML. */
-        add_action('wp_ajax_forge_forms_get_token', [self::class, 'ajaxGetToken']);
-        add_action('wp_ajax_nopriv_forge_forms_get_token', [self::class, 'ajaxGetToken']);
+        /* Mints a fresh fabricator_nonce/fabricator_submission_token pair; not embedded in cacheable form HTML. */
+        add_action('wp_ajax_fabricator_forms_get_token', [self::class, 'ajaxGetToken']);
+        add_action('wp_ajax_nopriv_fabricator_forms_get_token', [self::class, 'ajaxGetToken']);
 
         /* IBAN → BIC lookup (proxied through WP to avoid CORS) */
-        add_action('wp_ajax_forge_iban_bic', [self::class, 'ajaxIbanBic']);
-        add_action('wp_ajax_nopriv_forge_iban_bic', [self::class, 'ajaxIbanBic']);
+        add_action('wp_ajax_fabricator_iban_bic', [self::class, 'ajaxIbanBic']);
+        add_action('wp_ajax_nopriv_fabricator_iban_bic', [self::class, 'ajaxIbanBic']);
 
         /* PDF mail hook */
         Form\MailSender::init();
         add_action(
-            'forge_forms_submission',
+            'fabricator_forms_submission',
             [Form\MailSender::class, 'onSubmission'],
             10,
             3
@@ -170,30 +170,30 @@ class Plugin
            Registered unconditionally (not inside is_admin()) since generation
            happens on public form submissions and wp-cron.php requests aren't
            admin requests either. */
-        add_action('forge_generator_sweep_tmp_dirs', [PDF\Generator::class, 'cronSweepTmpDirs']);
-        if (!wp_next_scheduled('forge_generator_sweep_tmp_dirs')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'forge_generator_sweep_tmp_dirs');
+        add_action('fabricator_generator_sweep_tmp_dirs', [PDF\Generator::class, 'cronSweepTmpDirs']);
+        if (!wp_next_scheduled('fabricator_generator_sweep_tmp_dirs')) {
+            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_generator_sweep_tmp_dirs');
         }
 
-        /* Fallback sweep for expired forge_rl_* rate-limit rows — without this,
+        /* Fallback sweep for expired fabricator_rl_* rate-limit rows — without this,
            every distinct IP+form bucket that ever hits RateLimiter::increment()
            leaves a permanent wp_options row (GDPR storage-limitation: the key
            embeds a hash of the visitor's IP). */
-        add_action('forge_rl_sweep_expired', [Utils\RateLimiter::class, 'cronSweepExpired']);
-        if (!wp_next_scheduled('forge_rl_sweep_expired')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'forge_rl_sweep_expired');
+        add_action('fabricator_rl_sweep_expired', [Utils\RateLimiter::class, 'cronSweepExpired']);
+        if (!wp_next_scheduled('fabricator_rl_sweep_expired')) {
+            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_rl_sweep_expired');
         }
 
-        /* Sweeps expired forge_su_* single-use-claim rows — same rationale as the sweep above. */
-        add_action('forge_su_sweep_expired', [Utils\SingleUseToken::class, 'cronSweepExpired']);
-        if (!wp_next_scheduled('forge_su_sweep_expired')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'forge_su_sweep_expired');
+        /* Sweeps expired fabricator_su_* single-use-claim rows — same rationale as the sweep above. */
+        add_action('fabricator_su_sweep_expired', [Utils\SingleUseToken::class, 'cronSweepExpired']);
+        if (!wp_next_scheduled('fabricator_su_sweep_expired')) {
+            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_su_sweep_expired');
         }
 
-        /* Sweeps expired forge_cs_* concurrency-slot rows — same rationale as the sweep above. */
-        add_action('forge_cs_sweep_expired', [Utils\ConcurrencySlot::class, 'cronSweepExpired']);
-        if (!wp_next_scheduled('forge_cs_sweep_expired')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'forge_cs_sweep_expired');
+        /* Sweeps expired fabricator_cs_* concurrency-slot rows — same rationale as the sweep above. */
+        add_action('fabricator_cs_sweep_expired', [Utils\ConcurrencySlot::class, 'cronSweepExpired']);
+        if (!wp_next_scheduled('fabricator_cs_sweep_expired')) {
+            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_cs_sweep_expired');
         }
 
         /* Remove deleted forms from all FormSelect lists */
@@ -214,12 +214,12 @@ class Plugin
             }
             add_action('admin_enqueue_scripts', [Utils\Assets::class, 'enqueueAdmin']);
             add_action('admin_init', [self::class, 'maybeSealSetupRedirect']);
-            add_filter('plugin_action_links_' . FORGE_FORMS_BASENAME, [self::class, 'addDeleteWarningLink']);
+            add_filter('plugin_action_links_' . FABRICATOR_FORMS_BASENAME, [self::class, 'addDeleteWarningLink']);
         }
     }
 
     /**
-     * Mints a fresh forge_nonce/forge_submission_token pair, called by front.js right before submit
+     * Mints a fresh fabricator_nonce/fabricator_submission_token pair, called by front.js right before submit
      * so cached HTML never bakes in per-visitor values. Rate-limited per IP+form instead of nonce-guarded,
      * since there's nothing yet to verify a nonce against.
      *
@@ -243,7 +243,7 @@ class Plugin
 
         wp_send_json_success(
             [
-            'nonce' => wp_create_nonce('forge_forms_submit_' . $form_id),
+            'nonce' => wp_create_nonce('fabricator_forms_submit_' . $form_id),
             /* Replay-protection token, separate from the nonce above (which collides across
                anonymous visitors). See Utils/SingleUseToken.php and FormProcessor::handle(). */
             'token' => wp_generate_uuid4(),
@@ -272,7 +272,7 @@ class Plugin
         // that actually embed a FormFabricator form) so this endpoint can't be driven as a bare
         // anonymous IBAN-validation/BIC-harvesting oracle against openiban.com without ever
         // having loaded a page containing a form.
-        if (!check_ajax_referer('forge_iban_bic', 'nonce', false)) {
+        if (!check_ajax_referer('fabricator_iban_bic', 'nonce', false)) {
             wp_send_json_error();
             return;
         }
@@ -321,7 +321,7 @@ class Plugin
     public static function availablePrivacyLanguages(): array
     {
         $langs = ['en' => 'English'];
-        foreach (glob(FORGE_FORMS_PATH . 'languages/formfabricator-*.mo') ?: [] as $path) {
+        foreach (glob(FABRICATOR_FORMS_PATH . 'languages/formfabricator-*.mo') ?: [] as $path) {
             if (preg_match('/^formfabricator-([A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?)\.mo$/', basename($path), $m)) {
                 $langs[$m[1]] = self::localeDisplayName($m[1]);
             }
@@ -369,12 +369,11 @@ class Plugin
 
     /**
      * Suggested privacy-policy text (openiban.com + Google reCAPTCHA disclosures) as plain text, ready to
-     * copy-paste directly into a privacy policy page — via the normal gettext pipeline (EN source strings,
-     * German translation shipped in languages/formfabricator-de_DE.po/.mo, same as every other user-facing string
-     * in this plugin). Rendered in the language the caller (currently FormSettings::render()'s "Privacy
-     * Policy Text" card) asks for, not necessarily the site's current admin-UI locale — privacy-policy
-     * wording is content the admin is choosing for their published policy, independent of what language they
-     * run wp-admin in. withPluginLocale() handles the temporary locale switch.
+     * copy-paste directly into a privacy policy page — via the normal gettext pipeline. Rendered in the
+     * language the caller (currently FormSettings::render()'s "Privacy Policy Text" card) asks for, not
+     * necessarily the site's current admin-UI locale — privacy-policy wording is content the admin is
+     * choosing for their published policy, independent of what language they run wp-admin in.
+     * withPluginLocale() handles the temporary locale switch.
      *
      * @param string $lang Locale code from availablePrivacyLanguages().
      */
@@ -421,7 +420,7 @@ class Plugin
             $l10n['formfabricator'] = new \NOOP_Translations();
         } elseif (preg_match('/^[A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?$/', $locale)) {
             unset($l10n['formfabricator']);
-            $mofile = FORGE_FORMS_PATH . 'languages/formfabricator-' . $locale . '.mo';
+            $mofile = FABRICATOR_FORMS_PATH . 'languages/formfabricator-' . $locale . '.mo';
             if (file_exists($mofile)) {
                 load_textdomain('formfabricator', $mofile);
             }
@@ -439,14 +438,14 @@ class Plugin
     }
 
     /**
-     * Registers the forge_form custom post type.
+     * Registers the fabricator_form custom post type.
      *
      * @return void
      */
     public static function registerCpt(): void
     {
         register_post_type(
-            'forge_form',
+            'fabricator_form',
             [
             'label'               => __('Forms', 'formfabricator'),
             'labels'              => [
@@ -466,14 +465,14 @@ class Plugin
             'capability_type'     => 'post',
             // create_posts uses a custom cap so it can be granted to users with the
             // plugin's own 'edit_forms' permission, not just WP admins (see mapCreateFormCap())
-            'capabilities'        => ['create_posts' => 'create_forge_forms'],
+            'capabilities'        => ['create_posts' => 'create_fabricator_forms'],
             'map_meta_cap'        => true,
             ]
         );
     }
 
     /**
-     * Grants the create_forge_forms capability to users with the plugin's own edit_forms permission
+     * Grants the create_fabricator_forms capability to users with the plugin's own edit_forms permission
      * (Plugin::userCan() already lets admins through).
      *
      * @param string[] $caps    Required primitive capabilities.
@@ -482,7 +481,7 @@ class Plugin
      */
     public static function mapCreateFormCap(array $caps, string $cap): array
     {
-        if ($cap === 'create_forge_forms') {
+        if ($cap === 'create_fabricator_forms') {
             return self::userCan('edit_forms') ? ['exist'] : ['do_not_allow'];
         }
         return $caps;
@@ -527,7 +526,7 @@ class Plugin
         }
         static $access = null;
         if ($access === null) {
-            $access = get_option('forge_forms_access', []);
+            $access = get_option('fabricator_forms_access', []);
         }
         $user_overrides = $access['users'] ?? [];
         if (isset($user_overrides[$user_id]) && is_array($user_overrides[$user_id])) {
@@ -556,7 +555,7 @@ class Plugin
         if (!current_user_can('manage_options')) {
             return;
         }
-        if (get_option('forge_forms_seal_setup_done', false)) {
+        if (get_option('fabricator_forms_seal_setup_done', false)) {
             return;
         }
         if (wp_doing_ajax() || !isset($_SERVER['REQUEST_METHOD']) || $_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -565,13 +564,13 @@ class Plugin
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing decision (which admin page to redirect to); gated by manage_options above, no data written.
         $current_page = sanitize_text_field(wp_unslash($_GET['page'] ?? ''));
         // Only redirect within FormFabricator pages, not the whole WP admin.
-        if (strncmp($current_page, 'forge-forms', 11) !== 0) {
+        if (strncmp($current_page, 'fabricator-forms', 11) !== 0) {
             return;
         }
-        if ($current_page === 'forge-forms-settings') {
+        if ($current_page === 'fabricator-forms-settings') {
             return;
         }
-        wp_safe_redirect(admin_url('admin.php?page=forge-forms-settings'));
+        wp_safe_redirect(admin_url('admin.php?page=fabricator-forms-settings'));
         exit;
     }
 }

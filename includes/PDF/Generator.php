@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,13 +19,13 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\PDF;
+namespace FabricatorForms\PDF;
 
 use Mpdf\Mpdf;
 use Mpdf\MpdfException;
 use Mpdf\HTMLParserMode;
-use ForgeForms\Fields\FieldRegistry;
-use ForgeForms\Fields\HtmlField;
+use FabricatorForms\Fields\FieldRegistry;
+use FabricatorForms\Fields\HtmlField;
 
 defined('ABSPATH') || exit;
 
@@ -46,11 +46,11 @@ class Generator
     public static function generate(array $mapped, int $form_id, string $form_title = ''): string|false
     {
         if (empty($mapped)) {
-            \ForgeForms\forge_log('ForgeForms Generator: No data provided');
+            \FabricatorForms\fabricator_log('FabricatorForms Generator: No data provided');
             return false;
         }
 
-        $layout = include FORGE_FORMS_PATH . 'includes/PDF/templates/layout.php';
+        $layout = include FABRICATOR_FORMS_PATH . 'includes/PDF/templates/layout.php';
 
         $image_vars     = [];
         $sealed_uploads = [];
@@ -80,7 +80,7 @@ class Generator
             // key could otherwise break Verificationpage's marker-parsing regex or
             // inject markup into the invisible marker span below.
             if (!ctype_alnum(str_replace(['_', '-'], '', (string) $key))) {
-                \ForgeForms\forge_log('ForgeForms Generator: rejected suspicious field key: ' . $key);
+                \FabricatorForms\fabricator_log('FabricatorForms Generator: rejected suspicious field key: ' . $key);
                 continue;
             }
             $field_id = 'field_' . preg_replace('/[^A-Za-z0-9_-]/', '_', (string) $key);
@@ -119,7 +119,7 @@ class Generator
 
             $allowed_tags = ($pdf['trusted_rich_html'] ?? false)
                 ? HtmlField::trustedPdfAllowedTags()
-                : FORGE_PDF_ALLOWED_VALUE_TAGS;
+                : FABRICATOR_PDF_ALLOWED_VALUE_TAGS;
             $cell_html = wp_kses((string)($pdf['cell_html'] ?? ''), $allowed_tags);
             foreach (array_keys($pdf_image_vars) as $var) {
                 $cell_html .= $layout['image']($var);
@@ -129,9 +129,9 @@ class Generator
             $sealed_uploads = array_merge($sealed_uploads, $pdf_sealed_uploads);
 
             $start     = '<span style="font-size:0.1px;line-height:0.1px;color:#000;position:absolute;">'
-                . '[FORGE_PDF_FIELD_' . esc_html($field_id) . ']</span>';
+                . '[FABRICATOR_PDF_FIELD_' . esc_html($field_id) . ']</span>';
             $end       = '<span style="font-size:0.1px;line-height:0.1px;color:#000;position:absolute;">'
-                . '[FORGE_PDF_FIELD_END]</span>';
+                . '[FABRICATOR_PDF_FIELD_END]</span>';
             $cell_html = $start . $cell_html . $end;
 
             $fields_html .= ($pdf['labeled'] ?? true)
@@ -169,9 +169,9 @@ class Generator
             ini_set('pcre.backtrack_limit', (string)max($prev_backtrack, 16 * 1024 * 1024));
 
             $upload_dir = wp_upload_dir();
-            $safe_dir   = $upload_dir['basedir'] . '/forge-secure-pdf';
+            $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
 
-            if (!get_transient('forge_pdf_dirs_ready')) {
+            if (!get_transient('fabricator_pdf_dirs_ready')) {
                 // A restrictive umask makes mkdir()/file_put_contents() create the
                 // dir/file at 0750/0640 from the moment they exist, instead of at
                 // the OS default (often 0755/0644) and only tightened by chmod()
@@ -202,12 +202,12 @@ class Generator
                 } finally {
                     umask($prev_umask);
                 }
-                set_transient('forge_pdf_dirs_ready', true, DAY_IN_SECONDS);
+                set_transient('fabricator_pdf_dirs_ready', true, DAY_IN_SECONDS);
             }
 
             $pdf_dir   = $safe_dir . '/pdf';
             $mpdf_temp = $safe_dir . '/mpdf';
-            $grid_svg  = FORGE_FORMS_PATH . 'includes/PDF/templates/construction-grid.svg';
+            $grid_svg  = FABRICATOR_FORMS_PATH . 'includes/PDF/templates/construction-grid.svg';
 
             $form_name_clean = substr(preg_replace('/[^a-zA-Z0-9_-]/', '_', $title), 0, 80);
             $date_time       = wp_date('D_d_m_Y_T_H_i');
@@ -282,7 +282,7 @@ class Generator
             $all_stream_hashes = $all_stream_hashes ?? [];
             wp_delete_file($sl_path);
             if (file_exists($sl_path)) {
-                \ForgeForms\forge_log('ForgeForms Generator: failed to delete temp PDF: ' . $sl_path);
+                \FabricatorForms\fabricator_log('FabricatorForms Generator: failed to delete temp PDF: ' . $sl_path);
             }
 
             // All seal inputs come from PASS 1 — compute it now so the seal div
@@ -317,7 +317,7 @@ class Generator
             $seal_json = wp_json_encode($seal_data);
             if ($seal_json === false) {
                 throw new \RuntimeException(
-                    'ForgeForms Generator: JSON encode failed — ' . json_last_error_msg()
+                    'FabricatorForms Generator: JSON encode failed — ' . json_last_error_msg()
                 );
             }
             $seal_base64 = base64_encode($seal_json);
@@ -342,7 +342,7 @@ class Generator
 
             return $final_path;
         } catch (MpdfException $e) {
-            \ForgeForms\forge_log('ForgeForms Generator error: ' . $e->getMessage());
+            \FabricatorForms\fabricator_log('FabricatorForms Generator error: ' . $e->getMessage());
             return false;
         } catch (\Throwable $e) {
             // Broader safety net alongside the MpdfException catch above: this method's
@@ -350,11 +350,11 @@ class Generator
             // throw \RuntimeException (HashSeal::generate()'s master-key/JSON-encode
             // failures) which MpdfException alone wouldn't catch. Left uncaught, that
             // exception propagates through MailSender::onSubmission() and
-            // FormProcessor's do_action('forge_forms_submission', ...) — neither of
+            // FormProcessor's do_action('fabricator_forms_submission', ...) — neither of
             // which wrap this call in a try/catch — turning a PDF/key-config problem
             // into an uncaught-exception fatal on the visitor's form submission, and a
             // stack-trace disclosure (CWE-209) on any site with WP_DEBUG_DISPLAY on.
-            \ForgeForms\forge_log('ForgeForms Generator error: ' . $e->getMessage());
+            \FabricatorForms\fabricator_log('FabricatorForms Generator error: ' . $e->getMessage());
             return false;
         } finally {
             // Any exit path (including a \Throwable not caught above, e.g. from
@@ -387,7 +387,7 @@ class Generator
     public static function cronSweepTmpDirs(): void
     {
         $upload_dir = wp_upload_dir();
-        $safe_dir   = $upload_dir['basedir'] . '/forge-secure-pdf';
+        $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
         $now        = time();
 
         foreach (['/pdf', '/mpdf'] as $sub) {
@@ -403,7 +403,7 @@ class Generator
                 if ($mtime !== false && ($now - $mtime) > self::SWEEP_MAX_AGE) {
                     wp_delete_file($file);
                     if (file_exists($file)) {
-                        \ForgeForms\forge_log("ForgeForms Generator: sweep failed to remove stale temp PDF {$file}");
+                        \FabricatorForms\fabricator_log("FabricatorForms Generator: sweep failed to remove stale temp PDF {$file}");
                     }
                 }
             }
@@ -445,11 +445,11 @@ class Generator
     private static function footerHtml(string $user_text = ''): string
     {
         $pageno = '<span style="font-size:0.1px;line-height:0.1px;color:#fff;">'
-            . '[FORGE_PDF_PAGENO_START]</span>'
+            . '[FABRICATOR_PDF_PAGENO_START]</span>'
             // translators: %1$s: current page number placeholder, %2$s: total page count placeholder (both substituted by mPDF at render time).
             . sprintf(__('Page %1$s of %2$s', 'formfabricator'), '{PAGENO}', '{nbpg}')
             . '<span style="font-size:0.1px;line-height:0.1px;color:#fff;">'
-            . '[FORGE_PDF_PAGENO_END]</span>';
+            . '[FABRICATOR_PDF_PAGENO_END]</span>';
 
         $border = '';
 
@@ -458,7 +458,7 @@ class Generator
                 . $pageno . '</div>';
         }
 
-        // $user_text already passed through wp_kses(FORGE_PDF_HEADER_TITLE_ALLOWED_TAGS) in
+        // $user_text already passed through wp_kses(FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS) in
         // layout.php's footer() closure — it is safe HTML, not plain text. Re-escaping
         // it here would turn already-permitted tags (<strong>, <em>, <span>, ...) into
         // visible literal text, silently defeating that allowlist.
@@ -480,7 +480,7 @@ class Generator
      */
     private static function buildTemplateFingerprints(): array
     {
-        $cached = get_transient('forge_pdf_template_fingerprints');
+        $cached = get_transient('fabricator_pdf_template_fingerprints');
         if (is_array($cached)) {
             return $cached;
         }
@@ -504,9 +504,9 @@ class Generator
             $template[] = ['name' => $name, 'mime' => $mime, 'sha256' => $th ?? hash('sha256', $data)];
         };
 
-        $fingerprint(FORGE_FORMS_PATH . 'includes/PDF/templates/construction-grid.svg', 'construction-grid.svg');
+        $fingerprint(FABRICATOR_FORMS_PATH . 'includes/PDF/templates/construction-grid.svg', 'construction-grid.svg');
 
-        $raw = (array) \get_option('forge_forms_pdf_layout', []);
+        $raw = (array) \get_option('fabricator_forms_pdf_layout', []);
 
         // Custom logo only — no fallback
         if (!empty($raw['logo_url'])) {
@@ -530,7 +530,7 @@ class Generator
             }
         }
 
-        set_transient('forge_pdf_template_fingerprints', $template, HOUR_IN_SECONDS);
+        set_transient('fabricator_pdf_template_fingerprints', $template, HOUR_IN_SECONDS);
         return $template;
     }
 

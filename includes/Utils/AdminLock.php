@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Utils;
+namespace FabricatorForms\Utils;
 
 defined('ABSPATH') || exit;
 
@@ -38,7 +38,7 @@ class AdminLock
      */
     public static function check(string $key): int|false
     {
-        $raw = get_option('forge_lock_' . $key, '');
+        $raw = get_option('fabricator_lock_' . $key, '');
         if ($raw === '' || !str_contains($raw, ':')) {
             return false;
         }
@@ -65,7 +65,7 @@ class AdminLock
         if (!$uid) {
             return;
         }
-        update_option('forge_lock_' . $key, time() . ':' . $uid, false);
+        update_option('fabricator_lock_' . $key, time() . ':' . $uid, false);
     }
 
     /**
@@ -77,13 +77,13 @@ class AdminLock
      */
     public static function release(string $key, int $user_id): void
     {
-        $raw = get_option('forge_lock_' . $key, '');
+        $raw = get_option('fabricator_lock_' . $key, '');
         if ($raw === '' || !str_contains($raw, ':')) {
             return;
         }
         [, $owner] = explode(':', $raw, 2);
         if ((int) $owner === $user_id) {
-            delete_option('forge_lock_' . $key);
+            delete_option('fabricator_lock_' . $key);
         }
     }
 }

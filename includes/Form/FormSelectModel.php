@@ -10,11 +10,11 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
-namespace ForgeForms\Form;
+namespace FabricatorForms\Form;
 
 defined('ABSPATH') || exit;
 
@@ -23,7 +23,7 @@ defined('ABSPATH') || exit;
  */
 class FormSelectModel
 {
-    private static string $option = 'forge_form_selects';
+    private static string $option = 'fabricator_form_selects';
 
     public int    $id    = 0;
     public string $title = '';
@@ -43,7 +43,7 @@ class FormSelectModel
     {
         // Defense-in-depth: all current call sites are already gated on
         // Plugin::userCan('edit_forms') before reaching here, same as save()/delete().
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             return [];
         }
         return array_map([self::class, 'fromArray'], self::getRaw());
@@ -59,7 +59,7 @@ class FormSelectModel
     {
         // Defense-in-depth: all current call sites are already gated on
         // Plugin::userCan('edit_forms') before reaching here, same as save()/delete().
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             return null;
         }
         foreach (self::getRaw() as $record) {
@@ -87,14 +87,14 @@ class FormSelectModel
         // Defense-in-depth: both current call sites already gate on
         // Plugin::userCan('edit_forms') before reaching here — this model
         // method shouldn't rely solely on callers remembering to check.
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             return 0;
         }
         if (!self::nonceVerifiedOrCheck($nonce_verified)) {
             return 0;
         }
         $all   = self::getRaw();
-        $title = sanitize_text_field(\ForgeForms\Utils\Sanitize::str($data['title'] ?? null));
+        $title = sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($data['title'] ?? null));
         if ($title === '') {
             $title = __('Form Selection', 'formfabricator');
         }
@@ -107,8 +107,8 @@ class FormSelectModel
             }
             $items[] = [
                 'form_id'     => $form_id,
-                'label'       => sanitize_text_field(\ForgeForms\Utils\Sanitize::str($item['label'] ?? null)),
-                'description' => sanitize_text_field(\ForgeForms\Utils\Sanitize::str($item['description'] ?? null)),
+                'label'       => sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($item['label'] ?? null)),
+                'description' => sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($item['description'] ?? null)),
                 'favorite'    => !empty($item['favorite']),
             ];
         }
@@ -138,7 +138,7 @@ class FormSelectModel
      */
     public static function removeFormId(int $post_id): void
     {
-        if (get_post_type($post_id) !== 'forge_form') {
+        if (get_post_type($post_id) !== 'fabricator_form') {
             return;
         }
         $all     = self::getRaw();
@@ -172,7 +172,7 @@ class FormSelectModel
      */
     public static function delete(int $id, bool $nonce_verified = false): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             return;
         }
         if (!self::nonceVerifiedOrCheck($nonce_verified)) {
@@ -225,8 +225,8 @@ class FormSelectModel
      * CSRF backstop for save()/delete().
      *
      * Both current call sites (FormSelectList.php's ajaxSave()/ajaxDelete())
-     * already perform their own, more specific nonce check ('forge_fsel_save'
-     * or the per-record 'forge_fsel_delete_{id}') before calling into this
+     * already perform their own, more specific nonce check ('fabricator_fsel_save'
+     * or the per-record 'fabricator_fsel_delete_{id}') before calling into this
      * model, and pass $nonce_verified: true to acknowledge that so this method
      * is a no-op for them — mirrors {@see FormModel::nonceVerifiedOrCheck()}.
      * If a future (or forgotten) call site omits $nonce_verified, this falls
@@ -241,7 +241,7 @@ class FormSelectModel
         if ($nonce_verified) {
             return true;
         }
-        return (bool) check_ajax_referer('forge_forms_admin_nonce', 'nonce', false);
+        return (bool) check_ajax_referer('fabricator_forms_admin_nonce', 'nonce', false);
     }
 
     /**

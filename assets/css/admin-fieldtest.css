@@ -3,8 +3,8 @@
  * @copyright 2026 Alexander Jorek
  * @license   GPL-3.0-or-later
  */
-            #forge-panel-php, #forge-panel-js { font-family: monospace; }
-            .forge-test-topbar {
+            #fabricator-panel-php, #fabricator-panel-js { font-family: monospace; }
+            .fabricator-test-topbar {
                 display: flex;
                 align-items: center;
                 gap: 20px;
@@ -12,7 +12,7 @@
                 border-bottom: 2px solid #dcdcde;
                 flex-shrink: 0;
             }
-            .forge-test-title {
+            .fabricator-test-title {
                 margin: 0;
                 padding: 0 0 10px;
                 font-size: 16px;
@@ -21,8 +21,8 @@
                 white-space: nowrap;
                 flex-shrink: 0;
             }
-            .forge-test-tabs { display: flex; gap: 0; margin-bottom: -2px; }
-            .forge-test-tab {
+            .fabricator-test-tabs { display: flex; gap: 0; margin-bottom: -2px; }
+            .fabricator-test-tab {
                 padding: 8px 22px;
                 cursor: pointer;
                 font-size: 13px;
@@ -34,9 +34,9 @@
                 color: #50575e;
                 user-select: none;
             }
-            .forge-test-tab:hover { background: rgba(0,0,0,.06); }
-            .forge-test-tab.active { background: #fff; color: #1d2327; border-color: #dcdcde; }
-            .forge-test-tab .forge-tab-badge {
+            .fabricator-test-tab:hover { background: rgba(0,0,0,.06); }
+            .fabricator-test-tab.active { background: #fff; color: #1d2327; border-color: #dcdcde; }
+            .fabricator-test-tab .fabricator-tab-badge {
                 display: inline-block;
                 margin-left: 6px;
                 padding: 1px 6px;
@@ -44,18 +44,18 @@
                 font-size: 11px;
                 font-weight: bold;
             }
-            .forge-tab-badge--pass { background: #d1e7dd; color: #0a3622; }
-            .forge-tab-badge--fail { background: #f8d7da; color: #58151c; }
-            .forge-tab-badge--loading { background: #e2e3e5; color: #41464b; }
-            .forge-test-panel { display: none; padding-top: 16px; }
-            .forge-test-panel.active { display: block; }
-            .forge-test-table {
+            .fabricator-tab-badge--pass { background: #d1e7dd; color: #0a3622; }
+            .fabricator-tab-badge--fail { background: #f8d7da; color: #58151c; }
+            .fabricator-tab-badge--loading { background: #e2e3e5; color: #41464b; }
+            .fabricator-test-panel { display: none; padding-top: 16px; }
+            .fabricator-test-panel.active { display: block; }
+            .fabricator-test-table {
                 border-collapse: collapse;
                 width: 100%;
                 font-size: 13px;
                 table-layout: fixed;
             }
-            .forge-test-table th {
+            .fabricator-test-table th {
                 text-align: left;
                 padding: 6px 10px;
                 background: #f0f0f1;

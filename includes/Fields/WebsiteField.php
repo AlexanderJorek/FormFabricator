@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -65,7 +65,7 @@ class WebsiteField extends BaseField
                 var inp = fieldEl.querySelector('input[type="url"]');
                 if (!inp || !inp.value.trim() || inp.dataset.validateUrl !== '1') return null;
                 if (/^https?:\/\/.+\..+/.test(inp.value.trim())) return null;
-                var _i18n = window.ForgeForms && window.ForgeForms.i18n;
+                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                 return (_i18n && _i18n.website_invalid_url) || 'Please enter a valid URL (e.g. https://example.com).';
             }
             JS]];

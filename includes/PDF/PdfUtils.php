@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\PDF;
+namespace FabricatorForms\PDF;
 
 defined('ABSPATH') || exit;
 
@@ -123,8 +123,8 @@ class PdfUtils
     public static function thumbnailHash(string $binary): ?string
     {
         if (!function_exists('imagecreatefromstring')) {
-            \ForgeForms\forge_log(
-                'ForgeForms: GD extension unavailable — '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms: GD extension unavailable — '
                 . 'image verification uses raw hash (degraded mode).'
             );
             return null;

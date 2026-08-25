@@ -3,7 +3,7 @@
  * @copyright 2026 Alexander Jorek
  * @license   GPL-3.0-or-later
  */
-window.forgeCollapseSections = function (table) {
+window.fabricatorCollapseSections = function (table) {
     if (!table) { return; }
     table.querySelectorAll('tr.ff-section').forEach(function (sec) {
         var bodyRows = [];
@@ -47,7 +47,7 @@ window.forgeCollapseSections = function (table) {
         if (hasFail) { doExpand(); } else { doCollapse(); }
     });
 };
-window.forgeCollapseSections(document.getElementById('forge-php-tests'));
+window.fabricatorCollapseSections(document.getElementById('fabricator-php-tests'));
 
 (function () {
     'use strict';
@@ -94,11 +94,11 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
     function ok(i, o)       { return { ok: true,  i: i, o: o }; }
     function ko(i, o, msg)  { return { ok: false, i: i, o: String(o), msg: msg }; }
 
-    /* ── ForgeSkipValidation ─────────────────────────────────────────────── */
-    section('JS: ForgeSkipValidation');
-    var skip = window.ForgeSkipValidation || [];
+    /* ── FabricatorSkipValidation ─────────────────────────────────────────────── */
+    section('JS: FabricatorSkipValidation');
+    var skip = window.FabricatorSkipValidation || [];
     run('skip array exists', function () {
-        return Array.isArray(skip) ? ok('ForgeSkipValidation', skip.join(', ')) : ko('', '', 'not an array');
+        return Array.isArray(skip) ? ok('FabricatorSkipValidation', skip.join(', ')) : ko('', '', 'not an array');
     });
     run('html is skipped', function () {
         return skip.indexOf('html') !== -1 ? ok('html', 'in skip list') : ko('html', '', 'not in skip list');
@@ -110,12 +110,12 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         return skip.indexOf('page-header') !== -1 ? ok('page-header', 'in skip list') : ko('page-header', '', 'not in skip list');
     });
 
-    /* ── ForgeValidators ─────────────────────────────────────────────────── */
-    section('JS: ForgeValidators');
-    var validators = window.ForgeValidators || {};
-    run('ForgeValidators is an object', function () {
+    /* ── FabricatorValidators ─────────────────────────────────────────────────── */
+    section('JS: FabricatorValidators');
+    var validators = window.FabricatorValidators || {};
+    run('FabricatorValidators is an object', function () {
         return typeof validators === 'object'
-            ? ok('ForgeValidators', Object.keys(validators).join(', '))
+            ? ok('FabricatorValidators', Object.keys(validators).join(', '))
             : ko('', '', 'not object');
     });
 
@@ -139,33 +139,33 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
             : ko('not-an-email', r, 'expected error string');
     });
 
-    /* iban — validator reads _forgeIbanValid/_forgeIbanInvalid flags set by the
+    /* iban — validator reads _fabricatorIbanValid/_fabricatorIbanInvalid flags set by the
        init+input handler, so we set them manually to test each branch */
     run('iban: valid flag → null', function () {
         var fn = validators['iban'];
         if (!fn) { return ko('', '', 'iban validator not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<input class="forge-sepa-iban" value="DE89370400440532013000">';
-        el.querySelector('.forge-sepa-iban')._forgeIbanValid = true;
+        el.innerHTML = '<input class="fabricator-sepa-iban" value="DE89370400440532013000">';
+        el.querySelector('.fabricator-sepa-iban')._fabricatorIbanValid = true;
         var r = fn(el);
-        return r == null ? ok('DE89370400440532013000 + _forgeIbanValid', 'null') : ko('DE89370400440532013000', r, 'expected null');
+        return r == null ? ok('DE89370400440532013000 + _fabricatorIbanValid', 'null') : ko('DE89370400440532013000', r, 'expected null');
     });
     run('iban: invalid checksum flag → error string', function () {
         var fn = validators['iban'];
         if (!fn) { return ko('', '', 'iban validator not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<input class="forge-sepa-iban" value="DE00000000000000000000">';
-        el.querySelector('.forge-sepa-iban')._forgeIbanInvalid = true;
+        el.innerHTML = '<input class="fabricator-sepa-iban" value="DE00000000000000000000">';
+        el.querySelector('.fabricator-sepa-iban')._fabricatorIbanInvalid = true;
         var r = fn(el);
         return (typeof r === 'string' && r.length > 0)
-            ? ok('_forgeIbanInvalid=true', r)
-            : ko('_forgeIbanInvalid=true', r, 'expected error string');
+            ? ok('_fabricatorIbanInvalid=true', r)
+            : ko('_fabricatorIbanInvalid=true', r, 'expected error string');
     });
     run('iban: incomplete (no flags) → incomplete error', function () {
         var fn = validators['iban'];
         if (!fn) { return ko('', '', 'iban validator not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<input class="forge-sepa-iban" value="DE123">';
+        el.innerHTML = '<input class="fabricator-sepa-iban" value="DE123">';
         var r = fn(el);
         return (typeof r === 'string' && r.length > 0)
             ? ok('DE123 (no flags set)', r)
@@ -295,14 +295,14 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['date-format'];
         if (!fn) { return ko('', '', 'date-format not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<input class="forge-date-text" value="">';
+        el.innerHTML = '<input class="fabricator-date-text" value="">';
         return fn(el) == null ? ok('(empty)', 'null') : ko('(empty)', fn(el), 'expected null');
     });
     run('date-format: valid TT.MM.JJJJ → null', function () {
         var fn = validators['date-format'];
         if (!fn) { return ko('', '', 'date-format not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<input class="forge-date-text" value="15.06.2024">';
+        el.innerHTML = '<input class="fabricator-date-text" value="15.06.2024">';
         var r = fn(el);
         return r == null ? ok('15.06.2024', 'null') : ko('15.06.2024', r, 'expected null');
     });
@@ -310,7 +310,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['date-format'];
         if (!fn) { return ko('', '', 'date-format not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<input class="forge-date-text" value="2024-06-15">';
+        el.innerHTML = '<input class="fabricator-date-text" value="2024-06-15">';
         var r = fn(el);
         return typeof r === 'string' && r ? ok('2024-06-15', r) : ko('2024-06-15', r, 'expected format error');
     });
@@ -318,7 +318,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['date-format'];
         if (!fn) { return ko('', '', 'date-format not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<input class="forge-date-text" value="32.01.2024">';
+        el.innerHTML = '<input class="fabricator-date-text" value="32.01.2024">';
         var r = fn(el);
         return typeof r === 'string' && r ? ok('32.01.2024', r) : ko('32.01.2024', r, 'expected invalid date error');
     });
@@ -430,7 +430,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
 
     /* checkbox-count ────────────────────────────────────────────────────── */
     section('JS: validators — checkbox-count');
-    run('checkbox-count: no .forge-checkbox-group → null', function () {
+    run('checkbox-count: no .fabricator-checkbox-group → null', function () {
         var fn = validators['checkbox-count'];
         if (!fn) { return ko('', '', 'checkbox-count not registered'); }
         var el = document.createElement('div');
@@ -441,14 +441,14 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['checkbox-count'];
         if (!fn) { return ko('', '', 'checkbox-count not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div class="forge-checkbox-group"><input type="checkbox" checked></div>';
+        el.innerHTML = '<div class="fabricator-checkbox-group"><input type="checkbox" checked></div>';
         return fn(el) == null ? ok('(no min/max)', 'null') : ko('', fn(el), 'expected null');
     });
     run('checkbox-count: below min → error', function () {
         var fn = validators['checkbox-count'];
         if (!fn) { return ko('', '', 'checkbox-count not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div class="forge-checkbox-group" data-min-selections="2" data-max-selections="0">'
+        el.innerHTML = '<div class="fabricator-checkbox-group" data-min-selections="2" data-max-selections="0">'
             + '<input type="checkbox" checked><input type="checkbox"></div>';
         var r = fn(el);
         return typeof r === 'string' && r.indexOf('2') !== -1 ? ok('1 checked, min=2', r) : ko('1/min=2', r, 'expected min error');
@@ -457,7 +457,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['checkbox-count'];
         if (!fn) { return ko('', '', 'checkbox-count not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div class="forge-checkbox-group" data-min-selections="2" data-max-selections="0">'
+        el.innerHTML = '<div class="fabricator-checkbox-group" data-min-selections="2" data-max-selections="0">'
             + '<input type="checkbox" checked><input type="checkbox" checked></div>';
         var r = fn(el);
         return r == null ? ok('2 checked, min=2', 'null') : ko('2/min=2', r, 'expected null');
@@ -466,7 +466,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['checkbox-count'];
         if (!fn) { return ko('', '', 'checkbox-count not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div class="forge-checkbox-group" data-min-selections="0" data-max-selections="1">'
+        el.innerHTML = '<div class="fabricator-checkbox-group" data-min-selections="0" data-max-selections="1">'
             + '<input type="checkbox" checked><input type="checkbox" checked></div>';
         var r = fn(el);
         return typeof r === 'string' && r.indexOf('1') !== -1 ? ok('2 checked, max=1', r) : ko('2/max=1', r, 'expected max error');
@@ -474,7 +474,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
 
     /* slider-range ──────────────────────────────────────────────────────── */
     section('JS: validators — slider-range');
-    run('slider-range: no .forge-slider-wrap → null', function () {
+    run('slider-range: no .fabricator-slider-wrap → null', function () {
         var fn = validators['slider-range'];
         if (!fn) { return ko('', '', 'slider-range not registered'); }
         var el = document.createElement('div');
@@ -485,7 +485,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['slider-range'];
         if (!fn) { return ko('', '', 'slider-range not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div class="forge-slider-wrap" data-min="0" data-max="100"></div>'
+        el.innerHTML = '<div class="fabricator-slider-wrap" data-min="0" data-max="100"></div>'
             + '<input type="hidden" value="50">';
         var r = fn(el);
         return r == null ? ok('50 (0–100)', 'null') : ko('50', r, 'expected null');
@@ -494,7 +494,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['slider-range'];
         if (!fn) { return ko('', '', 'slider-range not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div class="forge-slider-wrap" data-min="10" data-max="100"></div>'
+        el.innerHTML = '<div class="fabricator-slider-wrap" data-min="10" data-max="100"></div>'
             + '<input type="hidden" value="5">';
         var r = fn(el);
         return typeof r === 'string' && r ? ok('5 < min=10', r) : ko('5/min=10', r, 'expected min error');
@@ -503,9 +503,9 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['slider-range'];
         if (!fn) { return ko('', '', 'slider-range not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div class="forge-slider-wrap forge-slider-wrap--range" data-min="0" data-max="100">'
-            + '<input class="forge-slider-input-from" value="20">'
-            + '<input class="forge-slider-input-to" value="80"></div>';
+        el.innerHTML = '<div class="fabricator-slider-wrap fabricator-slider-wrap--range" data-min="0" data-max="100">'
+            + '<input class="fabricator-slider-input-from" value="20">'
+            + '<input class="fabricator-slider-input-to" value="80"></div>';
         var r = fn(el);
         return r == null ? ok('from=20 to=80 (0–100)', 'null') : ko('20–80', r, 'expected null');
     });
@@ -513,9 +513,9 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['slider-range'];
         if (!fn) { return ko('', '', 'slider-range not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div class="forge-slider-wrap forge-slider-wrap--range" data-min="0" data-max="100">'
-            + '<input class="forge-slider-input-from" value="-5">'
-            + '<input class="forge-slider-input-to" value="80"></div>';
+        el.innerHTML = '<div class="fabricator-slider-wrap fabricator-slider-wrap--range" data-min="0" data-max="100">'
+            + '<input class="fabricator-slider-input-from" value="-5">'
+            + '<input class="fabricator-slider-input-to" value="80"></div>';
         var r = fn(el);
         return typeof r === 'string' && r ? ok('from=-5 (min=0)', r) : ko('-5/0–100', r, 'expected out-of-range error');
     });
@@ -526,14 +526,14 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['sepa-bic'];
         if (!fn) { return ko('', '', 'sepa-bic not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<input class="forge-sepa-bic" value="">';
+        el.innerHTML = '<input class="fabricator-sepa-bic" value="">';
         return fn(el) == null ? ok('(empty)', 'null') : ko('(empty)', fn(el), 'expected null');
     });
     run('sepa-bic: valid 8-char BIC → null', function () {
         var fn = validators['sepa-bic'];
         if (!fn) { return ko('', '', 'sepa-bic not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div><input class="forge-sepa-bic" value="COBADEFF"><span class="forge-field-error"></span></div>';
+        el.innerHTML = '<div><input class="fabricator-sepa-bic" value="COBADEFF"><span class="fabricator-field-error"></span></div>';
         var r = fn(el);
         return r == null ? ok('COBADEFF', 'null') : ko('COBADEFF', r, 'expected null');
     });
@@ -541,7 +541,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['sepa-bic'];
         if (!fn) { return ko('', '', 'sepa-bic not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div><input class="forge-sepa-bic" value="COBADEFFXXX"><span class="forge-field-error"></span></div>';
+        el.innerHTML = '<div><input class="fabricator-sepa-bic" value="COBADEFFXXX"><span class="fabricator-field-error"></span></div>';
         var r = fn(el);
         return r == null ? ok('COBADEFFXXX', 'null') : ko('COBADEFFXXX', r, 'expected null');
     });
@@ -549,7 +549,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['sepa-bic'];
         if (!fn) { return ko('', '', 'sepa-bic not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<div><input class="forge-sepa-bic" value="INVALID"><span class="forge-field-error"></span></div>';
+        el.innerHTML = '<div><input class="fabricator-sepa-bic" value="INVALID"><span class="fabricator-field-error"></span></div>';
         var r = fn(el);
         return (r != null && r.length > 0) ? ok('INVALID (7 chars)', 'non-null') : ko('INVALID', r, 'expected BIC error');
     });
@@ -560,7 +560,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         var fn = validators['sepa-required'];
         if (!fn) { return ko('', '', 'sepa-required not registered'); }
         var el = document.createElement('div');
-        el.innerHTML = '<input class="forge-sepa-iban" value="">';
+        el.innerHTML = '<input class="fabricator-sepa-iban" value="">';
         return fn(el) == null ? ok('(no data-required)', 'null') : ko('', fn(el), 'expected null');
     });
     run('sepa-required: required + empty IBAN → error', function () {
@@ -568,9 +568,9 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         if (!fn) { return ko('', '', 'sepa-required not registered'); }
         var el = document.createElement('div');
         el.dataset.required = 'true';
-        el.innerHTML = '<div><input class="forge-sepa-iban" value=""><span class="forge-field-error"></span></div>'
-            + '<div><input class="forge-sepa-bic" value="COBADEFF"><span class="forge-field-error"></span></div>'
-            + '<div><input class="forge-sepa-holder" value="Max"><span class="forge-field-error"></span></div>';
+        el.innerHTML = '<div><input class="fabricator-sepa-iban" value=""><span class="fabricator-field-error"></span></div>'
+            + '<div><input class="fabricator-sepa-bic" value="COBADEFF"><span class="fabricator-field-error"></span></div>'
+            + '<div><input class="fabricator-sepa-holder" value="Max"><span class="fabricator-field-error"></span></div>';
         var r = fn(el);
         return (r != null && r.length > 0) ? ok('required, IBAN empty', 'non-null error') : ko('IBAN empty', r, 'expected error');
     });
@@ -579,19 +579,19 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         if (!fn) { return ko('', '', 'sepa-required not registered'); }
         var el = document.createElement('div');
         el.dataset.required = 'true';
-        el.innerHTML = '<div><input class="forge-sepa-iban" value="DE89370400440532013000"><span class="forge-field-error"></span></div>'
-            + '<div><input class="forge-sepa-bic" value="COBADEFF"><span class="forge-field-error"></span></div>'
-            + '<div><input class="forge-sepa-holder" value="Max Muster"><span class="forge-field-error"></span></div>';
+        el.innerHTML = '<div><input class="fabricator-sepa-iban" value="DE89370400440532013000"><span class="fabricator-field-error"></span></div>'
+            + '<div><input class="fabricator-sepa-bic" value="COBADEFF"><span class="fabricator-field-error"></span></div>'
+            + '<div><input class="fabricator-sepa-holder" value="Max Muster"><span class="fabricator-field-error"></span></div>';
         var r = fn(el);
         return r == null ? ok('all filled', 'null') : ko('all filled', r, 'expected null');
     });
 
-    /* ── ForgeFieldInits ─────────────────────────────────────────────────── */
-    section('JS: ForgeFieldInits');
-    var inits = window.ForgeFieldInits || {};
-    run('ForgeFieldInits is an object', function () {
+    /* ── FabricatorFieldInits ─────────────────────────────────────────────────── */
+    section('JS: FabricatorFieldInits');
+    var inits = window.FabricatorFieldInits || {};
+    run('FabricatorFieldInits is an object', function () {
         return typeof inits === 'object'
-            ? ok('ForgeFieldInits', Object.keys(inits).join(', '))
+            ? ok('FabricatorFieldInits', Object.keys(inits).join(', '))
             : ko('', '', 'not object');
     });
     ['slider', 'rating', 'date', 'select', 'radio', 'upload', 'signature', 'sepa'].forEach(function (type) {
@@ -602,14 +602,14 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         });
     });
 
-    /* ── validatePage (via ForgeTestHooks) ───────────────────────────────── */
+    /* ── validatePage (via FabricatorTestHooks) ───────────────────────────────── */
     section('JS: validatePage');
-    var hooks = window.ForgeTestHooks || {};
+    var hooks = window.FabricatorTestHooks || {};
     var vp = hooks.validatePage;
-    run('ForgeTestHooks.validatePage exported', function () {
+    run('FabricatorTestHooks.validatePage exported', function () {
         return typeof vp === 'function'
-            ? ok('ForgeTestHooks', 'validatePage function')
-            : ko('', '', 'not exported — check __FORGE_TEST__ hook in front.js');
+            ? ok('FabricatorTestHooks', 'validatePage function')
+            : ko('', '', 'not exported — check __FABRICATOR_TEST__ hook in front.js');
     });
 
     if (typeof vp === 'function') {
@@ -623,8 +623,8 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
 
         run('required empty text → hasRequired', function () {
             var el = document.createElement('div');
-            el.innerHTML = '<div class="forge-field forge-field--text forge-required-field">'
-                + '<input type="text" value=""><span class="forge-field-error"></span></div>';
+            el.innerHTML = '<div class="fabricator-field fabricator-field--text fabricator-required-field">'
+                + '<input type="text" value=""><span class="fabricator-field-error"></span></div>';
             var r = vp(el);
             return (!r.valid && r.hasRequired)
                 ? ok('required empty text', JSON.stringify({ valid: r.valid, hasRequired: r.hasRequired }))
@@ -633,18 +633,18 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
 
         run('required filled text → valid', function () {
             var el = document.createElement('div');
-            el.innerHTML = '<div class="forge-field forge-field--text forge-required-field">'
-                + '<input type="text" value="hello"><span class="forge-field-error"></span></div>';
+            el.innerHTML = '<div class="fabricator-field fabricator-field--text fabricator-required-field">'
+                + '<input type="text" value="hello"><span class="fabricator-field-error"></span></div>';
             var r = vp(el);
             return r.valid
                 ? ok('"hello" required text', JSON.stringify({ valid: r.valid }))
                 : ko('"hello" required text', JSON.stringify(r), 'expected valid=true');
         });
 
-        run('html field skipped (in ForgeSkipValidation)', function () {
+        run('html field skipped (in FabricatorSkipValidation)', function () {
             var el = document.createElement('div');
-            el.innerHTML = '<div class="forge-field forge-field--html forge-required-field">'
-                + '<input type="text" value=""><span class="forge-field-error"></span></div>';
+            el.innerHTML = '<div class="fabricator-field fabricator-field--html fabricator-required-field">'
+                + '<input type="text" value=""><span class="fabricator-field-error"></span></div>';
             var r = vp(el);
             return r.valid
                 ? ok('required html (skipped)', JSON.stringify({ valid: r.valid }))
@@ -654,8 +654,8 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         run('conditionally hidden field → skipped', function () {
             var el = document.createElement('div');
             el.innerHTML = '<div data-conditions=\'{"rules":[]}\' style="display:none">'
-                + '<div class="forge-field forge-field--text forge-required-field">'
-                + '<input type="text" value=""><span class="forge-field-error"></span></div></div>';
+                + '<div class="fabricator-field fabricator-field--text fabricator-required-field">'
+                + '<input type="text" value=""><span class="fabricator-field-error"></span></div></div>';
             var r = vp(el);
             return r.valid
                 ? ok('hidden required field', JSON.stringify({ valid: r.valid }))
@@ -666,8 +666,8 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
             var fn = validators['email'];
             if (!fn) { return ok('(skipped — email validator not registered)', ''); }
             var el = document.createElement('div');
-            el.innerHTML = '<div class="forge-field forge-field--email" data-validate=\'["email"]\'>'
-                + '<input type="email" value="not-valid"><span class="forge-field-error"></span></div>';
+            el.innerHTML = '<div class="fabricator-field fabricator-field--email" data-validate=\'["email"]\'>'
+                + '<input type="email" value="not-valid"><span class="fabricator-field-error"></span></div>';
             var r = vp(el);
             return (!r.valid && r.hasInvalid)
                 ? ok('not-valid', JSON.stringify({ valid: r.valid, hasInvalid: r.hasInvalid }))
@@ -676,10 +676,10 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
 
         run('per-sub-input required check (composite field)', function () {
             var el = document.createElement('div');
-            el.innerHTML = '<div class="forge-field forge-field--name">'
+            el.innerHTML = '<div class="fabricator-field fabricator-field--name">'
                 + '<input type="text" value="Hans">'
                 + '<input type="text" required value="">'
-                + '<span class="forge-field-error"></span></div>';
+                + '<span class="fabricator-field-error"></span></div>';
             var r = vp(el);
             return (!r.valid && r.hasRequired)
                 ? ok('one sub-input required+empty', JSON.stringify({ valid: r.valid, hasRequired: r.hasRequired }))
@@ -688,10 +688,10 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
 
         run('per-sub-input required check all filled → valid', function () {
             var el = document.createElement('div');
-            el.innerHTML = '<div class="forge-field forge-field--name">'
+            el.innerHTML = '<div class="fabricator-field fabricator-field--name">'
                 + '<input type="text" required value="Hans">'
                 + '<input type="text" required value="Müller">'
-                + '<span class="forge-field-error"></span></div>';
+                + '<span class="fabricator-field-error"></span></div>';
             var r = vp(el);
             return r.valid
                 ? ok('all sub-inputs filled', JSON.stringify({ valid: r.valid }))
@@ -700,8 +700,8 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
 
         run('unregistered validation rule is silently skipped', function () {
             var el = document.createElement('div');
-            el.innerHTML = '<div class="forge-field forge-field--text" data-validate=\'["not-a-real-rule"]\'>'
-                + '<input type="text" value="anything"><span class="forge-field-error"></span></div>';
+            el.innerHTML = '<div class="fabricator-field fabricator-field--text" data-validate=\'["not-a-real-rule"]\'>'
+                + '<input type="text" value="anything"><span class="fabricator-field-error"></span></div>';
             var r = vp(el);
             return r.valid
                 ? ok('unknown rule "not-a-real-rule"', JSON.stringify({ valid: r.valid }))
@@ -712,8 +712,8 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
             var fn = validators['email'];
             if (!fn) { return ok('(skipped — email validator not registered)', ''); }
             var el = document.createElement('div');
-            el.innerHTML = '<div class="forge-field forge-field--email" data-validate=\'["not-a-real-rule","email"]\'>'
-                + '<input type="email" value="not-valid"><span class="forge-field-error"></span></div>';
+            el.innerHTML = '<div class="fabricator-field fabricator-field--email" data-validate=\'["not-a-real-rule","email"]\'>'
+                + '<input type="email" value="not-valid"><span class="fabricator-field-error"></span></div>';
             var r = vp(el);
             return (!r.valid && r.hasInvalid)
                 ? ok('rules: [unknown, email]', JSON.stringify({ valid: r.valid, hasInvalid: r.hasInvalid }))
@@ -724,10 +724,10 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
     /* ── Condition operators (via initConditions DOM) ─────────────────────── */
     section('JS: condition operators (via initConditions)');
     var ic = hooks.initConditions;
-    run('ForgeTestHooks.initConditions exported', function () {
+    run('FabricatorTestHooks.initConditions exported', function () {
         return typeof ic === 'function'
-            ? ok('ForgeTestHooks', 'initConditions function')
-            : ko('', '', 'not exported — check __FORGE_TEST__ hook in front.js');
+            ? ok('FabricatorTestHooks', 'initConditions function')
+            : ko('', '', 'not exported — check __FABRICATOR_TEST__ hook in front.js');
     });
 
     if (typeof ic === 'function') {
@@ -738,9 +738,9 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
                     action: 'show', match: 'all',
                     rules: [{ field_id: 'ctrl', operator: op, value: condVal }]
                 });
-                wrap.innerHTML = '<form class="forge-form">'
+                wrap.innerHTML = '<form class="fabricator-form">'
                     + '<input name="ctrl" type="text">'
-                    + '<div class="forge-field" data-conditions=\'' + cond + '\'>'
+                    + '<div class="fabricator-field" data-conditions=\'' + cond + '\'>'
                     + '<span>target</span></div></form>';
                 document.body.appendChild(wrap);
                 ic(wrap);
@@ -781,9 +781,9 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
                 action: 'hide', match: 'all',
                 rules: [{ field_id: 'ctrl', operator: 'equals', value: 'hello' }]
             });
-            wrap.innerHTML = '<form class="forge-form">'
+            wrap.innerHTML = '<form class="fabricator-form">'
                 + '<input name="ctrl" type="text">'
-                + '<div class="forge-field" data-conditions=\'' + cond + '\'>'
+                + '<div class="fabricator-field" data-conditions=\'' + cond + '\'>'
                 + '<span>target</span></div></form>';
             document.body.appendChild(wrap);
             ic(wrap);
@@ -806,9 +806,9 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
                     { field_id: 'ctrl', operator: 'equals', value: 'hello' },
                 ]
             });
-            wrap.innerHTML = '<form class="forge-form">'
+            wrap.innerHTML = '<form class="fabricator-form">'
                 + '<input name="ctrl" type="text">'
-                + '<div class="forge-field" data-conditions=\'' + cond + '\'>'
+                + '<div class="fabricator-field" data-conditions=\'' + cond + '\'>'
                 + '<span>target</span></div></form>';
             document.body.appendChild(wrap);
             ic(wrap);
@@ -831,9 +831,9 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
                     { field_id: 'ctrl', operator: 'equals', value: 'hello' },
                 ]
             });
-            wrap.innerHTML = '<form class="forge-form">'
+            wrap.innerHTML = '<form class="fabricator-form">'
                 + '<input name="ctrl" type="text">'
-                + '<div class="forge-field" data-conditions=\'' + cond + '\'>'
+                + '<div class="fabricator-field" data-conditions=\'' + cond + '\'>'
                 + '<span>target</span></div></form>';
             document.body.appendChild(wrap);
             ic(wrap);
@@ -853,10 +853,10 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
                 action: 'show', match: 'all',
                 rules: [{ field_id: 'ctrl', operator: 'equals', value: 'b' }]
             });
-            wrap.innerHTML = '<form class="forge-form">'
+            wrap.innerHTML = '<form class="fabricator-form">'
                 + '<input name="ctrl" type="checkbox" value="a">'
                 + '<input name="ctrl" type="checkbox" value="b">'
-                + '<div class="forge-field" data-conditions=\'' + cond + '\'>'
+                + '<div class="fabricator-field" data-conditions=\'' + cond + '\'>'
                 + '<span>target</span></div></form>';
             document.body.appendChild(wrap);
             ic(wrap);
@@ -876,10 +876,10 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
                 action: 'show', match: 'all',
                 rules: [{ field_id: 'ctrl', operator: 'contains', value: 'b' }]
             });
-            wrap.innerHTML = '<form class="forge-form">'
+            wrap.innerHTML = '<form class="fabricator-form">'
                 + '<input name="ctrl" type="checkbox" value="a">'
                 + '<input name="ctrl" type="checkbox" value="ab">'
-                + '<div class="forge-field" data-conditions=\'' + cond + '\'>'
+                + '<div class="fabricator-field" data-conditions=\'' + cond + '\'>'
                 + '<span>target</span></div></form>';
             document.body.appendChild(wrap);
             ic(wrap);
@@ -899,10 +899,10 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
                 action: 'show', match: 'all',
                 rules: [{ field_id: 'ctrl', operator: 'empty', value: '' }]
             });
-            wrap.innerHTML = '<form class="forge-form">'
+            wrap.innerHTML = '<form class="fabricator-form">'
                 + '<input name="ctrl" type="checkbox" value="a">'
                 + '<input name="ctrl" type="checkbox" value="b">'
-                + '<div class="forge-field" data-conditions=\'' + cond + '\'>'
+                + '<div class="fabricator-field" data-conditions=\'' + cond + '\'>'
                 + '<span>target</span></div></form>';
             document.body.appendChild(wrap);
             ic(wrap);
@@ -921,10 +921,10 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
                 action: 'show', match: 'all',
                 rules: [{ field_id: 'ctrl', operator: 'equals', value: 'y' }]
             });
-            wrap.innerHTML = '<form class="forge-form">'
+            wrap.innerHTML = '<form class="fabricator-form">'
                 + '<select name="ctrl" multiple>'
                 + '<option value="x">X</option><option value="y">Y</option></select>'
-                + '<div class="forge-field" data-conditions=\'' + cond + '\'>'
+                + '<div class="fabricator-field" data-conditions=\'' + cond + '\'>'
                 + '<span>target</span></div></form>';
             document.body.appendChild(wrap);
             ic(wrap);
@@ -951,20 +951,20 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
                 action: 'show', match: 'all',
                 rules: [{ field_id: 'ctrl', operator: 'not_empty', value: '' }]
             });
-            wrap.innerHTML = '<form class="forge-form">'
+            wrap.innerHTML = '<form class="fabricator-form">'
                 + '<input name="gate" type="text" value="">'
                 + '<div data-conditions=\'' + innerCond + '\'>'
                 + '<input name="ctrl" type="text" value="hello"></div>'
-                + '<div class="forge-field" data-conditions=\'' + outerCond + '\'>'
+                + '<div class="fabricator-field" data-conditions=\'' + outerCond + '\'>'
                 + '<span>target</span></div></form>';
             document.body.appendChild(wrap);
             ic(wrap);
-            var innerWrap = wrap.querySelector('div[data-conditions]:not(.forge-field)');
+            var innerWrap = wrap.querySelector('div[data-conditions]:not(.fabricator-field)');
             if (innerWrap.style.display !== 'none') {
                 document.body.removeChild(wrap);
                 return ko('setup', 'inner wrap visible', 'test setup broken: inner wrapper should already be hidden');
             }
-            var visible = wrap.querySelector('.forge-field[data-conditions]').style.display !== 'none';
+            var visible = wrap.querySelector('.fabricator-field[data-conditions]').style.display !== 'none';
             document.body.removeChild(wrap);
             return !visible
                 ? ok('ctrl hidden inside hidden ancestor, cond=not_empty', 'hidden')
@@ -972,28 +972,28 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         });
     }
 
-    /* ── front.js resilience guards (via ForgeTestHooks) ── */
+    /* ── front.js resilience guards (via FabricatorTestHooks) ── */
     section('JS: front.js — resilience guards');
 
-    run('ForgeTestHooks.showCaptchaBlockedNotice exported', function () {
+    run('FabricatorTestHooks.showCaptchaBlockedNotice exported', function () {
         return typeof hooks.showCaptchaBlockedNotice === 'function'
-            ? ok('ForgeTestHooks', 'showCaptchaBlockedNotice function')
-            : ko('', '', 'not exported — check __FORGE_TEST__ hook in front.js');
+            ? ok('FabricatorTestHooks', 'showCaptchaBlockedNotice function')
+            : ko('', '', 'not exported — check __FABRICATOR_TEST__ hook in front.js');
     });
-    run('ForgeTestHooks.resetFormsOnBfcacheRestore exported', function () {
+    run('FabricatorTestHooks.resetFormsOnBfcacheRestore exported', function () {
         return typeof hooks.resetFormsOnBfcacheRestore === 'function'
-            ? ok('ForgeTestHooks', 'resetFormsOnBfcacheRestore function')
-            : ko('', '', 'not exported — check __FORGE_TEST__ hook in front.js');
+            ? ok('FabricatorTestHooks', 'resetFormsOnBfcacheRestore function')
+            : ko('', '', 'not exported — check __FABRICATOR_TEST__ hook in front.js');
     });
 
     if (typeof hooks.showCaptchaBlockedNotice === 'function') {
         run('CAPTCHA blocked: re-enables the activation button', function () {
             var wrap = document.createElement('div');
-            wrap.innerHTML = '<div class="forge-captcha-gate" data-sitekey="x">'
-                + '<button type="button" class="forge-captcha-activate" disabled></button></div>';
+            wrap.innerHTML = '<div class="fabricator-captcha-gate" data-sitekey="x">'
+                + '<button type="button" class="fabricator-captcha-activate" disabled></button></div>';
             document.body.appendChild(wrap);
-            var gate = wrap.querySelector('.forge-captcha-gate');
-            var btn  = wrap.querySelector('.forge-captcha-activate');
+            var gate = wrap.querySelector('.fabricator-captcha-gate');
+            var btn  = wrap.querySelector('.fabricator-captcha-activate');
             hooks.showCaptchaBlockedNotice(gate, btn);
             var stillDisabled = btn.disabled;
             document.body.removeChild(wrap);
@@ -1004,30 +1004,30 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
 
         run('CAPTCHA blocked: shows a visible, non-empty error notice', function () {
             var wrap = document.createElement('div');
-            wrap.innerHTML = '<div class="forge-captcha-gate" data-sitekey="x">'
-                + '<button type="button" class="forge-captcha-activate" disabled></button></div>';
+            wrap.innerHTML = '<div class="fabricator-captcha-gate" data-sitekey="x">'
+                + '<button type="button" class="fabricator-captcha-activate" disabled></button></div>';
             document.body.appendChild(wrap);
-            var gate = wrap.querySelector('.forge-captcha-gate');
-            var btn  = wrap.querySelector('.forge-captcha-activate');
+            var gate = wrap.querySelector('.fabricator-captcha-gate');
+            var btn  = wrap.querySelector('.fabricator-captcha-activate');
             hooks.showCaptchaBlockedNotice(gate, btn);
-            var notice = gate.querySelector('.forge-notice.forge-error');
+            var notice = gate.querySelector('.fabricator-notice.fabricator-error');
             var text   = notice ? notice.textContent : '';
             document.body.removeChild(wrap);
             return (notice && text.length > 0)
                 ? ok('showCaptchaBlockedNotice()', text)
-                : ko('showCaptchaBlockedNotice()', '(no notice)', 'expected a non-empty .forge-notice.forge-error message');
+                : ko('showCaptchaBlockedNotice()', '(no notice)', 'expected a non-empty .fabricator-notice.fabricator-error message');
         });
 
         run('CAPTCHA blocked: calling it twice does not duplicate the notice', function () {
             var wrap = document.createElement('div');
-            wrap.innerHTML = '<div class="forge-captcha-gate" data-sitekey="x">'
-                + '<button type="button" class="forge-captcha-activate" disabled></button></div>';
+            wrap.innerHTML = '<div class="fabricator-captcha-gate" data-sitekey="x">'
+                + '<button type="button" class="fabricator-captcha-activate" disabled></button></div>';
             document.body.appendChild(wrap);
-            var gate = wrap.querySelector('.forge-captcha-gate');
-            var btn  = wrap.querySelector('.forge-captcha-activate');
+            var gate = wrap.querySelector('.fabricator-captcha-gate');
+            var btn  = wrap.querySelector('.fabricator-captcha-activate');
             hooks.showCaptchaBlockedNotice(gate, btn);
             hooks.showCaptchaBlockedNotice(gate, btn);
-            var count = gate.querySelectorAll('.forge-notice.forge-error').length;
+            var count = gate.querySelectorAll('.fabricator-notice.fabricator-error').length;
             document.body.removeChild(wrap);
             return count === 1
                 ? ok('showCaptchaBlockedNotice() x2', count + ' notice(s)')
@@ -1038,27 +1038,27 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
     if (typeof hooks.resetFormsOnBfcacheRestore === 'function') {
         run('bfcache restore: clears the durable "submitted" flag', function () {
             var wrap = document.createElement('div');
-            wrap.className = 'forge-form-wrap';
-            wrap.innerHTML = '<div class="forge-form-messages" style="display:block;"></div>'
-                + '<form class="forge-form"><button type="submit" class="forge-submit-btn" data-forge-submitted="1"></button></form>';
+            wrap.className = 'fabricator-form-wrap';
+            wrap.innerHTML = '<div class="fabricator-form-messages" style="display:block;"></div>'
+                + '<form class="fabricator-form"><button type="submit" class="fabricator-submit-btn" data-fabricator-submitted="1"></button></form>';
             document.body.appendChild(wrap);
             hooks.resetFormsOnBfcacheRestore();
-            var btn = wrap.querySelector('.forge-submit-btn');
-            var stillSet = 'forgeSubmitted' in btn.dataset;
+            var btn = wrap.querySelector('.fabricator-submit-btn');
+            var stillSet = 'fabricatorSubmitted' in btn.dataset;
             document.body.removeChild(wrap);
             return !stillSet
-                ? ok('btn.dataset.forgeSubmitted=1 → resetFormsOnBfcacheRestore()', 'flag cleared')
-                : ko('btn.dataset.forgeSubmitted=1 → resetFormsOnBfcacheRestore()', 'flag still set', 'a restored page would let a second click fire another submission');
+                ? ok('btn.dataset.fabricatorSubmitted=1 → resetFormsOnBfcacheRestore()', 'flag cleared')
+                : ko('btn.dataset.fabricatorSubmitted=1 → resetFormsOnBfcacheRestore()', 'flag still set', 'a restored page would let a second click fire another submission');
         });
 
         run('bfcache restore: hides the stale message box', function () {
             var wrap = document.createElement('div');
-            wrap.className = 'forge-form-wrap';
-            wrap.innerHTML = '<div class="forge-form-messages" style="display:block;">Thank you!</div>'
-                + '<form class="forge-form"><button type="submit" class="forge-submit-btn"></button></form>';
+            wrap.className = 'fabricator-form-wrap';
+            wrap.innerHTML = '<div class="fabricator-form-messages" style="display:block;">Thank you!</div>'
+                + '<form class="fabricator-form"><button type="submit" class="fabricator-submit-btn"></button></form>';
             document.body.appendChild(wrap);
             hooks.resetFormsOnBfcacheRestore();
-            var msgBox = wrap.querySelector('.forge-form-messages');
+            var msgBox = wrap.querySelector('.fabricator-form-messages');
             var stillVisible = msgBox.style.display !== 'none';
             document.body.removeChild(wrap);
             return !stillVisible
@@ -1068,17 +1068,17 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
     }
 
     /* ── Render results ──────────────────────────────────────────────────── */
-    var container = document.getElementById('forge-js-tests');
+    var container = document.getElementById('fabricator-js-tests');
     if (!container) { return; }
     var total = pass + fail;
-    var badge = document.getElementById('forge-js-tab-badge');
+    var badge = document.getElementById('fabricator-js-tab-badge');
     if (badge) {
-        badge.className = 'forge-tab-badge ' + (fail === 0 ? 'forge-tab-badge--pass' : 'forge-tab-badge--fail');
+        badge.className = 'fabricator-tab-badge ' + (fail === 0 ? 'fabricator-tab-badge--pass' : 'fabricator-tab-badge--fail');
         badge.innerHTML = fail === 0
             ? '<i class="fa-solid fa-check" aria-hidden="true"></i> ' + total
             : '<i class="fa-solid fa-xmark" aria-hidden="true"></i> ' + fail + '/' + total;
     }
-    container.innerHTML = '<table class="forge-test-table">'
+    container.innerHTML = '<table class="fabricator-test-table">'
         + '<colgroup><col style="width:24px"><col style="width:26%"><col style="width:20%"><col style="width:28%"><col></colgroup>'
         + '<thead><tr>'
         + '<th></th>'
@@ -1088,7 +1088,7 @@ window.forgeCollapseSections(document.getElementById('forge-php-tests'));
         + '<th>Note</th>'
         + '</tr></thead>'
         + '<tbody>' + rows.join('') + '</tbody></table>';
-    if (window.forgeCollapseSections) {
-        window.forgeCollapseSections(container.querySelector('table'));
+    if (window.fabricatorCollapseSections) {
+        window.fabricatorCollapseSections(container.querySelector('table'));
     }
 }());

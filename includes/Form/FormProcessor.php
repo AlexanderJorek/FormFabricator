@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,20 +19,20 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Form;
+namespace FabricatorForms\Form;
 
 defined('ABSPATH') || exit;
 
-use ForgeForms\Fields\FieldRegistry;
+use FabricatorForms\Fields\FieldRegistry;
 
 /**
- * Handles forge_form AJAX submissions, validates fields, and fires the
+ * Handles fabricator_form AJAX submissions, validates fields, and fires the
  * submission action.
  */
 class FormProcessor
 {
     /**
-     * AJAX handler for the forge_forms_submit action.
+     * AJAX handler for the fabricator_forms_submit action.
      *
      * Expects form_id, nonce, and field values in POST/FILES.
      *
@@ -41,10 +41,10 @@ class FormProcessor
     public static function handle(): void
     {
         /* ---- Nonce ---- */
-        $nonce   = sanitize_key(wp_unslash($_POST['forge_nonce'] ?? ''));
+        $nonce   = sanitize_key(wp_unslash($_POST['fabricator_nonce'] ?? ''));
         $form_id = absint(wp_unslash($_POST['form_id'] ?? 0));
 
-        if (!$form_id || !wp_verify_nonce($nonce, 'forge_forms_submit_' . $form_id)) {
+        if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_submit_' . $form_id)) {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
         }
 
@@ -52,7 +52,7 @@ class FormProcessor
            Not keyed on $nonce: an anonymous visitor's WP nonce is identical for every visitor
            within the same ~12h tick, which would let one submitter's claim lock out everyone
            else. This token is fresh per render instead — see FormRenderer::render(). */
-        $submission_token = sanitize_text_field(wp_unslash($_POST['forge_submission_token'] ?? ''));
+        $submission_token = sanitize_text_field(wp_unslash($_POST['fabricator_submission_token'] ?? ''));
         if ($submission_token === '') {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
         }
@@ -82,7 +82,7 @@ class FormProcessor
         }
 
         /* ---- Honeypot check (before any expensive work) ---- */
-        if (!empty($_POST['forge_hp_field'])) {
+        if (!empty($_POST['fabricator_hp_field'])) {
             $hp_msg = $form->settings['success_message'] ?? __('Thank you for your submission!', 'formfabricator');
             wp_send_json_success(['message' => $hp_msg]);
         }
@@ -292,12 +292,12 @@ class FormProcessor
            Placed right before the side-effecting action, not at the top: earlier validation can
            legitimately fail and retry without touching the claim table. claim() is atomic, so
            concurrent requests with the same token can never both win. */
-        if (!\ForgeForms\Utils\SingleUseToken::claim($claim_key, 2 * DAY_IN_SECONDS)) {
+        if (!\FabricatorForms\Utils\SingleUseToken::claim($claim_key, 2 * DAY_IN_SECONDS)) {
             wp_send_json_error(['message' => __('This submission has already been received.', 'formfabricator')], 409);
         }
 
         /* ---- Fire submission hook (PDF generation + mail happens here) ---- */
-        do_action('forge_forms_submission', $form_id, $mapped, $form);
+        do_action('fabricator_forms_submission', $form_id, $mapped, $form);
 
         /* ---- Respond ---- */
         $success_msg = esc_html($form->settings['success_message'] ?? __('Thank you for your submission!', 'formfabricator'));
@@ -316,29 +316,29 @@ class FormProcessor
     {
         // ClientIp::resolve() uses REMOTE_ADDR by default (unspoofable) and only trusts
         // X-Forwarded-For when REMOTE_ADDR is explicitly allowlisted via the
-        // FORGE_TRUSTED_PROXIES constant — see includes/Utils/ClientIp.php
-        $ip = \ForgeForms\Utils\ClientIp::resolve();
+        // FABRICATOR_TRUSTED_PROXIES constant — see includes/Utils/ClientIp.php
+        $ip = \FabricatorForms\Utils\ClientIp::resolve();
         if ($ip === '') {
             // Unknown client: fail closed rather than pooling every such
             // request into one shared rate-limit bucket. No real window to
             // report, so just cap the suggested wait at the window length.
-            \ForgeForms\forge_log(
-                'ForgeForms rateLimitRetryAfter: fail-closed — ClientIp::resolve() '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms rateLimitRetryAfter: fail-closed — ClientIp::resolve() '
                 . 'returned empty for form ' . $form_id . '. REMOTE_ADDR='
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- diagnostic log line only (WP_DEBUG-gated via forge_log()), never echoed/stored; not a security-relevant use of this value.
+                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- diagnostic log line only (WP_DEBUG-gated via fabricator_log()), never echoed/stored; not a security-relevant use of this value.
                 . (isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '(unset)')
             );
             return 5 * MINUTE_IN_SECONDS;
         }
         $key   = 'submit_' . hash_hmac('sha256', $ip . '_' . $form_id, wp_salt('auth'));
-        $count = \ForgeForms\Utils\RateLimiter::increment($key, 5 * MINUTE_IN_SECONDS);
+        $count = \FabricatorForms\Utils\RateLimiter::increment($key, 5 * MINUTE_IN_SECONDS);
         if ($count <= 10) {
             return null;
         }
         // The increment above may itself have just reset the window (if it had expired),
         // in which case secondsUntilReset() correctly reflects that new window rather
         // than a stale one — it re-reads the row increment() just wrote.
-        return max(1, \ForgeForms\Utils\RateLimiter::secondsUntilReset($key));
+        return max(1, \FabricatorForms\Utils\RateLimiter::secondsUntilReset($key));
     }
 
     /**

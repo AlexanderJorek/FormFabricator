@@ -7,7 +7,7 @@
  * default output-escaping/KSES filters or CSP. Field values echoed here ($value in the
  * 'field' closure) arrive already pre-escaped by each field type's own pdfData()/map()
  * handler (see includes/PDF/Generator.php); they additionally pass through a narrow
- * wp_kses() allowlist (FORGE_PDF_ALLOWED_VALUE_TAGS, defined below) here as defense-in-depth.
+ * wp_kses() allowlist (FABRICATOR_PDF_ALLOWED_VALUE_TAGS, defined below) here as defense-in-depth.
  * in case a field renderer's own escaping is ever incomplete.
  *
  * PHP Version 8.1
@@ -17,7 +17,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,10 +28,10 @@
 
 defined('ABSPATH') || exit;
 
-$forge_defaults     = \ForgeForms\Admin\PDFLayoutEditor::defaults();
-$forge_raw          = (array) get_option('forge_forms_pdf_layout', []);
-$forge_o             = array_merge($forge_defaults, $forge_raw);
-$forge_field_layout = get_option('forge_forms_field_layout', 'block');
+$fabricator_defaults     = \FabricatorForms\Admin\PDFLayoutEditor::defaults();
+$fabricator_raw          = (array) get_option('fabricator_forms_pdf_layout', []);
+$fabricator_o             = array_merge($fabricator_defaults, $fabricator_raw);
+$fabricator_field_layout = get_option('fabricator_forms_field_layout', 'block');
 
 // Defense-in-depth: validate these are actually hex color values before they get
 // interpolated into a <style> block / inline CSS `style="..."` attribute below.
@@ -40,17 +40,17 @@ $forge_field_layout = get_option('forge_forms_field_layout', 'block');
 // here as anything other than a well-formed color (e.g. a stale/foreign option
 // value bypassing PDFLayoutEditor::save()'s own sanitize_hex_color() call) could
 // otherwise break out of the intended CSS property value.
-$forge_hex_color_re = '/^#[0-9a-fA-F]{3,8}$/';
-$forge_accent = preg_match($forge_hex_color_re, (string) $forge_o['accent_color'])
-    ? $forge_o['accent_color'] : $forge_defaults['accent_color'];
-$forge_sep = preg_match($forge_hex_color_re, (string) $forge_o['separator_color'])
-    ? $forge_o['separator_color'] : $forge_defaults['separator_color'];
-$forge_accent    = esc_attr($forge_accent);
-$forge_sep       = esc_attr($forge_sep);
-$forge_fs        = (int) $forge_o['font_size_body'];
-$forge_title_fs  = (int) $forge_o['title_size'];
-$forge_logo_w    = (int) $forge_o['logo_width'];
-$forge_font      = match ($forge_o['font_family']) {
+$fabricator_hex_color_re = '/^#[0-9a-fA-F]{3,8}$/';
+$fabricator_accent = preg_match($fabricator_hex_color_re, (string) $fabricator_o['accent_color'])
+    ? $fabricator_o['accent_color'] : $fabricator_defaults['accent_color'];
+$fabricator_sep = preg_match($fabricator_hex_color_re, (string) $fabricator_o['separator_color'])
+    ? $fabricator_o['separator_color'] : $fabricator_defaults['separator_color'];
+$fabricator_accent    = esc_attr($fabricator_accent);
+$fabricator_sep       = esc_attr($fabricator_sep);
+$fabricator_fs        = (int) $fabricator_o['font_size_body'];
+$fabricator_title_fs  = (int) $fabricator_o['title_size'];
+$fabricator_logo_w    = (int) $fabricator_o['logo_width'];
+$fabricator_font      = match ($fabricator_o['font_family']) {
     'dejavuserif'    => 'dejavuserif',
     'dejavusansmono' => 'dejavusansmono',
     'freemono'       => 'freemono',
@@ -62,12 +62,12 @@ $forge_font      = match ($forge_o['font_family']) {
 // written by anything other than PDFLayoutEditor::save()'s sideload-on-save
 // path), never fall back to fetching the raw URL — mPDF has no SSRF guard of
 // its own and would fetch an external URL directly.
-$forge_logo_post_id = !empty($forge_o['logo_url']) ? attachment_url_to_postid($forge_o['logo_url']) : 0;
-$forge_logo_path    = $forge_logo_post_id ? (get_attached_file($forge_logo_post_id) ?: '') : '';
+$fabricator_logo_post_id = !empty($fabricator_o['logo_url']) ? attachment_url_to_postid($fabricator_o['logo_url']) : 0;
+$fabricator_logo_path    = $fabricator_logo_post_id ? (get_attached_file($fabricator_logo_post_id) ?: '') : '';
 
-$forge_section_hidden = is_array($forge_o['section_hidden']) ? $forge_o['section_hidden'] : [];
+$fabricator_section_hidden = is_array($fabricator_o['section_hidden']) ? $fabricator_o['section_hidden'] : [];
 
-$forge_margin_top_mm = (int) ($forge_o['margin_top'] ?? 15);
+$fabricator_margin_top_mm = (int) ($fabricator_o['margin_top'] ?? 15);
 
 // Shared inline-formatting allowlist for admin-configured rich text (header
 // "title" builder element content, and footer text) rendered into mPDF HTML.
@@ -80,9 +80,9 @@ $forge_margin_top_mm = (int) ($forge_o['margin_top'] ?? 15);
 // run more than once per PHP process (e.g. multiple submissions handled in one
 // request/CLI run) — a plain top-level `const` would fatal with "cannot
 // redeclare constant" on the second inclusion.
-if (!defined('FORGE_PDF_HEADER_TITLE_ALLOWED_TAGS')) {
+if (!defined('FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS')) {
     define(
-        'FORGE_PDF_HEADER_TITLE_ALLOWED_TAGS',
+        'FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS',
         [
         'b'      => [],
         'strong' => [],
@@ -107,9 +107,9 @@ if (!defined('FORGE_PDF_HEADER_TITLE_ALLOWED_TAGS')) {
 // top of this file), but this narrow allowlist guards against any renderer
 // that forgets, while still allowing the simple formatting (e.g. multi-line
 // values using <br>) some renderers rely on.
-if (!defined('FORGE_PDF_ALLOWED_VALUE_TAGS')) {
+if (!defined('FABRICATOR_PDF_ALLOWED_VALUE_TAGS')) {
     define(
-        'FORGE_PDF_ALLOWED_VALUE_TAGS',
+        'FABRICATOR_PDF_ALLOWED_VALUE_TAGS',
         [
         'br'     => [],
         'strong' => [],
@@ -119,45 +119,45 @@ if (!defined('FORGE_PDF_ALLOWED_VALUE_TAGS')) {
 }
 
 return [
-    'margin_top_mm'    => $forge_margin_top_mm,
-    'margin_left_mm'   => (int) ($forge_o['margin_left']   ?? 15),
-    'margin_right_mm'  => (int) ($forge_o['margin_right']  ?? 15),
-    'margin_bottom_mm' => (int) ($forge_o['margin_bottom'] ?? 15),
+    'margin_top_mm'    => $fabricator_margin_top_mm,
+    'margin_left_mm'   => (int) ($fabricator_o['margin_left']   ?? 15),
+    'margin_right_mm'  => (int) ($fabricator_o['margin_right']  ?? 15),
+    'margin_bottom_mm' => (int) ($fabricator_o['margin_bottom'] ?? 15),
 
-    'section_hidden' => $forge_section_hidden,
+    'section_hidden' => $fabricator_section_hidden,
 
-    'base_css' => function () use ($forge_accent, $forge_sep, $forge_fs, $forge_title_fs, $forge_font): string {
+    'base_css' => function () use ($fabricator_accent, $fabricator_sep, $fabricator_fs, $fabricator_title_fs, $fabricator_font): string {
         return '
         <style>
-            body        { font-family:' . $forge_font . '; font-size:' . $forge_fs . 'pt; }
+            body        { font-family:' . $fabricator_font . '; font-size:' . $fabricator_fs . 'pt; }
             .field-block { margin-bottom:14px; }
-            .field-label { font-weight:bold; font-size:' . $forge_title_fs . 'pt; margin-bottom:4px; color:#222; }
-            .field-separator-thin  { border-bottom:1px solid ' . $forge_sep . '; margin-bottom:4px; }
-            .field-value           { font-size:' . $forge_fs . 'pt; margin-bottom:5px; color:#333; }
-            .field-separator-thick { border-bottom:3px solid ' . $forge_accent . '; margin-top:2px; }
-            .pdf-link   { font-size:' . ($forge_fs - 1) . 'pt; margin-top:4px; display:block; }
+            .field-label { font-weight:bold; font-size:' . $fabricator_title_fs . 'pt; margin-bottom:4px; color:#222; }
+            .field-separator-thin  { border-bottom:1px solid ' . $fabricator_sep . '; margin-bottom:4px; }
+            .field-value           { font-size:' . $fabricator_fs . 'pt; margin-bottom:5px; color:#333; }
+            .field-separator-thick { border-bottom:3px solid ' . $fabricator_accent . '; margin-top:2px; }
+            .pdf-link   { font-size:' . ($fabricator_fs - 1) . 'pt; margin-top:4px; display:block; }
             .section-metadata { background:#f9f9f9; border:1px solid #e0e0e0;'
-            . ' padding:8px 10px; font-size:' . ($forge_fs - 2) . 'pt; margin-bottom:12px; }
-            .section-legal    { font-size:' . ($forge_fs - 3) . 'pt; color:#666; margin-top:8px; line-height:1.4; }
+            . ' padding:8px 10px; font-size:' . ($fabricator_fs - 2) . 'pt; margin-bottom:12px; }
+            .section-legal    { font-size:' . ($fabricator_fs - 3) . 'pt; color:#666; margin-top:8px; line-height:1.4; }
         </style>';
     },
 
     'header' => function (string $title) use (
-        $forge_logo_path,
-        $forge_logo_w,
-        $forge_title_fs,
-        $forge_o,
-        $forge_hex_color_re
+        $fabricator_logo_path,
+        $fabricator_logo_w,
+        $fabricator_title_fs,
+        $fabricator_o,
+        $fabricator_hex_color_re
     ): string {
-        $hb = $forge_o['header_layout'] ?? [];
+        $hb = $fabricator_o['header_layout'] ?? [];
         $elements = $hb['elements'] ?? [];
 
         /* ── Grid-based header (header builder was used) ── */
         if (!empty($elements)) {
             $cols     = 42;
-            $margin_l = (int) ($forge_o['margin_left']  ?? 15);
-            $margin_r = (int) ($forge_o['margin_right'] ?? 15);
-            $margin_t = (int) ($forge_o['margin_top']   ?? 15);
+            $margin_l = (int) ($fabricator_o['margin_left']  ?? 15);
+            $margin_r = (int) ($fabricator_o['margin_right'] ?? 15);
+            $margin_t = (int) ($fabricator_o['margin_top']   ?? 15);
             $w_mm     = 210 - $margin_l - $margin_r;
             $cell_mm  = round($w_mm / $cols, 4); // square cells: same unit for x and y
 
@@ -209,13 +209,13 @@ return [
                     // protects the HTML-attribute context, not CSS syntax.
                     $raw_color = (string) ($el['color'] ?? '#1d2327');
                     $color     = esc_attr(
-                        preg_match($forge_hex_color_re, $raw_color) ? $raw_color : '#1d2327'
+                        preg_match($fabricator_hex_color_re, $raw_color) ? $raw_color : '#1d2327'
                     );
                     $align = in_array($el['align'] ?? '', ['left','center','right'], true)
                            ? $el['align'] : 'left';
                     $raw   = $el['content'] ?? $el['text'] ?? '{form_title}';
                     $raw   = str_replace('{form_title}', esc_html($title), $raw);
-                    $safe  = wp_kses($raw, FORGE_PDF_HEADER_TITLE_ALLOWED_TAGS);
+                    $safe  = wp_kses($raw, FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS);
                     $out .= '<div style="font-size:' . $fs . 'pt;color:' . $color
                           . ';text-align:' . $align . ';line-height:' . $el_h_mm . 'mm;">'
                           . $safe . '</div>';
@@ -228,22 +228,22 @@ return [
         }
 
         /* ── Default header (no builder layout set) ── */
-        $has_logo = file_exists($forge_logo_path) && is_readable($forge_logo_path);
-        if (!$has_logo && !empty($forge_o['logo_url'])) {
-            \ForgeForms\forge_log("PDF header: logo missing at {$forge_logo_path}");
+        $has_logo = file_exists($fabricator_logo_path) && is_readable($fabricator_logo_path);
+        if (!$has_logo && !empty($fabricator_o['logo_url'])) {
+            \FabricatorForms\fabricator_log("PDF header: logo missing at {$fabricator_logo_path}");
         }
 
         if ($has_logo) {
-            $logo_cell  = '<td style="width:' . $forge_logo_w . 'px;vertical-align:middle;">'
-                . '<img src="' . esc_attr($forge_logo_path) . '" style="width:' . $forge_logo_w
+            $logo_cell  = '<td style="width:' . $fabricator_logo_w . 'px;vertical-align:middle;">'
+                . '<img src="' . esc_attr($fabricator_logo_path) . '" style="width:' . $fabricator_logo_w
                 . 'px;height:auto;" /></td>';
             $title_cell = '<td style="text-align:right;vertical-align:middle;'
-                . 'font-size:' . $forge_title_fs . 'pt;font-weight:bold;'
+                . 'font-size:' . $fabricator_title_fs . 'pt;font-weight:bold;'
                 . 'padding-left:10px;">' . esc_html($title) . '</td>';
         } else {
             $logo_cell  = '';
             $title_cell = '<td style="text-align:left;vertical-align:middle;'
-                . 'font-size:' . $forge_title_fs . 'pt;font-weight:bold;">'
+                . 'font-size:' . $fabricator_title_fs . 'pt;font-weight:bold;">'
                 . esc_html($title) . '</td>';
         }
 
@@ -253,13 +253,13 @@ return [
         </table>';
     },
 
-    'field' => function (string $label, string $value) use ($forge_field_layout, $forge_title_fs, $forge_fs): string {
-        $lbl_style = 'font-weight:bold;font-size:' . $forge_title_fs . 'pt;color:#222;';
-        $val_style = 'font-size:' . $forge_fs . 'pt;color:#333;';
-        // $value has already been run through FORGE_PDF_ALLOWED_VALUE_TAGS by Generator.php,
+    'field' => function (string $label, string $value) use ($fabricator_field_layout, $fabricator_title_fs, $fabricator_fs): string {
+        $lbl_style = 'font-weight:bold;font-size:' . $fabricator_title_fs . 'pt;color:#222;';
+        $val_style = 'font-size:' . $fabricator_fs . 'pt;color:#333;';
+        // $value has already been run through FABRICATOR_PDF_ALLOWED_VALUE_TAGS by Generator.php,
         // before it was wrapped with the invisible marker spans / <img> tags this
         // closure now receives — sanitizing again here would strip those trusted tags.
-        if ($forge_field_layout === 'inline') {
+        if ($fabricator_field_layout === 'inline') {
             return '
         <div class="field-block">
             <span style="' . $lbl_style . '">' . esc_html($label) . ':</span>'
@@ -283,7 +283,7 @@ return [
             . '</div>';
     },
 
-    'document_metadata' => function (array $data) use ($forge_fs): string {
+    'document_metadata' => function (array $data) use ($fabricator_fs): string {
         $metadata = $data['metadata'] ?? [];
         return '
         <div class="section-metadata">
@@ -302,8 +302,8 @@ return [
         </p>';
     },
 
-    'footer' => function () use ($forge_o, $forge_sep): string {
-        $text = $forge_o['footer_text'] ?? '';
+    'footer' => function () use ($fabricator_o, $fabricator_sep): string {
+        $text = $fabricator_o['footer_text'] ?? '';
         if (!$text) {
             return '';
         }
@@ -315,6 +315,6 @@ return [
         // Defense-in-depth: footer_text is an admin-configured option value (same
         // trust level as the header "title" element content above), so apply the
         // same wp_kses() allowlist before it's returned unescaped into mPDF HTML.
-        return wp_kses($text, FORGE_PDF_HEADER_TITLE_ALLOWED_TAGS);
+        return wp_kses($text, FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS);
     },
 ];

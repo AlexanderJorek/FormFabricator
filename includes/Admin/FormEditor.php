@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,12 +19,12 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Admin;
+namespace FabricatorForms\Admin;
 
 defined('ABSPATH') || exit;
 
-use ForgeForms\Form\FormModel;
-use ForgeForms\Fields\FieldRegistry;
+use FabricatorForms\Form\FormModel;
+use FabricatorForms\Fields\FieldRegistry;
 
 /**
  * Admin drag-and-drop form builder page controller.
@@ -39,9 +39,9 @@ class FormEditor
     public static function init(): void
     {
         \add_action('admin_menu', [self::class, 'menu']);
-        \add_action('wp_ajax_forge_forms_save_form', [self::class, 'ajaxSave']);
-        \add_action('wp_ajax_forge_forms_preview', [self::class, 'ajaxPreview']);
-        \add_action('wp_ajax_forge_forms_unlock_form', [self::class, 'ajaxUnlock']);
+        \add_action('wp_ajax_fabricator_forms_save_form', [self::class, 'ajaxSave']);
+        \add_action('wp_ajax_fabricator_forms_preview', [self::class, 'ajaxPreview']);
+        \add_action('wp_ajax_fabricator_forms_unlock_form', [self::class, 'ajaxUnlock']);
         \add_filter('admin_body_class', [self::class, 'bodyClass']);
         \add_filter('heartbeat_received', [self::class, 'heartbeatReceived'], 10, 2);
     }
@@ -55,18 +55,18 @@ class FormEditor
      */
     public static function heartbeatReceived(array $response, array $data): array
     {
-        if (empty($data['forge_forms_lock'])) {
+        if (empty($data['fabricator_forms_lock'])) {
             return $response;
         }
-        $form_id = absint($data['forge_forms_lock']);
+        $form_id = absint($data['fabricator_forms_lock']);
         $post    = $form_id ? get_post($form_id) : null;
-        if (!$post || $post->post_type !== 'forge_form' || !\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!$post || $post->post_type !== 'fabricator_form' || !\FabricatorForms\Plugin::userCan('edit_forms')) {
             return $response;
         }
         $lock_owner = wp_check_post_lock($form_id);
         if ($lock_owner && (int) $lock_owner !== get_current_user_id()) {
             $user = get_userdata($lock_owner);
-            $response['forge_forms_lock_conflict'] = $user ? $user->display_name : __('another user', 'formfabricator');
+            $response['fabricator_forms_lock_conflict'] = $user ? $user->display_name : __('another user', 'formfabricator');
         } else {
             wp_set_post_lock($form_id);
         }
@@ -80,14 +80,14 @@ class FormEditor
      */
     public static function ajaxUnlock(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             \wp_send_json_error(['message' => 'Forbidden'], 403);
         }
-        \check_ajax_referer('forge_forms_admin_nonce', 'nonce');
+        \check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
         $form_id = absint(\wp_unslash($_POST['form_id'] ?? 0));
         $post    = $form_id ? \get_post($form_id) : null;
-        if (!$post || $post->post_type !== 'forge_form') {
+        if (!$post || $post->post_type !== 'fabricator_form') {
             \wp_send_json_error(['message' => 'Invalid form_id'], 400);
         }
 
@@ -113,8 +113,8 @@ class FormEditor
     public static function bodyClass(string $classes): string
     {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
-        if (isset($_GET['page']) && $_GET['page'] === 'forge-forms-editor') {
-            $classes .= ' forge-editor-page';
+        if (isset($_GET['page']) && $_GET['page'] === 'fabricator-forms-editor') {
+            $classes .= ' fabricator-editor-page';
         }
         return $classes;
     }
@@ -126,13 +126,13 @@ class FormEditor
      */
     public static function menu(): void
     {
-        if (\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (\FabricatorForms\Plugin::userCan('edit_forms')) {
             \add_submenu_page(
-                'forge-forms',
+                'fabricator-forms',
                 __('FormFabricator Editor', 'formfabricator'),
                 __('New Form', 'formfabricator'),
                 'read',
-                'forge-forms-editor',
+                'fabricator-forms-editor',
                 [self::class, 'render']
             );
         }
@@ -145,7 +145,7 @@ class FormEditor
      */
     public static function render(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             \wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
@@ -191,21 +191,21 @@ class FormEditor
 
         \wp_enqueue_script('heartbeat');
 
-        $nonce    = \wp_create_nonce('forge_forms_admin_nonce');
+        $nonce    = \wp_create_nonce('fabricator_forms_admin_nonce');
         $data_form    = \wp_json_encode($form_data, JSON_HEX_APOS | JSON_HEX_QUOT);
         $data_palette = \wp_json_encode($palette, JSON_HEX_APOS | JSON_HEX_QUOT);
         $ajax_url     = \esc_attr(\admin_url('admin-ajax.php'));
 
         /* assets/js/admin-builder.js (the drag-and-drop builder) is enqueued by
-           Assets::enqueueAdmin() under the 'forge-forms-builder' handle — that
+           Assets::enqueueAdmin() under the 'fabricator-forms-builder' handle — that
            enqueue always runs before this render() callback (admin_enqueue_scripts
            fires before the admin_menu page-render callback), so localizing the
            already-registered handle here is safe; wp_localize_script() only
            stores the data, the inline <script> is printed later at footer time. */
-        \wp_localize_script('forge-forms-builder', 'ForgeBuilderI18n', self::builderI18n());
+        \wp_localize_script('fabricator-forms-builder', 'FabricatorBuilderI18n', self::builderI18n());
         \wp_localize_script(
-            'forge-forms-editor-lock',
-            'ForgeEditorLock',
+            'fabricator-forms-editor-lock',
+            'FabricatorEditorLock',
             [
             'formId'  => $form ? $form->id : 0,
             'nonce'   => $nonce,
@@ -220,13 +220,13 @@ class FormEditor
         if ($perf_mode) {
             $php_ms = round((microtime(true) - $perf_start) * 1000, 2);
             \wp_enqueue_script(
-                'forge-perf-debug',
-                FORGE_FORMS_URL . 'assets/js/forge-perf-debug.js',
+                'fabricator-perf-debug',
+                FABRICATOR_FORMS_URL . 'assets/js/fabricator-perf-debug.js',
                 [],
-                FORGE_FORMS_VERSION,
+                FABRICATOR_FORMS_VERSION,
                 false  /* in <head> so it registers its DOMContentLoaded listener BEFORE admin-builder.js */
             );
-            \wp_localize_script('forge-perf-debug', 'ForgePerfData', [
+            \wp_localize_script('fabricator-perf-debug', 'FabricatorPerfData', [
                 'phpRenderMs' => $php_ms,
                 'formId'      => $form_id,
                 'fieldCount'  => count($form_data['fields']),
@@ -237,27 +237,27 @@ class FormEditor
             ]);
         }
         ?>
-        <canvas id="forge-particle-canvas"></canvas>
-        <div class="wrap forge-editor-wrap" style="padding:0;margin:0;">
+        <canvas id="fabricator-particle-canvas"></canvas>
+        <div class="wrap fabricator-editor-wrap" style="padding:0;margin:0;">
         <!-- admin-builder.js reads these on load and keeps them updated as the source of
              truth for the form/palette state; ajaxSave() below receives that state back -->
-        <div id="forge-editor"
+        <div id="fabricator-editor"
              data-form='<?php echo esc_attr($data_form); ?>'
              data-palette='<?php echo esc_attr($data_palette); ?>'
              data-nonce="<?php echo \esc_attr($nonce); ?>"
              data-ajax-url="<?php echo esc_attr($ajax_url); ?>">
 
-            <div id="forge-canvas">
-                <div id="forge-canvas-header">
-                    <div id="forge-header-brand">
+            <div id="fabricator-canvas">
+                <div id="fabricator-canvas-header">
+                    <div id="fabricator-header-brand">
                         <i class="fa-solid fa-table-list"></i>
                         <span>FormFabricator</span>
                     </div>
-                    <div id="forge-header-divider"></div>
-                    <input id="forge-form-name" type="text" value="" />
-                    <span id="forge-save-status"></span>
+                    <div id="fabricator-header-divider"></div>
+                    <input id="fabricator-form-name" type="text" value="" />
+                    <span id="fabricator-save-status"></span>
                     <?php if ($lock_owner_name !== '') : ?>
-                    <span id="forge-lock-notice" class="forge-ss--err">
+                    <span id="fabricator-lock-notice" class="fabricator-ss--err">
                         <?php
                         // translators: %s: display name of the user currently editing this form.
                         echo esc_html(sprintf(__('Currently being edited by %s. Saving may conflict.', 'formfabricator'), $lock_owner_name));
@@ -265,35 +265,35 @@ class FormEditor
                     </span>
                     <?php endif; ?>
                     <?php if ($perf_mode) : ?>
-                    <button id="forge-perf-btn" type="button" title="<?php echo esc_attr__('Performance Overlay', 'formfabricator'); ?>">
+                    <button id="fabricator-perf-btn" type="button" title="<?php echo esc_attr__('Performance Overlay', 'formfabricator'); ?>">
                         <i class="fa-solid fa-gauge-high"></i>
                     </button>
                     <?php endif; ?>
-                    <button id="forge-preview-btn" type="button" title="<?php echo esc_attr__('Preview', 'formfabricator'); ?>">
+                    <button id="fabricator-preview-btn" type="button" title="<?php echo esc_attr__('Preview', 'formfabricator'); ?>">
                         <i class="fa-solid fa-eye"></i> <?php echo esc_html__('Preview', 'formfabricator'); ?>
                     </button>
-                    <button id="forge-save-btn" type="button"><?php esc_html_e('Save', 'formfabricator'); ?></button>
+                    <button id="fabricator-save-btn" type="button"><?php esc_html_e('Save', 'formfabricator'); ?></button>
                 </div>
 
-                <div id="forge-canvas-tabs">
-                    <button class="forge-tab-btn forge-tab-active" data-tab="forge-fields-panel"><?php esc_html_e('Fields', 'formfabricator'); ?></button>
-                    <button class="forge-tab-btn" data-tab="forge-notifications-panel"><?php esc_html_e('Notifications', 'formfabricator'); ?></button>
+                <div id="fabricator-canvas-tabs">
+                    <button class="fabricator-tab-btn fabricator-tab-active" data-tab="fabricator-fields-panel"><?php esc_html_e('Fields', 'formfabricator'); ?></button>
+                    <button class="fabricator-tab-btn" data-tab="fabricator-notifications-panel"><?php esc_html_e('Notifications', 'formfabricator'); ?></button>
                 </div>
 
-                <div id="forge-fields-panel" class="forge-tab-panel forge-panel-active">
-                    <div id="forge-field-list"></div>
-                    <div id="forge-submit-preview-bar"></div>
-                    <div id="forge-add-field-bar">
-                        <button id="forge-add-field-btn" type="button">
+                <div id="fabricator-fields-panel" class="fabricator-tab-panel fabricator-panel-active">
+                    <div id="fabricator-field-list"></div>
+                    <div id="fabricator-submit-preview-bar"></div>
+                    <div id="fabricator-add-field-bar">
+                        <button id="fabricator-add-field-btn" type="button">
                             <i class="fa-solid fa-plus"></i> <?php esc_html_e('Add Field', 'formfabricator'); ?>
                         </button>
                     </div>
                 </div>
 
-                <div id="forge-notifications-panel" class="forge-tab-panel"></div>
+                <div id="fabricator-notifications-panel" class="fabricator-tab-panel"></div>
             </div>
 
-        </div><!-- #forge-editor -->
+        </div><!-- #fabricator-editor -->
         </div>
         <?php // Particle background + heartbeat lock notice: assets/js/admin-editor-canvas.js and assets/js/admin-editor-lock.js. ?>
         <?php
@@ -306,10 +306,10 @@ class FormEditor
      */
     public static function ajaxPreview(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             \wp_send_json_error(['message' => 'Forbidden'], 403);
         }
-        \check_ajax_referer('forge_forms_admin_nonce', 'nonce');
+        \check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
         $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
 
@@ -319,7 +319,7 @@ class FormEditor
             // base64-wrapped like ajaxSave()'s 'form_data', so sanitize_*_field() doesn't strip tags out of embedded HTML.
             $settings_override = [];
             if (!empty($_POST['settings'])) {
-                $decoded_s = base64_decode(\ForgeForms\Utils\Sanitize::str(sanitize_text_field(\wp_unslash($_POST['settings']))), true);
+                $decoded_s = base64_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_text_field(\wp_unslash($_POST['settings']))), true);
                 $raw_s = ($decoded_s !== false) ? json_decode($decoded_s, true) : null;
                 if (is_array($raw_s)) {
                     $settings_override = self::sanitizeSettings($raw_s);
@@ -329,16 +329,16 @@ class FormEditor
             /* Use live editor fields when posted; fall back to saved DB state. */
             $fields_override = null;
             if (!empty($_POST['fields'])) {
-                $decoded_f = base64_decode(\ForgeForms\Utils\Sanitize::str(sanitize_text_field(\wp_unslash($_POST['fields']))), true);
+                $decoded_f = base64_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_text_field(\wp_unslash($_POST['fields']))), true);
                 $raw_f = ($decoded_f !== false) ? json_decode($decoded_f, true) : null;
                 if (is_array($raw_f)) {
                     $fields_override = self::sanitizeFields($raw_f);
                 }
             }
 
-            $html = \ForgeForms\Form\FormRenderer::render($form_id, $settings_override, $fields_override);
+            $html = \FabricatorForms\Form\FormRenderer::render($form_id, $settings_override, $fields_override);
         } catch (\Throwable $e) {
-            \ForgeForms\forge_log('ForgeForms FormEditor::ajaxPreview: ' . get_class($e) . ' — ' . $e->getMessage());
+            \FabricatorForms\fabricator_log('FabricatorForms FormEditor::ajaxPreview: ' . get_class($e) . ' — ' . $e->getMessage());
             \wp_send_json_error(
                 [
                 'message' => __('Could not build the preview — one of the fields may contain content the editor could not process (check any HTML blocks for malformed markup).', 'formfabricator'),
@@ -352,26 +352,26 @@ class FormEditor
 
         /* Collect all field-specific CSS (mirrors Assets::enqueueFront). */
         $field_css = [];
-        foreach (\ForgeForms\Fields\FieldRegistry::all() as $class) {
+        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $class) {
             $css = trim((new $class())->getStyles());
             if ($css !== '') {
                 $field_css[] = $css;
             }
         }
 
-        /* Collect ForgeFieldInits. */
+        /* Collect FabricatorFieldInits. */
         $inits = [];
-        foreach (\ForgeForms\Fields\FieldRegistry::all() as $type => $class) {
+        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
             $fn = (new $class())->getClientInit();
             if ($fn !== '') {
                 $inits[] = \wp_json_encode($type) . ':' . trim($fn);
             }
         }
 
-        /* Collect ForgeValidators. */
+        /* Collect FabricatorValidators. */
         $pairs = [];
         $seen  = [];
-        foreach (\ForgeForms\Fields\FieldRegistry::all() as $class) {
+        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $class) {
             foreach ((new $class())->getClientValidation() as $entry) {
                 $rule = $entry['rule'] ?? '';
                 $fn   = $entry['fn']   ?? '';
@@ -383,44 +383,44 @@ class FormEditor
             }
         }
 
-        /* Collect ForgeEmptyChecks. */
+        /* Collect FabricatorEmptyChecks. */
         $empty_checks = [];
-        foreach (\ForgeForms\Fields\FieldRegistry::all() as $type => $class) {
+        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
             $entry = (new $class())->getClientEmptyCheck();
             if (!empty($entry['fn'])) {
                 $empty_checks[] = \wp_json_encode($type) . ':' . trim($entry['fn']);
             }
         }
 
-        /* Collect ForgeSkipValidation. */
+        /* Collect FabricatorSkipValidation. */
         $skip = [];
-        foreach (\ForgeForms\Fields\FieldRegistry::all() as $type => $class) {
+        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
             if ((new $class())->skipValidation()) {
                 $skip[] = \wp_json_encode($type);
             }
         }
 
-        $css_url = \FORGE_FORMS_URL . 'assets/css/front.css';
+        $css_url = \FABRICATOR_FORMS_URL . 'assets/css/front.css';
 
-        $globals = 'window.ForgeForms={'
+        $globals = 'window.FabricatorForms={'
             . 'ajaxUrl:"",ibanBicUrl:"",'
             . 'i18n:{submitting:' . \wp_json_encode(__('Sending…', 'formfabricator')) . ',error_server:' . \wp_json_encode(__('Server error.', 'formfabricator')) . '}'
             . '};';
         if (!empty($inits)) {
-            $globals .= 'window.ForgeFieldInits={' . implode(',', $inits) . '};';
+            $globals .= 'window.FabricatorFieldInits={' . implode(',', $inits) . '};';
         }
         if (!empty($pairs)) {
-            $globals .= 'window.ForgeValidators={' . implode(',', $pairs) . '};';
+            $globals .= 'window.FabricatorValidators={' . implode(',', $pairs) . '};';
         }
         if (!empty($empty_checks)) {
-            $globals .= 'window.ForgeEmptyChecks={' . implode(',', $empty_checks) . '};';
+            $globals .= 'window.FabricatorEmptyChecks={' . implode(',', $empty_checks) . '};';
         }
         if (!empty($skip)) {
-            $globals .= 'window.ForgeSkipValidation=[' . implode(',', $skip) . '];';
+            $globals .= 'window.FabricatorSkipValidation=[' . implode(',', $skip) . '];';
         }
 
         $toolbar_css = '
-#forge-preview-toolbar{
+#fabricator-preview-toolbar{
     position:sticky;top:16px;flex-shrink:0;
     background:#fff;border:1px solid #dcdcde;border-radius:10px;
     box-shadow:0 4px 16px rgba(0,0,0,.12);
@@ -451,11 +451,11 @@ class FormEditor
     background:#f0f6fc;color:#2271b1;border:1px solid #c2d9f0;
 }
 @media(prefers-color-scheme:dark){
-    #forge-preview-toolbar{background:#2c2c2c;border-color:#3c3c3c;box-shadow:0 4px 16px rgba(0,0,0,.4);}
+    #fabricator-preview-toolbar{background:#2c2c2c;border-color:#3c3c3c;box-shadow:0 4px 16px rgba(0,0,0,.4);}
     .fpt-label strong{color:#e0e0e0;}
 }';
 
-        $toolbar_html = '<div id="forge-preview-toolbar">'
+        $toolbar_html = '<div id="fabricator-preview-toolbar">'
             . '<div class="fpt-row">'
             . '<label class="fpt-toggle">'
             . '<input type="checkbox" id="fpt-skip-required">'
@@ -470,34 +470,40 @@ class FormEditor
         $page = '<!DOCTYPE html><html lang="' . esc_attr(str_replace('_', '-', get_locale())) . '"><head>'
             . '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             . '<title>' . esc_html__('Preview', 'formfabricator') . '</title>'
-            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- standalone preview HTML document returned via wp_send_json_success(), not rendered through the WP page pipeline (no wp_head/wp_footer to enqueue into); Font Awesome is this plugin's own vendored local asset (FORGE_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css'), not an external/offloaded resource.
+            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- standalone preview HTML document returned via wp_send_json_success(), not rendered through the WP page pipeline (no wp_head/wp_footer to enqueue into); Font Awesome is this plugin's own vendored local asset (FABRICATOR_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css'), not an external/offloaded resource.
             . '<link rel="stylesheet" href="'
-            . \esc_url(FORGE_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css')
+            . \esc_url(FABRICATOR_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css')
             . '">'
-            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- standalone preview HTML document returned via wp_send_json_success(), not rendered through the WP page pipeline (no wp_head/wp_footer to enqueue into); $css_url is this plugin's own local asset (FORGE_FORMS_URL . 'assets/css/front.css'), not an external/offloaded resource.
+            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- standalone preview HTML document returned via wp_send_json_success(), not rendered through the WP page pipeline (no wp_head/wp_footer to enqueue into); $css_url is this plugin's own local asset (FABRICATOR_FORMS_URL . 'assets/css/front.css'), not an external/offloaded resource.
             . '<link rel="stylesheet" href="' . \esc_url($css_url) . '">'
+            // Inline <style>/<script> below (not just the src-based tags already flagged above) are
+            // likewise part of this standalone preview document, not a normal WP-rendered admin page —
+            // there is no wp_head()/wp_footer() call anywhere in this synthetic HTML string for
+            // wp_add_inline_style()/wp_add_inline_script() to attach to.
             . '<style>' . implode("\n", $field_css) . '</style>'
             . '<style>'
             . 'body{font-family:system-ui,sans-serif;background:#f6f7f7;'
             . 'margin:0;padding:40px 24px;display:flex;gap:20px;'
             . 'justify-content:center;align-items:flex-start;}'
-            . '#forge-preview-content{flex:1;max-width:760px;min-width:0;}'
-            . '.forge-form-wrap{background:#fff;border-radius:8px;padding:32px;'
+            . '#fabricator-preview-content{flex:1;max-width:760px;min-width:0;}'
+            . '.fabricator-form-wrap{background:#fff;border-radius:8px;padding:32px;'
             . 'box-shadow:0 2px 12px rgba(0,0,0,.08);box-sizing:border-box;}'
             . '@media(prefers-color-scheme:dark){'
             . 'body{background:#1a1a1a;}'
-            . '.forge-form-wrap{box-shadow:0 2px 16px rgba(0,0,0,.5);}'
+            . '.fabricator-form-wrap{box-shadow:0 2px 16px rgba(0,0,0,.5);}'
             . '}'
             . $toolbar_css
             . '</style>'
             . '</head><body>'
-            . '<div id="forge-preview-content">' . $html . '</div>'
+            . '<div id="fabricator-preview-content">' . $html . '</div>'
             . $toolbar_html
+            // Same rationale as the <style> block above — inline data, no wp_head()/wp_footer() to
+            // attach wp_add_inline_script() to in this synthetic document.
             . '<script>' . $globals . '</script>'
             // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- standalone preview HTML document returned via wp_send_json_success(), not rendered through the WP page pipeline (no wp_head/wp_footer to enqueue into); both are this plugin's own local assets, not external/offloaded resources.
-            . '<script src="' . \esc_url(FORGE_FORMS_URL . 'assets/js/front.js') . '"></script>'
+            . '<script src="' . \esc_url(FABRICATOR_FORMS_URL . 'assets/js/front.js') . '"></script>'
             // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- see comment above.
-            . '<script src="' . \esc_url(FORGE_FORMS_URL . 'assets/js/admin-preview-toolbar.js') . '"></script>'
+            . '<script src="' . \esc_url(FABRICATOR_FORMS_URL . 'assets/js/admin-preview-toolbar.js') . '"></script>'
             . '</body></html>';
 
         \wp_send_json_success(['html' => $page]);
@@ -510,14 +516,14 @@ class FormEditor
      */
     public static function ajaxSave(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             \wp_send_json_error(['message' => 'Forbidden'], 403);
         }
-        \check_ajax_referer('forge_forms_admin_nonce', 'nonce');
+        \check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
         // base64-wrapped so admin-builder.js can send the raw JSON as a plain string field
         // without WP's magic-quotes slashing corrupting embedded quotes before we get here
-        $encoded = \ForgeForms\Utils\Sanitize::str(sanitize_text_field(\wp_unslash($_POST['form_data'] ?? '')));
+        $encoded = \FabricatorForms\Utils\Sanitize::str(sanitize_text_field(\wp_unslash($_POST['form_data'] ?? '')));
         $json    = base64_decode($encoded, true);
         $raw     = ($json !== false) ? json_decode($json, true) : null;
         if (!is_array($raw)) {
@@ -570,14 +576,14 @@ class FormEditor
             wp_set_post_lock($result);
 
             /* Save PDF attachment settings from notifications */
-            $pdf_settings = \get_option('forge_forms_pdf_settings', []);
+            $pdf_settings = \get_option('fabricator_forms_pdf_settings', []);
             foreach ($sanitized_notifications as $notif) {
                 $slug = $notif['slug'] ?? '';
                 if ($slug) {
                     $pdf_settings[$result . '|' . $slug] = !empty($notif['attach_pdf']) ? 1 : 0;
                 }
             }
-            \update_option('forge_forms_pdf_settings', $pdf_settings);
+            \update_option('fabricator_forms_pdf_settings', $pdf_settings);
 
             \wp_send_json_success(
                 [
@@ -587,7 +593,7 @@ class FormEditor
                 ]
             );
         } catch (\Throwable $e) {
-            \ForgeForms\forge_log('ForgeForms FormEditor::ajaxSave: ' . get_class($e) . ' — ' . $e->getMessage());
+            \FabricatorForms\fabricator_log('FabricatorForms FormEditor::ajaxSave: ' . get_class($e) . ' — ' . $e->getMessage());
             \wp_send_json_error(
                 [
                 'message' => __('Could not save this form — one of the fields may contain content the editor could not process (check any HTML blocks for malformed markup). Please review the fields and try again.', 'formfabricator'),
@@ -614,7 +620,7 @@ class FormEditor
             // below — they're plain identifiers/labels, not rich config values, and every
             // field type needs them handled the same way regardless of its own rules
             $plaintext_keys = ['id', 'type', 'label', 'placeholder', 'description', 'hint', 'name'];
-            $handler = \ForgeForms\Fields\FieldRegistry::get((string)($field['type'] ?? ''));
+            $handler = \FabricatorForms\Fields\FieldRegistry::get((string)($field['type'] ?? ''));
             $f = [];
             foreach ($field as $k => $v) {
                 $sk = \sanitize_key($k);
@@ -701,32 +707,32 @@ class FormEditor
                     continue;
                 }
                 $routing_rules[] = [
-                    'field_id' => \sanitize_key(\ForgeForms\Utils\Sanitize::str($rule['field_id'] ?? '')),
-                    'operator' => \sanitize_key(\ForgeForms\Utils\Sanitize::str($rule['operator'] ?? 'equals', 'equals')),
-                    'value'    => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($rule['value'] ?? '')),
+                    'field_id' => \sanitize_key(\FabricatorForms\Utils\Sanitize::str($rule['field_id'] ?? '')),
+                    'operator' => \sanitize_key(\FabricatorForms\Utils\Sanitize::str($rule['operator'] ?? 'equals', 'equals')),
+                    'value'    => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($rule['value'] ?? '')),
                     /* May be a literal address or a {field_id}/{admin_email}
                        placeholder resolved at send time — sanitize_email()
                        would strip the braces, so keep it as plain text. */
-                    'email'    => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($rule['email'] ?? '')),
+                    'email'    => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($rule['email'] ?? '')),
                 ];
             }
             $clean[] = [
-                'slug'             => \sanitize_key(\ForgeForms\Utils\Sanitize::str($n['slug'] ?? '', 'notification-' . \wp_generate_uuid4())),
-                'name'             => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($n['name']       ?? '')),
+                'slug'             => \sanitize_key(\FabricatorForms\Utils\Sanitize::str($n['slug'] ?? '', 'notification-' . \wp_generate_uuid4())),
+                'name'             => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($n['name']       ?? '')),
                 'recipient_mode'   => in_array($n['recipient_mode'] ?? '', ['single', 'routing'], true)
                     ? $n['recipient_mode'] : 'single',
-                'to'               => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($n['to']         ?? '')),
+                'to'               => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($n['to']         ?? '')),
                 'routing_rules'    => $routing_rules,
                 'routing_fallback' =>
-                    \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($n['routing_fallback'] ?? '')),
-                'reply_to'         => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($n['reply_to']   ?? '')),
-                'subject'          => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($n['subject']    ?? '')),
+                    \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($n['routing_fallback'] ?? '')),
+                'reply_to'         => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($n['reply_to']   ?? '')),
+                'subject'          => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($n['subject']    ?? '')),
                 /* Body is always HTML, authored via the Visual or Code view. */
-                'body'             => self::sanitizeEmailBody(\ForgeForms\Utils\Sanitize::str($n['body'] ?? '')),
-                'from_name'        => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($n['from_name']  ?? '')),
-                'from_email'       => \sanitize_email(\ForgeForms\Utils\Sanitize::str($n['from_email']      ?? '')),
-                'cc'               => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($n['cc']         ?? '')),
-                'bcc'              => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($n['bcc']        ?? '')),
+                'body'             => self::sanitizeEmailBody(\FabricatorForms\Utils\Sanitize::str($n['body'] ?? '')),
+                'from_name'        => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($n['from_name']  ?? '')),
+                'from_email'       => \sanitize_email(\FabricatorForms\Utils\Sanitize::str($n['from_email']      ?? '')),
+                'cc'               => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($n['cc']         ?? '')),
+                'bcc'              => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($n['bcc']        ?? '')),
                 'attach_pdf'       => !empty($n['attach_pdf']),
                 'attach_uploads'   => !empty($n['attach_uploads']),
                 'enabled'          => !isset($n['enabled']) || !empty($n['enabled']),
@@ -749,17 +755,17 @@ class FormEditor
                 continue;
             }
             $rules[] = [
-                'field_id'   => \sanitize_key(\ForgeForms\Utils\Sanitize::str($rule['field_id']   ?? '')),
-                'operator'   => \sanitize_key(\ForgeForms\Utils\Sanitize::str($rule['operator']   ?? 'equals', 'equals')),
-                'value'      => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($rule['value'] ?? '')),
+                'field_id'   => \sanitize_key(\FabricatorForms\Utils\Sanitize::str($rule['field_id']   ?? '')),
+                'operator'   => \sanitize_key(\FabricatorForms\Utils\Sanitize::str($rule['operator']   ?? 'equals', 'equals')),
+                'value'      => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($rule['value'] ?? '')),
                 'use_option' => !empty($rule['use_option']),
             ];
         }
 
         return [
-            'submit_label'      => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($settings['submit_label']    ?? '', __('Submit', 'formfabricator'))),
-            'submit_working'    => \sanitize_text_field(\ForgeForms\Utils\Sanitize::str($settings['submit_working']   ?? '', __('Sending…', 'formfabricator'))),
-            'success_message'   => \wp_kses_post(\ForgeForms\Utils\Sanitize::str($settings['success_message']         ?? '', __('Thank you!', 'formfabricator'))),
+            'submit_label'      => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($settings['submit_label']    ?? '', __('Submit', 'formfabricator'))),
+            'submit_working'    => \sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($settings['submit_working']   ?? '', __('Sending…', 'formfabricator'))),
+            'success_message'   => \wp_kses_post(\FabricatorForms\Utils\Sanitize::str($settings['success_message']         ?? '', __('Thank you!', 'formfabricator'))),
             'submit_conditions' => [
                 'enabled' => !empty($settings['submit_conditions']['enabled']),
                 'match'   => in_array($settings['submit_conditions']['match'] ?? '', ['all', 'any'], true)
@@ -836,8 +842,8 @@ class FormEditor
                 // (not gated behind WP_DEBUG) so production sites keep an audit
                 // trail when a notification body actually triggers a strip.
                 preg_match_all($pattern, $html, $m);
-                \ForgeForms\forge_log(
-                    'ForgeForms sanitizeEmailBody [' . $label . '] removed '
+                \FabricatorForms\fabricator_log(
+                    'FabricatorForms sanitizeEmailBody [' . $label . '] removed '
                     . count($m[0] ?? []) . ' match(es)'
                 );
             }
@@ -868,8 +874,8 @@ class FormEditor
                 // before the keyword check, not just via \s* around the colon.
                 $decoded = str_replace(["\t", "\n", "\r"], '', (string) $decoded);
                 if (preg_match('/javascript\s*:|vbscript\s*:/i', $decoded)) {
-                    \ForgeForms\forge_log(
-                        'ForgeForms sanitizeEmailBody [encoded-js-uri] stripped '
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms sanitizeEmailBody [encoded-js-uri] stripped '
                         . $attr . ' value: ' . substr($val, 0, 200)
                     );
                     return $quoted ? ($attr . '=' . $q . $q) : ($attr . '=""');
@@ -893,8 +899,8 @@ class FormEditor
                     $html = substr($html, 0, $body_close)
                         . "\n" . $orphan . "\n"
                         . substr($html, $body_close);
-                    \ForgeForms\forge_log(
-                        'ForgeForms sanitizeEmailBody: moved orphaned content'
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms sanitizeEmailBody: moved orphaned content'
                         . ' from after </html> to before </body>: '
                         . substr($orphan, 0, 100)
                     );
@@ -1078,13 +1084,13 @@ class FormEditor
         // actually stripped so production keeps an audit trail; the "nothing
         // stripped" case is debug-only noise, not a security-relevant event.
         if ($html !== $before) {
-            \ForgeForms\forge_log(
-                'ForgeForms sanitizeEmailBody: input length '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms sanitizeEmailBody: input length '
                 . strlen($before) . ' → output length ' . strlen($html)
             );
         } elseif (defined('WP_DEBUG') && WP_DEBUG) {
-            \ForgeForms\forge_log(
-                'ForgeForms sanitizeEmailBody: nothing stripped '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms sanitizeEmailBody: nothing stripped '
                 . '(input length ' . strlen($html) . ')'
             );
         }
@@ -1122,7 +1128,7 @@ class FormEditor
     /**
      * Builds the localized string catalog consumed by assets/js/admin-builder.js
      * (the drag-and-drop builder UI). Mirrors the pattern used for
-     * ForgeForms.i18n (Assets::enqueueFront()) and hbi18n
+     * FabricatorForms.i18n (Assets::enqueueFront()) and hbi18n
      * (PDFLayoutEditor.php) — a single object of English-source strings that
      * the JS falls back to its own English literal for if this ever fails to
      * load (see the `_i18n.key || 'English fallback'` pattern in the JS).
@@ -1350,8 +1356,7 @@ class FormEditor
             /* SEPA "Länderfilter" country-tag picker (IBAN-capable countries). Reuses the
                exact same __() msgids as SepaField::ibanCountryOptions() — same list, same
                English source text — except 'SC' (Seychelles), which that list doesn't
-               contain and is new here. Reusing msgids means these already have German
-               translations in languages/formfabricator-de_DE.po. */
+               contain and is new here. Reusing msgids means these already have translations. */
             'countryNames' => [
                 'AD' => __('Andorra', 'formfabricator'),
                 'AE' => __('United Arab Emirates', 'formfabricator'),

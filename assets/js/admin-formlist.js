@@ -7,9 +7,9 @@
 
             /* Localized strings for dynamically-generated UI text (alerts, toasts,
                modal messages set from JS) — mirrors the wp_localize_script i18n
-               pattern used elsewhere (e.g. Assets.php's ForgeVerifier), inlined here
+               pattern used elsewhere (e.g. Assets.php's FabricatorVerifier), inlined here
                since this script is embedded directly rather than a static asset. */
-            var pageData = window.ForgeFormListPage || {};
+            var pageData = window.FabricatorFormListPage || {};
             var ffi18n = pageData.i18n || {};
 
             /* ── Dropdown: hoist to body, smart flip up/down ── */
@@ -23,14 +23,14 @@
             document.addEventListener('scroll', closeAllDropdowns, true);
 
             /* ── Live search ── */
-            var searchInput = document.getElementById('forge-form-search');
-            var noResults   = document.getElementById('forge-no-results');
+            var searchInput = document.getElementById('fabricator-form-search');
+            var noResults   = document.getElementById('fabricator-no-results');
 
             if (searchInput) {
                 searchInput.addEventListener('input', function() {
                     var q = this.value.toLowerCase().trim();
                     var visible = 0;
-                    document.querySelectorAll('.forge-form-row').forEach(function(row) {
+                    document.querySelectorAll('.fabricator-form-row').forEach(function(row) {
                         var title = row.dataset.title || '';
                         var show  = !q || title.indexOf(q) !== -1;
                         row.hidden = !show;
@@ -41,13 +41,13 @@
             }
 
             /* ── Multi-select ── */
-            var selectAll   = document.getElementById('forge-select-all');
-            var bulkBar       = document.getElementById('forge-bulk-bar');
-            var bulkCount     = document.getElementById('forge-bulk-count');
-            var bulkApply     = document.getElementById('forge-bulk-apply');
-            var bulkActionBtn = document.getElementById('forge-bulk-action-btn');
-            var bulkActionDd  = document.getElementById('forge-bulk-action-dd');
-            var bulkActionLbl = document.getElementById('forge-bulk-action-label');
+            var selectAll   = document.getElementById('fabricator-select-all');
+            var bulkBar       = document.getElementById('fabricator-bulk-bar');
+            var bulkCount     = document.getElementById('fabricator-bulk-count');
+            var bulkApply     = document.getElementById('fabricator-bulk-apply');
+            var bulkActionBtn = document.getElementById('fabricator-bulk-action-btn');
+            var bulkActionDd  = document.getElementById('fabricator-bulk-action-dd');
+            var bulkActionLbl = document.getElementById('fabricator-bulk-action-label');
             var selectedBulkAction = '';
 
             /* ── Bulk action custom dropdown ── */
@@ -65,7 +65,7 @@
                     bulkActionDd.hidden = false;
                     openDd = bulkActionDd;
                 });
-                bulkActionDd.querySelectorAll('.forge-dd-item[data-action]').forEach(function(item) {
+                bulkActionDd.querySelectorAll('.fabricator-dd-item[data-action]').forEach(function(item) {
                     item.addEventListener('click', function() {
                         selectedBulkAction = this.dataset.action;
                         bulkActionLbl.textContent = this.textContent.trim();
@@ -75,15 +75,15 @@
             }
 
             function getChecked() {
-                return document.querySelectorAll('.forge-row-check:checked');
+                return document.querySelectorAll('.fabricator-row-check:checked');
             }
 
-            var emptyState   = document.getElementById('forge-list-empty');
-            var listToolbar  = document.getElementById('forge-list-toolbar');
-            var deleteModal  = document.getElementById('forge-delete-modal');
-            var modalMsg     = document.getElementById('forge-modal-msg');
-            var modalConfirm = document.getElementById('forge-modal-confirm');
-            var modalCancel  = document.getElementById('forge-modal-cancel');
+            var emptyState   = document.getElementById('fabricator-list-empty');
+            var listToolbar  = document.getElementById('fabricator-list-toolbar');
+            var deleteModal  = document.getElementById('fabricator-delete-modal');
+            var modalMsg     = document.getElementById('fabricator-modal-msg');
+            var modalConfirm = document.getElementById('fabricator-modal-confirm');
+            var modalCancel  = document.getElementById('fabricator-modal-cancel');
             var modalResolve = null;
 
             function showDeleteModal(msg) {
@@ -116,10 +116,10 @@
             }
 
             function checkEmpty() {
-                if (document.querySelectorAll('.forge-form-row').length === 0) {
+                if (document.querySelectorAll('.fabricator-form-row').length === 0) {
                     if (emptyState) emptyState.hidden = false;
-                    var tl = document.getElementById('forge-toolbar-left');
-                    var tc = document.getElementById('forge-toolbar-center');
+                    var tl = document.getElementById('fabricator-toolbar-left');
+                    var tc = document.getElementById('fabricator-toolbar-center');
                     if (tl) tl.hidden = true;
                     if (tc) tc.hidden = true;
                 }
@@ -136,7 +136,7 @@
                 if (bulkBar)   bulkBar.hidden = checked.length === 0;
                 if (bulkCount) bulkCount.textContent = ffi18n.selectedCount.replace('%d', String(checked.length));
                 if (selectAll) {
-                    var all = document.querySelectorAll('.forge-row-check');
+                    var all = document.querySelectorAll('.fabricator-row-check');
                     selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
                     selectAll.checked = all.length > 0 && checked.length === all.length;
                 }
@@ -145,12 +145,12 @@
             /* ── Per-row event binding (also called after dynamic injection) ── */
             function bindRow(row) {
                 /* Grab all references before dd is hoisted to body */
-                var menuBtn = row.querySelector('.forge-row-menu-btn');
-                var copyBtn = row.querySelector('.forge-copy-shortcode');
-                var dupBtn  = row.querySelector('.forge-duplicate-form');
-                var delBtn  = row.querySelector('.forge-delete-form');
-                var expBtn  = row.querySelector('.forge-export-form');
-                var cb      = row.querySelector('.forge-row-check');
+                var menuBtn = row.querySelector('.fabricator-row-menu-btn');
+                var copyBtn = row.querySelector('.fabricator-copy-shortcode');
+                var dupBtn  = row.querySelector('.fabricator-duplicate-form');
+                var delBtn  = row.querySelector('.fabricator-delete-form');
+                var expBtn  = row.querySelector('.fabricator-export-form');
+                var cb      = row.querySelector('.fabricator-row-check');
 
                 if (menuBtn) {
                     var dd = menuBtn.nextElementSibling;
@@ -195,7 +195,7 @@
                             method: 'POST',
                             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                             body: new URLSearchParams({
-                                action: 'forge_forms_duplicate',
+                                action: 'fabricator_forms_duplicate',
                                 form_id: formId,
                                 nonce: nonce
                             })
@@ -207,7 +207,7 @@
                                 var tmp = document.createElement('div');
                                 tmp.innerHTML = data.data.html.trim();
                                 var newRow = tmp.firstElementChild;
-                                var list = document.getElementById('forge-form-list');
+                                var list = document.getElementById('fabricator-form-list');
                                 if (list && newRow) {
                                     list.insertBefore(newRow, list.firstChild);
                                     bindRow(newRow);
@@ -235,7 +235,7 @@
                                 method: 'POST',
                                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                                 body: new URLSearchParams({
-                                    action: 'forge_forms_delete',
+                                    action: 'fabricator_forms_delete',
                                     form_id: formId,
                                     nonce: nonce
                                 })
@@ -263,7 +263,7 @@
                             method: 'POST',
                             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                             body: new URLSearchParams({
-                                action: 'forge_forms_export',
+                                action: 'fabricator_forms_export',
                                 form_id: expBtn.dataset.id,
                                 nonce: expBtn.dataset.nonce
                             })
@@ -287,12 +287,12 @@
                 if (cb) cb.addEventListener('change', updateBulkBar);
             }
 
-            document.querySelectorAll('.forge-form-row').forEach(bindRow);
+            document.querySelectorAll('.fabricator-form-row').forEach(bindRow);
 
             if (selectAll) {
                 selectAll.addEventListener('change', function() {
-                    document.querySelectorAll('.forge-row-check').forEach(function(cb) {
-                        if (!cb.closest('.forge-form-row').hidden) cb.checked = selectAll.checked;
+                    document.querySelectorAll('.fabricator-row-check').forEach(function(cb) {
+                        if (!cb.closest('.fabricator-form-row').hidden) cb.checked = selectAll.checked;
                     });
                     updateBulkBar();
                 });
@@ -321,7 +321,7 @@
                             method: 'POST',
                             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                             body: new URLSearchParams({
-                                action: 'forge_forms_bulk_delete',
+                                action: 'fabricator_forms_bulk_delete',
                                 ids: JSON.stringify(ids),
                                 nonces: JSON.stringify(nonces)
                             })
@@ -330,8 +330,8 @@
                         .then(function(data) {
                             if (data.success) {
                                 (data.data.deleted || []).forEach(function(id) {
-                                    var cb  = document.querySelector('.forge-row-check[value="' + id + '"]');
-                                    var row = cb ? cb.closest('.forge-form-row') : null;
+                                    var cb  = document.querySelector('.fabricator-row-check[value="' + id + '"]');
+                                    var row = cb ? cb.closest('.fabricator-form-row') : null;
                                     if (row) fadeRemoveRow(row, updateBulkBar);
                                 });
                             } else {
@@ -355,7 +355,7 @@
                             method: 'POST',
                             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                             body: new URLSearchParams({
-                                action: 'forge_forms_bulk_duplicate',
+                                action: 'fabricator_forms_bulk_duplicate',
                                 ids: JSON.stringify(ids),
                                 nonces: JSON.stringify(dupNonces)
                             })
@@ -378,13 +378,13 @@
             }
 
             /* ── Export ── */
-            var exportModal   = document.getElementById('forge-export-modal');
-            var exportLoading = document.getElementById('forge-export-loading');
-            var exportResult  = document.getElementById('forge-export-result');
-            var exportBar     = document.getElementById('forge-export-bar');
-            var exportString  = document.getElementById('forge-export-string');
-            var exportCopy    = document.getElementById('forge-export-copy');
-            var exportClose   = document.getElementById('forge-export-close');
+            var exportModal   = document.getElementById('fabricator-export-modal');
+            var exportLoading = document.getElementById('fabricator-export-loading');
+            var exportResult  = document.getElementById('fabricator-export-result');
+            var exportBar     = document.getElementById('fabricator-export-bar');
+            var exportString  = document.getElementById('fabricator-export-string');
+            var exportCopy    = document.getElementById('fabricator-export-copy');
+            var exportClose   = document.getElementById('fabricator-export-close');
             var exportBarTimer = null;
 
             function closeExportModal() {
@@ -443,8 +443,8 @@
             }
 
             /* ── Import ── */
-            var importInput  = document.getElementById('forge-import-input');
-            var importSubmit = document.getElementById('forge-import-submit');
+            var importInput  = document.getElementById('fabricator-import-input');
+            var importSubmit = document.getElementById('fabricator-import-submit');
             var importNonce  = pageData.importNonce;
 
             function doImport() {
@@ -455,7 +455,7 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                     body: new URLSearchParams({
-                        action: 'forge_forms_import',
+                        action: 'fabricator_forms_import',
                         string: str,
                         nonce: importNonce
                     })
@@ -467,7 +467,7 @@
                         var tmp = document.createElement('div');
                         tmp.innerHTML = data.data.html.trim();
                         var newRow = tmp.firstElementChild;
-                        var list = document.getElementById('forge-form-list');
+                        var list = document.getElementById('fabricator-form-list');
                         if (list && newRow) {
                             list.insertBefore(newRow, list.firstChild);
                             bindRow(newRow);

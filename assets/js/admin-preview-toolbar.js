@@ -10,7 +10,7 @@
     var cb = document.getElementById('fpt-skip-required');
     if (cb) {
         cb.addEventListener('change', function () {
-            window.ForgeIgnoreRequired = this.checked;
+            window.FabricatorIgnoreRequired = this.checked;
         });
     }
 
@@ -20,7 +20,7 @@
         var isSubmit = (url === '' || url === location.href)
             && opts && opts.body instanceof FormData
             && typeof opts.body.get === 'function'
-            && opts.body.get('action') === 'forge_forms_submit';
+            && opts.body.get('action') === 'fabricator_forms_submit';
         if (isSubmit) {
             return new Promise(function (resolve) {
                 setTimeout(function () {

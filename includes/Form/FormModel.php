@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,12 +19,12 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Form;
+namespace FabricatorForms\Form;
 
 defined('ABSPATH') || exit;
 
 /**
- * Thin wrapper around the forge_form custom post type.
+ * Thin wrapper around the fabricator_form custom post type.
  *
  * Forms are stored as posts; field definitions and notifications are stored as post meta.
  */
@@ -45,16 +45,16 @@ class FormModel
     public static function get(int $form_id): ?self
     {
         $post = get_post($form_id);
-        if (!$post || $post->post_type !== 'forge_form') {
+        if (!$post || $post->post_type !== 'fabricator_form') {
             return null;
         }
 
         $model                = new self();
         $model->id            = $form_id;
         $model->title         = $post->post_title;
-        $model->fields        = self::decodeMeta($form_id, 'forge_form_fields');
-        $model->notifications = self::decodeMeta($form_id, 'forge_form_notifications');
-        $model->settings      = self::decodeMeta($form_id, 'forge_form_settings');
+        $model->fields        = self::decodeMeta($form_id, 'fabricator_form_fields');
+        $model->notifications = self::decodeMeta($form_id, 'fabricator_form_notifications');
+        $model->settings      = self::decodeMeta($form_id, 'fabricator_form_settings');
 
         return $model;
     }
@@ -68,7 +68,7 @@ class FormModel
     public static function snapshot(int $form_id): string
     {
         $post = get_post($form_id);
-        if (!$post || $post->post_type !== 'forge_form') {
+        if (!$post || $post->post_type !== 'fabricator_form') {
             return '';
         }
         return (string) $post->post_modified_gmt;
@@ -92,7 +92,7 @@ class FormModel
         // method should not rely solely on callers remembering to check —
         // a single missed gate anywhere in the admin layer would otherwise be
         // a full privilege-escalation/CSRF path with no second line of defense.
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             return new \WP_Error('forbidden', __('Insufficient permissions.', 'formfabricator'));
         }
         if (!self::nonceVerifiedOrCheck($nonce_verified)) {
@@ -101,7 +101,7 @@ class FormModel
 
         if ($form_id > 0 && $expected_snapshot !== '') {
             $current = get_post($form_id);
-            if ($current && $current->post_type === 'forge_form' && $current->post_modified_gmt !== $expected_snapshot) {
+            if ($current && $current->post_type === 'fabricator_form' && $current->post_modified_gmt !== $expected_snapshot) {
                 return new \WP_Error(
                     'conflict',
                     __('This form was changed in another tab or by another user. Please reload and try again.', 'formfabricator')
@@ -109,11 +109,11 @@ class FormModel
             }
         }
 
-        $title = sanitize_text_field(\ForgeForms\Utils\Sanitize::str($data['title'] ?? null, 'Untitled Form'));
+        $title = sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($data['title'] ?? null, 'Untitled Form'));
 
         $post_data = [
             'post_title'  => $title,
-            'post_type'   => 'forge_form',
+            'post_type'   => 'fabricator_form',
             'post_status' => 'publish',
         ];
 
@@ -133,9 +133,9 @@ class FormModel
         $fields        = $data['fields']        ?? [];
         $notifications = $data['notifications'] ?? [];
         $settings      = $data['settings']      ?? [];
-        update_post_meta($id, 'forge_form_fields', $fields);
-        update_post_meta($id, 'forge_form_notifications', $notifications);
-        update_post_meta($id, 'forge_form_settings', $settings);
+        update_post_meta($id, 'fabricator_form_fields', $fields);
+        update_post_meta($id, 'fabricator_form_notifications', $notifications);
+        update_post_meta($id, 'fabricator_form_settings', $settings);
 
         return $id;
     }
@@ -179,7 +179,7 @@ class FormModel
      */
     public static function delete(int $form_id, bool $nonce_verified = false): bool
     {
-        if (!\ForgeForms\Plugin::userCan('edit_forms') && !current_user_can('manage_options')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms') && !current_user_can('manage_options')) {
             return false;
         }
         if (!self::nonceVerifiedOrCheck($nonce_verified)) {
@@ -189,7 +189,7 @@ class FormModel
     }
 
     /**
-     * Returns all forge_form posts as model instances. Gated on view_forms (the least-privilege FormFabricator
+     * Returns all fabricator_form posts as model instances. Gated on view_forms (the least-privilege FormFabricator
      * capability for read access) rather than edit_forms — every current call site (FormList.php's and
      * FormSelectList.php's admin listing pages) is already an admin screen gated on view_forms before it ever
      * reaches this method, so this mirrors that without narrowing legitimate access.
@@ -198,12 +198,12 @@ class FormModel
      */
     public static function getAll(): array
     {
-        if (!\ForgeForms\Plugin::userCan('view_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('view_forms')) {
             return [];
         }
         $posts = get_posts(
             [
-            'post_type'      => 'forge_form',
+            'post_type'      => 'fabricator_form',
             'posts_per_page' => -1,
             'post_status'    => 'publish',
             'orderby'        => 'title',
@@ -220,9 +220,9 @@ class FormModel
             $m                = new self();
             $m->id            = $post->ID;
             $m->title         = $post->post_title;
-            $m->fields        = self::decodeMeta($post->ID, 'forge_form_fields');
-            $m->notifications = self::decodeMeta($post->ID, 'forge_form_notifications');
-            $m->settings      = self::decodeMeta($post->ID, 'forge_form_settings');
+            $m->fields        = self::decodeMeta($post->ID, 'fabricator_form_fields');
+            $m->notifications = self::decodeMeta($post->ID, 'fabricator_form_notifications');
+            $m->settings      = self::decodeMeta($post->ID, 'fabricator_form_settings');
             $models[]         = $m;
         }
         return $models;
@@ -251,7 +251,7 @@ class FormModel
     /**
      * CSRF backstop for save()/duplicate()/delete(). Every current admin call site (FormEditor.php,
      * FormList.php) already performs its own, more specific nonce check — a per-form action like
-     * 'forge_forms_delete_{id}', or the shared 'forge_forms_admin_nonce' for save/import — before calling
+     * 'fabricator_forms_delete_{id}', or the shared 'fabricator_forms_admin_nonce' for save/import — before calling
      * into this model, and passes $nonce_verified: true to acknowledge that so this method is a no-op for
      * them. If a future (or forgotten) call site omits $nonce_verified, this falls back to checking the
      * shared admin AJAX nonce so the request is never silently accepted without any CSRF check at all.
@@ -264,6 +264,6 @@ class FormModel
         if ($nonce_verified) {
             return true;
         }
-        return (bool) check_ajax_referer('forge_forms_admin_nonce', 'nonce', false);
+        return (bool) check_ajax_referer('fabricator_forms_admin_nonce', 'nonce', false);
     }
 }

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -70,7 +70,7 @@ defined('ABSPATH') || exit;
  *   Drop the file in includes/Fields/ — Plugin.php auto-discovers it via getType().
  *   That's a complete, working field. Treat inputAttrs() and wrap() as black
  *   boxes for now — they generate the standard input attributes and the
- *   outer .forge-field wrapper (label, description, error placeholder).
+ *   outer .fabricator-field wrapper (label, description, error placeholder).
  *   Every simple text-like field follows this exact pattern. BaseField
  *   already handles the required check, the default map() → string, and a
  *   plain-text PDF row — so the four methods above are all a simple field needs.
@@ -234,7 +234,7 @@ class ExampleField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         // ── Simple single input ──────────────────────────────────────────
-        // inputAttrs() builds: id, name, class="forge-input", placeholder,
+        // inputAttrs() builds: id, name, class="fabricator-input", placeholder,
         // required + aria-required. Pass extra HTML attributes as 4th array.
         $attrs = $this->inputAttrs(
             $config,
@@ -246,7 +246,7 @@ class ExampleField extends BaseField
             ]
         );
 
-        // wrap() adds the outer .forge-field div, label, description, error placeholder,
+        // wrap() adds the outer .fabricator-field div, label, description, error placeholder,
         // required class/asterisk, and data-validate attribute automatically.
         // Almost every field should call wrap() — do not reproduce those pieces manually.
         return $this->wrap($field_id, $config, '<input' . $attrs . '>');
@@ -261,7 +261,7 @@ class ExampleField extends BaseField
      *
      * Rules:
      *  • Put `required` HTML attr on each individual <input>/<select>
-     *  • Add a .forge-field-error.forge-sub-error div after each input
+     *  • Add a .fabricator-field-error.fabricator-sub-error div after each input
      *    (front.js will write the error message there)
      *  • Add $req_star so the label shows a red *
      *  • Pass $wrapper_config with required=false to wrap() so the
@@ -269,7 +269,7 @@ class ExampleField extends BaseField
      */
     private function exampleRenderComposite(array $config, string $field_id): string
     {
-        $inner = '<div class="forge-example-group">';
+        $inner = '<div class="fabricator-example-group">';
         foreach (['part_a', 'part_b'] as $k) {
             $label = esc_html($config[$k . '_label'] ?? $k);
 
@@ -277,13 +277,13 @@ class ExampleField extends BaseField
             $req_star = '';
             if (!empty($config[$k . '_required'])) {
                 $req      = ' required aria-required="true"';
-                $req_star = ' <span class="forge-required" aria-hidden="true">*</span>';
+                $req_star = ' <span class="fabricator-required" aria-hidden="true">*</span>';
             }
 
-            $inner .= '<div class="forge-example-sub">';
-            $inner .= '<label class="forge-sub-label">' . $label . $req_star . '</label>';
-            $inner .= '<input type="text" name="' . esc_attr($field_id) . '[' . $k . ']" class="forge-input"' . $req . '>';
-            $inner .= '<div class="forge-field-error forge-sub-error"></div>';
+            $inner .= '<div class="fabricator-example-sub">';
+            $inner .= '<label class="fabricator-sub-label">' . $label . $req_star . '</label>';
+            $inner .= '<input type="text" name="' . esc_attr($field_id) . '[' . $k . ']" class="fabricator-input"' . $req . '>';
+            $inner .= '<div class="fabricator-field-error fabricator-sub-error"></div>';
             $inner .= '</div>';
         }
         $inner .= '</div>';
@@ -298,7 +298,7 @@ class ExampleField extends BaseField
     // ═══════════════════════════════════════════════════════
     //
     //  Return a raw CSS string (no <style> tags). Assets::enqueueFront() collects all non-empty getStyles() returns
-    //  and emits them as a single wp_add_inline_style call after front.css loads, so CSS variables and the .forge-input base rules are already defined and available here.
+    //  and emits them as a single wp_add_inline_style call after front.css loads, so CSS variables and the .fabricator-input base rules are already defined and available here.
     //
     //  Use a nowdoc (<<<'CSS' ... CSS) so the content is literal — no PHP
     //  variable expansion, no accidental escaping of $ or \.
@@ -323,16 +323,16 @@ class ExampleField extends BaseField
     private function exampleStylesComposite(): string
     {
         return <<<'CSS'
-        .forge-example-group {
+        .fabricator-example-group {
             display: flex;
             gap: 10px;
         }
-        .forge-example-sub {
+        .fabricator-example-sub {
             flex: 1;
             min-width: 100px;
         }
         @media (max-width: 600px) {
-            .forge-example-group { flex-direction: column; }
+            .fabricator-example-group { flex-direction: column; }
         }
         CSS;
     }
@@ -475,8 +475,8 @@ class ExampleField extends BaseField
     //
     //  Do NOT return raw German strings — always wrap in __('English source', 'formfabricator').
     //  JS strings inside heredocs cannot use __() directly; add them to Assets::enqueueFront()
-    //  under ForgeForms.i18n and read them as:
-    //    (window.ForgeForms && window.ForgeForms.i18n && window.ForgeForms.i18n.MY_KEY) || 'English fallback'
+    //  under FabricatorForms.i18n and read them as:
+    //    (window.FabricatorForms && window.FabricatorForms.i18n && window.FabricatorForms.i18n.MY_KEY) || 'English fallback'
     //
     //  Override mapNormalized() only when your field needs any of:
     //    • Multiple output entries  (SepaField expands to IBAN + BIC + Kontoinhaber + sig)
@@ -532,16 +532,16 @@ class ExampleField extends BaseField
     // ═══════════════════════════════════════════════════════
     //
     //  Return a JS function string: function(root) { ... }
-    //  Assets::enqueueFront() collects these into window.ForgeFieldInits keyed by field type. front.js calls each with the container root element — no field-specific knowledge lives in front.js.
+    //  Assets::enqueueFront() collects these into window.FabricatorFieldInits keyed by field type. front.js calls each with the container root element — no field-specific knowledge lives in front.js.
     //
     //  Use querySelectorAll / addEventListener directly. The on() helper in front.js is scoped to its IIFE and is NOT available here.
     //
     //  Return '' (default) when no client-side init is needed.
     //
-    //  forge:upload-overflow — front.js dispatches this custom event on the <form> element
-    //  during pre-submit validation when the sum of data-forge-file-count attributes across
+    //  fabricator:upload-overflow — front.js dispatches this custom event on the <form> element
+    //  during pre-submit validation when the sum of data-fabricator-file-count attributes across
     //  all file-upload zones exceeds PHP's max_file_uploads limit. The event detail carries
-    //  { total, max }. If your field reports a file count via data-forge-file-count it will
+    //  { total, max }. If your field reports a file count via data-fabricator-file-count it will
     //  be included in this sum — listen for the event to show a user-visible error.
     //  See UploadField::getClientInit() for a full usage example.
 
@@ -563,7 +563,7 @@ class ExampleField extends BaseField
     {
         return <<<'JS'
         function (root) {
-            root.querySelectorAll('.forge-example-widget').forEach(function (widget) {
+            root.querySelectorAll('.fabricator-example-widget').forEach(function (widget) {
                 widget.addEventListener('click', function () {
                     // ... interaction logic
                 });
@@ -588,7 +588,7 @@ class ExampleField extends BaseField
     //    and a 'fn' key (JS function string). Return [] if no format check is needed.
     //
     //  Both are collected by Assets::enqueueFront() and injected as
-    //  window.ForgeEmptyChecks / window.ForgeValidators before front.js loads.
+    //  window.FabricatorEmptyChecks / window.FabricatorValidators before front.js loads.
     //  front.js is a pure runner — zero field-specific logic lives there.
 
     /**
@@ -625,12 +625,12 @@ class ExampleField extends BaseField
      * would return this instead of [].
      *
      * Rule keys must be globally unique — prefix with the field type if unsure.
-     * The function receives the outer .forge-field wrapper element, not the input.
+     * The function receives the outer .fabricator-field wrapper element, not the input.
      * Return null = valid, return string = error message shown below the field.
      *
      * Note the i18n lookup below — per the "Do NOT return raw German strings" rule
      * in the MAP section above, JS-side error text must read from
-     * window.ForgeForms.i18n (registered in Assets::enqueueFront()) with an
+     * window.FabricatorForms.i18n (registered in Assets::enqueueFront()) with an
      * English literal as the fallback, not a bare hardcoded string.
      */
     private function exampleClientValidationZip(): array
@@ -640,7 +640,7 @@ class ExampleField extends BaseField
                 var inp = fieldEl.querySelector('input');
                 if (!inp || !inp.value.trim()) return null;
                 if (/^\d{5}$/.test(inp.value.trim())) return null;
-                var _i18n = window.ForgeForms && window.ForgeForms.i18n;
+                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                 return (_i18n && _i18n.example_zip_invalid) || 'Please enter a five-digit number.';
             }
             JS]];
@@ -707,7 +707,7 @@ class ExampleField extends BaseField
     // ═══════════════════════════════════════════════════════
     //
     //  Return true for fields that carry no user input and should never be evaluated by validatePage() — e.g. PageBreakField, HtmlField.
-    //  Assets::enqueueFront() collects these into window.ForgeSkipValidation. Default (BaseField): false. Almost every field should leave this alone.
+    //  Assets::enqueueFront() collects these into window.FabricatorSkipValidation. Default (BaseField): false. Almost every field should leave this alone.
     //  FormProcessor also checks skipValidation() — returning true skips both server-side validation and value extraction for the field.
 
     /** EXAMPLE (unused) — would replace the inherited BaseField::skipValidation(). */
@@ -805,7 +805,7 @@ class ExampleField extends BaseField
     /** EXAMPLE (unused) — would replace the inherited BaseField::enqueueFrontScripts(). */
     private function exampleEnqueueFrontScripts(): void
     {
-        wp_enqueue_script('my-lib', 'https://example.com/lib.js', [], FORGE_FORMS_VERSION, true);
+        wp_enqueue_script('my-lib', 'https://example.com/lib.js', [], FABRICATOR_FORMS_VERSION, true);
     }
 
 

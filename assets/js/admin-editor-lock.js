@@ -5,25 +5,25 @@
  */
 (function ($) {
     'use strict';
-    var data = window.ForgeEditorLock;
+    var data = window.FabricatorEditorLock;
     if (!data || !data.formId || !$ || !$.fn || !$(document).on) { return; }
 
     $(document).on('heartbeat-send', function (e, hbData) {
-        hbData.forge_forms_lock = data.formId;
+        hbData.fabricator_forms_lock = data.formId;
     });
     $(document).on('heartbeat-tick', function (e, hbData) {
-        if (!hbData.forge_forms_lock_conflict) { return; }
-        var msg = (data.i18n.lockConflict || '').replace('%s', hbData.forge_forms_lock_conflict);
-        var notice = document.getElementById('forge-lock-notice');
+        if (!hbData.fabricator_forms_lock_conflict) { return; }
+        var msg = (data.i18n.lockConflict || '').replace('%s', hbData.fabricator_forms_lock_conflict);
+        var notice = document.getElementById('fabricator-lock-notice');
         if (notice) {
             notice.textContent = msg;
             notice.style.display = '';
         } else {
-            var status = document.getElementById('forge-save-status');
+            var status = document.getElementById('fabricator-save-status');
             if (status && status.parentNode) {
                 var span = document.createElement('span');
-                span.id = 'forge-lock-notice';
-                span.className = 'forge-ss--err';
+                span.id = 'fabricator-lock-notice';
+                span.className = 'fabricator-ss--err';
                 span.textContent = msg;
                 status.parentNode.insertBefore(span, status.nextSibling);
             }
@@ -34,7 +34,7 @@
     window.addEventListener('pagehide', function () {
         if (!navigator.sendBeacon) { return; }
         var body = new URLSearchParams({
-            action: 'forge_forms_unlock_form',
+            action: 'fabricator_forms_unlock_form',
             nonce: data.nonce,
             form_id: String(data.formId)
         });

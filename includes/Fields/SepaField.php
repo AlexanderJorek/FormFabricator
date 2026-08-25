@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -53,13 +53,13 @@ class SepaField extends BaseField
                 'rule' => 'iban',
                 'fn'   => <<<'JS'
                 function (fieldEl) {
-                    var inp = fieldEl.querySelector('.forge-sepa-iban');
+                    var inp = fieldEl.querySelector('.fabricator-sepa-iban');
                     if (!inp) return null;
                     var raw = inp.value.replace(/[^A-Za-z0-9]/g, '');
                     if (!raw) return null;
-                    var _i18n = window.ForgeForms && window.ForgeForms.i18n;
-                    if (inp._forgeIbanInvalid) return (_i18n && _i18n.sepa_iban_invalid)    || 'Invalid IBAN (check digit incorrect).';
-                    if (!inp._forgeIbanValid)  return (_i18n && _i18n.sepa_iban_incomplete) || 'Please enter a complete and valid IBAN.';
+                    var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
+                    if (inp._fabricatorIbanInvalid) return (_i18n && _i18n.sepa_iban_invalid)    || 'Invalid IBAN (check digit incorrect).';
+                    if (!inp._fabricatorIbanValid)  return (_i18n && _i18n.sepa_iban_incomplete) || 'Please enter a complete and valid IBAN.';
                     return null;
                 }
                 JS,
@@ -68,11 +68,11 @@ class SepaField extends BaseField
                 'rule' => 'sepa-bic',
                 'fn'   => <<<'JS'
                 function (fieldEl) {
-                    var bic = fieldEl.querySelector('.forge-sepa-bic');
+                    var bic = fieldEl.querySelector('.fabricator-sepa-bic');
                     if (!bic || !bic.value.trim()) return null;
-                    var bicErr = bic.parentNode.querySelector('.forge-field-error');
+                    var bicErr = bic.parentNode.querySelector('.fabricator-field-error');
                     if (/^[A-Za-z]{6}[A-Za-z0-9]{2}([A-Za-z0-9]{3})?$/.test(bic.value.trim())) return null;
-                    var _i18nB = window.ForgeForms && window.ForgeForms.i18n;
+                    var _i18nB = window.FabricatorForms && window.FabricatorForms.i18n;
                     if (bicErr && !bicErr.textContent) bicErr.textContent = (_i18nB && _i18nB.sepa_bic_invalid) || 'Please enter a valid BIC.';
                     return '​';
                 }
@@ -84,32 +84,32 @@ class SepaField extends BaseField
                 function (fieldEl) {
                     if (fieldEl.dataset.required !== 'true') return null;
                     var missing = false;
-                    var iban = fieldEl.querySelector('.forge-sepa-iban');
-                    var ibanErr = iban ? iban.parentNode.querySelector('.forge-field-error') : null;
+                    var iban = fieldEl.querySelector('.fabricator-sepa-iban');
+                    var ibanErr = iban ? iban.parentNode.querySelector('.fabricator-field-error') : null;
                     if (iban && !iban.value.replace(/[^A-Za-z0-9]/g, '')) {
-                        var _i18nR = window.ForgeForms && window.ForgeForms.i18n;
+                        var _i18nR = window.FabricatorForms && window.FabricatorForms.i18n;
                         if (ibanErr && !ibanErr.textContent) ibanErr.textContent = (_i18nR && _i18nR.sepa_iban_required) || 'IBAN is required.';
                         missing = true;
                     }
-                    var bic = fieldEl.querySelector('.forge-sepa-bic');
-                    var bicErr = bic ? bic.parentNode.querySelector('.forge-field-error') : null;
+                    var bic = fieldEl.querySelector('.fabricator-sepa-bic');
+                    var bicErr = bic ? bic.parentNode.querySelector('.fabricator-field-error') : null;
                     if (bic && !bic.value.trim()) {
-                        var _i18nBr = window.ForgeForms && window.ForgeForms.i18n;
+                        var _i18nBr = window.FabricatorForms && window.FabricatorForms.i18n;
                         if (bicErr && !bicErr.textContent) bicErr.textContent = (_i18nBr && _i18nBr.sepa_bic_required) || 'BIC is required.';
                         missing = true;
                     }
-                    var holder = fieldEl.querySelector('.forge-sepa-holder');
-                    var holderErr = holder ? holder.parentNode.querySelector('.forge-field-error') : null;
+                    var holder = fieldEl.querySelector('.fabricator-sepa-holder');
+                    var holderErr = holder ? holder.parentNode.querySelector('.fabricator-field-error') : null;
                     if (holder && !holder.value.trim()) {
-                        var _i18nH = window.ForgeForms && window.ForgeForms.i18n;
+                        var _i18nH = window.FabricatorForms && window.FabricatorForms.i18n;
                         if (holderErr && !holderErr.textContent)
                             holderErr.textContent = (_i18nH && _i18nH.sepa_holder_required) || 'Account holder is required.';
                         missing = true;
                     }
-                    var sig = fieldEl.querySelector('.forge-sepa-sig-data');
-                    var sigErr = fieldEl.querySelector('.forge-sepa-sig-error');
+                    var sig = fieldEl.querySelector('.fabricator-sepa-sig-data');
+                    var sigErr = fieldEl.querySelector('.fabricator-sepa-sig-error');
                     if (sig && !sig.value) {
-                        var _i18nSig = window.ForgeForms && window.ForgeForms.i18n;
+                        var _i18nSig = window.FabricatorForms && window.FabricatorForms.i18n;
                         if (sigErr && !sigErr.textContent) sigErr.textContent = (_i18nSig && _i18nSig.sepa_sig_required) || 'Please sign.';
                         missing = true;
                     }
@@ -128,38 +128,38 @@ class SepaField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-field--sepa {
-    border: 1px solid var(--forge-border);
-    border-radius: var(--forge-radius);
+.fabricator-field--sepa {
+    border: 1px solid var(--fabricator-border);
+    border-radius: var(--fabricator-radius);
     padding: 24px;
     margin-bottom: 24px;
-    background: var(--forge-bg);
+    background: var(--fabricator-bg);
 }
-.forge-sepa-title { font-size: 16px; font-weight: 700; margin: 0 0 14px; color: var(--forge-text); }
-.forge-sepa-text { font-size: 14px; line-height: 1.65; color: var(--forge-text); margin-bottom: 10px; }
-.forge-sepa-note { font-size: 12px; color: var(--forge-text-muted); margin-bottom: 20px; line-height: 1.55; }
-.forge-sepa-lookup-notice { font-size: 11px; color: var(--forge-text-muted); margin: 4px 0 0; line-height: 1.4; }
-.forge-sepa-creditor {
-    background: var(--forge-bg-subtle);
-    border: 1px solid var(--forge-border);
+.fabricator-sepa-title { font-size: 16px; font-weight: 700; margin: 0 0 14px; color: var(--fabricator-text); }
+.fabricator-sepa-text { font-size: 14px; line-height: 1.65; color: var(--fabricator-text); margin-bottom: 10px; }
+.fabricator-sepa-note { font-size: 12px; color: var(--fabricator-text-muted); margin-bottom: 20px; line-height: 1.55; }
+.fabricator-sepa-lookup-notice { font-size: 11px; color: var(--fabricator-text-muted); margin: 4px 0 0; line-height: 1.4; }
+.fabricator-sepa-creditor {
+    background: var(--fabricator-bg-subtle);
+    border: 1px solid var(--fabricator-border);
     padding: 10px 14px;
-    border-radius: var(--forge-radius-sm);
+    border-radius: var(--fabricator-radius-sm);
     font-size: 13px;
-    color: var(--forge-text-muted);
+    color: var(--fabricator-text-muted);
     margin-bottom: 20px;
     line-height: 1.6;
 }
-.forge-sepa-creditor p { margin: 1px 0; }
-.forge-field-inner { margin-bottom: 14px; }
-.forge-sepa-signatures { display: flex; flex-direction: column; gap: 20px; margin-top: 20px; }
-.forge-sepa-dual-sig { flex-direction: row; flex-wrap: wrap; gap: 16px; }
-.forge-sepa-dual-sig .forge-sepa-sig-block { flex: 1; min-width: 240px; }
-.forge-sepa-sig-block { display: flex; flex-direction: column; gap: 0; }
-.forge-sepa-sig-label { font-size: 13px; font-weight: 600; margin: 0 !important; color: var(--forge-text); }
-.forge-sepa-iban { font-family: monospace; letter-spacing: 1px; font-size: 15px; }
+.fabricator-sepa-creditor p { margin: 1px 0; }
+.fabricator-field-inner { margin-bottom: 14px; }
+.fabricator-sepa-signatures { display: flex; flex-direction: column; gap: 20px; margin-top: 20px; }
+.fabricator-sepa-dual-sig { flex-direction: row; flex-wrap: wrap; gap: 16px; }
+.fabricator-sepa-dual-sig .fabricator-sepa-sig-block { flex: 1; min-width: 240px; }
+.fabricator-sepa-sig-block { display: flex; flex-direction: column; gap: 0; }
+.fabricator-sepa-sig-label { font-size: 13px; font-weight: 600; margin: 0 !important; color: var(--fabricator-text); }
+.fabricator-sepa-iban { font-family: monospace; letter-spacing: 1px; font-size: 15px; }
 @media (max-width: 600px) {
-    .forge-sepa-dual-sig { flex-direction: column; }
-    .forge-field--sepa { padding: 16px; }
+    .fabricator-sepa-dual-sig { flex-direction: column; }
+    .fabricator-field--sepa { padding: 16px; }
 }
 CSS;
     }
@@ -220,14 +220,14 @@ CSS;
                 }
                 return out;
             }
-            root.querySelectorAll('.forge-sepa-iban').forEach(function (input) {
-                if (input._forgeIbanInited) return;
-                input._forgeIbanInited = true;
+            root.querySelectorAll('.fabricator-sepa-iban').forEach(function (input) {
+                if (input._fabricatorIbanInited) return;
+                input._fabricatorIbanInited = true;
                 var filterMode  = input.dataset.countryFilter || 'off';
                 var filterList  = input.dataset.countryList
                     ? input.dataset.countryList.toUpperCase().split(',') : [];
                 var defaultCc   = (input.dataset.placeholderCountry || 'DE').toUpperCase();
-                var errorEl     = input.parentNode.querySelector('.forge-field-error');
+                var errorEl     = input.parentNode.querySelector('.fabricator-field-error');
                 var lastValidCc = IBAN_LEN[defaultCc] ? defaultCc : 'DE';
                 input.placeholder = ibanTemplate(lastValidCc);
                 function countryAllowed(cc) {
@@ -237,12 +237,29 @@ CSS;
                     if (filterMode === 'disallow') return !inList;
                     return true;
                 }
-                var noticeEl = input.parentNode.querySelector('.forge-field-hint');
+                var noticeEl = input.parentNode.querySelector('.fabricator-field-hint');
                 function showError(msg)       { if (errorEl)  errorEl.textContent  = msg; }
                 function showIbanNotice(msg)  { if (noticeEl) noticeEl.textContent = msg; }
                 function getBicInput() {
-                    var field = input.closest('.forge-field--sepa');
-                    return field ? field.querySelector('.forge-sepa-bic') : null;
+                    var field = input.closest('.fabricator-field--sepa');
+                    return field ? field.querySelector('.fabricator-sepa-bic') : null;
+                }
+                // Mirrors PHP SepaField::ibanChecksumValid() — moves country+check-digits to the
+                // end, converts letters to numbers (A=10..Z=35), then requires mod 97 == 1. Runs
+                // client-side regardless of live_iban_lookup so the field can validate locally
+                // when the (opt-in, GDPR-gated) openiban.com lookup is disabled.
+                function ibanChecksumValid(iban) {
+                    var rearranged = iban.substring(4) + iban.substring(0, 4);
+                    var numeric = '';
+                    for (var i = 0; i < rearranged.length; i++) {
+                        var ch = rearranged.charAt(i);
+                        numeric += /[A-Z]/.test(ch) ? String(ch.charCodeAt(0) - 55) : ch;
+                    }
+                    var remainder = 0;
+                    for (var pos = 0; pos < numeric.length; pos += 7) {
+                        remainder = Number(String(remainder) + numeric.substring(pos, pos + 7)) % 97;
+                    }
+                    return remainder === 1;
                 }
                 var bicManuallyEntered = false;
                 function lookupBic(iban) {
@@ -250,20 +267,20 @@ CSS;
                     if (input.dataset.liveLookup === '0') return;
                     var bicInput = getBicInput();
                     if (!bicInput) return;
-                    var ajaxUrl = (window.ForgeForms && window.ForgeForms.ajaxUrl) || '';
+                    var ajaxUrl = (window.FabricatorForms && window.FabricatorForms.ajaxUrl) || '';
                     if (!ajaxUrl) return;
                     bicInput.value    = '';
                     bicInput.disabled = true;
                     var dots = 0;
                     var dotTimer = setInterval(function () {
                         dots = (dots + 1) % 4;
-                        var _i18nLu = window.ForgeForms && window.ForgeForms.i18n;
+                        var _i18nLu = window.FabricatorForms && window.FabricatorForms.i18n;
                         bicInput.placeholder = ((_i18nLu && _i18nLu.sepa_looking_up) || 'Looking up') + '.'.repeat(dots);
                     }, 400);
                     var body = new FormData();
-                    body.append('action', 'forge_iban_bic');
+                    body.append('action', 'fabricator_iban_bic');
                     body.append('iban', iban);
-                    body.append('nonce', (window.ForgeForms && window.ForgeForms.ibanBicNonce) || '');
+                    body.append('nonce', (window.FabricatorForms && window.FabricatorForms.ibanBicNonce) || '');
                     fetch(ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
                         .then(function (r) { return r.json(); })
                         .then(function (res) {
@@ -272,18 +289,18 @@ CSS;
                             bicInput.placeholder = 'XXXXXXXXXXX';
                             var d = res.data || {};
                             if (!d.valid) {
-                                input._forgeIbanValid   = false;
-                                input._forgeIbanInvalid = true;
-                                var _i18nIi = window.ForgeForms && window.ForgeForms.i18n;
+                                input._fabricatorIbanValid   = false;
+                                input._fabricatorIbanInvalid = true;
+                                var _i18nIi = window.FabricatorForms && window.FabricatorForms.i18n;
                                 showError((_i18nIi && _i18nIi.sepa_iban_invalid) || 'Invalid IBAN (check digit incorrect).');
                             } else {
-                                input._forgeIbanValid   = true;
-                                input._forgeIbanInvalid = false;
+                                input._fabricatorIbanValid   = true;
+                                input._fabricatorIbanInvalid = false;
                                 showError('');
                                 if (d.bic && !bicManuallyEntered) {
                                     bicInput.value = d.bic;
                                 } else if (!d.bankCodeFound) {
-                                    var _i18nUv = window.ForgeForms && window.ForgeForms.i18n;
+                                    var _i18nUv = window.FabricatorForms && window.FabricatorForms.i18n;
                                     showIbanNotice((_i18nUv && _i18nUv.sepa_iban_unvalidated) || 'Could not be validated.');
                                 }
                             }
@@ -300,13 +317,13 @@ CSS;
                 }
                 function getRaw() { return input.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase(); }
                 input.addEventListener('input', function () {
-                    input._forgeIbanValid   = false;
-                    input._forgeIbanInvalid = false;
+                    input._fabricatorIbanValid   = false;
+                    input._fabricatorIbanInvalid = false;
                     var raw = getRaw();
                     var cc  = raw.substring(0, 2);
                     if (cc.length === 2 && IBAN_LEN[cc]) {
                         if (countryAllowed(cc)) { lastValidCc = cc; showError(''); showIbanNotice(''); }
-                        else { var _i18nCb = window.ForgeForms && window.ForgeForms.i18n; showError((_i18nCb && _i18nCb.sepa_country_blocked) || 'This country is not allowed.'); }
+                        else { var _i18nCb = window.FabricatorForms && window.FabricatorForms.i18n; showError((_i18nCb && _i18nCb.sepa_country_blocked) || 'This country is not allowed.'); }
                     } else { showError(''); showIbanNotice(''); }
                     this.placeholder = ibanTemplate(lastValidCc);
                     var maxLen = IBAN_LEN[cc] || 34;
@@ -319,6 +336,16 @@ CSS;
                     }
                     this.value = out;
                     if (cc.length === 2 && IBAN_LEN[cc] && raw.length === IBAN_LEN[cc] && countryAllowed(cc)) {
+                        if (ibanChecksumValid(raw)) {
+                            input._fabricatorIbanValid   = true;
+                            input._fabricatorIbanInvalid = false;
+                            showError('');
+                        } else {
+                            input._fabricatorIbanValid   = false;
+                            input._fabricatorIbanInvalid = true;
+                            var _i18nCk = window.FabricatorForms && window.FabricatorForms.i18n;
+                            showError((_i18nCk && _i18nCk.sepa_iban_invalid) || 'Invalid IBAN (check digit incorrect).');
+                        }
                         lookupBic(raw);
                     }
                 });
@@ -333,23 +360,23 @@ CSS;
                     }
                 });
             });
-            root.querySelectorAll('.forge-sepa-bic').forEach(function (input) {
-                if (input._forgeBicInited) return;
-                input._forgeBicInited = true;
+            root.querySelectorAll('.fabricator-sepa-bic').forEach(function (input) {
+                if (input._fabricatorBicInited) return;
+                input._fabricatorBicInited = true;
                 input.addEventListener('input', function () {
                     this.value = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
                 });
             });
             /* Signature canvas init — self-contained so SepaField has no dependency
-               on SignatureField being registered. Sets data-forge-file-count so
+               on SignatureField being registered. Sets data-fabricator-file-count so
                front.js can include SEPA signatures in the total file count. */
-            var sepaSigSel = '.forge-sepa-mandate .forge-signature-wrap';
+            var sepaSigSel = '.fabricator-sepa-mandate .fabricator-signature-wrap';
             root.querySelectorAll(sepaSigSel).forEach(function (wrap) {
-                if (wrap._forgeCanvasInited) return;
-                wrap._forgeCanvasInited = true;
-                var canvas   = wrap.querySelector('.forge-signature-canvas');
+                if (wrap._fabricatorCanvasInited) return;
+                wrap._fabricatorCanvasInited = true;
+                var canvas   = wrap.querySelector('.fabricator-signature-canvas');
                 var input    = wrap.querySelector('input[type="hidden"]');
-                var clearBtn = wrap.querySelector('.forge-signature-clear');
+                var clearBtn = wrap.querySelector('.fabricator-signature-clear');
                 if (!canvas || !input) return;
                 var ctx    = canvas.getContext('2d');
                 var stroke = parseFloat(wrap.dataset.stroke || '2');
@@ -408,7 +435,7 @@ CSS;
                         ctx.fillStyle = '#ffffff';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
                         input.value = '';
-                        wrap.dataset.forgeFileCount = '0';
+                        wrap.dataset.fabricatorFileCount = '0';
                     });
                 }
                 var ownerForm = canvas.closest('form');
@@ -468,21 +495,21 @@ CSS;
         $holder_val = esc_attr($val['holder'] ?? '');
 
         $rules = array_column($this->getClientValidation(), 'rule');
-        $html  = '<div class="forge-field forge-field--sepa" data-field-id="' . esc_attr($field_id) . '"'
+        $html  = '<div class="fabricator-field fabricator-field--sepa" data-field-id="' . esc_attr($field_id) . '"'
             . $req_attr . ' data-validate="' . esc_attr(wp_json_encode($rules)) . '">';
-        $html .= '<div class="forge-sepa-mandate">';
-        $html .= '<h3 class="forge-sepa-title">' . $mandate_title . '</h3>';
-        $html .= '<div class="forge-sepa-text">' . $mandate_text . '</div>';
+        $html .= '<div class="fabricator-sepa-mandate">';
+        $html .= '<h3 class="fabricator-sepa-title">' . $mandate_title . '</h3>';
+        $html .= '<div class="fabricator-sepa-text">' . $mandate_text . '</div>';
 
         if ($mandate_note !== '') {
-            $html .= '<p class="forge-sepa-note">' . $mandate_note . '</p>';
+            $html .= '<p class="fabricator-sepa-note">' . $mandate_note . '</p>';
         }
 
         /* ---- IBAN ---- */
-        $html .= '<div class="forge-field-inner">';
-        $html .= '<label class="forge-label" for="' . esc_attr($field_id) . '-iban">' . $iban_label;
+        $html .= '<div class="fabricator-field-inner">';
+        $html .= '<label class="fabricator-label" for="' . esc_attr($field_id) . '-iban">' . $iban_label;
         if (!empty($config['required'])) {
-            $html .= ' <span class="forge-required" aria-hidden="true">*</span>';
+            $html .= ' <span class="fabricator-required" aria-hidden="true">*</span>';
         }
         $html .= '</label>';
         // live_iban_lookup defaults to false (opt-in, GDPR). When enabled, the BIC
@@ -492,60 +519,60 @@ CSS;
         $live_lookup = isset($config['live_iban_lookup']) && !empty($config['live_iban_lookup']);
         $html .= '<input type="text" id="' . esc_attr($field_id) . '-iban"'
             . ' name="' . esc_attr($field_id) . '[iban]"'
-            . ' class="forge-input forge-sepa-iban"'
+            . ' class="fabricator-input fabricator-sepa-iban"'
             . ' maxlength="42" autocomplete="off"'
             . ' inputmode="text" spellcheck="false"'
             . ' data-placeholder-country="' . $placeholder_cc . '"'
             . ' data-live-lookup="' . ($live_lookup ? '1' : '0') . '"'
             . $filter_attr
             . ' value="' . $iban_val . '">';
-        $html .= '<div class="forge-field-hint"></div>';
+        $html .= '<div class="fabricator-field-hint"></div>';
         if ($live_lookup) {
             // GDPR Art. 13 transparency: live_iban_lookup sends the IBAN to the
             // third-party openiban.com service as soon as it's fully typed, before
             // submission — disclose this to the visitor, not just the admin
             // configuring the field.
-            $html .= '<p class="forge-sepa-lookup-notice">'
+            $html .= '<p class="fabricator-sepa-lookup-notice">'
                 . esc_html__(
                     'Your IBAN is sent to a third-party service (openiban.com) to look up the BIC.',
                     'formfabricator'
                 ) . '</p>';
         }
-        $html .= '<div class="forge-field-error" id="' . esc_attr($field_id) . '-iban-error" role="alert"></div>';
+        $html .= '<div class="fabricator-field-error" id="' . esc_attr($field_id) . '-iban-error" role="alert"></div>';
         $html .= '</div>';
 
         /* ---- BIC ---- */
-        $html .= '<div class="forge-field-inner">';
-        $html .= '<label class="forge-label" for="' . esc_attr($field_id) . '-bic">' . $bic_label;
+        $html .= '<div class="fabricator-field-inner">';
+        $html .= '<label class="fabricator-label" for="' . esc_attr($field_id) . '-bic">' . $bic_label;
         if (!empty($config['required'])) {
-            $html .= ' <span class="forge-required" aria-hidden="true">*</span>';
+            $html .= ' <span class="fabricator-required" aria-hidden="true">*</span>';
         }
         $html .= '</label>';
         $html .= '<input type="text" id="' . esc_attr($field_id) . '-bic"'
             . ' name="' . esc_attr($field_id) . '[bic]"'
-            . ' class="forge-input forge-sepa-bic"'
+            . ' class="fabricator-input fabricator-sepa-bic"'
             . ' placeholder="XXXXXXXXXXX" maxlength="11" autocomplete="off"'
             . ' value="' . $bic_val . '">';
-        $html .= '<div class="forge-field-error" id="' . esc_attr($field_id) . '-bic-error" role="alert"></div>';
+        $html .= '<div class="fabricator-field-error" id="' . esc_attr($field_id) . '-bic-error" role="alert"></div>';
         $html .= '</div>';
 
         /* ---- Kontoinhaber ---- */
-        $html .= '<div class="forge-field-inner">';
-        $html .= '<label class="forge-label" for="' . esc_attr($field_id) . '-holder">' . $holder_label;
+        $html .= '<div class="fabricator-field-inner">';
+        $html .= '<label class="fabricator-label" for="' . esc_attr($field_id) . '-holder">' . $holder_label;
         if (!empty($config['required'])) {
-            $html .= ' <span class="forge-required" aria-hidden="true">*</span>';
+            $html .= ' <span class="fabricator-required" aria-hidden="true">*</span>';
         }
         $html .= '</label>';
         $html .= '<input type="text" id="' . esc_attr($field_id) . '-holder"'
             . ' name="' . esc_attr($field_id) . '[holder]"'
-            . ' class="forge-input forge-sepa-holder" autocomplete="off"'
+            . ' class="fabricator-input fabricator-sepa-holder" autocomplete="off"'
             . ' value="' . $holder_val . '">';
-        $html .= '<div class="forge-field-error" id="' . esc_attr($field_id) . '-holder-error" role="alert"></div>';
+        $html .= '<div class="fabricator-field-error" id="' . esc_attr($field_id) . '-holder-error" role="alert"></div>';
         $html .= '</div>';
 
         /* ---- Static creditor info ---- */
         if ($creditor_id !== '' || $mandate_ref !== '') {
-            $html .= '<div class="forge-sepa-creditor">';
+            $html .= '<div class="fabricator-sepa-creditor">';
             if ($creditor_id !== '') {
                 $html .= '<p>' . esc_html__('Creditor identification number:', 'formfabricator') . ' ' . $creditor_id . '</p>';
             }
@@ -559,26 +586,26 @@ CSS;
         $canvas_id     = esc_attr($field_id) . '-sig-canvas';
         $canvas_height = (int)($config['canvas_height'] ?? 200);
         $stroke_width  = (float)($config['stroke_width'] ?? 2);
-        $html .= '<div class="forge-sepa-signatures">';
-        $html .= '<div class="forge-sepa-sig-block">';
-        $html .= '<div class="forge-sepa-sig-label">' . $sig_label;
+        $html .= '<div class="fabricator-sepa-signatures">';
+        $html .= '<div class="fabricator-sepa-sig-block">';
+        $html .= '<div class="fabricator-sepa-sig-label">' . $sig_label;
         if (!empty($config['required'])) {
-            $html .= ' <span class="forge-required" aria-hidden="true">*</span>';
+            $html .= ' <span class="fabricator-required" aria-hidden="true">*</span>';
         }
         $html .= '</div>';
-        $html .= '<div class="forge-signature-wrap"'
+        $html .= '<div class="fabricator-signature-wrap"'
             . ' data-field-id="' . esc_attr($field_id) . '-sig"'
             . (!empty($config['required']) ? ' data-required="true"' : '')
             . ' data-stroke="' . esc_attr((string)$stroke_width) . '">';
-        $html .= '<canvas id="' . $canvas_id . '" class="forge-signature-canvas"'
+        $html .= '<canvas id="' . $canvas_id . '" class="fabricator-signature-canvas"'
             . ' width="400" height="' . $canvas_height . '"'
             . ' style="height:' . $canvas_height . 'px"'
             . ' tabindex="0" aria-label="' . $sig_label . '"></canvas>';
         $html .= '<input type="hidden"'
             . ' name="' . esc_attr($field_id) . '-sig"'
             . ' id="' . esc_attr($field_id) . '-sig-data"'
-            . ' class="forge-sepa-sig-data">';
-        $html .= '<div class="forge-signature-toolbar">';
+            . ' class="fabricator-sepa-sig-data">';
+        $html .= '<div class="fabricator-signature-toolbar">';
         $reset_icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"'
             . ' aria-hidden="true" focusable="false">'
             . '<path d="M125.7 160H176a16 16 0 0 1 0 32H48a16 16 0 0 1-16-16V48a16 16 0 0 1 32 0v68.7'
@@ -586,21 +613,21 @@ CSS;
             . 'C167.7 512 74.4 443.5 38 346a16 16 0 1 1 30-11c31.4 83.7 111.5 141 210 141'
             . ' 123.7 0 224-100.3 224-224S401.7 32 278 32c-78.1 0-145.8 39.4-185.3 99.3z"/>'
             . '</svg>';
-        $html .= '<button type="button" class="forge-signature-clear"'
+        $html .= '<button type="button" class="fabricator-signature-clear"'
             . ' data-canvas="' . $canvas_id . '" title="' . esc_attr__('Clear', 'formfabricator') . '" aria-label="' . esc_attr__('Clear signature', 'formfabricator') . '">'
             . $reset_icon . '</button>';
-        $html .= '<span class="forge-signature-hint">' . esc_html__('Sign here', 'formfabricator') . '</span>';
+        $html .= '<span class="fabricator-signature-hint">' . esc_html__('Sign here', 'formfabricator') . '</span>';
         $html .= '</div>';
         $html .= '</div>';
-        $html .= '<div class="forge-field-error forge-sepa-sig-error"'
+        $html .= '<div class="fabricator-field-error fabricator-sepa-sig-error"'
             . ' id="' . esc_attr($field_id) . '-sig-error" role="alert"></div>';
         $html .= '</div>'; /* sig-block */
         $html .= '</div>'; /* signatures */
 
-        $html .= '<div class="forge-field-error" id="'
+        $html .= '<div class="fabricator-field-error" id="'
             . esc_attr($field_id) . '-error" role="alert" aria-live="polite"></div>';
-        $html .= '</div>'; /* forge-sepa-mandate */
-        $html .= '</div>'; /* forge-field */
+        $html .= '</div>'; /* fabricator-sepa-mandate */
+        $html .= '</div>'; /* fabricator-field */
 
         return $html;
     }

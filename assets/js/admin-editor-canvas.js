@@ -5,11 +5,11 @@
  */
 (function () {
     'use strict';
-    var canvas = document.getElementById('forge-particle-canvas');
+    var canvas = document.getElementById('fabricator-particle-canvas');
     if (!canvas) return;
     var ctx = canvas.getContext('2d');
     var mouse = { x: -9999, y: -9999 };
-    var _ah = getComputedStyle(document.documentElement).getPropertyValue('--forge-admin-accent').trim() || '#2271b1';
+    var _ah = getComputedStyle(document.documentElement).getPropertyValue('--fabricator-admin-accent').trim() || '#2271b1';
     var _rgb = function (h) { return parseInt(h.slice(1, 3), 16) + ',' + parseInt(h.slice(3, 5), 16) + ',' + parseInt(h.slice(5, 7), 16); };
     var DOTS = Math.min(120, Math.max(40, Math.round(window.innerWidth * window.innerHeight / 26000)));
     var LINK = 150, SPEED = 1.0, COLOR = _rgb(_ah);

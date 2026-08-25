@@ -4,7 +4,7 @@
  * @license   GPL-3.0-or-later
  */
             /* move style before flex children so it is not a flex item */
-            #forge-pdf-idle-state {
+            #fabricator-pdf-idle-state {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
@@ -13,8 +13,8 @@
                 min-height: 0;
                 padding: 40px 20px;
             }
-            #forge-pdf-idle-state .forge-pdf-idle-card,
-            #forge-pdf-scan-more-backdrop .forge-pdf-idle-card {
+            #fabricator-pdf-idle-state .fabricator-pdf-idle-card,
+            #fabricator-pdf-scan-more-backdrop .fabricator-pdf-idle-card {
                 background: #fff;
                 border: 1px solid #dcdcde;
                 border-radius: 8px;
@@ -24,13 +24,13 @@
                 width: 100%;
                 box-shadow: 0 1px 3px rgba(0,0,0,.07);
             }
-            #forge-pdf-idle-state h2 {
+            #fabricator-pdf-idle-state h2 {
                 font-size: 20px;
                 font-weight: 600;
                 margin: 0 0 8px;
                 color: #1d2327;
             }
-            #forge-pdf-idle-state > .forge-pdf-idle-card > p {
+            #fabricator-pdf-idle-state > .fabricator-pdf-idle-card > p {
                 color: #787c82;
                 margin: 0 0 28px;
                 font-size: 14px;
@@ -58,21 +58,21 @@
                 margin-bottom: 16px;
                 text-align: center;
             }
-            #drop-zone:hover, #drop-zone.forge-pdf-dragover,
-            #drop-zone-more:hover, #drop-zone-more.forge-pdf-dragover {
-                border-color: var(--forge-admin-accent);
-                background: color-mix(in srgb, var(--forge-admin-accent) 8%, #fff);
-                color: var(--forge-admin-accent);
+            #drop-zone:hover, #drop-zone.fabricator-pdf-dragover,
+            #drop-zone-more:hover, #drop-zone-more.fabricator-pdf-dragover {
+                border-color: var(--fabricator-admin-accent);
+                background: color-mix(in srgb, var(--fabricator-admin-accent) 8%, #fff);
+                color: var(--fabricator-admin-accent);
             }
-            #forge-pdf-file-queue,
-            #forge-pdf-file-queue-more {
+            #fabricator-pdf-file-queue,
+            #fabricator-pdf-file-queue-more {
                 list-style: none;
                 margin: 0 0 16px;
                 padding: 0;
                 text-align: left;
             }
-            #forge-pdf-file-queue li,
-            #forge-pdf-file-queue-more li {
+            #fabricator-pdf-file-queue li,
+            #fabricator-pdf-file-queue-more li {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
@@ -83,10 +83,10 @@
                 background: #f6f7f7;
                 margin-bottom: 4px;
             }
-            #forge-pdf-file-queue li:last-child,
-            #forge-pdf-file-queue-more li:last-child { margin-bottom: 0; }
-            #forge-pdf-file-queue .forge-pdf-remove-file,
-            #forge-pdf-file-queue-more .forge-pdf-remove-file {
+            #fabricator-pdf-file-queue li:last-child,
+            #fabricator-pdf-file-queue-more li:last-child { margin-bottom: 0; }
+            #fabricator-pdf-file-queue .fabricator-pdf-remove-file,
+            #fabricator-pdf-file-queue-more .fabricator-pdf-remove-file {
                 background: none;
                 border: none;
                 cursor: pointer;
@@ -95,11 +95,11 @@
                 line-height: 1;
                 padding: 0 2px;
             }
-            #forge-pdf-file-queue .forge-pdf-remove-file:hover,
-            #forge-pdf-file-queue-more .forge-pdf-remove-file:hover { color: #b32d2e; }
+            #fabricator-pdf-file-queue .fabricator-pdf-remove-file:hover,
+            #fabricator-pdf-file-queue-more .fabricator-pdf-remove-file:hover { color: #b32d2e; }
 
             /* ── Scan-more modal overlay ── */
-            #forge-pdf-scan-more-backdrop {
+            #fabricator-pdf-scan-more-backdrop {
                 display: none;
                 position: fixed;
                 inset: 0;
@@ -108,20 +108,20 @@
                 align-items: center;
                 justify-content: center;
             }
-            #forge-pdf-scan-more-backdrop.forge-pdf-open {
+            #fabricator-pdf-scan-more-backdrop.fabricator-pdf-open {
                 display: flex;
             }
-            #forge-pdf-scan-more-backdrop .forge-pdf-idle-card {
+            #fabricator-pdf-scan-more-backdrop .fabricator-pdf-idle-card {
                 position: relative;
                 max-width: 520px;
                 width: calc(100% - 40px);
-                animation: forge-pdf-modal-in .15s ease;
+                animation: fabricator-pdf-modal-in .15s ease;
             }
-            @keyframes forge-pdf-modal-in {
+            @keyframes fabricator-pdf-modal-in {
                 from { opacity: 0; transform: translateY(-12px); }
                 to   { opacity: 1; transform: translateY(0);     }
             }
-            #forge-pdf-scan-more-close {
+            #fabricator-pdf-scan-more-close {
                 position: absolute;
                 top: 12px;
                 right: 14px;
@@ -132,7 +132,7 @@
                 cursor: pointer;
                 color: #787c82;
             }
-            #forge-pdf-scan-more-close:hover { color: #1d2327; }
+            #fabricator-pdf-scan-more-close:hover { color: #1d2327; }
 
             /* ── Upload-in-progress overlay ──
                A native <form> POST gives the browser zero hooks for upload progress —
@@ -151,7 +151,7 @@
                errors, breaking the page. A real native submit avoids that entirely by
                giving the browser an actual fresh navigation/JS realm — the only cost
                is no byte-accurate progress bar, just this indeterminate indicator. */
-            #forge-pdf-upload-overlay {
+            #fabricator-pdf-upload-overlay {
                 display: none;
                 position: fixed;
                 inset: 0;
@@ -160,13 +160,13 @@
                 align-items: center;
                 justify-content: center;
             }
-            #forge-pdf-upload-overlay.forge-pdf-open { display: flex; }
-            #forge-pdf-upload-overlay .forge-pdf-idle-card {
+            #fabricator-pdf-upload-overlay.fabricator-pdf-open { display: flex; }
+            #fabricator-pdf-upload-overlay .fabricator-pdf-idle-card {
                 max-width: 420px;
                 width: calc(100% - 40px);
                 text-align: center;
             }
-            #forge-pdf-upload-spinner {
+            #fabricator-pdf-upload-spinner {
                 width: 36px;
                 height: 36px;
                 /* transform-based centering avoids the 1px rounding margin:auto can leave. */
@@ -175,36 +175,36 @@
                 transform: translateX(-50%);
                 margin: 4px 0 16px;
                 border: 4px solid #dcdcde;
-                border-top-color: var(--forge-admin-accent);
+                border-top-color: var(--fabricator-admin-accent);
                 border-radius: 50%;
-                animation: forge-pdf-spin 0.8s linear infinite;
+                animation: fabricator-pdf-spin 0.8s linear infinite;
             }
-            @keyframes forge-pdf-spin {
+            @keyframes fabricator-pdf-spin {
                 /* Must include translateX(-50%) here too, or rotation would replace it. */
                 to { transform: translateX(-50%) rotate(360deg); }
             }
 
-            /* ── Forge-coloured primary actions ── */
-            #forge-pdf-verify-btn:not([disabled]) {
-                background: var(--forge-admin-accent) !important;
-                border-color: var(--forge-admin-accent) !important;
-                color: var(--forge-accent-text, #fff) !important;
+            /* ── Fabricator-coloured primary actions ── */
+            #fabricator-pdf-verify-btn:not([disabled]) {
+                background: var(--fabricator-admin-accent) !important;
+                border-color: var(--fabricator-admin-accent) !important;
+                color: var(--fabricator-accent-text, #fff) !important;
             }
-            #forge-pdf-verify-btn:not([disabled]):hover {
-                background: color-mix(in srgb, var(--forge-admin-accent) 82%, #000) !important;
-                border-color: color-mix(in srgb, var(--forge-admin-accent) 82%, #000) !important;
+            #fabricator-pdf-verify-btn:not([disabled]):hover {
+                background: color-mix(in srgb, var(--fabricator-admin-accent) 82%, #000) !important;
+                border-color: color-mix(in srgb, var(--fabricator-admin-accent) 82%, #000) !important;
             }
 
             /* ── Floating scan-more trigger ── */
-            #forge-pdf-scan-more-btn {
+            #fabricator-pdf-scan-more-btn {
                 display: none;
                 position: fixed;
                 bottom: 28px;
                 left: calc(50% + 80px); /* +80px centres in content area alongside 160px WP sidebar */
                 transform: translateX(-50%);
                 z-index: 99997;
-                background: var(--forge-admin-accent);
-                color: var(--forge-accent-text, #fff);
+                background: var(--fabricator-admin-accent);
+                color: var(--fabricator-accent-text, #fff);
                 border: none;
                 border-radius: 8px;
                 padding: 11px 22px;
@@ -214,109 +214,109 @@
                 box-shadow: 0 4px 14px rgb(0 0 0 / 25%);
                 letter-spacing: .01em;
             }
-            #forge-pdf-scan-more-btn:hover { background: color-mix(in srgb, var(--forge-admin-accent) 82%, #000); }
-            #forge-pdf-scan-more-btn.forge-pdf-visible { display: block; }
+            #fabricator-pdf-scan-more-btn:hover { background: color-mix(in srgb, var(--fabricator-admin-accent) 82%, #000); }
+            #fabricator-pdf-scan-more-btn.fabricator-pdf-visible { display: block; }
 
             /* ── Verification summary panel ── */
-            .forge-pdf-summary-panel {
+            .fabricator-pdf-summary-panel {
                 border: 2px solid #c3c4c7;
                 border-radius: 6px;
                 overflow: hidden;
                 margin-bottom: 14px;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             }
-            .forge-pdf-summary-verdict {
+            .fabricator-pdf-summary-verdict {
                 padding: 11px 16px;
                 font-size: 15px;
                 font-weight: 700;
                 letter-spacing: .01em;
             }
-            .forge-pdf-verdict-pass       { background: #00a32a; color: #fff; }
-            .forge-pdf-verdict-fail       { background: #b32d2e; color: #fff; }
-            .forge-pdf-verdict-compromised { background: #d97706; color: #fff; }
-            .forge-pdf-verdict-rotated    { background: #65a30d; color: #fff; }
-            .forge-pdf-summary-table {
+            .fabricator-pdf-verdict-pass       { background: #00a32a; color: #fff; }
+            .fabricator-pdf-verdict-fail       { background: #b32d2e; color: #fff; }
+            .fabricator-pdf-verdict-compromised { background: #d97706; color: #fff; }
+            .fabricator-pdf-verdict-rotated    { background: #65a30d; color: #fff; }
+            .fabricator-pdf-summary-table {
                 width: 100%;
                 border-collapse: collapse;
                 background: #fff;
             }
-            .forge-pdf-summary-table tr { border-bottom: 1px solid #f0f0f1; }
-            .forge-pdf-summary-table tr:last-child { border-bottom: none; }
-            .forge-pdf-chk-icon {
+            .fabricator-pdf-summary-table tr { border-bottom: 1px solid #f0f0f1; }
+            .fabricator-pdf-summary-table tr:last-child { border-bottom: none; }
+            .fabricator-pdf-chk-icon {
                 width: 28px; padding: 7px 2px 7px 12px; font-size: 14px; vertical-align: middle;
             }
-            .forge-pdf-chk-name {
+            .fabricator-pdf-chk-name {
                 padding: 7px 6px; font-size: 13px; font-weight: 600;
                 white-space: nowrap; vertical-align: middle;
             }
-            .forge-pdf-chk-name a { text-decoration: none; color: inherit; }
-            .forge-pdf-chk-name a:hover { text-decoration: underline; }
-            .forge-pdf-chk-reason {
+            .fabricator-pdf-chk-name a { text-decoration: none; color: inherit; }
+            .fabricator-pdf-chk-name a:hover { text-decoration: underline; }
+            .fabricator-pdf-chk-reason {
                 padding: 7px 12px 7px 4px; font-size: 12px; color: #50575e; vertical-align: middle;
             }
-            .forge-pdf-chk-pass .forge-pdf-chk-icon { color: #00a32a; }
-            .forge-pdf-chk-fail .forge-pdf-chk-icon { color: #b32d2e; }
-            .forge-pdf-chk-fail .forge-pdf-chk-reason { color: #b32d2e; font-weight: 500; }
-            .forge-pdf-chk-warn .forge-pdf-chk-icon { color: #996800; }
-            .forge-pdf-chk-warn .forge-pdf-chk-reason { color: #996800; }
+            .fabricator-pdf-chk-pass .fabricator-pdf-chk-icon { color: #00a32a; }
+            .fabricator-pdf-chk-fail .fabricator-pdf-chk-icon { color: #b32d2e; }
+            .fabricator-pdf-chk-fail .fabricator-pdf-chk-reason { color: #b32d2e; font-weight: 500; }
+            .fabricator-pdf-chk-warn .fabricator-pdf-chk-icon { color: #996800; }
+            .fabricator-pdf-chk-warn .fabricator-pdf-chk-reason { color: #996800; }
 
             /* ── Detail section wrappers ── */
-            .forge-pdf-detail-section { margin: 6px 0; }
-            .forge-pdf-detail-hdr { display: none; }
-            .forge-pdf-detail-badge {
+            .fabricator-pdf-detail-section { margin: 6px 0; }
+            .fabricator-pdf-detail-hdr { display: none; }
+            .fabricator-pdf-detail-badge {
                 font-size: 10px; font-weight: 700; padding: 2px 6px;
                 border-radius: 3px; white-space: nowrap; line-height: 1.6;
             }
-            .forge-pdf-badge-pass { background: #d6f5df; color: #00a32a; }
-            .forge-pdf-badge-fail { background: #fce8e8; color: #b32d2e; }
-            .forge-pdf-badge-info { background: #f0f0f1; color: #50575e; }
+            .fabricator-pdf-badge-pass { background: #d6f5df; color: #00a32a; }
+            .fabricator-pdf-badge-fail { background: #fce8e8; color: #b32d2e; }
+            .fabricator-pdf-badge-info { background: #f0f0f1; color: #50575e; }
             /* summary panel check icons */
-            .forge-pdf-summary-table th, .forge-pdf-summary-table td {
+            .fabricator-pdf-summary-table th, .fabricator-pdf-summary-table td {
                 padding: 7px 10px; vertical-align: middle; font-size: 13px;
             }
-            .forge-pdf-summary-table th:first-child, .forge-pdf-summary-table td:first-child {
+            .fabricator-pdf-summary-table th:first-child, .fabricator-pdf-summary-table td:first-child {
                 width: 28px; font-size: 15px; text-align: center;
             }
-            .forge-pdf-summary-table th:nth-child(2), .forge-pdf-summary-table td:nth-child(2) { width: 220px; }
-            .forge-pdf-summary-table thead th { font-weight: 600; border-bottom: 2px solid #e0e0e0; }
-            span.forge-pdf-chk-pass     { color: #00a32a; font-weight: 700; }
-            span.forge-pdf-chk-fail     { color: #b32d2e; font-weight: 700; }
-            span.forge-pdf-chk-warn     { color: #996800; font-weight: 700; }
-            span.forge-pdf-chk-rotated  { color: #65a30d; font-weight: 700; }
+            .fabricator-pdf-summary-table th:nth-child(2), .fabricator-pdf-summary-table td:nth-child(2) { width: 220px; }
+            .fabricator-pdf-summary-table thead th { font-weight: 600; border-bottom: 2px solid #e0e0e0; }
+            span.fabricator-pdf-chk-pass     { color: #00a32a; font-weight: 700; }
+            span.fabricator-pdf-chk-fail     { color: #b32d2e; font-weight: 700; }
+            span.fabricator-pdf-chk-warn     { color: #996800; font-weight: 700; }
+            span.fabricator-pdf-chk-rotated  { color: #65a30d; font-weight: 700; }
             /* clickable summary rows */
-            tr.forge-pdf-summary-row { cursor: pointer; transition: background .1s; }
-            tr.forge-pdf-summary-row:hover { background: #f0f6fc; }
-            .forge-pdf-row-ok         { color: #00a32a; font-weight: 600; }
-            .forge-pdf-row-fail       { color: #b32d2e; font-weight: 600; }
-            .forge-pdf-row-warn       { color: #d97706; font-weight: 600; }
-            .forge-pdf-row-rotated    { color: #65a30d; font-weight: 600; }
-            .forge-pdf-verdict-legacy { background: #1a56db; color: #fff; }
-            .forge-pdf-row-caret-cell { width: 20px; text-align: right; color: #787c82; }
-            .forge-pdf-row-caret { font-size: 18px; line-height: 1; transition: transform .15s; }
-            tr.forge-pdf-summary-row:hover .forge-pdf-row-caret { color: #2271b1; }
+            tr.fabricator-pdf-summary-row { cursor: pointer; transition: background .1s; }
+            tr.fabricator-pdf-summary-row:hover { background: #f0f6fc; }
+            .fabricator-pdf-row-ok         { color: #00a32a; font-weight: 600; }
+            .fabricator-pdf-row-fail       { color: #b32d2e; font-weight: 600; }
+            .fabricator-pdf-row-warn       { color: #d97706; font-weight: 600; }
+            .fabricator-pdf-row-rotated    { color: #65a30d; font-weight: 600; }
+            .fabricator-pdf-verdict-legacy { background: #1a56db; color: #fff; }
+            .fabricator-pdf-row-caret-cell { width: 20px; text-align: right; color: #787c82; }
+            .fabricator-pdf-row-caret { font-size: 18px; line-height: 1; transition: transform .15s; }
+            tr.fabricator-pdf-summary-row:hover .fabricator-pdf-row-caret { color: #2271b1; }
 
         /* PDF segment header */
-        .forge-pdf-pdf-hdr {
+        .fabricator-pdf-pdf-hdr {
             display: flex;
             align-items: center;
             gap: 8px;
             overflow: hidden;
             width: 100%;
         }
-        .forge-pdf-pdf-hdr-name {
+        .fabricator-pdf-pdf-hdr-name {
             flex: 1;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
             min-width: 0;
         }
-        .forge-pdf-pdf-hdr-verdict {
+        .fabricator-pdf-pdf-hdr-verdict {
             flex-shrink: 0;
             white-space: nowrap;
         }
 
         /* Layout-safe hidden state: participate in layout but invisible */
-        .forge-pdf-hidden {
+        .fabricator-pdf-hidden {
             display: none;
             visibility: hidden;
             max-height: 0;
@@ -324,7 +324,7 @@
         }
 
         /* Visible state */
-        .forge-pdf-visible {
+        .fabricator-pdf-visible {
             display: block;
             visibility: visible;
             max-height: none;

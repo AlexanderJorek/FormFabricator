@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,19 +19,19 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Form;
+namespace FabricatorForms\Form;
 
 defined('ABSPATH') || exit;
 
-use ForgeForms\Fields\FieldRegistry;
+use FabricatorForms\Fields\FieldRegistry;
 
 /**
- * Renders forge_form shortcode output and form HTML strings.
+ * Renders fabricator_form shortcode output and form HTML strings.
  */
 class FormRenderer
 {
     /**
-     * Handles the [forge_form] shortcode and returns the rendered form HTML.
+     * Handles the [fabricator_form] shortcode and returns the rendered form HTML.
      *
      * @param array $atts Shortcode attributes (expects 'id' key).
      * @return string Rendered form HTML or empty string.
@@ -101,11 +101,11 @@ class FormRenderer
 
         ob_start();
         ?>
-        <div class="forge-form-wrap" id="forge-form-<?php echo esc_attr($form_id); ?>">
-            <div class="forge-form-messages" role="alert" aria-live="polite" style="display:none;"></div>
+        <div class="fabricator-form-wrap" id="fabricator-form-<?php echo esc_attr($form_id); ?>">
+            <div class="fabricator-form-messages" role="alert" aria-live="polite" style="display:none;"></div>
             <form
-                class="forge-form"
-                id="forge-form-inner-<?php echo esc_attr($form_id); ?>"
+                class="fabricator-form"
+                id="fabricator-form-inner-<?php echo esc_attr($form_id); ?>"
                 method="post"
                 action="<?php echo esc_url($ajax_url); ?>"
                 <?php echo $has_upload ? 'enctype="multipart/form-data"' : ''; ?>
@@ -113,24 +113,24 @@ class FormRenderer
                 data-form-id="<?php echo esc_attr($form_id); ?>"
                 <?php echo $has_pages ? 'data-has-pages="true"' : ''; ?>
             >
-                <input type="hidden" name="action"     value="forge_forms_submit">
+                <input type="hidden" name="action"     value="fabricator_forms_submit">
                 <input type="hidden" name="form_id"    value="<?php echo esc_attr($form_id); ?>">
-                <!-- Filled in by front.js from forge_forms_get_token immediately before submit. -->
-                <input type="hidden" name="forge_nonce" value="" class="forge-nonce-field">
-                <input type="hidden" name="forge_submission_token" value="" class="forge-submission-token-field">
+                <!-- Filled in by front.js from fabricator_forms_get_token immediately before submit. -->
+                <input type="hidden" name="fabricator_nonce" value="" class="fabricator-nonce-field">
+                <input type="hidden" name="fabricator_submission_token" value="" class="fabricator-submission-token-field">
                 <!-- Honeypot -->
-                <input type="text" name="forge_hp_field"
+                <input type="text" name="fabricator_hp_field"
                        style="display:none!important" tabindex="-1" autocomplete="off">
 
                 <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- renderFields() returns pre-escaped HTML; each field handler escapes its own output internally. ?>
                 <?php echo self::renderFields($form->fields); ?>
 
-                <div class="forge-form-footer">
-                    <button type="submit" class="forge-submit-btn"
+                <div class="fabricator-form-footer">
+                    <button type="submit" class="fabricator-submit-btn"
                             data-working="<?php echo esc_attr($submit_working); ?>"
                             data-success="<?php echo esc_attr($success_msg); ?>">
-                        <span class="forge-submit-label"><?php echo esc_html($submit_label); ?></span>
-                        <span class="forge-submit-spinner" aria-hidden="true" style="display:none;"></span>
+                        <span class="fabricator-submit-label"><?php echo esc_html($submit_label); ?></span>
+                        <span class="fabricator-submit-spinner" aria-hidden="true" style="display:none;"></span>
                     </button>
                 </div>
             </form>
@@ -174,7 +174,7 @@ class FormRenderer
             static fn($h) => $h !== null && $h->isPageBreak()
         );
         if ($has_pagebreaks) {
-            $html   .= '<div class="forge-form-page forge-page-active" data-page="0">';
+            $html   .= '<div class="fabricator-form-page fabricator-page-active" data-page="0">';
             $in_page = true;
             $page    = 1;
         }
@@ -198,7 +198,7 @@ class FormRenderer
             if ($handler->isGroupContainer()) {
                 $children_html = self::renderChildFields($field_cfg['children'] ?? []);
                 $group_cond    = method_exists($handler, 'rowCondAttr') ? $handler->rowCondAttr($field_cfg) : '';
-                $html .= '<div class="forge-row"' . $group_cond . '><div class="forge-col forge-col-12">'
+                $html .= '<div class="fabricator-row"' . $group_cond . '><div class="fabricator-col fabricator-col-12">'
                     . $handler->openTag($field_cfg, $field_id)
                     . $children_html
                     . $handler->closeTag()
@@ -248,20 +248,20 @@ class FormRenderer
                     $col_b_cond = !empty($next['conditions']['rules'])
                         ? ' data-conditions="' . esc_attr(wp_json_encode($next['conditions'])) . '"'
                         : '';
-                    $col_a  = '<div class="forge-col forge-col-6"' . $col_a_cond . '>';
+                    $col_a  = '<div class="fabricator-col fabricator-col-6"' . $col_a_cond . '>';
                     $col_a .= $handler->render($field_cfg, $field_id) . '</div>';
-                    $col_b  = '<div class="forge-col forge-col-6"' . $col_b_cond . '>';
+                    $col_b  = '<div class="fabricator-col fabricator-col-6"' . $col_b_cond . '>';
                     $col_b .= $next_handler->render($next, $next_id) . '</div>';
-                    $html  .= '<div class="forge-row forge-row--pair">' . $col_a . $col_b . '</div>';
+                    $html  .= '<div class="fabricator-row fabricator-row--pair">' . $col_a . $col_b . '</div>';
                     $i += 2;
                     continue;
                 }
 
-                $html .= '<div class="forge-row"' . $cond_attr . '><div class="forge-col forge-col-6">'
+                $html .= '<div class="fabricator-row"' . $cond_attr . '><div class="fabricator-col fabricator-col-6">'
                     . $handler->render($field_cfg, $field_id)
                     . '</div></div>';
             } else {
-                $html .= '<div class="forge-row"' . $cond_attr . '><div class="forge-col forge-col-12">'
+                $html .= '<div class="fabricator-row"' . $cond_attr . '><div class="fabricator-col fabricator-col-12">'
                     . $handler->render($field_cfg, $field_id)
                     . '</div></div>';
             }

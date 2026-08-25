@@ -4,7 +4,7 @@ Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -77,11 +77,14 @@ Yes — the PDF Layout Editor (under FormFabricator → PDF Layout) lets you con
 
 == Changelog ==
 
+= 1.0.4 =
+* Internal: renamed the plugin's internal code identifiers (PHP namespace, constants, hook/option prefixes) from Forge/FormForge to FormFabricator, completing the rename started in earlier versions. No action needed — this is naming-only and doesn't change any stored data, settings, or behavior.
+
 = 1.0.3 =
 * Fixed: the PDF verification page could pile up dozens of simultaneous downloads/checks during a large batch scan, slowing or stalling the server; scans are now throttled to a few files at a time with clear "waiting…" status messages.
 * Improved: admin pages now load their scripts and styles as proper, cacheable files instead of inline code on the page, for faster admin page loads and better compatibility with other plugins/security scanners.
 * Hardening: re-audited every security-suppressed code line in the plugin (~120 sites) and corrected two inaccurate internal code comments found in the process; no actual issues found.
-* Internal: renamed remaining references from FormForge to FormFabricator in build tooling and stylesheets (cosmetic only, no functional change).
+* Internal: corrected remaining stale plugin-name references in build tooling and stylesheets (cosmetic only, no functional change).
 
 = 1.0.2 =
 * Security: updated the bundled PDF-viewer library (pdf.js) to the latest version, closing a known vulnerability in PDF handling on the verification page.

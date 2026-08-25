@@ -5,12 +5,12 @@
  */
 (function () {
     'use strict';
-    document.querySelectorAll('.forge-test-tab').forEach(function (tab) {
+    document.querySelectorAll('.fabricator-test-tab').forEach(function (tab) {
         tab.addEventListener('click', function () {
             var panel = document.getElementById(tab.dataset.panel);
             if (!panel) { return; }
-            document.querySelectorAll('.forge-test-tab').forEach(function (t) { t.classList.remove('active'); });
-            document.querySelectorAll('.forge-test-panel').forEach(function (p) { p.classList.remove('active'); });
+            document.querySelectorAll('.fabricator-test-tab').forEach(function (t) { t.classList.remove('active'); });
+            document.querySelectorAll('.fabricator-test-panel').forEach(function (p) { p.classList.remove('active'); });
             tab.classList.add('active');
             panel.classList.add('active');
         });

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Utils;
+namespace FabricatorForms\Utils;
 
 defined('ABSPATH') || exit;
 
@@ -32,8 +32,8 @@ class ClientIp
     /**
      * Returns the IP address to key rate limiting on. By default this is REMOTE_ADDR — the only value that
      * can't be spoofed by the client. X-Forwarded-For is only consulted when REMOTE_ADDR is in the site's
-     * FORGE_TRUSTED_PROXIES allowlist (a comma-separated constant defined in wp-config.php), since otherwise
-     * any client could forge that header to dodge the limit or to frame another visitor's IP.
+     * FABRICATOR_TRUSTED_PROXIES allowlist (a comma-separated constant defined in wp-config.php), since otherwise
+     * any client could fabricator that header to dodge the limit or to frame another visitor's IP.
      *
      * @return string Client IP address, or '' if unavailable.
      */
@@ -74,17 +74,17 @@ class ClientIp
     }
 
     /**
-     * Checks whether an address is listed in FORGE_TRUSTED_PROXIES.
+     * Checks whether an address is listed in FABRICATOR_TRUSTED_PROXIES.
      *
      * @param string $ip Address to check.
      * @return bool True when the site has explicitly marked $ip as a trusted proxy.
      */
     private static function isTrustedProxy(string $ip): bool
     {
-        if (!defined('FORGE_TRUSTED_PROXIES') || (string) FORGE_TRUSTED_PROXIES === '') {
+        if (!defined('FABRICATOR_TRUSTED_PROXIES') || (string) FABRICATOR_TRUSTED_PROXIES === '') {
             return false;
         }
-        foreach (array_map('trim', explode(',', (string) FORGE_TRUSTED_PROXIES)) as $entry) {
+        foreach (array_map('trim', explode(',', (string) FABRICATOR_TRUSTED_PROXIES)) as $entry) {
             if ($entry === '') {
                 continue;
             }

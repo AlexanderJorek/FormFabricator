@@ -10,20 +10,20 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
-namespace ForgeForms\Admin;
+namespace FabricatorForms\Admin;
 
 defined('ABSPATH') || exit;
 
 use Smalot\PdfParser\Parser;
-use ForgeForms\PDF\HashSeal;
-use ForgeForms\PDF\PdfUtils;
+use FabricatorForms\PDF\HashSeal;
+use FabricatorForms\PDF\PdfUtils;
 
 add_action(
-    'wp_ajax_forge_verify_push_lines',
+    'wp_ajax_fabricator_verify_push_lines',
     function () {
 
         /* ---- Raise limits for heavy PDF parsing ----
@@ -31,7 +31,7 @@ add_action(
            large embedded images (UploadField has no fixed max_size_mb ceiling)
            can easily produce a PDF well past the old 50MB assumption. These are
            hard ceilings meant to stay practically unreachable; the real per-request
-           budget is the soft cap in handleUpload() (see $forge_parse_max_seconds),
+           budget is the soft cap in handleUpload() (see $fabricator_parse_max_seconds),
            which scales with both file size and actual decompressed text volume and
            aborts long before these are hit. */
         @ini_set('memory_limit', '3072M'); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- legitimate resource-limit raise for heavy PDF text-extraction/hash-verification; see comment above.
@@ -42,29 +42,29 @@ add_action(
         }
 
         /* ---- Capability ---- */
-        if (!\ForgeForms\Plugin::userCan('use_verifier')) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
+        if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
             wp_send_json_error(['message' => 'Forbidden'], 403);
         }
 
         /* ---- Nonce ---- */
-        check_ajax_referer('forge_verifier_nonce', 'nonce');
+        check_ajax_referer('fabricator_verifier_nonce', 'nonce');
 
         /* ---- Rate limit: this handler raises memory/time limits per request, so a
            low-privileged verifier user firing it repeatedly can still create a modest
            self-DoS surface on shared hosting. ---- */
         $rl_key = 'verify_' . get_current_user_id();
-        if (\ForgeForms\Utils\RateLimiter::increment($rl_key, 5) > 1) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rate-limited user ' . get_current_user_id() . '.');
+        if (\FabricatorForms\Utils\RateLimiter::increment($rl_key, 5) > 1) {
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rate-limited user ' . get_current_user_id() . '.');
             wp_send_json_error(['message' => 'Please wait before verifying another PDF.'], 429);
         }
 
         /* ---- Global concurrency cap: at most 3 of this handler running at once, across
            everyone (the per-user throttle above only spaces out one tab's own requests). ---- */
-        $forge_cs_bucket = 'verify';
-        $forge_cs_token  = \ForgeForms\Utils\ConcurrencySlot::acquire($forge_cs_bucket, 3, 900);
-        if ($forge_cs_token === false) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rejected — concurrency cap reached.');
+        $fabricator_cs_bucket = 'verify';
+        $fabricator_cs_token  = \FabricatorForms\Utils\ConcurrencySlot::acquire($fabricator_cs_bucket, 3, 900);
+        if ($fabricator_cs_token === false) {
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — concurrency cap reached.');
             wp_send_json_error(
                 [
                 'message'     => 'Server busy verifying other PDFs right now.',
@@ -76,19 +76,19 @@ add_action(
         }
         // Releases the slot on script end (covers wp_die() too); TTL is the rare-case backstop.
         register_shutdown_function(
-            static function () use ($forge_cs_bucket, $forge_cs_token) {
-                \ForgeForms\Utils\ConcurrencySlot::release($forge_cs_bucket, $forge_cs_token);
+            static function () use ($fabricator_cs_bucket, $fabricator_cs_token) {
+                \FabricatorForms\Utils\ConcurrencySlot::release($fabricator_cs_bucket, $fabricator_cs_token);
             }
         );
 
         /* ---- Input ---- */
         $pdf_token   = sanitize_key($_POST['pdf_token'] ?? '');
         $visualLines = isset($_POST['visualLines'])
-        ? json_decode(\ForgeForms\Utils\Sanitize::str(sanitize_textarea_field(wp_unslash($_POST['visualLines'])), '[]'), true)
+        ? json_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_textarea_field(wp_unslash($_POST['visualLines'])), '[]'), true)
         : [];
 
         if (!$pdf_token) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rejected — missing pdf_token (user ' . get_current_user_id() . ').');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — missing pdf_token (user ' . get_current_user_id() . ').');
             wp_send_json_error(['message' => 'Invalid input: missing token'], 400);
         }
         // Sized against Verificationpage::MAX_PDF_BYTES — a large-but-legitimate multi-page PDF
@@ -115,19 +115,19 @@ add_action(
         }
 
         /* ---- Resolve path from transient (avoids URL-to-path mapping) ---- */
-        $pdf_transient = get_transient('forge_pdf_' . $pdf_token);
+        $pdf_transient = get_transient('fabricator_pdf_' . $pdf_token);
         if (!is_array($pdf_transient) || !isset($pdf_transient['path']) || !is_string($pdf_transient['path'])) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rejected — token not found or expired (user ' . get_current_user_id() . ').');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — token not found or expired (user ' . get_current_user_id() . ').');
             wp_send_json_error(['message' => 'PDF not found or token expired'], 404);
         }
         if ((int)($pdf_transient['uid'] ?? -1) !== get_current_user_id()) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rejected — token owned by a different user than ' . get_current_user_id() . '.');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — token owned by a different user than ' . get_current_user_id() . '.');
             wp_send_json_error(['message' => 'Forbidden'], 403);
         }
         $target_path = $pdf_transient['path'];
 
         $upload_dir   = wp_upload_dir();
-        $safe_dir     = $upload_dir['basedir'] . '/forge-secure-pdf';
+        $safe_dir     = $upload_dir['basedir'] . '/fabricator-secure-pdf';
         $verfiles_dir = $safe_dir . '/verfiles';
 
         /* ---- Path-traversal guard ---- */
@@ -137,7 +137,7 @@ add_action(
             || !$real_target_path
             || strpos($real_target_path, $real_verfiles_dir . DIRECTORY_SEPARATOR) !== 0
         ) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rejected — path-traversal guard failed for token-resolved path.');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — path-traversal guard failed for token-resolved path.');
             wp_send_json_error(['message' => 'Invalid PDF path'], 400);
         }
 
@@ -145,14 +145,14 @@ add_action(
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $detected_mime = $finfo->file($real_target_path);
         if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rejected — stored file MIME re-check failed, detected "' . $detected_mime . '".');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — stored file MIME re-check failed, detected "' . $detected_mime . '".');
             wp_send_json_error(['message' => 'File is not a valid PDF'], 400);
         }
 
         $file_size = filesize($real_target_path);
         if ($file_size > Verificationpage::MAX_PDF_BYTES) {
-            \ForgeForms\forge_log(
-                'ForgeForms forge_verify_push_lines: rejected — stored file is '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms fabricator_verify_push_lines: rejected — stored file is '
                 . round($file_size / 1048576, 1) . 'MB, exceeds MAX_PDF_BYTES ('
                 . round(Verificationpage::MAX_PDF_BYTES / 1048576) . 'MB).'
             );
@@ -181,14 +181,14 @@ add_action(
         try {
             Verificationpage::handleUpload($file, $visualLines, $pdf_token);
         } catch (\Throwable $ajax_err) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: handleUpload threw: ' . $ajax_err->getMessage());
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: handleUpload threw: ' . $ajax_err->getMessage());
             echo '<p style="color:red">' . esc_html__('Internal error while processing this PDF. See server log for details.', 'formfabricator') . '</p>';
         }
         $raw_html = ob_get_clean();
 
         if ($raw_html === false || $raw_html === '') {
-            \ForgeForms\forge_log(
-                'ForgeForms forge_verify_push_lines: raw_html is empty after handleUpload — ob level was '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms fabricator_verify_push_lines: raw_html is empty after handleUpload — ob level was '
                 . ob_get_level()
             );
             wp_send_json_error(['message' => 'PDF processing produced no output. Check the PHP error log.'], 500);
@@ -197,23 +197,23 @@ add_action(
 
         /* ---- SANITIZE OUTPUT (critical) ---- */
         try {
-            $safe_html = forge_sanitize_verifier_html($raw_html);
+            $safe_html = fabricator_sanitize_verifier_html($raw_html);
         } catch (\Throwable $san_err) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: forge_sanitize_verifier_html threw: ' . $san_err->getMessage());
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: fabricator_sanitize_verifier_html threw: ' . $san_err->getMessage());
             wp_send_json_error(['message' => 'Output sanitization failed. See server log for details.'], 500);
             return;
         }
 
         if ($safe_html === '') {
-            \ForgeForms\forge_log(
-                'ForgeForms forge_verify_push_lines: safe_html is empty after wp_kses (raw len='
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms fabricator_verify_push_lines: safe_html is empty after wp_kses (raw len='
                 . strlen($raw_html) . ')'
             );
             // Fall back to escaping raw html if kses strips everything (e.g. encoding issue)
             $safe_html = '<p style="color:orange">Result was sanitized to empty. Check PHP error log.</p>';
         }
 
-        delete_transient('forge_vp_' . $pdf_token);
+        delete_transient('fabricator_vp_' . $pdf_token);
 
         wp_send_json_success(
             [
@@ -227,20 +227,20 @@ add_action(
 
 /* ---- Progress polling endpoint ---- */
 add_action(
-    'wp_ajax_forge_verify_progress',
+    'wp_ajax_fabricator_verify_progress',
     function () {
-        // Capability-first, matching forge_verify_push_lines/forge_serve_pdf,
+        // Capability-first, matching fabricator_verify_push_lines/fabricator_serve_pdf,
         // so this doesn't rely on nonce-then-capability ordering being
         // preserved if either check is edited independently later.
-        if (!\ForgeForms\Plugin::userCan('use_verifier')) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_progress: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
+        if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_progress: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
             wp_send_json_error([], 403);
         }
-        check_ajax_referer('forge_verifier_nonce', 'nonce');
+        check_ajax_referer('fabricator_verifier_nonce', 'nonce');
         $key  = sanitize_key($_POST['token'] ?? '');
-        $data = $key ? get_transient('forge_vp_' . $key) : false;
+        $data = $key ? get_transient('fabricator_vp_' . $key) : false;
         if ($data && (int)($data['uid'] ?? -1) !== get_current_user_id()) {
-            \ForgeForms\forge_log('ForgeForms forge_verify_progress: rejected — progress token owned by a different user than ' . get_current_user_id() . '.');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_progress: rejected — progress token owned by a different user than ' . get_current_user_id() . '.');
             wp_send_json_error(['message' => 'Forbidden'], 403);
         }
         if (is_array($data)) {
@@ -252,50 +252,50 @@ add_action(
 
 /* ---- Authenticated PDF file-serving endpoint ---- */
 add_action(
-    'wp_ajax_forge_serve_pdf',
+    'wp_ajax_fabricator_serve_pdf',
     function () {
 
-        if (!\ForgeForms\Plugin::userCan('use_verifier')) {
-            \ForgeForms\forge_log('ForgeForms forge_serve_pdf: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
+        if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
             wp_die('Forbidden', '', ['response' => 403]);
         }
 
         // Nonce passed as query-string param by verification.js
-        if (!wp_verify_nonce(sanitize_key($_GET['nonce'] ?? ''), 'forge_verifier_nonce')) {
-            \ForgeForms\forge_log('ForgeForms forge_serve_pdf: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
+        if (!wp_verify_nonce(sanitize_key($_GET['nonce'] ?? ''), 'fabricator_verifier_nonce')) {
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
             wp_die('Nonce verification failed', '', ['response' => 403]);
         }
 
         $token = sanitize_key($_GET['token'] ?? '');
         if (!$token) {
-            \ForgeForms\forge_log('ForgeForms forge_serve_pdf: rejected — missing token (user ' . get_current_user_id() . ').');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — missing token (user ' . get_current_user_id() . ').');
             wp_die('Missing token', '', ['response' => 400]);
         }
 
-        $pdf_transient = get_transient('forge_pdf_' . $token);
+        $pdf_transient = get_transient('fabricator_pdf_' . $token);
         $path = is_array($pdf_transient) ? ($pdf_transient['path'] ?? null) : null;
         if (!$path || !is_string($path) || !file_exists($path)) {
-            \ForgeForms\forge_log('ForgeForms forge_serve_pdf: rejected — token not found, expired, or target file missing.');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — token not found, expired, or target file missing.');
             wp_die('PDF not found or token expired', '', ['response' => 404]);
         }
         if ((int)($pdf_transient['uid'] ?? -1) !== get_current_user_id()) {
-            \ForgeForms\forge_log('ForgeForms forge_serve_pdf: rejected — token owned by a different user than ' . get_current_user_id() . '.');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — token owned by a different user than ' . get_current_user_id() . '.');
             wp_die('Forbidden', '', ['response' => 403]);
         }
 
         // Extra path-safety check
         $upload_dir   = wp_upload_dir();
-        $safe_dir     = realpath($upload_dir['basedir'] . '/forge-secure-pdf');
+        $safe_dir     = realpath($upload_dir['basedir'] . '/fabricator-secure-pdf');
         $real_path    = realpath($path);
         if (!$safe_dir || !$real_path || strpos($real_path, $safe_dir . DIRECTORY_SEPARATOR) !== 0) {
-            \ForgeForms\forge_log('ForgeForms forge_serve_pdf: rejected — path-traversal guard failed for token-resolved path.');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — path-traversal guard failed for token-resolved path.');
             wp_die('Invalid path', '', ['response' => 403]);
         }
 
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $detected_mime = $finfo->file($real_path);
         if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
-            \ForgeForms\forge_log('ForgeForms forge_serve_pdf: rejected — stored file MIME re-check failed, detected "' . $detected_mime . '".');
+            \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — stored file MIME re-check failed, detected "' . $detected_mime . '".');
             wp_die('Not a PDF', '', ['response' => 400]);
         }
 
@@ -316,7 +316,7 @@ add_action(
  * @param string $html Raw HTML to sanitize.
  * @return string Sanitized HTML.
  */
-function forge_sanitize_verifier_html(string $html): string
+function fabricator_sanitize_verifier_html(string $html): string
 {
 
     $allowed = [
@@ -358,7 +358,7 @@ function forge_sanitize_verifier_html(string $html): string
     $html = preg_replace_callback(
         '/\bsrc=(["\'])data:[^"\']+\1/i',
         static function (array $m) use (&$data_uris): string {
-            $key = '__FORGE_DATA_URI_' . count($data_uris) . '__';
+            $key = '__FABRICATOR_DATA_URI_' . count($data_uris) . '__';
             $data_uris[$key] = $m[0];
             return 'src=' . $m[1] . $key . $m[1];
         },
@@ -395,7 +395,7 @@ final class Verificationpage
             'in_admin_header',
             static function (): void {
                 $screen = get_current_screen();
-                if ($screen && $screen->id === 'forge-forms_page_forge-pdf-verification') {
+                if ($screen && $screen->id === 'fabricator-forms_page_fabricator-pdf-verification') {
                     remove_all_actions('admin_notices');
                     remove_all_actions('all_admin_notices');
                     remove_all_actions('user_admin_notices');
@@ -403,7 +403,7 @@ final class Verificationpage
                 }
             }
         );
-        add_action('forge_verifier_cleanup_files', [self::class, 'cronCleanupFiles']);
+        add_action('fabricator_verifier_cleanup_files', [self::class, 'cronCleanupFiles']);
 
         // Fallback sweep: the per-file wp_schedule_single_event() cleanups above
         // depend on WP-Cron actually firing, which isn't guaranteed on every
@@ -413,9 +413,9 @@ final class Verificationpage
         // verimages/ forever. This recurring sweep is a safety net that simply
         // age-based-deletes anything older than self::SWEEP_MAX_AGE, independent
         // of whether the original single-event cleanup ever ran.
-        add_action('forge_verifier_sweep_tmp_dirs', [self::class, 'cronSweepTmpDirs']);
-        if (!wp_next_scheduled('forge_verifier_sweep_tmp_dirs')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'forge_verifier_sweep_tmp_dirs');
+        add_action('fabricator_verifier_sweep_tmp_dirs', [self::class, 'cronSweepTmpDirs']);
+        if (!wp_next_scheduled('fabricator_verifier_sweep_tmp_dirs')) {
+            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_verifier_sweep_tmp_dirs');
         }
     }
 
@@ -468,7 +468,7 @@ final class Verificationpage
     public static function cronSweepTmpDirs(): void
     {
         $upload_dir = wp_upload_dir();
-        $safe_dir   = $upload_dir['basedir'] . '/forge-secure-pdf';
+        $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
         $now        = time();
 
         foreach (['/verfiles', '/verimages'] as $sub) {
@@ -484,7 +484,7 @@ final class Verificationpage
                 if ($mtime !== false && ($now - $mtime) > self::SWEEP_MAX_AGE) {
                     wp_delete_file($file);
                     if (file_exists($file)) {
-                        \ForgeForms\forge_log("ForgeForms Verificationpage: sweep failed to remove stale temp file {$file}");
+                        \FabricatorForms\fabricator_log("FabricatorForms Verificationpage: sweep failed to remove stale temp file {$file}");
                     }
                 }
             }
@@ -521,7 +521,7 @@ final class Verificationpage
     }
 
     /**
-     * Appends forge-verification-page body class on the verification page.
+     * Appends fabricator-verification-page body class on the verification page.
      *
      * @param string $classes Existing admin body classes.
      * @return string Modified body class string.
@@ -529,8 +529,8 @@ final class Verificationpage
     public static function bodyClass(string $classes): string
     {
         $page_slug = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        if ($page_slug === 'forge-pdf-verification') {
-            $classes .= ' forge-verification-page';
+        if ($page_slug === 'fabricator-pdf-verification') {
+            $classes .= ' fabricator-verification-page';
         }
         return $classes;
     }
@@ -542,13 +542,13 @@ final class Verificationpage
      */
     public static function menu(): void
     {
-        if (\ForgeForms\Plugin::userCan('use_verifier')) {
+        if (\FabricatorForms\Plugin::userCan('use_verifier')) {
             add_submenu_page(
-                'forge-forms',
+                'fabricator-forms',
                 __('FormFabricator Verification', 'formfabricator'),
                 __('PDF Verification', 'formfabricator'),
                 'read',
-                'forge-pdf-verification',
+                'fabricator-pdf-verification',
                 [self::class, 'render']
             );
         }
@@ -566,22 +566,22 @@ final class Verificationpage
         // callback ever runs — but this function processes file uploads to
         // disk, so it checks again explicitly rather than depending solely on
         // admin_menu registration semantics holding across future refactors.
-        if (!\ForgeForms\Plugin::userCan('use_verifier')) {
-            \ForgeForms\forge_log('ForgeForms Verificationpage::render: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
+        if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
+            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage::render: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
             wp_die(esc_html__('Insufficient permissions.', 'formfabricator'), '', ['response' => 403]);
         }
-        echo '<canvas id="forge-particle-canvas" aria-hidden="true"></canvas>';
-        echo '<div class="wrap forge-verification-wrap">';
-        echo '<div id="forge-verification-body">';
+        echo '<canvas id="fabricator-particle-canvas" aria-hidden="true"></canvas>';
+        echo '<div class="wrap fabricator-verification-wrap">';
+        echo '<div id="fabricator-verification-body">';
 
         // --- Handle POST uploads securely ---
         $is_request_post = strtoupper(sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD'] ?? 'GET'))) === 'POST';
         if ($is_request_post) {
             // Nonce is the unconditional first gate — before touching any $_FILES.
-            if (!isset($_POST['forge_verifier_nonce'])
-                || !check_admin_referer('forge_verifier_upload', 'forge_verifier_nonce')
+            if (!isset($_POST['fabricator_verifier_nonce'])
+                || !check_admin_referer('fabricator_verifier_upload', 'fabricator_verifier_nonce')
             ) {
-                \ForgeForms\forge_log('ForgeForms Verificationpage::render: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
+                \FabricatorForms\fabricator_log('FabricatorForms Verificationpage::render: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
                 wp_die('Security check failed', 'Error', ['response' => 403]);
             }
         }
@@ -591,7 +591,7 @@ final class Verificationpage
         if ($is_request_post && !empty($_FILES['pdfs']['name'][0])) {
             // Process uploaded files
             $upload_dir = wp_upload_dir();
-            $safe_dir   = $upload_dir['basedir'] . '/forge-secure-pdf';
+            $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
 
             // Ensure directories exist with restricted permissions.
             $wp_filesystem = self::getWpFilesystem();
@@ -634,8 +634,8 @@ final class Verificationpage
             // to the server's actual max_file_uploads ini limit rather than an arbitrary number.
             $max_files = max(1, (int)(ini_get('max_file_uploads') ?: 20));
             if (count($uploaded_tmp_names) > $max_files) {
-                \ForgeForms\forge_log(
-                    'ForgeForms Verificationpage::render: batch upload truncated — '
+                \FabricatorForms\fabricator_log(
+                    'FabricatorForms Verificationpage::render: batch upload truncated — '
                     . count($uploaded_tmp_names) . ' files submitted, max_file_uploads limit is ' . $max_files . '.'
                 );
                 echo wp_kses_post(
@@ -654,8 +654,8 @@ final class Verificationpage
                     : '(unknown)';
 
                 if (!is_readable($tmpName) || !is_uploaded_file($tmpName)) {
-                    \ForgeForms\forge_log(
-                        'ForgeForms Verificationpage::render: upload skipped for "' . $original_name
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms Verificationpage::render: upload skipped for "' . $original_name
                         . '" — failed is_uploaded_file()/is_readable() check (possible spoofed or malformed multipart entry).'
                     );
                     echo wp_kses_post(
@@ -670,8 +670,8 @@ final class Verificationpage
 
                 // File size guard — use the actual file on disk, not the browser-reported size.
                 if (filesize($tmpName) > $max_upload_bytes) {
-                    \ForgeForms\forge_log(
-                        'ForgeForms Verificationpage::render: upload skipped for "' . $original_name . '" — '
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms Verificationpage::render: upload skipped for "' . $original_name . '" — '
                         . round(filesize($tmpName) / 1048576, 1) . 'MB exceeds ' . round($max_upload_bytes / 1048576) . 'MB limit.'
                     );
                     echo wp_kses_post(
@@ -691,8 +691,8 @@ final class Verificationpage
                 );
 
                 if (($type_check['ext'] ?? '') !== 'pdf') {
-                    \ForgeForms\forge_log(
-                        'ForgeForms Verificationpage::render: upload skipped for "' . $original_name
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms Verificationpage::render: upload skipped for "' . $original_name
                         . '" — wp_check_filetype_and_ext() did not resolve to pdf (ext: '
                         . ($type_check['ext'] ?? '(none)') . ', type: ' . ($type_check['type'] ?? '(none)') . ').'
                     );
@@ -703,8 +703,8 @@ final class Verificationpage
                 $finfo = new \finfo(FILEINFO_MIME_TYPE);
                 $detected_mime = $finfo->file($tmpName);
                 if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
-                    \ForgeForms\forge_log(
-                        'ForgeForms Verificationpage::render: upload skipped for "' . $original_name
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms Verificationpage::render: upload skipped for "' . $original_name
                         . '" — finfo MIME re-check detected "' . $detected_mime . '" instead of application/pdf.'
                     );
                     echo wp_kses_post(self::noticeHtml(__('Upload skipped: MIME validation failed.', 'formfabricator'), 'warning'));
@@ -714,8 +714,8 @@ final class Verificationpage
                 $safe_name = sanitize_file_name($original_name);
 
                 if ($safe_name === '' || !preg_match('/\.pdf$/i', $safe_name)) {
-                    \ForgeForms\forge_log(
-                        'ForgeForms Verificationpage::render: upload skipped — filename sanitized to "'
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms Verificationpage::render: upload skipped — filename sanitized to "'
                         . $safe_name . '" from original "' . $original_name . '", not a valid .pdf name.'
                     );
                     echo wp_kses_post(self::noticeHtml(__('Upload skipped: invalid PDF filename.', 'formfabricator'), 'warning'));
@@ -736,20 +736,20 @@ final class Verificationpage
                     // Issue a short-lived transient token; JS uses the serve endpoint
                     // instead of the direct (now HTTP-blocked) verfiles URL.
                     // TTL must stay >= the parse-time hard ceiling (set_time_limit(1800)
-                    // in wp_ajax_forge_verify_push_lines) plus margin — see
+                    // in wp_ajax_fabricator_verify_push_lines) plus margin — see
                     // scheduleDeletion()'s matching delay below, which the file's
                     // on-disk lifetime must also outlive.
                     $token = bin2hex(random_bytes(16));
                     set_transient(
-                        'forge_pdf_' . $token,
+                        'fabricator_pdf_' . $token,
                         ['path' => $target_path, 'uid' => get_current_user_id()],
                         2100
                     ); // 35 minutes
 
                     $serve_url = add_query_arg(
                         [
-                        'action' => 'forge_serve_pdf',
-                        'nonce'  => wp_create_nonce('forge_verifier_nonce'),
+                        'action' => 'fabricator_serve_pdf',
+                        'nonce'  => wp_create_nonce('fabricator_verifier_nonce'),
                         'token'  => $token,
                         ],
                         admin_url('admin-ajax.php')
@@ -761,21 +761,21 @@ final class Verificationpage
         }
 
         // Localized once for the whole batch; verification.js reads this on load to seed its queue.
-        wp_localize_script('forge-verifier-data', 'ForgeVerifierQueueData', $verification_queue);
+        wp_localize_script('fabricator-verifier-data', 'FabricatorVerifierQueueData', $verification_queue);
 
         // --- Render drag-and-drop form with nonce ---
         // Verification page styles: assets/css/admin-verification.css (enqueued in Utils/Assets.php).
 
         echo '<form id="pdf-upload-form" method="post" enctype="multipart/form-data">';
-        wp_nonce_field('forge_verifier_upload', 'forge_verifier_nonce');
+        wp_nonce_field('fabricator_verifier_upload', 'fabricator_verifier_nonce');
         $idle_style   = $is_request_post ? ' style="' . esc_attr('display:none') . '"' : '';
-        $scanmore_cls = $is_request_post ? ' class="' . esc_attr('forge-pdf-visible') . '"' : '';
+        $scanmore_cls = $is_request_post ? ' class="' . esc_attr('fabricator-pdf-visible') . '"' : '';
         // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- $idle_style/$scanmore_cls are
         // already esc_attr()'d at assignment above; other interpolated values are esc_html()/esc_attr()'d
         // inline.
         echo '
-        <div id="forge-pdf-idle-state"' . $idle_style . '>
-            <div class="forge-pdf-idle-card">
+        <div id="fabricator-pdf-idle-state"' . $idle_style . '>
+            <div class="fabricator-pdf-idle-card">
                 <h2>' . esc_html__('PDF Verification', 'formfabricator') . '</h2>
                 <p>' . esc_html__('Upload one or more generated PDFs to verify their embedded seal and check for tampering.', 'formfabricator') . '</p>
                 <div id="drop-zone">
@@ -784,16 +784,16 @@ final class Verificationpage
                 </div>
                 <input type="file" name="pdfs[]" id="pdf-input"
                     accept="application/pdf" multiple style="display:none;">
-                <ul id="forge-pdf-file-queue"></ul>
-                <button id="forge-pdf-verify-btn" class="button button-primary"
+                <ul id="fabricator-pdf-file-queue"></ul>
+                <button id="fabricator-pdf-verify-btn" class="button button-primary"
                     type="submit" style="width:100%;justify-content:center;" disabled>' . esc_html__('Verify PDFs', 'formfabricator') . '</button>
             </div>
         </div>
         </form>
 
-        <div id="forge-pdf-scan-more-backdrop">
-            <div class="forge-pdf-idle-card">
-                <button id="forge-pdf-scan-more-close" title="' . esc_attr__('Close', 'formfabricator') . '">&times;</button>
+        <div id="fabricator-pdf-scan-more-backdrop">
+            <div class="fabricator-pdf-idle-card">
+                <button id="fabricator-pdf-scan-more-close" title="' . esc_attr__('Close', 'formfabricator') . '">&times;</button>
                 <h2>' . esc_html__('Scan more PDFs', 'formfabricator') . '</h2>
                 <p>' . esc_html__('Add more PDFs to verify.', 'formfabricator') . '</p>
                 <div id="drop-zone-more">
@@ -801,23 +801,23 @@ final class Verificationpage
                     <small style="opacity:.75">' . esc_html__('or click to select', 'formfabricator') . '</small>
                 </div>
                 <input type="file" id="pdf-input-more" accept="application/pdf" multiple style="display:none;">
-                <ul id="forge-pdf-file-queue-more"></ul>
-                <button id="forge-pdf-verify-more-btn" class="button button-primary"
+                <ul id="fabricator-pdf-file-queue-more"></ul>
+                <button id="fabricator-pdf-verify-more-btn" class="button button-primary"
                     style="width:100%;justify-content:center;" disabled>' . esc_html__('Verify PDFs', 'formfabricator') . '</button>
             </div>
         </div>
 
-        <button id="forge-pdf-scan-more-btn" type="button"' . $scanmore_cls . '>+ ' . esc_html__('Scan more PDFs', 'formfabricator') . '</button>
+        <button id="fabricator-pdf-scan-more-btn" type="button"' . $scanmore_cls . '>+ ' . esc_html__('Scan more PDFs', 'formfabricator') . '</button>
 
-        <div id="forge-pdf-upload-overlay">
-            <div class="forge-pdf-idle-card">
-                <div id="forge-pdf-upload-spinner"></div>
+        <div id="fabricator-pdf-upload-overlay">
+            <div class="fabricator-pdf-idle-card">
+                <div id="fabricator-pdf-upload-spinner"></div>
                 <h2>' . esc_html__('Uploading…', 'formfabricator') . '</h2>
                 <p>' . esc_html__('Please keep this page open — this can take a while for large files.', 'formfabricator') . '</p>
             </div>
         </div>
 
-        <div id="forge-pdf-verification-results"></div>
+        <div id="fabricator-pdf-verification-results"></div>
         ';
         // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
 
@@ -843,7 +843,7 @@ final class Verificationpage
             return;
         }
         set_transient(
-            'forge_vp_' . self::$progressKey,
+            'fabricator_vp_' . self::$progressKey,
             ['step' => $step, 'pct' => $pct, 'uid' => get_current_user_id()],
             120
         );
@@ -866,8 +866,8 @@ final class Verificationpage
         if ($elapsed <= $maxSeconds) {
             return;
         }
-        \ForgeForms\forge_log(
-            'ForgeForms handleUpload: aborting after [' . $passLabel . '] pass — '
+        \FabricatorForms\fabricator_log(
+            'FabricatorForms handleUpload: aborting after [' . $passLabel . '] pass — '
             . round($elapsed, 1) . 's elapsed (limit ' . $maxSeconds . 's)'
         );
         // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- this exception message is never echoed directly; the catch block in handleUpload() only matches it via str_contains() against fixed, already-translated literals (see the match(true) block around line 3840) before echoing the mapped friendly message.
@@ -887,21 +887,21 @@ final class Verificationpage
         // escaped/int-cast/hashed/regex-constrained; WPCS can't trace escaping through interpolation.
         self::$progressKey = $progressKey;
         // Wall-clock checkpoint: this handler runs under a raised 1800s hard ceiling
-        // (see set_time_limit(1800) at the top of wp_ajax_forge_verify_push_lines) that
+        // (see set_time_limit(1800) at the top of wp_ajax_fabricator_verify_push_lines) that
         // should never actually be reached. The real budget is this soft cap, scaled to
         // the uploaded file's size so a legitimately large-but-valid PDF (multiple big
         // embedded images, up to Verificationpage::MAX_PDF_BYTES) isn't penalized by a flat ceiling
         // sized for a much smaller file — while still aborting a pathologically slow
         // parse well before the hard ceiling.
-        $forge_parse_start       = microtime(true);
-        $forge_parse_file_mb     = max(1, (int) ceil(($file['size'] ?? 0) / 1048576));
-        $forge_parse_max_seconds = min(600, 30 + ($forge_parse_file_mb * 2));
+        $fabricator_parse_start       = microtime(true);
+        $fabricator_parse_file_mb     = max(1, (int) ceil(($file['size'] ?? 0) / 1048576));
+        $fabricator_parse_max_seconds = min(600, 30 + ($fabricator_parse_file_mb * 2));
         $file_name = sanitize_file_name((string) ($file['name'] ?? 'document.pdf'));
         static $upload_id_counter = 0;
-        $uid_prefix = 'forge-pdf-' . (++$upload_id_counter) . '-' . substr(md5($file_name), 0, 8);
+        $uid_prefix = 'fabricator-pdf-' . (++$upload_id_counter) . '-' . substr(md5($file_name), 0, 8);
 
         if ($file['error'] !== UPLOAD_ERR_OK) {
-            \ForgeForms\forge_log('ForgeForms handleUpload: rejected "' . $file_name . '" — PHP upload error code ' . $file['error'] . '.');
+            \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected "' . $file_name . '" — PHP upload error code ' . $file['error'] . '.');
             // translators: %s: uploaded file name.
             $msg = sprintf(__('Upload failed for %s.', 'formfabricator'), esc_html($file_name));
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
@@ -913,7 +913,7 @@ final class Verificationpage
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $detected_mime = $finfo->file($file['tmp_name']);
         if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
-            \ForgeForms\forge_log('ForgeForms handleUpload: rejected "' . $file_name . '" — finfo detected MIME "' . $detected_mime . '" instead of application/pdf.');
+            \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected "' . $file_name . '" — finfo detected MIME "' . $detected_mime . '" instead of application/pdf.');
             // translators: %s: uploaded file name.
             $msg = sprintf(__('Invalid file type for %s.', 'formfabricator'), esc_html($file_name));
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
@@ -924,7 +924,7 @@ final class Verificationpage
 
         // --- Store visual lines if provided ---
         $upload_dir   = wp_upload_dir();
-        $safe_dir     = $upload_dir['basedir'] . '/forge-secure-pdf';
+        $safe_dir     = $upload_dir['basedir'] . '/fabricator-secure-pdf';
 
         $wp_filesystem = self::getWpFilesystem();
 
@@ -963,7 +963,7 @@ final class Verificationpage
         // technique to alter visible content while leaving the original seal intact.
         $raw_for_guard = @file_get_contents($file['tmp_name']);
         if ($raw_for_guard === false) {
-            \ForgeForms\forge_log('ForgeForms handleUpload: rejected "' . $file_name . '" — file_get_contents() failed reading the uploaded temp file.');
+            \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected "' . $file_name . '" — file_get_contents() failed reading the uploaded temp file.');
             // translators: %s: uploaded file name.
             $msg = sprintf(__('Could not read PDF file: %s.', 'formfabricator'), esc_html($file_name));
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
@@ -982,13 +982,13 @@ final class Verificationpage
 
         // Raw-byte preflight: scan compressed streams for the seal marker without
         // loading the full PDF object graph. Avoids calling pdfparser (and its
-        // memory overhead) entirely for PDFs that have no forge seal.
+        // memory overhead) entirely for PDFs that have no fabricator seal.
         if (!self::rawPdfHasSeal($file['tmp_name'])) {
             // rawPdfHasSeal() itself logs details (skipped/oversized streams) when
             // relevant — this just records that this file was rejected at this gate.
-            \ForgeForms\forge_log('ForgeForms handleUpload: rejected "' . $file_name . '" — raw-byte preflight found no seal marker.');
+            \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected "' . $file_name . '" — raw-byte preflight found no seal marker.');
             // translators: %s: uploaded file name.
-            $msg = sprintf(__('%s does not contain a forge-pdf seal and cannot be verified.', 'formfabricator'), esc_html($file_name)); // phpcs:ignore Generic.Files.LineLength
+            $msg = sprintf(__('%s does not contain a fabricator-pdf seal and cannot be verified.', 'formfabricator'), esc_html($file_name)); // phpcs:ignore Generic.Files.LineLength
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
             // its $message argument internally.
             echo self::noticeHtml($msg, 'error');
@@ -1014,10 +1014,10 @@ final class Verificationpage
             // across many fields), and it's the decompressed volume — not the on-disk
             // file size — that drives the cost of the regex passes below. Whichever
             // estimate is larger wins so neither dimension alone can starve the budget.
-            $forge_parse_text_mb    = strlen($text) / 1048576;
-            $forge_parse_max_seconds = max(
-                $forge_parse_max_seconds,
-                min(600, 30 + ($forge_parse_text_mb * 4))
+            $fabricator_parse_text_mb    = strlen($text) / 1048576;
+            $fabricator_parse_max_seconds = max(
+                $fabricator_parse_max_seconds,
+                min(600, 30 + ($fabricator_parse_text_mb * 4))
             );
 
             // --- Extract Seal (exactly one allowed) ---
@@ -1042,7 +1042,7 @@ final class Verificationpage
 
             $seal_base64 = trim($multiple_seals_detected ? end($matches[1]) : $matches[1][0]);
 
-            self::checkParseTimeBudget($forge_parse_start, $forge_parse_max_seconds, 'seal extraction');
+            self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'seal extraction');
 
             if (strlen($seal_base64) > 65536) {
                 throw new \RuntimeException("Seal is implausibly large in {$file_name}.");
@@ -1112,23 +1112,23 @@ final class Verificationpage
 
             // --- Structure integrity section (only present when incremental update detected) ---
             if ($incremental_update_detected) {
-                $struct_section_id = 'forge-pdf-content-structure-' . $uid_prefix;
+                $struct_section_id = 'fabricator-pdf-content-structure-' . $uid_prefix;
                 $struct_sec_attr = esc_attr($uid_prefix);
-                echo "<div class='forge-pdf-detail-section'"
-                   . " id='forge-pdf-section-structure-{$struct_sec_attr}'>";
-                echo "<div class='forge-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small forge-pdf-toggle'"
+                echo "<div class='fabricator-pdf-detail-section'"
+                   . " id='fabricator-pdf-section-structure-{$struct_sec_attr}'>";
+                echo "<div class='fabricator-pdf-detail-hdr'>";
+                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($struct_section_id) . "'>" . esc_html__('PDF Structure', 'formfabricator') . "</button>";
-                echo "<span class='forge-pdf-detail-badge forge-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+                echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
                 echo "</div>";
                 $eof_n_disp = (int) $incremental_update_eof_count;
                 echo "<div id='" . esc_attr($struct_section_id) . "'"
-                   . " class='forge-pdf-hidden forge-pdf-detail-content'>";
-                echo "<div class='forge-pdf-hash-list'>";
-                echo "<div class='forge-pdf-hash-row forge-pdf-hash-row--fail'>";
-                echo "<span class='forge-pdf-hash-label'>%%EOF count</span>";
-                echo "<span class='forge-pdf-hash-value'>{$eof_n_disp} (expected: 1)</span>";
-                echo "<span class='forge-pdf-pill forge-pdf-pill--fail'>FAIL</span>";
+                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+                echo "<div class='fabricator-pdf-hash-list'>";
+                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
+                echo "<span class='fabricator-pdf-hash-label'>%%EOF count</span>";
+                echo "<span class='fabricator-pdf-hash-value'>{$eof_n_disp} (expected: 1)</span>";
+                echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>FAIL</span>";
                 echo "</div>";
                 echo "<p style='margin:10px 14px 8px;font-size:12px;color:#444;line-height:1.6'>";
                 echo wp_kses_post(sprintf(
@@ -1149,38 +1149,38 @@ final class Verificationpage
             // --- Raw debug: Seal Data + Rebuilt Payload (info-only, always collapsed) ---
             $seal_id    = sanitize_html_class($uid_prefix . '-seal');
             $rebuilt_id = sanitize_html_class($uid_prefix . '-rebuilt');
-            echo "<div class='forge-pdf-detail-section' id='forge-pdf-section-raw-" . esc_attr($uid_prefix) . "'>";
-            echo "<div class='forge-pdf-detail-hdr'>";
-            echo "<button type='button' class='button button-small forge-pdf-toggle'"
+            echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-raw-" . esc_attr($uid_prefix) . "'>";
+            echo "<div class='fabricator-pdf-detail-hdr'>";
+            echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                . " data-target='" . esc_attr($uid_prefix) . "-raw-content'>" . esc_html__('Raw Seal & Rebuilt Data', 'formfabricator') . "</button>";
-            echo "<span class='forge-pdf-detail-badge forge-pdf-badge-info'>INFO</span>";
+            echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-info'>INFO</span>";
             echo "</div>";
             $flags      = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE;
             $json_seal  = esc_html((string) wp_json_encode($seal_data, $flags));
             $json_built = esc_html((string) wp_json_encode($rebuilt_payload, $flags));
 
             $raw_id = esc_attr($uid_prefix) . '-raw-content';
-            echo "<div id='{$raw_id}' class='forge-pdf-hidden forge-pdf-detail-content' style='padding:0;'>";
+            echo "<div id='{$raw_id}' class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
 
             // Column headers — outside the scroll container so they stay fixed
-            echo "<div class='forge-pdf-sbs-headers'>";
-            echo "<div class='forge-pdf-sbs-col-label'>" . esc_html__('Seal', 'formfabricator') . "</div>";
-            echo "<div class='forge-pdf-sbs-col-label'>" . esc_html__('Rebuilt', 'formfabricator') . "</div>";
+            echo "<div class='fabricator-pdf-sbs-headers'>";
+            echo "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Seal', 'formfabricator') . "</div>";
+            echo "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Rebuilt', 'formfabricator') . "</div>";
             echo "</div>";
 
             // Single scrollable container — one scroll event, both columns move together
-            echo "<div class='forge-pdf-sbs-scroll'>";
-            echo "<pre class='forge-pdf-sbs-pre'>{$json_seal}</pre>";
-            echo "<div class='forge-pdf-sbs-divider'></div>";
-            echo "<pre class='forge-pdf-sbs-pre'>{$json_built}</pre>";
+            echo "<div class='fabricator-pdf-sbs-scroll'>";
+            echo "<pre class='fabricator-pdf-sbs-pre'>{$json_seal}</pre>";
+            echo "<div class='fabricator-pdf-sbs-divider'></div>";
+            echo "<pre class='fabricator-pdf-sbs-pre'>{$json_built}</pre>";
             echo "</div>";
 
             if (!$seal_rebuilt_match) {
                 $json_diff = esc_html((string) wp_json_encode($diffs, $flags));
                 echo "<div style='padding:12px 14px;border-top:1px solid #f5c6cb;'>";
-                echo "<div class='forge-pdf-seal-pane__label'"
+                echo "<div class='fabricator-pdf-seal-pane__label'"
                     . " style='color:#721c24;margin-bottom:4px;'>" . esc_html__('Differences', 'formfabricator') . "</div>";
-                echo "<pre class='forge-pdf-json-pre'"
+                echo "<pre class='fabricator-pdf-json-pre'"
                     . " style='border-color:#f5c6cb;color:#721c24;margin:0;'>{$json_diff}</pre>";
                 echo "</div>";
             }
@@ -1216,7 +1216,7 @@ final class Verificationpage
             // Normalize full PDF text
             $normalized_pdf = $normalize($text);
             $normalized_pdf = preg_replace(
-                '/\[FORGE_PDF_PAGENO_START\].*?\[FORGE_PDF_PAGENO_END\]/s',
+                '/\[FABRICATOR_PDF_PAGENO_START\].*?\[FABRICATOR_PDF_PAGENO_END\]/s',
                 '',
                 $normalized_pdf
             );
@@ -1225,16 +1225,16 @@ final class Verificationpage
             self::setProgress(__('Checking fields…', 'formfabricator'), 45);
 
             // Section wrapper — badge + open-state injected after check runs via post-processing
-            $all_visual_id = 'forge-pdf-content-fields-' . $uid_prefix;
-            echo "<div class='forge-pdf-detail-section' id='forge-pdf-section-fields-" . esc_attr($uid_prefix) . "'>";
-            echo "<div class='forge-pdf-detail-hdr' id='forge-pdf-hdr-fields-" . esc_attr($uid_prefix) . "'>";
-            echo "<button type='button' class='button button-small forge-pdf-toggle'"
+            $all_visual_id = 'fabricator-pdf-content-fields-' . $uid_prefix;
+            echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-fields-" . esc_attr($uid_prefix) . "'>";
+            echo "<div class='fabricator-pdf-detail-hdr' id='fabricator-pdf-hdr-fields-" . esc_attr($uid_prefix) . "'>";
+            echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                . " data-target='" . esc_attr($all_visual_id) . "'>" . esc_html__('Field Content', 'formfabricator') . "</button>";
-            echo "<span id='forge-pdf-badge-fields-" . esc_attr($uid_prefix)
-               . "' class='forge-pdf-detail-badge forge-pdf-badge-pass'>PASS</span>";
+            echo "<span id='fabricator-pdf-badge-fields-" . esc_attr($uid_prefix)
+               . "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
             echo "</div>";
-            echo "<div id='" . esc_attr($all_visual_id) . "' class='forge-pdf-hidden forge-pdf-detail-content'>";
-            echo "<div class='forge-pdf-cmp-list'>";
+            echo "<div id='" . esc_attr($all_visual_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+            echo "<div class='fabricator-pdf-cmp-list'>";
 
             // Track processed array entries and start markers
             $processed_fields = [];
@@ -1243,7 +1243,7 @@ final class Verificationpage
             do {
                 $new_start_found = false;
 
-                $field_pattern = '/\[FORGE_PDF_FIELD_([^\]]+)\](.*?)\[FORGE_PDF_FIELD_END\]/s';
+                $field_pattern = '/\[FABRICATOR_PDF_FIELD_([^\]]+)\](.*?)\[FABRICATOR_PDF_FIELD_END\]/s';
                 if (preg_match_all($field_pattern, $normalized_pdf, $matches, PREG_SET_ORDER)) {
                     foreach ($matches as $match) {
                         $start_marker = $match[1];
@@ -1264,11 +1264,11 @@ final class Verificationpage
                         }
 
                         if ($payload_index === null) {
-                            echo "<div class='forge-pdf-cmp-row forge-pdf-cmp-row--fail'>"
-                               . "<div class='forge-pdf-cmp-header'>"
-                               . "<span class='forge-pdf-cmp-label'>" . esc_html__('Unknown field', 'formfabricator') . "</span>"
-                               . "<span class='forge-pdf-cmp-marker'>" . esc_html($start_marker) . "</span>"
-                               . "<span class='forge-pdf-pill forge-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . "</span>"
+                            echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
+                               . "<div class='fabricator-pdf-cmp-header'>"
+                               . "<span class='fabricator-pdf-cmp-label'>" . esc_html__('Unknown field', 'formfabricator') . "</span>"
+                               . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($start_marker) . "</span>"
+                               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . "</span>"
                                . "</div></div>\n";
                             $processed_markers[] = $start_marker;
                             $new_start_found = true;
@@ -1346,23 +1346,23 @@ final class Verificationpage
                         $pill_text  = $matches_visual ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
                         $display_label = $label !== '' ? esc_html($label) : 'Field #' . (int) $payload_index;
 
-                        echo "<div class='forge-pdf-cmp-row forge-pdf-cmp-row--{$row_state}'>";
-                        echo "<div class='forge-pdf-cmp-header'>"
-                           . "<span class='forge-pdf-cmp-label'>{$display_label}</span>"
-                           . "<span class='forge-pdf-cmp-marker'>" . esc_html($start_marker) . "</span>"
-                           . "<span class='forge-pdf-pill forge-pdf-pill--{$pill_state}'>{$pill_text}</span>"
+                        echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
+                        echo "<div class='fabricator-pdf-cmp-header'>"
+                           . "<span class='fabricator-pdf-cmp-label'>{$display_label}</span>"
+                           . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($start_marker) . "</span>"
+                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>{$pill_text}</span>"
                            . "</div>";
-                        echo "<div class='forge-pdf-cmp-body'>";
+                        echo "<div class='fabricator-pdf-cmp-body'>";
                         $seal_val = esc_html((string) ($payload_field['value'] ?? ''));
-                        echo "<div class='forge-pdf-cmp-col'>"
-                           . "<div class='forge-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
-                           . "<div class='forge-pdf-cmp-col__value'>{$seal_val}</div>"
+                        echo "<div class='fabricator-pdf-cmp-col'>"
+                           . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
+                           . "<div class='fabricator-pdf-cmp-col__value'>{$seal_val}</div>"
                            . "</div>";
-                        echo "<div class='forge-pdf-cmp-col'>"
-                           . "<div class='forge-pdf-cmp-col__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
-                           . "<div class='forge-pdf-cmp-col__value'>" . esc_html((string) $pdf_field_text) . "</div>"
+                        echo "<div class='fabricator-pdf-cmp-col'>"
+                           . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
+                           . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html((string) $pdf_field_text) . "</div>"
                            . "</div>";
-                        echo "</div>"; // forge-pdf-cmp-body
+                        echo "</div>"; // fabricator-pdf-cmp-body
 
                         if (!$matches_visual) {
                             $diff_parts = [];
@@ -1376,12 +1376,12 @@ final class Verificationpage
                                 }
                             }
                             if (!empty($diff_parts)) {
-                                echo "<div class='forge-pdf-diff-row'>"
+                                echo "<div class='fabricator-pdf-diff-row'>"
                                 . implode(' &nbsp;|&nbsp; ', $diff_parts) . "</div>";
                             }
                         }
 
-                        echo "</div>\n"; // forge-pdf-cmp-row
+                        echo "</div>\n"; // fabricator-pdf-cmp-row
 
                         // Mark both as processed
                         $processed_fields[] = $payload_index;
@@ -1391,11 +1391,11 @@ final class Verificationpage
                 }
             } while ($new_start_found);
 
-            self::checkParseTimeBudget($forge_parse_start, $forge_parse_max_seconds, 'field extraction');
+            self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'field extraction');
 
-            echo "</div>"; // forge-pdf-cmp-list
-            echo "</div>"; // forge-pdf-detail-content
-            echo "</div>"; // forge-pdf-detail-section
+            echo "</div>"; // fabricator-pdf-cmp-list
+            echo "</div>"; // fabricator-pdf-detail-content
+            echo "</div>"; // fabricator-pdf-detail-section
 
             // --- Multiple seals detail section ---
             // Each seal found here is verified against the same server-side key lookup as the
@@ -1426,17 +1426,17 @@ final class Verificationpage
                     }
                 }
 
-                $seals_section_id = 'forge-pdf-content-seals-' . $uid_prefix;
-                echo "<div class='forge-pdf-detail-section'"
-                   . " id='forge-pdf-section-seals-" . esc_attr($uid_prefix) . "'>";
-                echo "<div class='forge-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small forge-pdf-toggle'"
+                $seals_section_id = 'fabricator-pdf-content-seals-' . $uid_prefix;
+                echo "<div class='fabricator-pdf-detail-section'"
+                   . " id='fabricator-pdf-section-seals-" . esc_attr($uid_prefix) . "'>";
+                echo "<div class='fabricator-pdf-detail-hdr'>";
+                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($seals_section_id) . "'>" . esc_html__('Seal Blocks', 'formfabricator') . "</button>";
-                echo "<span class='forge-pdf-detail-badge forge-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+                echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
                 echo "</div>";
                 echo "<div id='" . esc_attr($seals_section_id) . "'"
-                   . " class='forge-pdf-hidden forge-pdf-detail-content'>";
-                echo "<div class='forge-pdf-hash-list'>";
+                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+                echo "<div class='fabricator-pdf-hash-list'>";
 
                 $total_seals = count($all_seals_b64);
                 echo "<p style='margin:8px 14px 4px;font-size:12px;color:#d63638;font-weight:600'>";
@@ -1473,7 +1473,7 @@ final class Verificationpage
                                     $vr    = HashSeal::verify($rp, (string)($sd['seal'] ?? ''));
                                     $is_ok = $vr['valid'];
                                 } catch (\Throwable $sve) {
-                                    \ForgeForms\forge_log('ForgeForms Verificationpage: seal HMAC check threw: ' . $sve->getMessage());
+                                    \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: seal HMAC check threw: ' . $sve->getMessage());
                                     $is_ok     = false;
                                     $parse_err = 'HMAC check failed';
                                 }
@@ -1481,15 +1481,15 @@ final class Verificationpage
                         }
                     }
 
-                    $row_cls  = $is_ok ? 'forge-pdf-hash-row--pass' : 'forge-pdf-hash-row--fail';
-                    $pill_cls = $is_ok ? 'forge-pdf-pill--pass'     : 'forge-pdf-pill--fail';
+                    $row_cls  = $is_ok ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail';
+                    $pill_cls = $is_ok ? 'fabricator-pdf-pill--pass'     : 'fabricator-pdf-pill--fail';
                     $pill_txt = $is_ok ? esc_html__('AUTHENTIC', 'formfabricator') : esc_html__('FORGED / INVALID', 'formfabricator');
 
                     $seal_row_style = 'flex-direction:column;align-items:flex-start;gap:6px;padding:10px 14px';
-                    echo "<div class='forge-pdf-hash-row {$row_cls}' style='{$seal_row_style}'>";
+                    echo "<div class='fabricator-pdf-hash-row {$row_cls}' style='{$seal_row_style}'>";
                     echo "<div style='display:flex;align-items:center;gap:8px;width:100%'>";
                     echo "<strong style='flex:1'>Seal #" . (int)$seal_num . "</strong>";
-                    echo "<span class='forge-pdf-pill {$pill_cls}'>{$pill_txt}</span>";
+                    echo "<span class='fabricator-pdf-pill {$pill_cls}'>{$pill_txt}</span>";
                     echo "</div>";
 
                     // Always show a truncated preview of the raw base64 between the markers.
@@ -1548,28 +1548,28 @@ final class Verificationpage
             self::setProgress(__('Checking annotations…', 'formfabricator'), 58);
 
             // Section wrapper — badge injected after annotation check via post-processing
-            echo "<div class='forge-pdf-detail-section' id='forge-pdf-section-annots-" . esc_attr($uid_prefix) . "'>";
+            echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-annots-" . esc_attr($uid_prefix) . "'>";
 
-            $fold_id = 'forge-pdf-content-annots-' . $uid_prefix;
-            echo "<div class='forge-pdf-detail-hdr'>";
-            echo "<button type='button' class='button button-small forge-pdf-toggle'"
+            $fold_id = 'fabricator-pdf-content-annots-' . $uid_prefix;
+            echo "<div class='fabricator-pdf-detail-hdr'>";
+            echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                . " data-target='" . esc_attr($fold_id) . "'>"
                . esc_html__('Annotations', 'formfabricator') . "</button>";
-            $annot_badge_id = 'forge-pdf-badge-annots-' . esc_attr($uid_prefix);
-            echo "<span id='{$annot_badge_id}' class='forge-pdf-detail-badge forge-pdf-badge-pass'>PASS</span>";
+            $annot_badge_id = 'fabricator-pdf-badge-annots-' . esc_attr($uid_prefix);
+            echo "<span id='{$annot_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
             echo "</div>";
             echo "<div id='" . esc_attr($fold_id) . "'"
-               . " class='forge-pdf-hidden forge-pdf-detail-content'>";
+               . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
 
             $fold_dupes_id = 'fold_dupecheck_' . uniqid();
-            echo "<div class='forge-pdf-subsection'>";
-            echo "<button type='button' class='forge-pdf-subtoggle forge-pdf-toggle'"
+            echo "<div class='fabricator-pdf-subsection'>";
+            echo "<button type='button' class='fabricator-pdf-subtoggle fabricator-pdf-toggle'"
                . " data-target='" . esc_attr($fold_dupes_id) . "'>"
-               . "<span class='forge-pdf-subtoggle__icon'>&#9656;</span> " . esc_html__('Chunk Check', 'formfabricator')
+               . "<span class='fabricator-pdf-subtoggle__icon'>&#9656;</span> " . esc_html__('Chunk Check', 'formfabricator')
                . "</button>";
             echo "<div id='" . esc_attr($fold_dupes_id) . "'"
-               . " class='forge-pdf-hidden forge-pdf-detail-content' style='padding:0;'>";
-            echo "<div class='forge-pdf-cmp-list'>";
+               . " class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
+            echo "<div class='fabricator-pdf-cmp-list'>";
 
             $fields = $rebuilt_payload['fields'] ?? [];
             $processed_fields = [];
@@ -1580,19 +1580,19 @@ final class Verificationpage
             $current_marker = '';
             $current_chunks = [];
 
-            $forge_total_lines = count($visualLines);
+            $fabricator_total_lines = count($visualLines);
 
             foreach ($visualLines as $line_number => $chunk) {
                 // Interim progress so a large-but-valid submission (see the raised
                 // visualLines cap above) doesn't look frozen while this loop works
                 // through the full comparison instead of silently truncating data.
-                if ($forge_total_lines > 0 && $line_number % 1000 === 0) {
+                if ($fabricator_total_lines > 0 && $line_number % 1000 === 0) {
                     self::setProgress(
                         sprintf(
                             /* translators: 1: lines processed so far, 2: total lines to process. */
                             __('Compiling results… (%1$d/%2$d)', 'formfabricator'),
                             $line_number,
-                            $forge_total_lines
+                            $fabricator_total_lines
                         ),
                         58
                     );
@@ -1602,7 +1602,7 @@ final class Verificationpage
                 $chunk_clean = preg_replace('/^\d+:\s*/', '', $chunk);
 
                 // --- Detect end of field first ---
-                if ($inside_field && preg_match('/^\[FORGE_PDF_FIELD_END\]/', $chunk_clean)) {
+                if ($inside_field && preg_match('/^\[FABRICATOR_PDF_FIELD_END\]/', $chunk_clean)) {
                     $inside_field = false;
 
                     // Concatenate chunks
@@ -1610,7 +1610,7 @@ final class Verificationpage
 
                     // Remove page markers inside field
                     $full_field_text = preg_replace(
-                        '/\[FORGE_PDF_PAGENO_START\].*?\[FORGE_PDF_PAGENO_END\]/s',
+                        '/\[FABRICATOR_PDF_PAGENO_START\].*?\[FABRICATOR_PDF_PAGENO_END\]/s',
                         '',
                         $full_field_text
                     );
@@ -1649,30 +1649,30 @@ final class Verificationpage
                             // translators: %d: number of text chunks the field's content was split into.
                             $chunk_count_label = sprintf(_n('%d chunk', '%d chunks', count($current_chunks), 'formfabricator'), count($current_chunks));
 
-                            echo "<div class='forge-pdf-cmp-row forge-pdf-cmp-row--{$row_state}'>";
-                            echo "<div class='forge-pdf-cmp-header'>"
-                               . "<span class='forge-pdf-cmp-label'>{$disp_label}</span>"
-                               . "<span class='forge-pdf-cmp-marker'>" . esc_html($current_marker) . "</span>"
-                               . "<span class='forge-pdf-pill forge-pdf-pill--{$pill_state}'>" . esc_html($pill_text) . "</span>"
+                            echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
+                            echo "<div class='fabricator-pdf-cmp-header'>"
+                               . "<span class='fabricator-pdf-cmp-label'>{$disp_label}</span>"
+                               . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($current_marker) . "</span>"
+                               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>" . esc_html($pill_text) . "</span>"
                                . "<span style='font-size:10px;color:#787c82;margin-left:4px;'>"
                                . esc_html($chunk_count_label) . "</span>"
                                . "</div>";
-                            echo "<div class='forge-pdf-cmp-body'>";
+                            echo "<div class='fabricator-pdf-cmp-body'>";
                             $seal_v = esc_html((string) $expected_text);
                             $pdf_v  = esc_html((string) $snippet);
-                            echo "<div class='forge-pdf-cmp-col'><div class='forge-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
-                               . "<div class='forge-pdf-cmp-col__value'>{$seal_v}</div></div>";
-                            echo "<div class='forge-pdf-cmp-col'><div class='forge-pdf-cmp-col__label'>" . esc_html__('PDF chunk', 'formfabricator') . "</div>"
-                               . "<div class='forge-pdf-cmp-col__value'>{$pdf_v}</div></div>";
-                            echo "</div></div>\n"; // forge-pdf-cmp-body + forge-pdf-cmp-row
+                            echo "<div class='fabricator-pdf-cmp-col'><div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
+                               . "<div class='fabricator-pdf-cmp-col__value'>{$seal_v}</div></div>";
+                            echo "<div class='fabricator-pdf-cmp-col'><div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF chunk', 'formfabricator') . "</div>"
+                               . "<div class='fabricator-pdf-cmp-col__value'>{$pdf_v}</div></div>";
+                            echo "</div></div>\n"; // fabricator-pdf-cmp-body + fabricator-pdf-cmp-row
 
                             $processed_fields[] = $payload_index;
                         } else {
-                            echo "<div class='forge-pdf-cmp-row forge-pdf-cmp-row--fail'>"
-                               . "<div class='forge-pdf-cmp-header'>"
-                               . "<span class='forge-pdf-cmp-label'>" . esc_html__('Unknown marker', 'formfabricator') . "</span>"
-                               . "<span class='forge-pdf-cmp-marker'>" . esc_html($current_marker) . "</span>"
-                               . "<span class='forge-pdf-pill forge-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . "</span>"
+                            echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
+                               . "<div class='fabricator-pdf-cmp-header'>"
+                               . "<span class='fabricator-pdf-cmp-label'>" . esc_html__('Unknown marker', 'formfabricator') . "</span>"
+                               . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($current_marker) . "</span>"
+                               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . "</span>"
                                . "</div></div>\n";
                         }
 
@@ -1685,7 +1685,7 @@ final class Verificationpage
                 }
 
                 // --- Detect start of field ---
-                if (preg_match('/^\[FORGE_PDF_FIELD_([^\]]+)\]/', $chunk_clean, $start_match)) {
+                if (preg_match('/^\[FABRICATOR_PDF_FIELD_([^\]]+)\]/', $chunk_clean, $start_match)) {
                     $inside_field = true;
                     $current_marker = $start_match[1];
                     $current_chunks = [];
@@ -1698,13 +1698,13 @@ final class Verificationpage
                 }
             }
 
-            echo "</div>"; // forge-pdf-cmp-list
+            echo "</div>"; // fabricator-pdf-cmp-list
             echo "</div>"; // fold_dupes_id content
-            echo "</div>"; // forge-pdf-subsection
+            echo "</div>"; // fabricator-pdf-subsection
 
             // --- RAW PDF ANNOTATION EXTRACTION & SEAL CHECK ---
             if ($pdf_raw === false) {
-                \ForgeForms\forge_log('ForgeForms handleUpload: could not re-read "' . $file_name . '" for annotation/seal extraction — file_get_contents() failed.');
+                \FabricatorForms\fabricator_log('FabricatorForms handleUpload: could not re-read "' . $file_name . '" for annotation/seal extraction — file_get_contents() failed.');
                 // translators: %s: uploaded file name.
                 $msg = sprintf(__('Could not read PDF content for %s.', 'formfabricator'), esc_html($file_name));
                 // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml()
@@ -1800,19 +1800,19 @@ final class Verificationpage
                     }
                 }
 
-                self::checkParseTimeBudget($forge_parse_start, $forge_parse_max_seconds, 'object/annotation extraction');
+                self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'object/annotation extraction');
 
                 // --- 3) Foldable unified annotation report ---
                 $all_annots_id = sanitize_html_class($uid_prefix . '-all-annots');
-                echo "<div class='forge-pdf-subsection'>";
+                echo "<div class='fabricator-pdf-subsection'>";
                 $annot_btn_target = esc_attr($all_annots_id);
-                echo "<button type='button' class='forge-pdf-subtoggle forge-pdf-toggle'"
+                echo "<button type='button' class='fabricator-pdf-subtoggle fabricator-pdf-toggle'"
                    . " data-target='{$annot_btn_target}'>"
-                   . "<span class='forge-pdf-subtoggle__icon'>&#9656;</span> " . esc_html__('Annotation List', 'formfabricator')
+                   . "<span class='fabricator-pdf-subtoggle__icon'>&#9656;</span> " . esc_html__('Annotation List', 'formfabricator')
                    . "</button>";
                 echo "<div id='" . esc_attr($all_annots_id) . "'"
-                   . " class='forge-pdf-hidden forge-pdf-detail-content' style='padding:0;'>";
-                echo "<div class='forge-pdf-cmp-list'>";
+                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
+                echo "<div class='fabricator-pdf-cmp-list'>";
 
                 if (!empty($annotations)) {
                     $matched_fields = []; // track fields already matched
@@ -1909,29 +1909,29 @@ final class Verificationpage
                         });
 
                         $ann_label = 'Annot #' . ($i + 1) . ' — ' . esc_html($ann['type']);
-                        echo "<div class='forge-pdf-cmp-row forge-pdf-cmp-row--{$row_state}'>";
-                        echo "<div class='forge-pdf-cmp-header'>"
-                           . "<span class='forge-pdf-cmp-label'>{$ann_label}</span>"
-                           . "<span class='forge-pdf-pill forge-pdf-pill--{$pill_state}'>{$pill_text}</span>"
+                        echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
+                        echo "<div class='fabricator-pdf-cmp-header'>"
+                           . "<span class='fabricator-pdf-cmp-label'>{$ann_label}</span>"
+                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>{$pill_text}</span>"
                            . "</div>";
-                        echo "<div class='forge-pdf-cmp-body'>";
-                        echo "<div class='forge-pdf-cmp-col'>"
-                           . "<div class='forge-pdf-cmp-col__label'>" . esc_html__('PDF content', 'formfabricator') . "</div>"
-                           . "<div class='forge-pdf-cmp-col__value'>" . esc_html($content_to_match) . "</div>"
+                        echo "<div class='fabricator-pdf-cmp-body'>";
+                        echo "<div class='fabricator-pdf-cmp-col'>"
+                           . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF content', 'formfabricator') . "</div>"
+                           . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html($content_to_match) . "</div>"
                            . "</div>";
-                        echo "<div class='forge-pdf-cmp-col'>"
-                           . "<div class='forge-pdf-cmp-col__label'>" . esc_html__('Matched to seal', 'formfabricator') . "</div>"
-                           . "<div class='forge-pdf-cmp-col__value'>" . esc_html($matched_to_display) . "</div>"
+                        echo "<div class='fabricator-pdf-cmp-col'>"
+                           . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Matched to seal', 'formfabricator') . "</div>"
+                           . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html($matched_to_display) . "</div>"
                            . "</div>";
                         echo "</div></div>\n";
                     }
                 } else {
-                    echo "<p class='forge-pdf-empty-state'>" . esc_html__('No annotations found in PDF.', 'formfabricator') . "</p>";
+                    echo "<p class='fabricator-pdf-empty-state'>" . esc_html__('No annotations found in PDF.', 'formfabricator') . "</p>";
                 }
 
-                echo "</div>"; // forge-pdf-cmp-list
+                echo "</div>"; // fabricator-pdf-cmp-list
                 echo "</div>"; // all_annots_id content
-                echo "</div>"; // all_annots forge-pdf-detail-section
+                echo "</div>"; // all_annots fabricator-pdf-detail-section
             }
 
             echo "</div>"; // close annotation section foldable content
@@ -1952,29 +1952,29 @@ final class Verificationpage
 
                 self::setProgress(__('Checking page count…', 'formfabricator'), 68);
 
-                $page_box_id    = 'forge-pdf-content-pgcount-' . $uid_prefix;
-                $pgcount_sec_id = 'forge-pdf-section-pgcount-' . esc_attr($uid_prefix);
-                echo "<div class='forge-pdf-detail-section' id='{$pgcount_sec_id}'>";
-                echo "<div class='forge-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small forge-pdf-toggle'"
+                $page_box_id    = 'fabricator-pdf-content-pgcount-' . $uid_prefix;
+                $pgcount_sec_id = 'fabricator-pdf-section-pgcount-' . esc_attr($uid_prefix);
+                echo "<div class='fabricator-pdf-detail-section' id='{$pgcount_sec_id}'>";
+                echo "<div class='fabricator-pdf-detail-hdr'>";
+                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($page_box_id) . "'>" . esc_html__('Page Count', 'formfabricator') . "</button>";
-                $pgcount_badge = $pagecount_mismatch ? 'forge-pdf-badge-fail' : 'forge-pdf-badge-pass';
+                $pgcount_badge = $pagecount_mismatch ? 'fabricator-pdf-badge-fail' : 'fabricator-pdf-badge-pass';
                 $pgcount_label = $pagecount_mismatch ? __('FAIL', 'formfabricator') : __('PASS', 'formfabricator');
-                echo "<span class='forge-pdf-detail-badge {$pgcount_badge}'>" . esc_html($pgcount_label) . "</span>";
+                echo "<span class='fabricator-pdf-detail-badge {$pgcount_badge}'>" . esc_html($pgcount_label) . "</span>";
                 echo "</div>";
-                $pgcount_hidden = $pagecount_mismatch ? '' : ' forge-pdf-hidden';
-                echo "<div id='" . esc_attr($page_box_id) . "' class='forge-pdf-detail-content{$pgcount_hidden}'>";
-                echo "<div class='forge-pdf-stat-row'>";
-                echo "<div class='forge-pdf-stat'><div class='forge-pdf-stat__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
-                   . "<div class='forge-pdf-stat__value'>{$expected_pages}</div></div>";
-                echo "<div class='forge-pdf-stat-sep'>→</div>";
-                echo "<div class='forge-pdf-stat'><div class='forge-pdf-stat__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
-                   . "<div class='forge-pdf-stat__value'>{$object_page_count}</div></div>";
+                $pgcount_hidden = $pagecount_mismatch ? '' : ' fabricator-pdf-hidden';
+                echo "<div id='" . esc_attr($page_box_id) . "' class='fabricator-pdf-detail-content{$pgcount_hidden}'>";
+                echo "<div class='fabricator-pdf-stat-row'>";
+                echo "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
+                   . "<div class='fabricator-pdf-stat__value'>{$expected_pages}</div></div>";
+                echo "<div class='fabricator-pdf-stat-sep'>→</div>";
+                echo "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
+                   . "<div class='fabricator-pdf-stat__value'>{$object_page_count}</div></div>";
                 echo "</div>";
                 if ($pagecount_mismatch) {
-                    echo "<span class='forge-pdf-pill forge-pdf-pill--fail'>" . esc_html__('MISMATCH', 'formfabricator') . "</span>";
+                    echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISMATCH', 'formfabricator') . "</span>";
                 } else {
-                    echo "<span class='forge-pdf-pill forge-pdf-pill--pass'>" . esc_html__('OK', 'formfabricator') . "</span>";
+                    echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('OK', 'formfabricator') . "</span>";
                 }
                 echo "</div>";
                 echo "</div>";
@@ -1991,17 +1991,17 @@ final class Verificationpage
                 // IMAGE CHECK
                 self::setProgress(__('Checking images…', 'formfabricator'), 75);
 
-                $image_section_id  = 'forge-pdf-content-images-' . $uid_prefix;
-                $image_section_sec = 'forge-pdf-section-images-' . esc_attr($uid_prefix);
-                echo "<div class='forge-pdf-detail-section' id='{$image_section_sec}'>";
-                echo "<div class='forge-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small forge-pdf-toggle'"
+                $image_section_id  = 'fabricator-pdf-content-images-' . $uid_prefix;
+                $image_section_sec = 'fabricator-pdf-section-images-' . esc_attr($uid_prefix);
+                echo "<div class='fabricator-pdf-detail-section' id='{$image_section_sec}'>";
+                echo "<div class='fabricator-pdf-detail-hdr'>";
+                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($image_section_id) . "'>Image Hashes</button>";
-                $img_badge_id = 'forge-pdf-badge-images-' . esc_attr($uid_prefix);
-                echo "<span id='{$img_badge_id}' class='forge-pdf-detail-badge forge-pdf-badge-pass'>PASS</span>";
+                $img_badge_id = 'fabricator-pdf-badge-images-' . esc_attr($uid_prefix);
+                echo "<span id='{$img_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
                 echo "</div>";
                 echo "<div id='" . esc_attr($image_section_id) . "'"
-                   . " class='forge-pdf-hidden forge-pdf-detail-content'"
+                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'"
                    . " style='background:#f4f4f4; padding:10px; border:1px solid #ddd;'>";
 
                 if (str_contains($pdf_raw, '/XObject')) {
@@ -2019,7 +2019,7 @@ final class Verificationpage
                     // image/Form-XObject, so running these idempotent filesystem checks
                     // inside it repeated the same stat/write calls once per image.
                     $upload_dir = wp_upload_dir();
-                    $safe_dir   = $upload_dir['basedir'] . '/forge-secure-pdf';
+                    $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
                     $ver_dir    = $safe_dir . '/verimages';
 
                     $wp_filesystem = self::getWpFilesystem();
@@ -2901,19 +2901,19 @@ final class Verificationpage
 
                 self::setProgress(__('Checking content streams…', 'formfabricator'), 87);
 
-                $cs_section_id  = 'forge-pdf-content-streams-' . $uid_prefix;
-                $cs_section_sec = 'forge-pdf-section-streams-' . esc_attr($uid_prefix);
-                echo "<div class='forge-pdf-detail-section' id='{$cs_section_sec}'>";
-                echo "<div class='forge-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small forge-pdf-toggle'"
+                $cs_section_id  = 'fabricator-pdf-content-streams-' . $uid_prefix;
+                $cs_section_sec = 'fabricator-pdf-section-streams-' . esc_attr($uid_prefix);
+                echo "<div class='fabricator-pdf-detail-section' id='{$cs_section_sec}'>";
+                echo "<div class='fabricator-pdf-detail-hdr'>";
+                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($cs_section_id) . "'>Content Streams</button>";
-                $cs_badge_id = 'forge-pdf-badge-streams-' . esc_attr($uid_prefix);
-                echo "<span id='{$cs_badge_id}' class='forge-pdf-detail-badge forge-pdf-badge-pass'>PASS</span>";
+                $cs_badge_id = 'fabricator-pdf-badge-streams-' . esc_attr($uid_prefix);
+                echo "<span id='{$cs_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
                 echo "</div>";
-                echo "<div id='" . esc_attr($cs_section_id) . "' class='forge-pdf-hidden forge-pdf-detail-content'>";
+                echo "<div id='" . esc_attr($cs_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
 
                 if (empty($allowed_content_hashes)) {
-                    echo "<p class='forge-pdf-empty-state'>No content stream hashes in seal "
+                    echo "<p class='fabricator-pdf-empty-state'>No content stream hashes in seal "
                        . "(PDF generated before this feature was added).</p>";
                 } else {
                     // Extract all page content streams from the PDF (exclude seal stream and binary streams)
@@ -2967,19 +2967,19 @@ final class Verificationpage
 
                     $n_seal = count($allowed_content_hashes);
                     $n_pdf  = count($pdf_content_hashes);
-                    echo "<p class='forge-pdf-hash-summary'>"
+                    echo "<p class='fabricator-pdf-hash-summary'>"
                        . "{$n_seal} stream(s) in seal &nbsp;·&nbsp; {$n_pdf} verifiable in PDF</p>";
-                    echo "<div class='forge-pdf-hash-list'>";
+                    echo "<div class='fabricator-pdf-hash-list'>";
                     foreach ($pdf_content_hashes as $pdf_hash) {
                         $short = esc_html(substr($pdf_hash, 0, 20));
                         if (isset($seal_hash_set[$pdf_hash])) {
-                            echo "<div class='forge-pdf-hash-row forge-pdf-hash-row--pass'>"
-                               . "<span class='forge-pdf-pill forge-pdf-pill--pass'>MATCH</span>"
+                            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--pass'>"
+                               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>MATCH</span>"
                                . "<code>{$short}…</code></div>";
                         } else {
                             $content_stream_mismatch = true;
-                            echo "<div class='forge-pdf-hash-row forge-pdf-hash-row--fail'>"
-                               . "<span class='forge-pdf-pill forge-pdf-pill--fail'>UNRECOGNISED</span>"
+                            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+                               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>UNRECOGNISED</span>"
                                . "<code>{$short}…</code>"
                                . "<span style='font-size:11px;color:#721c24;'>not in seal</span></div>";
                         }
@@ -2987,7 +2987,7 @@ final class Verificationpage
                     echo "</div>";
                     if (!$content_stream_mismatch) {
                         echo "<p style='margin-top:8px;'>"
-                           . "<span class='forge-pdf-pill forge-pdf-pill--pass'>All streams accounted for</span></p>";
+                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>All streams accounted for</span></p>";
                     }
                 }
 
@@ -3000,17 +3000,17 @@ final class Verificationpage
 
                 // ── Fonts section
                 // ─────────────────────────────────────────────────────
-                $fonts_section_id  = 'forge-pdf-content-fonts-' . $uid_prefix;
-                $fonts_section_sec = 'forge-pdf-section-fonts-' . esc_attr($uid_prefix);
-                echo "<div class='forge-pdf-detail-section' id='{$fonts_section_sec}'>";
-                echo "<div class='forge-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small forge-pdf-toggle'"
+                $fonts_section_id  = 'fabricator-pdf-content-fonts-' . $uid_prefix;
+                $fonts_section_sec = 'fabricator-pdf-section-fonts-' . esc_attr($uid_prefix);
+                echo "<div class='fabricator-pdf-detail-section' id='{$fonts_section_sec}'>";
+                echo "<div class='fabricator-pdf-detail-hdr'>";
+                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($fonts_section_id) . "'>Fonts</button>";
-                $fonts_badge_id = 'forge-pdf-badge-fonts-' . esc_attr($uid_prefix);
-                echo "<span id='{$fonts_badge_id}' class='forge-pdf-detail-badge forge-pdf-badge-pass'>PASS</span>";
+                $fonts_badge_id = 'fabricator-pdf-badge-fonts-' . esc_attr($uid_prefix);
+                echo "<span id='{$fonts_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
                 echo "</div>";
                 echo "<div id='" . esc_attr($fonts_section_id) . "'"
-                   . " class='forge-pdf-hidden forge-pdf-detail-content'>";
+                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
 
                 if (preg_match_all('/\/Type\s*\/(\w+)/', $pdf_raw, $matches, PREG_SET_ORDER)) {
                     $verified_fonts = null;
@@ -3074,21 +3074,21 @@ final class Verificationpage
 
                             $all_font_names = array_unique(array_merge($allowed_fonts, $used_fonts));
                             sort($all_font_names);
-                            echo "<div class='forge-pdf-hash-list'>";
+                            echo "<div class='fabricator-pdf-hash-list'>";
                             foreach ($all_font_names as $font) {
                                 $in_seal = in_array($font, $allowed_fonts, true);
                                 $in_pdf  = in_array($font, $used_fonts, true);
                                 if ($in_seal && $in_pdf) {
-                                    $row_cls = 'forge-pdf-hash-row--pass';
-                                    $pill    = "<span class='forge-pdf-pill forge-pdf-pill--pass'>OK</span>";
+                                    $row_cls = 'fabricator-pdf-hash-row--pass';
+                                    $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>OK</span>";
                                 } elseif (!$in_seal && $in_pdf) {
-                                    $row_cls = 'forge-pdf-hash-row--fail';
-                                    $pill    = "<span class='forge-pdf-pill forge-pdf-pill--fail'>UNDECLARED</span>";
+                                    $row_cls = 'fabricator-pdf-hash-row--fail';
+                                    $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>UNDECLARED</span>";
                                 } else {
-                                    $row_cls = 'forge-pdf-hash-row--warn';
-                                    $pill    = "<span class='forge-pdf-pill forge-pdf-pill--warn'>UNUSED</span>";
+                                    $row_cls = 'fabricator-pdf-hash-row--warn';
+                                    $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--warn'>UNUSED</span>";
                                 }
-                                echo "<div class='forge-pdf-hash-row {$row_cls}'>"
+                                echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
                                    . $pill
                                    . "<code>" . esc_html($font) . "</code>"
                                    . "</div>";
@@ -3104,12 +3104,12 @@ final class Verificationpage
 
                 if ($font_prog_mismatch) {
                     echo "<p style='margin-top:8px;'>"
-                       . "<span class='forge-pdf-pill forge-pdf-pill--fail'>Font binary programs do not match the seal</span></p>";
+                       . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>Font binary programs do not match the seal</span></p>";
                 }
 
                 if (!$font_missmatch) {
                     echo "<p style='margin-top:8px;'>"
-                       . "<span class='forge-pdf-pill forge-pdf-pill--pass'>All fonts match the seal</span></p>";
+                       . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>All fonts match the seal</span></p>";
                 }
 
                 echo "</div>"; // close fonts foldable content
@@ -3117,17 +3117,17 @@ final class Verificationpage
 
                 // ── PDF Objects section
                 // ────────────────────────────────────────────────
-                $objects_section_id  = 'forge-pdf-content-objects-' . $uid_prefix;
-                $objects_section_sec = 'forge-pdf-section-objects-' . esc_attr($uid_prefix);
-                echo "<div class='forge-pdf-detail-section' id='{$objects_section_sec}'>";
-                echo "<div class='forge-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small forge-pdf-toggle'"
+                $objects_section_id  = 'fabricator-pdf-content-objects-' . $uid_prefix;
+                $objects_section_sec = 'fabricator-pdf-section-objects-' . esc_attr($uid_prefix);
+                echo "<div class='fabricator-pdf-detail-section' id='{$objects_section_sec}'>";
+                echo "<div class='fabricator-pdf-detail-hdr'>";
+                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($objects_section_id) . "'>PDF Objects</button>";
-                $objects_badge_id = 'forge-pdf-badge-objects-' . esc_attr($uid_prefix);
-                echo "<span id='{$objects_badge_id}' class='forge-pdf-detail-badge forge-pdf-badge-pass'>PASS</span>";
+                $objects_badge_id = 'fabricator-pdf-badge-objects-' . esc_attr($uid_prefix);
+                echo "<span id='{$objects_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
                 echo "</div>";
                 echo "<div id='" . esc_attr($objects_section_id) . "'"
-                   . " class='forge-pdf-hidden forge-pdf-detail-content'>";
+                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
 
                 $unexpected_types = [];
                 if (!empty($matches)) {
@@ -3161,13 +3161,13 @@ final class Verificationpage
                 }
 
                 if ($unexpected_detected) {
-                    echo "<div class='forge-pdf-tag-list'>";
+                    echo "<div class='fabricator-pdf-tag-list'>";
                     foreach (array_unique($unexpected_types) as $utype) {
-                        echo "<span class='forge-pdf-tag'>" . esc_html($utype) . "</span>";
+                        echo "<span class='fabricator-pdf-tag'>" . esc_html($utype) . "</span>";
                     }
                     echo "</div>";
                 } else {
-                    echo "<p class='forge-pdf-empty-state'>No unexpected PDF objects detected.</p>";
+                    echo "<p class='fabricator-pdf-empty-state'>No unexpected PDF objects detected.</p>";
                 }
 
                 echo "</div>"; // close objects foldable content
@@ -3178,8 +3178,8 @@ final class Verificationpage
             $inner_html = ob_get_clean();
 
             // --- Post-process: update badge classes based on computed booleans ---
-            $bdg_pass = "' class='forge-pdf-detail-badge forge-pdf-badge-pass'>PASS";
-            $bdg_fail = "' class='forge-pdf-detail-badge forge-pdf-badge-fail'>FAIL";
+            $bdg_pass = "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS";
+            $bdg_fail = "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>FAIL";
             $bdg_flip = static function (
                 string &$html,
                 string $id,
@@ -3192,7 +3192,7 @@ final class Verificationpage
             if ($field_mismatch_count > 0) {
                 $bdg_flip(
                     $inner_html,
-                    'forge-pdf-badge-fields-' . $uid_prefix,
+                    'fabricator-pdf-badge-fields-' . $uid_prefix,
                     $bdg_pass,
                     $bdg_fail
                 );
@@ -3200,7 +3200,7 @@ final class Verificationpage
             if ($annotation_fail_count > 0) {
                 $bdg_flip(
                     $inner_html,
-                    'forge-pdf-badge-annots-' . $uid_prefix,
+                    'fabricator-pdf-badge-annots-' . $uid_prefix,
                     $bdg_pass,
                     $bdg_fail
                 );
@@ -3208,7 +3208,7 @@ final class Verificationpage
             if ($image_missmatch) {
                 $bdg_flip(
                     $inner_html,
-                    'forge-pdf-badge-images-' . $uid_prefix,
+                    'fabricator-pdf-badge-images-' . $uid_prefix,
                     $bdg_pass,
                     $bdg_fail
                 );
@@ -3216,7 +3216,7 @@ final class Verificationpage
             if ($font_missmatch) {
                 $bdg_flip(
                     $inner_html,
-                    'forge-pdf-badge-fonts-' . $uid_prefix,
+                    'fabricator-pdf-badge-fonts-' . $uid_prefix,
                     $bdg_pass,
                     $bdg_fail
                 );
@@ -3224,7 +3224,7 @@ final class Verificationpage
             if ($unexpected_detected) {
                 $bdg_flip(
                     $inner_html,
-                    'forge-pdf-badge-objects-' . $uid_prefix,
+                    'fabricator-pdf-badge-objects-' . $uid_prefix,
                     $bdg_pass,
                     $bdg_fail
                 );
@@ -3232,7 +3232,7 @@ final class Verificationpage
             if ($content_stream_mismatch) {
                 $bdg_flip(
                     $inner_html,
-                    'forge-pdf-badge-streams-' . $uid_prefix,
+                    'fabricator-pdf-badge-streams-' . $uid_prefix,
                     $bdg_pass,
                     $bdg_fail
                 );
@@ -3241,7 +3241,7 @@ final class Verificationpage
             // --- PDF Metadata integrity check ---
             $meta_mismatch  = false;
             $sealed_meta    = $rebuilt_payload['pdf_meta'] ?? [];
-            $meta_section_id = 'forge-pdf-content-meta-' . $uid_prefix;
+            $meta_section_id = 'fabricator-pdf-content-meta-' . $uid_prefix;
 
             if (!empty($sealed_meta)) {
                 // Helper: decode a PDF string value — plain ASCII or UTF-16BE (þÿ BOM).
@@ -3283,15 +3283,15 @@ final class Verificationpage
                 }
 
                 ob_start();
-                echo "<div class='forge-pdf-detail-section' id='forge-pdf-section-meta-" . esc_attr($uid_prefix) . "'>";
-                echo "<div class='forge-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small forge-pdf-toggle'"
+                echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-meta-" . esc_attr($uid_prefix) . "'>";
+                echo "<div class='fabricator-pdf-detail-hdr'>";
+                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($meta_section_id) . "'>PDF Metadata</button>";
-                echo "<span id='forge-pdf-badge-meta-" . esc_attr($uid_prefix) . "'"
-                   . " class='forge-pdf-detail-badge forge-pdf-badge-pass'>PASS</span>";
+                echo "<span id='fabricator-pdf-badge-meta-" . esc_attr($uid_prefix) . "'"
+                   . " class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
                 echo "</div>";
-                echo "<div id='" . esc_attr($meta_section_id) . "' class='forge-pdf-hidden forge-pdf-detail-content'>";
-                echo "<div class='forge-pdf-hash-list'>";
+                echo "<div id='" . esc_attr($meta_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+                echo "<div class='fabricator-pdf-hash-list'>";
 
                 $meta_labels = ['title' => 'Title', 'author' => 'Author', 'creator' => 'Creator'];
                 foreach ($meta_labels as $slot => $label) {
@@ -3301,11 +3301,11 @@ final class Verificationpage
                     if (!$match) {
                         $meta_mismatch = true;
                     }
-                    $row_cls    = $match ? 'forge-pdf-hash-row--pass' : 'forge-pdf-hash-row--fail';
-                    $pill_cls   = $match ? 'forge-pdf-pill--pass' : 'forge-pdf-pill--fail';
+                    $row_cls    = $match ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail';
+                    $pill_cls   = $match ? 'fabricator-pdf-pill--pass' : 'fabricator-pdf-pill--fail';
                     $pill_text  = $match ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
-                    echo "<div class='forge-pdf-hash-row {$row_cls}'>"
-                       . "<span class='forge-pdf-pill {$pill_cls}'>{$pill_text}</span>"
+                    echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
+                       . "<span class='fabricator-pdf-pill {$pill_cls}'>{$pill_text}</span>"
                        . "<code>" . esc_html($label) . "</code>"
                        . "<span style='color:#50575e;font-size:11px;margin-left:4px;'>"
                        . esc_html($actual !== '' ? $actual : '(leer)')
@@ -3314,7 +3314,7 @@ final class Verificationpage
                        . "</div>";
                 }
 
-                echo "</div>"; // forge-pdf-hash-list
+                echo "</div>"; // fabricator-pdf-hash-list
                 echo "</div>"; // meta section content
                 echo "</div>"; // meta section wrapper
                 $meta_html = ob_get_clean();
@@ -3322,10 +3322,10 @@ final class Verificationpage
             }
 
             if ($meta_mismatch) {
-                $meta_badge_pass = "id='forge-pdf-badge-meta-{$uid_prefix}'"
-                    . " class='forge-pdf-detail-badge forge-pdf-badge-pass'>PASS";
-                $meta_badge_fail = "id='forge-pdf-badge-meta-{$uid_prefix}'"
-                    . " class='forge-pdf-detail-badge forge-pdf-badge-fail'>FAIL";
+                $meta_badge_pass = "id='fabricator-pdf-badge-meta-{$uid_prefix}'"
+                    . " class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS";
+                $meta_badge_fail = "id='fabricator-pdf-badge-meta-{$uid_prefix}'"
+                    . " class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>FAIL";
                 $inner_html = str_replace($meta_badge_pass, $meta_badge_fail, $inner_html ?? '');
             }
 
@@ -3394,7 +3394,7 @@ final class Verificationpage
                 ob_end_clean();
             }
             $raw_msg = $e->getMessage();
-            \ForgeForms\forge_log('ForgeForms Verificationpage: ' . $raw_msg);
+            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: ' . $raw_msg);
             // Map technical exception messages to user-friendly German.
             $fn           = esc_html($file_name);
             $friendly_msg = match (true) {
@@ -3480,12 +3480,12 @@ final class Verificationpage
         $verdict_icon_html = $verdict_icon
             ? '<i class="' . esc_attr($verdict_icon) . '" aria-hidden="true"></i> '
             : '';
-        $verdict_badge = '<span class="forge-pdf-pdf-hdr-verdict" style="background:'
+        $verdict_badge = '<span class="fabricator-pdf-pdf-hdr-verdict" style="background:'
             . esc_attr($badge_bg) . ';color:' . esc_attr($badge_text) . ';' . $badge_base_style . '">'
             . $verdict_icon_html . esc_html($verdict_label) . '</span>';
 
         if ($is_legacy) {
-            $legacy_badge = '<span class="forge-pdf-verdict-legacy" style="background:#1a56db;color:#fff;'
+            $legacy_badge = '<span class="fabricator-pdf-verdict-legacy" style="background:#1a56db;color:#fff;'
                 . $badge_base_style . '">Legacy</span>';
             $hdr_right = '<span style="grid-column:3;justify-self:end;display:flex;gap:6px;'
                 . 'align-items:center;">' . $verdict_badge . $legacy_badge . '</span>';
@@ -3495,15 +3495,15 @@ final class Verificationpage
         }
 
         echo "<div style='" . $hdr_wrap_style . "'>";
-        echo "<button type='button' class='forge-pdf-toggle forge-pdf-pdf-hdr'"
+        echo "<button type='button' class='fabricator-pdf-toggle fabricator-pdf-pdf-hdr'"
             . " data-target='" . esc_attr($segment_id) . "'"
             . " style='" . $hdr_btn_style . "'>";
         echo "<span></span>";
-        echo "<span class='forge-pdf-pdf-hdr-name' style='" . $hdr_name_style . "'>"
+        echo "<span class='fabricator-pdf-pdf-hdr-name' style='" . $hdr_name_style . "'>"
             . esc_html($file_name) . "</span>";
         echo $hdr_right;
         echo "</button>";
-        echo "<div id='" . esc_attr($segment_id) . "' class='forge-pdf-hidden' style='padding:10px;'>";
+        echo "<div id='" . esc_attr($segment_id) . "' class='fabricator-pdf-hidden' style='padding:10px;'>";
         echo $pdf_content;
         echo "</div>";
         echo "</div>";
@@ -3525,7 +3525,7 @@ final class Verificationpage
         // to the beginning of the file, well outside any 2MB tail window.
         $raw = @file_get_contents($path);
         if ($raw === false) {
-            \ForgeForms\forge_log('ForgeForms rawPdfHasSeal: file_get_contents() failed for ' . basename($path) . '.');
+            \FabricatorForms\fabricator_log('FabricatorForms rawPdfHasSeal: file_get_contents() failed for ' . basename($path) . '.');
             return false;
         }
 
@@ -3582,8 +3582,8 @@ final class Verificationpage
         }
 
         if ($skipped_oversized_streams > 0 || $skipped_failed_decompress > 0) {
-            \ForgeForms\forge_log(
-                'ForgeForms rawPdfHasSeal: no seal found in ' . basename($path) . ' — '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms rawPdfHasSeal: no seal found in ' . basename($path) . ' — '
                 . $skipped_oversized_streams . ' FlateDecode stream(s) skipped for exceeding the 64MB decompression-bomb guard, '
                 . $skipped_failed_decompress . ' stream(s) skipped for failing to decompress or decompressing outside plausible bounds. '
                 . 'If this document is legitimate, the seal may be inside one of the skipped streams.'
@@ -3623,24 +3623,24 @@ final class Verificationpage
      */
     private static function renderSummaryPanel(array $d): string
     {
-        $pass     = '<span class="forge-pdf-chk-pass">&#10003;</span>';
-        $fail     = '<span class="forge-pdf-chk-fail">&#10007;</span>';
-        $warn     = '<span class="forge-pdf-chk-warn">&#9888;</span>';
-        $rotated  = '<span class="forge-pdf-chk-rotated">&#8634;</span>';
-        $caret    = '<span class="forge-pdf-row-caret">&#8250;</span>';
+        $pass     = '<span class="fabricator-pdf-chk-pass">&#10003;</span>';
+        $fail     = '<span class="fabricator-pdf-chk-fail">&#10007;</span>';
+        $warn     = '<span class="fabricator-pdf-chk-warn">&#9888;</span>';
+        $rotated  = '<span class="fabricator-pdf-chk-rotated">&#8634;</span>';
+        $caret    = '<span class="fabricator-pdf-row-caret">&#8250;</span>';
 
         $row = function (bool $ok, string $label, string $detail, string $target_id)
  use ($pass, $fail, $caret): string {
             $icon   = $ok ? $pass : $fail;
             $status = $ok
-                ? '<span class="forge-pdf-row-ok">' . esc_html__('OK', 'formfabricator') . '</span>'
-                : '<span class="forge-pdf-row-fail">' . esc_html($detail) . '</span>';
-            return "<tr class='forge-pdf-toggle forge-pdf-summary-row' data-target='"
+                ? '<span class="fabricator-pdf-row-ok">' . esc_html__('OK', 'formfabricator') . '</span>'
+                : '<span class="fabricator-pdf-row-fail">' . esc_html($detail) . '</span>';
+            return "<tr class='fabricator-pdf-toggle fabricator-pdf-summary-row' data-target='"
                 . esc_attr($target_id) . "' title='" . esc_attr__('Show details', 'formfabricator') . "'>"
                 . "<td>{$icon}</td>"
                 . '<td>' . esc_html($label) . '</td>'
-                . "<td class='forge-pdf-row-detail'>{$status}</td>"
-                . "<td class='forge-pdf-row-caret-cell'>{$caret}</td>"
+                . "<td class='fabricator-pdf-row-detail'>{$status}</td>"
+                . "<td class='fabricator-pdf-row-caret-cell'>{$caret}</td>"
                 . "</tr>\n";
         };
 
@@ -3652,7 +3652,7 @@ final class Verificationpage
                 false,
                 __('PDF structure', 'formfabricator'),
                 __('Incremental update detected', 'formfabricator'),
-                'forge-pdf-content-structure-' . $uid
+                'fabricator-pdf-content-structure-' . $uid
             );
         }
 
@@ -3661,7 +3661,7 @@ final class Verificationpage
                 false,
                 __('Seal integrity', 'formfabricator'),
                 __('Extra seal block(s) injected — document has been tampered with', 'formfabricator'),
-                'forge-pdf-content-seals-' . $uid
+                'fabricator-pdf-content-seals-' . $uid
             );
         }
 
@@ -3672,28 +3672,28 @@ final class Verificationpage
             $key_status       = (string)($d['seal_key_status'] ?? 'active');
             $key_compromised  = !empty($d['seal_compromised']);
             if ($key_compromised) {
-                $rows .= "<tr class='forge-pdf-summary-row'>"
+                $rows .= "<tr class='fabricator-pdf-summary-row'>"
                     . "<td>{$warn}</td>"
                     . "<td>" . esc_html__('Seal key', 'formfabricator') . "</td>"
-                    . "<td class='forge-pdf-row-detail' colspan='2'>"
-                    . "<span class='forge-pdf-row-warn'>"
+                    . "<td class='fabricator-pdf-row-detail' colspan='2'>"
+                    . "<span class='fabricator-pdf-row-warn'>"
                     . esc_html__('COMPROMISED — manual verification strongly recommended', 'formfabricator')
                     . "</span></td></tr>\n";
             } elseif (in_array($key_status, ['rotated-legacy', 'compromised-legacy'], true)) {
-                $rows .= "<tr class='forge-pdf-summary-row'>"
+                $rows .= "<tr class='fabricator-pdf-summary-row'>"
                     . "<td>&#10003;</td>"
                     . "<td>" . esc_html__('Seal key', 'formfabricator') . "</td>"
-                    . "<td class='forge-pdf-row-detail' colspan='2'>"
+                    . "<td class='fabricator-pdf-row-detail' colspan='2'>"
                     . "<span style='background:#1a56db;color:#fff;font-size:11px;font-weight:700;"
                     . "padding:2px 8px;border-radius:3px;letter-spacing:.4px;'>" . esc_html__('Legacy', 'formfabricator') . "</span>"
                     . "&nbsp;" . esc_html__('Manually imported key', 'formfabricator')
                     . "</td></tr>\n";
             } elseif ($key_status !== 'active') {
-                $rows .= "<tr class='forge-pdf-summary-row'>"
+                $rows .= "<tr class='fabricator-pdf-summary-row'>"
                     . "<td>{$rotated}</td>"
                     . "<td>" . esc_html__('Seal key', 'formfabricator') . "</td>"
-                    . "<td class='forge-pdf-row-detail' colspan='2'>"
-                    . "<span class='forge-pdf-row-rotated'>"
+                    . "<td class='fabricator-pdf-row-detail' colspan='2'>"
+                    . "<span class='fabricator-pdf-row-rotated'>"
                     . esc_html__('Signed with a rotated (older) key', 'formfabricator')
                     . "</span></td></tr>\n";
             }
@@ -3705,7 +3705,7 @@ final class Verificationpage
             __('Visual field content', 'formfabricator'),
             // translators: %d: number of visible form fields whose content no longer matches the seal.
             sprintf(__('%d field(s) do not match the seal', 'formfabricator'), $d['field_mismatch_count']),
-            'forge-pdf-content-fields-' . $uid
+            'fabricator-pdf-content-fields-' . $uid
         );
 
         $annots_ok = $d['annotation_fail_count'] === 0;
@@ -3714,16 +3714,16 @@ final class Verificationpage
             __('Annotations', 'formfabricator'),
             // translators: %d: number of PDF annotations that don't match the seal.
             sprintf(__('%d annotation(s) unmatched', 'formfabricator'), $d['annotation_fail_count']),
-            'forge-pdf-content-annots-' . $uid
+            'fabricator-pdf-content-annots-' . $uid
         );
 
-        $rows .= $row(!$d['pagecount_mismatch'], __('Page count', 'formfabricator'), __('MISMATCH', 'formfabricator'), 'forge-pdf-content-pgcount-' . $uid);
+        $rows .= $row(!$d['pagecount_mismatch'], __('Page count', 'formfabricator'), __('MISMATCH', 'formfabricator'), 'fabricator-pdf-content-pgcount-' . $uid);
 
         $rows .= $row(
             !$d['image_missmatch'],
             __('Image hashes', 'formfabricator'),
             __('MISMATCH — image content changed', 'formfabricator'),
-            'forge-pdf-content-images-' . $uid
+            'fabricator-pdf-content-images-' . $uid
         );
 
         $cs_ok = !($d['content_stream_mismatch'] ?? false);
@@ -3731,21 +3731,21 @@ final class Verificationpage
             $cs_ok,
             __('Page content integrity', 'formfabricator'),
             __('Page content was modified or added', 'formfabricator'),
-            'forge-pdf-content-streams-' . $uid
+            'fabricator-pdf-content-streams-' . $uid
         );
 
         $rows .= $row(
             !$d['font_missmatch'],
             __('Fonts', 'formfabricator'),
             __('Undeclared or missing fonts detected', 'formfabricator'),
-            'forge-pdf-content-fonts-' . $uid
+            'fabricator-pdf-content-fonts-' . $uid
         );
 
         $rows .= $row(
             !$d['unexpected_detected'],
             __('PDF Objects', 'formfabricator'),
             __('Unexpected object types detected', 'formfabricator'),
-            'forge-pdf-content-objects-' . $uid
+            'fabricator-pdf-content-objects-' . $uid
         );
 
         if (isset($d['meta_mismatch'])) {
@@ -3753,7 +3753,7 @@ final class Verificationpage
                 !$d['meta_mismatch'],
                 __('PDF Metadata', 'formfabricator'),
                 __('Title/Author/Creator tampered', 'formfabricator'),
-                'forge-pdf-content-meta-' . $uid
+                'fabricator-pdf-content-meta-' . $uid
             );
         }
 
@@ -3762,11 +3762,11 @@ final class Verificationpage
                 false,
                 __('Stream fingerprint', 'formfabricator'),
                 __('A compressed stream was added or modified', 'formfabricator'),
-                'forge-pdf-content-streams-' . $uid
+                'fabricator-pdf-content-streams-' . $uid
             );
         }
 
-        $verdict_class = $d['document_modified'] ? 'forge-pdf-verdict-fail' : 'forge-pdf-verdict-pass';
+        $verdict_class = $d['document_modified'] ? 'fabricator-pdf-verdict-fail' : 'fabricator-pdf-verdict-pass';
         $verdict_text  = $d['document_modified']
             ? '&#10007; ' . esc_html($d['file_name']) . ' — ' . esc_html__('MODIFIED or INVALID', 'formfabricator')
             : '&#10003; ' . esc_html($d['file_name']) . ' — ' . esc_html__('Authentic', 'formfabricator');
@@ -3774,13 +3774,13 @@ final class Verificationpage
         $nonce_html = '';
         if (!empty($d['doc_nonce'])) {
             $nonce_disp = esc_html((string) $d['doc_nonce']);
-            $nonce_html = "<div class='forge-pdf-doc-id'>" . esc_html__('Document ID:', 'formfabricator') . " <code>{$nonce_disp}</code></div>";
+            $nonce_html = "<div class='fabricator-pdf-doc-id'>" . esc_html__('Document ID:', 'formfabricator') . " <code>{$nonce_disp}</code></div>";
         }
 
-        return "<div class='forge-pdf-summary-panel'>"
-            . "<div class='forge-pdf-summary-verdict {$verdict_class}'>{$verdict_text}</div>"
+        return "<div class='fabricator-pdf-summary-panel'>"
+            . "<div class='fabricator-pdf-summary-verdict {$verdict_class}'>{$verdict_text}</div>"
             . $nonce_html
-            . "<table class='forge-pdf-summary-table'>"
+            . "<table class='fabricator-pdf-summary-table'>"
             . "<thead><tr><th></th><th>" . esc_html__('Check', 'formfabricator') . "</th><th></th><th></th></tr></thead>"
             . "<tbody>{$rows}</tbody>"
             . "</table>"
@@ -4049,7 +4049,7 @@ final class Verificationpage
     }
 
     /**
-     * Builds a styled notice card HTML string for pre-flight rejections. Matches the forge-vpc error card
+     * Builds a styled notice card HTML string for pre-flight rejections. Matches the fabricator-vpc error card
      * visual so all server-side rejections (MIME, %%EOF, no seal, etc.) share a single consistent card
      * design.
      *
@@ -4061,11 +4061,11 @@ final class Verificationpage
     {
         if ($type === 'error') {
             return sprintf(
-                '<div class="forge-vpc forge-vpc--error">'
-                . '<div class="forge-vpc__header">'
-                . '<span class="forge-vpc__icon"><span class="dashicons dashicons-warning"></span></span>'
+                '<div class="fabricator-vpc fabricator-vpc--error">'
+                . '<div class="fabricator-vpc__header">'
+                . '<span class="fabricator-vpc__icon"><span class="dashicons dashicons-warning"></span></span>'
                 . '</div>'
-                . '<div class="forge-vpc__step">%s</div>'
+                . '<div class="fabricator-vpc__step">%s</div>'
                 . '</div>',
                 wp_kses_post($message)
             );
@@ -4163,7 +4163,7 @@ final class Verificationpage
                     // Give the browser time to fetch the rendered images before
                     // they're removed, without blocking this PHP-FPM worker for
                     // the whole delay — hand the actual unlink off to WP-Cron.
-                    wp_schedule_single_event(time() + 120, 'forge_verifier_cleanup_files', [self::$files_to_delete]);
+                    wp_schedule_single_event(time() + 120, 'fabricator_verifier_cleanup_files', [self::$files_to_delete]);
                 }
             );
         }
@@ -4180,13 +4180,13 @@ final class Verificationpage
 
     /**
      * Schedules a temporary PDF file for deletion after the request ends. Registers a shutdown function
-     * (once) that waits until the same 2100s (35 minute) window as the forge_pdf_{token} transient set
+     * (once) that waits until the same 2100s (35 minute) window as the fabricator_pdf_{token} transient set
      * alongside this file, then retries unlink up to five times per file — the file must outlive every
-     * request that can legitimately still read it via that token (forge_verify_push_lines/forge_serve_pdf),
+     * request that can legitimately still read it via that token (fabricator_verify_push_lines/fabricator_serve_pdf),
      * which can run up to set_time_limit(1800) seconds after the initial upload response, plus the soft
      * per-pass parse budget on top of that. A shorter window here previously raced those follow-up requests
      * — keep this in sync with the transient TTL above and with set_time_limit() at the top of
-     * wp_ajax_forge_verify_push_lines if either is ever changed again.
+     * wp_ajax_fabricator_verify_push_lines if either is ever changed again.
      *
      * @param string $file_path Absolute path to the PDF file to delete.
      */
@@ -4204,7 +4204,7 @@ final class Verificationpage
                     }
                     // Same rationale as emitImageSlot() above — offload the
                     // delayed unlink to WP-Cron instead of sleeping in-worker.
-                    wp_schedule_single_event(time() + 2100, 'forge_verifier_cleanup_files', [self::$pdfs_to_delete]);
+                    wp_schedule_single_event(time() + 2100, 'fabricator_verifier_cleanup_files', [self::$pdfs_to_delete]);
                 }
             );
         }

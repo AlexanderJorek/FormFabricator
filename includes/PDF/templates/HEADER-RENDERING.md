@@ -125,7 +125,7 @@ Builder canvas (JS)
   └─ el.{x,y,w,h} in grid units, HB_CELL=15px per unit
        │
        ▼
-Saved to DB as JSON in forge_forms_pdf_layout.header_layout.elements
+Saved to DB as JSON in fabricator_forms_pdf_layout.header_layout.elements
        │
        ├─► Preview renderer (JS, PDFLayoutEditor.php ~line 1043)
        │     position:absolute in px within a scaled position:relative container

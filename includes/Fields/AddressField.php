@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -51,13 +51,13 @@ class AddressField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-address-group { display: flex; flex-direction: column; gap: 10px; }
-.forge-address-row { display: flex; gap: 10px; }
-.forge-address-zip { width: 90px; flex-shrink: 0; }
-.forge-address-city { flex: 1; }
+.fabricator-address-group { display: flex; flex-direction: column; gap: 10px; }
+.fabricator-address-row { display: flex; gap: 10px; }
+.fabricator-address-zip { width: 90px; flex-shrink: 0; }
+.fabricator-address-city { flex: 1; }
 @media (max-width: 600px) {
-    .forge-address-row { flex-direction: column; }
-    .forge-address-zip { width: 100%; }
+    .fabricator-address-row { flex-direction: column; }
+    .fabricator-address-zip { width: 100%; }
 }
 CSS;
     }
@@ -116,7 +116,7 @@ CSS;
         }
 
         $val   = is_array($value) ? $value : [];
-        $inner = '<div class="forge-address-group">';
+        $inner = '<div class="fabricator-address-group">';
 
         foreach (self::SUBFIELDS as $sf) {
             $k = $sf['key'];
@@ -128,21 +128,21 @@ CSS;
             $req   = !empty($config[$k . '_required']) ? ' required aria-required="true"' : '';
             $ac    = esc_attr($this->autocompleteToken($k));
 
-            $req_star = !empty($config[$k . '_required']) ? ' <span class="forge-required" aria-hidden="true">*</span>' : '';
-            $inner .= '<div class="forge-address-sub">';
-            $inner .= '<label class="forge-sub-label">' . $label . $req_star . '</label>';
+            $req_star = !empty($config[$k . '_required']) ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
+            $inner .= '<div class="fabricator-address-sub">';
+            $inner .= '<label class="fabricator-sub-label">' . $label . $req_star . '</label>';
             $inner .= '<input type="text"'
                 . ' name="' . esc_attr($field_id) . '[' . esc_attr($k) . ']"'
-                . ' class="forge-input" placeholder="' . $ph . '"'
+                . ' class="fabricator-input" placeholder="' . $ph . '"'
                 . ' value="' . esc_attr((string)($val[$k] ?? '')) . '"'
                 . ' autocomplete="' . $ac . '"' . $req . '>';
-            $inner .= '<div class="forge-field-error forge-sub-error"></div>';
+            $inner .= '<div class="fabricator-field-error fabricator-sub-error"></div>';
             $inner .= '</div>';
         }
 
         $inner .= '</div>';
         /* In expanded mode each sub-input carries its own required — the wrapper
-         * should not show a global * or forge-required-field class. */
+         * should not show a global * or fabricator-required-field class. */
         $wrapper_config             = $config;
         $wrapper_config['required'] = false;
         return $this->wrap($field_id, $wrapper_config, $inner);

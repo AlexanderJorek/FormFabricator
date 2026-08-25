@@ -11,7 +11,7 @@
 (function () {
 'use strict';
 
-var STORAGE_KEY = 'forge_perf_active';
+var STORAGE_KEY = 'fabricator_perf_active';
 var _active = localStorage.getItem(STORAGE_KEY) === '1';
 
 /* ── Baseline ────────────────────────────────────────────────────────────── */
@@ -26,7 +26,7 @@ function mark(label, note, dur) {
     var delta = now - _prevMark;
     _log.push({ label: label, t: now - T0, delta: delta, note: note || '', dur: dur || null });
     _prevMark = now;
-    console.log('[ForgePerfDebug] +' + delta.toFixed(1) + 'ms  ' + label + (note ? '  (' + note + ')' : ''));
+    console.log('[FabricatorPerfDebug] +' + delta.toFixed(1) + 'ms  ' + label + (note ? '  (' + note + ')' : ''));
 }
 
 function fmt(ms) {
@@ -108,7 +108,7 @@ function startFpsMonitor() {
 var _renderClearT = 0;
 
 function watchFieldList() {
-    var list = document.getElementById('forge-field-list');
+    var list = document.getElementById('fabricator-field-list');
     if (!list) return;
 
     /* Shadow innerHTML on the element instance */
@@ -142,7 +142,7 @@ var _body = null, _open = true, _scrollPaused = false, _scrollTimer = null;
 
 function buildPanel() {
     var wrap = document.createElement('div');
-    wrap.id = 'forge-perf-panel';
+    wrap.id = 'fabricator-perf-panel';
     wrap.style.cssText = [
         'position:fixed','bottom:16px','right:16px','z-index:999999',
         'background:#1d2327','color:#e2e4e7','border-radius:8px',
@@ -157,7 +157,7 @@ function buildPanel() {
         'padding:8px 12px;background:#2c3338;border-radius:8px 8px 0 0;' +
         'cursor:move;user-select:none;flex-shrink:0;';
     head.innerHTML = '<span style="font-weight:700;color:#a7aaad;"><i class="fa-solid fa-bolt" aria-hidden="true"></i> FormFabricator Perf</span>' +
-        '<span id="forge-perf-toggle" style="color:#72aee6;cursor:pointer;"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span>';
+        '<span id="fabricator-perf-toggle" style="color:#72aee6;cursor:pointer;"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span>';
 
     _body = document.createElement('div');
     _body.style.cssText = 'overflow-y:auto;overflow-x:hidden;padding:8px 10px;flex:1 1 0;min-height:0;';
@@ -180,7 +180,7 @@ function buildPanel() {
 
     /* ── Toggle click (separate from drag) ── */
     var _savedHeight = '';
-    var toggle = head.querySelector('#forge-perf-toggle');
+    var toggle = head.querySelector('#fabricator-perf-toggle');
     toggle.addEventListener('click', function (e) {
         e.stopPropagation();
         _open = !_open;
@@ -394,8 +394,8 @@ if (window.PerformanceObserver) {
 
 /* ── PHP render time ─────────────────────────────────────────────────────── */
 if (_active) {
-    if (window.ForgePerfData && ForgePerfData.phpRenderMs) {
-        mark('PHP page render', parseFloat(ForgePerfData.phpRenderMs).toFixed(1) + ' ms server-side');
+    if (window.FabricatorPerfData && FabricatorPerfData.phpRenderMs) {
+        mark('PHP page render', parseFloat(FabricatorPerfData.phpRenderMs).toFixed(1) + ' ms server-side');
     }
     mark('Debug script parsed');
 }
@@ -403,10 +403,10 @@ if (_active) {
 /* ── DOMContentLoaded ────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', function () {
     /* Wire the toggle button regardless of active state */
-    var perfBtn = document.getElementById('forge-perf-btn');
+    var perfBtn = document.getElementById('fabricator-perf-btn');
     if (perfBtn) {
         var isOn = _active;
-        var _pi18n = (window.ForgePerfData && ForgePerfData.i18n) || {};
+        var _pi18n = (window.FabricatorPerfData && FabricatorPerfData.i18n) || {};
         perfBtn.title = isOn
             ? (_pi18n.toggleHide || 'Hide performance overlay')
             : (_pi18n.toggleShow || 'Show performance overlay');
@@ -417,7 +417,7 @@ document.addEventListener('DOMContentLoaded', function () {
             } else {
                 localStorage.setItem(STORAGE_KEY, '1');
             }
-            if (window.forgeGuardedReload) { window.forgeGuardedReload(); } else { location.reload(); }
+            if (window.fabricatorGuardedReload) { window.fabricatorGuardedReload(); } else { location.reload(); }
         });
     }
 
@@ -429,9 +429,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /* ── Synchronous boot phases: watch document.body for specific IDs ── */
     var syncPhases = [
-        { id: 'forge-field-modal',         label: 'createFieldPickerModal' },
-        { id: 'forge-notifications-panel', label: 'renderNotifications'    },
-        { id: 'forge-submit-preview-bar',  label: 'renderSubmitPreview'    },
+        { id: 'fabricator-field-modal',         label: 'createFieldPickerModal' },
+        { id: 'fabricator-notifications-panel', label: 'renderNotifications'    },
+        { id: 'fabricator-submit-preview-bar',  label: 'renderSubmitPreview'    },
     ];
     var syncPending = syncPhases.slice();
 
@@ -456,9 +456,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /* ── Deferred modals: same approach, separate observer, survives setTimeout ── */
     var deferredPhases = [
-        { id: 'forge-settings-modal', label: 'createSettingsModal (deferred)' },
-        { id: 'forge-notif-modal',    label: 'createNotifModal (deferred)'    },
-        { id: 'forge-submit-modal',   label: 'createSubmitModal (deferred)'   },
+        { id: 'fabricator-settings-modal', label: 'createSettingsModal (deferred)' },
+        { id: 'fabricator-notif-modal',    label: 'createNotifModal (deferred)'    },
+        { id: 'fabricator-submit-modal',   label: 'createSubmitModal (deferred)'   },
     ];
     var deferredPending = deferredPhases.slice();
 

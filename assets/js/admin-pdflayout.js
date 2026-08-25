@@ -5,7 +5,7 @@
  */
 (function () {
     'use strict';
-    var pageData = window.ForgePdfLayoutPage || {};
+    var pageData = window.FabricatorPdfLayoutPage || {};
     var I18N = pageData.i18n || {};
     var DATA = pageData.data || {};
 
@@ -30,7 +30,7 @@
     var pageOfTpl = I18N.pageOfPage;
 
     /* Auto-dismiss save notice: wait 5 s, then fade out over 2 s */
-    var notice = document.querySelector('.forge-settings-notice');
+    var notice = document.querySelector('.fabricator-settings-notice');
     if (notice) {
         setTimeout(function () {
             notice.style.opacity = '0';
@@ -39,10 +39,10 @@
     }
 
     /* particle canvas */
-    var canvas = document.getElementById('forge-particle-canvas');
+    var canvas = document.getElementById('fabricator-particle-canvas');
     if (canvas) {
         var ctx = canvas.getContext('2d'), mouse = {x:-9999,y:-9999};
-        var _ah=getComputedStyle(document.documentElement).getPropertyValue('--forge-admin-accent').trim()||'#2271b1';
+        var _ah=getComputedStyle(document.documentElement).getPropertyValue('--fabricator-admin-accent').trim()||'#2271b1';
         var _rgb=function(h){return parseInt(h.slice(1,3),16)+','+parseInt(h.slice(3,5),16)+','+parseInt(h.slice(5,7),16);};
         var DOTS=Math.min(120,Math.max(40,Math.round(innerWidth*innerHeight/26000)));
         var LINK=150,SPEED=1.0,COLOR=_rgb(_ah),particles=[],paused=false,FRAME_MS=1000/30;
@@ -100,8 +100,8 @@
 
     function collectSettings(){
         var hidden=[];
-        document.querySelectorAll('#forge-sections-sortable .forge-section-item').forEach(function(li){
-            if(li.classList.contains('forge-section-hidden')) hidden.push(li.dataset.slug);
+        document.querySelectorAll('#fabricator-sections-sortable .fabricator-section-item').forEach(function(li){
+            if(li.classList.contains('fabricator-section-hidden')) hidden.push(li.dataset.slug);
         });
         return {
             accent_color:    val('accent_color')||'#f59e0b',
@@ -118,12 +118,12 @@
         };
     }
 
-    var paper = $('forge-a4-paper');
-    var stageInner = $('forge-preview-stage-inner');
+    var paper = $('fabricator-a4-paper');
+    var stageInner = $('fabricator-preview-stage-inner');
 
     function scaleA4() {
         if (!stageInner) return;
-        var papers = stageInner.querySelectorAll('.forge-a4-paper');
+        var papers = stageInner.querySelectorAll('.fabricator-a4-paper');
         var paperW = 992;
         var vw     = document.documentElement.clientWidth;
 
@@ -141,7 +141,7 @@
 
         /* Grid container is a stable width reference — sizes to its outer context,
            not to its children, so it stays correct even when papers overflow. */
-        var editorWrap  = document.querySelector('.forge-pdf-editor-wrap');
+        var editorWrap  = document.querySelector('.fabricator-pdf-editor-wrap');
         var refW        = editorWrap ? editorWrap.clientWidth : Math.max(vw - 20, 100);
         var stageStyles = stageInner.parentElement ? window.getComputedStyle(stageInner.parentElement) : null;
         var padL        = stageStyles ? parseFloat(stageStyles.paddingLeft)  : 10;
@@ -254,7 +254,7 @@
         return out;
     }
 
-    var PAGE_HEIGHT_PX = 1402; /* A4 at 120dpi (mPDF), matches .forge-a4-paper */
+    var PAGE_HEIGHT_PX = 1402; /* A4 at 120dpi (mPDF), matches .fabricator-a4-paper */
 
     /* Splits buildPreview()'s single (unbounded) HTML output into multiple
        A4-sized pages by measuring top-level blocks in an offscreen sandbox —
@@ -297,7 +297,7 @@
 
     function updatePreview(){
         var s = collectSettings();
-        var hi = $('forge-section-hidden-input');
+        var hi = $('fabricator-section-hidden-input');
         if(hi) hi.value = s.section_hidden.join(',');
 
         var stage = stageInner;
@@ -316,8 +316,8 @@
         stage.innerHTML = '';
         result.pages.forEach(function(pageContent, idx){
             var pageEl = document.createElement('div');
-            pageEl.className = 'forge-a4-paper';
-            if(idx===0) pageEl.id = 'forge-a4-paper';
+            pageEl.className = 'fabricator-a4-paper';
+            if(idx===0) pageEl.id = 'fabricator-a4-paper';
 
             var padParts = result.pad.split(' ');
             var pRight = padParts[1]||padParts[0];
@@ -350,7 +350,7 @@
                 +pageContent+'</div>'+footerHtml;
             stage.appendChild(pageEl);
         });
-        paper = document.getElementById('forge-a4-paper');
+        paper = document.getElementById('fabricator-a4-paper');
         scaleA4();
     }
 
@@ -375,7 +375,7 @@
     if(footerTxt) footerTxt.addEventListener('input', updatePreview);
 
     /* Placeholder chips — insert token at cursor position */
-    document.querySelectorAll('.forge-placeholder-chip').forEach(function(btn){
+    document.querySelectorAll('.fabricator-placeholder-chip').forEach(function(btn){
         btn.addEventListener('click', function(){
             var token = btn.dataset.insert;
             if(!footerTxt) return;
@@ -391,14 +391,14 @@
 
 
     /* section hide/show toggles */
-    var sortable = $('forge-sections-sortable');
+    var sortable = $('fabricator-sections-sortable');
     if(sortable){
         sortable.addEventListener('click', function(e){
-            var btn = e.target.closest('.forge-section-toggle');
+            var btn = e.target.closest('.fabricator-section-toggle');
             if(!btn) return;
-            var li  = btn.closest('.forge-section-item');
+            var li  = btn.closest('.fabricator-section-item');
             var ico = btn.querySelector('i');
-            if(li.classList.toggle('forge-section-hidden')){
+            if(li.classList.toggle('fabricator-section-hidden')){
                 ico.className='fa-solid fa-eye-slash';
             } else {
                 ico.className='fa-solid fa-eye';
@@ -408,14 +408,14 @@
     }
 
     /* ── PDF preview button ── */
-    var pdfBtn = $('forge-pdf-preview-btn');
+    var pdfBtn = $('fabricator-pdf-preview-btn');
     if(pdfBtn){
         pdfBtn.addEventListener('click', function(){
             var origHtml = pdfBtn.innerHTML;
             pdfBtn.disabled = true;
-            pdfBtn.innerHTML = '<span class="forge-spinner"></span> ' + I18N.generating;
+            pdfBtn.innerHTML = '<span class="fabricator-spinner"></span> ' + I18N.generating;
             var fd = new FormData();
-            fd.append('action', 'forge_forms_pdf_preview');
+            fd.append('action', 'fabricator_forms_pdf_preview');
             fd.append('nonce',  DATA.nonce);
             fd.append('settings', JSON.stringify(collectSettings()));
             fetch(DATA.ajaxUrl, {method:'POST', body:fd})
@@ -479,7 +479,7 @@
     var hbLayout   = { rows: 8, elements: [] };
     /* Initialize from saved DB value immediately so preview works without opening the modal */
     (function(){
-        var inp = document.getElementById('forge-header-layout-input');
+        var inp = document.getElementById('fabricator-header-layout-input');
         if(inp && inp.value){ try{ hbLayout = JSON.parse(inp.value); }catch(e){} }
         if(!hbLayout || !Array.isArray(hbLayout.elements)) hbLayout = { rows:8, elements:[] };
     })();
@@ -489,9 +489,9 @@
     var hbDrag     = null;
     /* hbDrag = { type:'move'|'resize', dir, elId, mx0, my0, ex0, ey0, ew0, eh0 } */
 
-    var hbModal  = document.getElementById('forge-hb-modal');
-    var hbCanvas = document.getElementById('forge-hb-canvas');
-    var hbProps  = document.getElementById('forge-hb-props');
+    var hbModal  = document.getElementById('fabricator-hb-modal');
+    var hbCanvas = document.getElementById('fabricator-hb-canvas');
+    var hbProps  = document.getElementById('fabricator-hb-props');
 
     function hbEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
     /* Strips <script>, on*="" handlers and javascript:/vbscript: URIs before the
@@ -507,13 +507,13 @@
     function hbGetEl(id){ return hbLayout.elements.find(function(e){ return e.id===id; }); }
 
     function hbOpen(){
-        var inp = document.getElementById('forge-header-layout-input');
+        var inp = document.getElementById('fabricator-header-layout-input');
         if(inp && inp.value){ try{ hbLayout = JSON.parse(inp.value); }catch(e){} }
         if(!hbLayout || !Array.isArray(hbLayout.elements)) hbLayout = { rows:8, elements:[] };
         hbSnapshot = JSON.parse(JSON.stringify(hbLayout));
         hbSel = null;
         hbNextId = hbLayout.elements.reduce(function(m,e){ return Math.max(m, parseInt((e.id||'0').replace(/\D/g,''))||0); }, 0) + 1;
-        var ri = document.getElementById('forge-hb-rows');
+        var ri = document.getElementById('fabricator-hb-rows');
         if(ri) ri.value = hbLayout.rows || 8;
         hbRender();
         hbRenderProps();
@@ -528,7 +528,7 @@
     }
 
     function hbApply(){
-        var inp = document.getElementById('forge-header-layout-input');
+        var inp = document.getElementById('fabricator-header-layout-input');
         if(inp) inp.value = JSON.stringify(hbLayout);
         hbClose();
         updatePreview();
@@ -545,19 +545,19 @@
 
     function hbMakeNode(el){
         var node = document.createElement('div');
-        node.className = 'forge-hb-el' + (hbSel===el.id ? ' forge-hb-el--selected' : '');
+        node.className = 'fabricator-hb-el' + (hbSel===el.id ? ' fabricator-hb-el--selected' : '');
         node.dataset.id = el.id;
         node.style.cssText = 'left:'+(el.x*HB_CELL)+'px;top:'+(el.y*HB_CELL)+'px;width:'+(el.w*HB_CELL)+'px;height:'+(el.h*HB_CELL)+'px;';
 
         /* label */
         var lbl = document.createElement('div');
-        lbl.className = 'forge-hb-el-label';
+        lbl.className = 'fabricator-hb-el-label';
         lbl.textContent = el.type === 'title' ? hbi18n.elTitle : el.type === 'image' ? hbi18n.elImage : hbi18n.elHtml;
         node.appendChild(lbl);
 
         /* inner content */
         var inner = document.createElement('div');
-        inner.className = 'forge-hb-el-inner';
+        inner.className = 'fabricator-hb-el-inner';
         if(el.type==='image' && el.src){
             inner.innerHTML = '<img src="'+hbEsc(el.src)+'" style="width:100%;height:auto;max-height:100%;display:block;">';
         } else if(el.type==='title'){
@@ -576,7 +576,7 @@
         if(hbSel===el.id){
             ['nw','n','ne','w','e','sw','s','se'].forEach(function(dir){
                 var h = document.createElement('div');
-                h.className = 'forge-hb-handle forge-hb-handle--'+dir;
+                h.className = 'fabricator-hb-handle fabricator-hb-handle--'+dir;
                 h.dataset.dir = dir;
                 node.appendChild(h);
             });
@@ -694,12 +694,12 @@
         /* Show inline picker in props panel — user chooses URL or media library */
         if(!hbProps) return;
         hbSel = null;
-        hbProps.innerHTML = '<div class="forge-hb-img-picker">'
-            +'<p class="forge-hb-img-picker-title"><i class="fa-solid fa-image"></i> ' + I18N.addImage + '</p>'
+        hbProps.innerHTML = '<div class="fabricator-hb-img-picker">'
+            +'<p class="fabricator-hb-img-picker-title"><i class="fa-solid fa-image"></i> ' + I18N.addImage + '</p>'
             +'<button type="button" class="button button-primary" id="hb-pick-media" style="width:100%">'
             +'<i class="fa-solid fa-photo-film"></i> ' + I18N.chooseFromLibrary + '</button>'
-            +'<div class="forge-hb-img-picker-sep"><span>' + I18N.orLabel + '</span></div>'
-            +'<div class="forge-hb-prop-group"><span>' + I18N.externalUrl + '</span>'
+            +'<div class="fabricator-hb-img-picker-sep"><span>' + I18N.orLabel + '</span></div>'
+            +'<div class="fabricator-hb-prop-group"><span>' + I18N.externalUrl + '</span>'
             +'<input type="text" id="hb-pick-url" placeholder="https://…" style="margin-bottom:4px">'
             +'<button type="button" class="button" id="hb-pick-url-confirm" style="width:100%">' + I18N.insert + '</button>'
             +'</div>'
@@ -725,87 +725,87 @@
     function hbRenderProps(){
         if(!hbProps) return;
         var el = hbSel ? hbGetEl(hbSel) : null;
-        if(!el){ hbProps.innerHTML='<p class="forge-hb-empty">'+hbEsc(hbi18n.selectElement)+'<br>'+hbEsc(hbi18n.toEdit)+'</p>'; return; }
+        if(!el){ hbProps.innerHTML='<p class="fabricator-hb-empty">'+hbEsc(hbi18n.selectElement)+'<br>'+hbEsc(hbi18n.toEdit)+'</p>'; return; }
 
-        var h='<div class="forge-hb-card"><div class="forge-hb-prop-row2">'
-            +'<div class="forge-hb-prop-group"><span>X</span><input type="number" data-p="x" value="'+el.x+'" min="0" max="41"></div>'
-            +'<div class="forge-hb-prop-group"><span>Y</span><input type="number" data-p="y" value="'+el.y+'" min="0"></div>'
-            +'<div class="forge-hb-prop-group"><span>'+hbEsc(hbi18n.width)+'</span><input type="number" data-p="w" value="'+el.w+'" min="1" max="42"></div>'
-            +'<div class="forge-hb-prop-group"><span>'+hbEsc(hbi18n.height)+'</span><input type="number" data-p="h" value="'+el.h+'" min="1"></div>'
+        var h='<div class="fabricator-hb-card"><div class="fabricator-hb-prop-row2">'
+            +'<div class="fabricator-hb-prop-group"><span>X</span><input type="number" data-p="x" value="'+el.x+'" min="0" max="41"></div>'
+            +'<div class="fabricator-hb-prop-group"><span>Y</span><input type="number" data-p="y" value="'+el.y+'" min="0"></div>'
+            +'<div class="fabricator-hb-prop-group"><span>'+hbEsc(hbi18n.width)+'</span><input type="number" data-p="w" value="'+el.w+'" min="1" max="42"></div>'
+            +'<div class="fabricator-hb-prop-group"><span>'+hbEsc(hbi18n.height)+'</span><input type="number" data-p="h" value="'+el.h+'" min="1"></div>'
             +'</div></div>';
 
         if(el.type==='image'){
             /* Image: picker first, then position/size, then fit */
             h=''; /* reset — image skips the shared X/Y/W/H block above */
-            h+='<div class="forge-hb-card"><div class="forge-hb-prop-row2">'
-                +'<div class="forge-hb-prop-group"><span>X</span><input type="number" data-p="x" value="'+el.x+'" min="0" max="41"></div>'
-                +'<div class="forge-hb-prop-group"><span>Y</span><input type="number" data-p="y" value="'+el.y+'" min="0"></div>'
-                +'<div class="forge-hb-prop-group"><span>'+hbEsc(hbi18n.width)+'</span><input type="number" data-p="w" value="'+el.w+'" min="1" max="42"></div>'
-                +'<div class="forge-hb-prop-group"><span>'+hbEsc(hbi18n.height)+'</span><input type="number" data-p="h" value="'+el.h+'" min="1"></div>'
+            h+='<div class="fabricator-hb-card"><div class="fabricator-hb-prop-row2">'
+                +'<div class="fabricator-hb-prop-group"><span>X</span><input type="number" data-p="x" value="'+el.x+'" min="0" max="41"></div>'
+                +'<div class="fabricator-hb-prop-group"><span>Y</span><input type="number" data-p="y" value="'+el.y+'" min="0"></div>'
+                +'<div class="fabricator-hb-prop-group"><span>'+hbEsc(hbi18n.width)+'</span><input type="number" data-p="w" value="'+el.w+'" min="1" max="42"></div>'
+                +'<div class="fabricator-hb-prop-group"><span>'+hbEsc(hbi18n.height)+'</span><input type="number" data-p="h" value="'+el.h+'" min="1"></div>'
                 +'</div></div>';
-            h+='<div class="forge-hb-card forge-hb-card--image">'
-                +'<div class="forge-hb-img-preview">'
+            h+='<div class="fabricator-hb-card fabricator-hb-card--image">'
+                +'<div class="fabricator-hb-img-preview">'
                 +(el.src ? '<img src="'+hbEsc(el.src)+'" style="max-width:100%;max-height:80px;display:block;border-radius:3px;">' : '<span style="color:#aaa;font-size:11px;">'+hbEsc(hbi18n.noImageSelected)+'</span>')
                 +'</div>'
                 +'<button type="button" class="button" id="hb-media-pick" style="width:100%">'
                 +'<i class="fa-solid fa-upload"></i> '+hbEsc(el.src?hbi18n.changeImage:hbi18n.chooseFromLibrary)+'</button>'
                 +'<input type="text" data-p="src" value="'+hbEsc(el.src||'')+'" placeholder="'+hbEsc(hbi18n.orEnterUrl)+'">'
                 +'</div>';
-            h+='<div class="forge-hb-card">'
-                +'<div class="forge-hb-fit-btns">'
-                +'<button type="button" class="forge-hb-fit-btn'+((!el.fit||el.fit==='contain')?' forge-hb-fit-btn--active':'')+'" data-fit="contain">'+hbEsc(hbi18n.fitContain)+'</button>'
-                +'<button type="button" class="forge-hb-fit-btn'+(el.fit==='cover'?' forge-hb-fit-btn--active':'')+'" data-fit="cover">'+hbEsc(hbi18n.fitCover)+'</button>'
-                +'<button type="button" class="forge-hb-fit-btn'+(el.fit==='fill'?' forge-hb-fit-btn--active':'')+'" data-fit="fill">'+hbEsc(hbi18n.fitFill)+'</button>'
+            h+='<div class="fabricator-hb-card">'
+                +'<div class="fabricator-hb-fit-btns">'
+                +'<button type="button" class="fabricator-hb-fit-btn'+((!el.fit||el.fit==='contain')?' fabricator-hb-fit-btn--active':'')+'" data-fit="contain">'+hbEsc(hbi18n.fitContain)+'</button>'
+                +'<button type="button" class="fabricator-hb-fit-btn'+(el.fit==='cover'?' fabricator-hb-fit-btn--active':'')+'" data-fit="cover">'+hbEsc(hbi18n.fitCover)+'</button>'
+                +'<button type="button" class="fabricator-hb-fit-btn'+(el.fit==='fill'?' fabricator-hb-fit-btn--active':'')+'" data-fit="fill">'+hbEsc(hbi18n.fitFill)+'</button>'
                 +'</div>'
                 +'</div>';
         } else if(el.type==='title'){
-            var _al = (!el.align||el.align==='left') ? ' forge-hb-tb-btn--active' : '';
-            var _ac = el.align==='center' ? ' forge-hb-tb-btn--active' : '';
-            var _ar = el.align==='right'  ? ' forge-hb-tb-btn--active' : '';
-            h+='<div class="forge-hb-card"><div class="forge-hb-fmt-toolbar">'
+            var _al = (!el.align||el.align==='left') ? ' fabricator-hb-tb-btn--active' : '';
+            var _ac = el.align==='center' ? ' fabricator-hb-tb-btn--active' : '';
+            var _ar = el.align==='right'  ? ' fabricator-hb-tb-btn--active' : '';
+            h+='<div class="fabricator-hb-card"><div class="fabricator-hb-fmt-toolbar">'
                 /* Rich-text format buttons — execCommand, use data-cmd */
-                +'<button type="button" class="forge-hb-tb-btn" data-cmd="bold" title="'+hbEsc(hbi18n.bold)+'"><i class="fa-solid fa-bold"></i></button>'
-                +'<button type="button" class="forge-hb-tb-btn" data-cmd="italic" title="'+hbEsc(hbi18n.italic)+'"><i class="fa-solid fa-italic"></i></button>'
+                +'<button type="button" class="fabricator-hb-tb-btn" data-cmd="bold" title="'+hbEsc(hbi18n.bold)+'"><i class="fa-solid fa-bold"></i></button>'
+                +'<button type="button" class="fabricator-hb-tb-btn" data-cmd="italic" title="'+hbEsc(hbi18n.italic)+'"><i class="fa-solid fa-italic"></i></button>'
                 /* Underline split button */
-                +'<div class="forge-hb-tb-split">'
-                +'<button type="button" class="forge-hb-tb-btn" data-cmd="underline" title="'+hbEsc(hbi18n.underline)+'"><i class="fa-solid fa-underline"></i></button>'
-                +'<button type="button" class="forge-hb-tb-btn forge-hb-tb-chevron" data-action="ul-menu" title="'+hbEsc(hbi18n.underlineStyle)+'"><i class="fa-solid fa-chevron-down"></i></button>'
-                +'<div class="forge-hb-ul-menu" hidden>'
-                +'<button type="button" data-ul-style="solid"><span class="forge-hb-ul-prev forge-hb-ul-solid"></span>'+hbEsc(hbi18n.solid)+'</button>'
-                +'<button type="button" data-ul-style="double"><span class="forge-hb-ul-prev forge-hb-ul-double"></span>'+hbEsc(hbi18n.double)+'</button>'
-                +'<button type="button" data-ul-style="dotted"><span class="forge-hb-ul-prev forge-hb-ul-dotted"></span>'+hbEsc(hbi18n.dotted)+'</button>'
-                +'<button type="button" data-ul-style="dashed"><span class="forge-hb-ul-prev forge-hb-ul-dashed"></span>'+hbEsc(hbi18n.dashed)+'</button>'
+                +'<div class="fabricator-hb-tb-split">'
+                +'<button type="button" class="fabricator-hb-tb-btn" data-cmd="underline" title="'+hbEsc(hbi18n.underline)+'"><i class="fa-solid fa-underline"></i></button>'
+                +'<button type="button" class="fabricator-hb-tb-btn fabricator-hb-tb-chevron" data-action="ul-menu" title="'+hbEsc(hbi18n.underlineStyle)+'"><i class="fa-solid fa-chevron-down"></i></button>'
+                +'<div class="fabricator-hb-ul-menu" hidden>'
+                +'<button type="button" data-ul-style="solid"><span class="fabricator-hb-ul-prev fabricator-hb-ul-solid"></span>'+hbEsc(hbi18n.solid)+'</button>'
+                +'<button type="button" data-ul-style="double"><span class="fabricator-hb-ul-prev fabricator-hb-ul-double"></span>'+hbEsc(hbi18n.double)+'</button>'
+                +'<button type="button" data-ul-style="dotted"><span class="fabricator-hb-ul-prev fabricator-hb-ul-dotted"></span>'+hbEsc(hbi18n.dotted)+'</button>'
+                +'<button type="button" data-ul-style="dashed"><span class="fabricator-hb-ul-prev fabricator-hb-ul-dashed"></span>'+hbEsc(hbi18n.dashed)+'</button>'
                 +'</div></div>'
-                +'<button type="button" class="forge-hb-tb-btn" data-cmd="strikeThrough" title="'+hbEsc(hbi18n.strikethrough)+'"><i class="fa-solid fa-strikethrough"></i></button>'
-                +'<div class="forge-hb-tb-sep"></div>'
-                +'<button type="button" class="forge-hb-tb-btn" data-valign="super" title="'+hbEsc(hbi18n.superscript)+'"><i class="fa-solid fa-superscript"></i></button>'
-                +'<button type="button" class="forge-hb-tb-btn" data-valign="sub" title="'+hbEsc(hbi18n.subscript)+'"><i class="fa-solid fa-subscript"></i></button>'
-                +'<div class="forge-hb-tb-sep"></div>'
+                +'<button type="button" class="fabricator-hb-tb-btn" data-cmd="strikeThrough" title="'+hbEsc(hbi18n.strikethrough)+'"><i class="fa-solid fa-strikethrough"></i></button>'
+                +'<div class="fabricator-hb-tb-sep"></div>'
+                +'<button type="button" class="fabricator-hb-tb-btn" data-valign="super" title="'+hbEsc(hbi18n.superscript)+'"><i class="fa-solid fa-superscript"></i></button>'
+                +'<button type="button" class="fabricator-hb-tb-btn" data-valign="sub" title="'+hbEsc(hbi18n.subscript)+'"><i class="fa-solid fa-subscript"></i></button>'
+                +'<div class="fabricator-hb-tb-sep"></div>'
                 /* Alignment — element-level, use data-p */
-                +'<button type="button" class="forge-hb-tb-btn'+_al+'" data-p="align" data-val="left" title="'+hbEsc(hbi18n.left)+'"><i class="fa-solid fa-align-left"></i></button>'
-                +'<button type="button" class="forge-hb-tb-btn'+_ac+'" data-p="align" data-val="center" title="'+hbEsc(hbi18n.center)+'"><i class="fa-solid fa-align-center"></i></button>'
-                +'<button type="button" class="forge-hb-tb-btn'+_ar+'" data-p="align" data-val="right" title="'+hbEsc(hbi18n.right)+'"><i class="fa-solid fa-align-right"></i></button>'
-                +'<div class="forge-hb-tb-sep"></div>'
+                +'<button type="button" class="fabricator-hb-tb-btn'+_al+'" data-p="align" data-val="left" title="'+hbEsc(hbi18n.left)+'"><i class="fa-solid fa-align-left"></i></button>'
+                +'<button type="button" class="fabricator-hb-tb-btn'+_ac+'" data-p="align" data-val="center" title="'+hbEsc(hbi18n.center)+'"><i class="fa-solid fa-align-center"></i></button>'
+                +'<button type="button" class="fabricator-hb-tb-btn'+_ar+'" data-p="align" data-val="right" title="'+hbEsc(hbi18n.right)+'"><i class="fa-solid fa-align-right"></i></button>'
+                +'<div class="fabricator-hb-tb-sep"></div>'
                 /* Size + colour — element-level */
                 +(function(){
                     var sizes=[8,9,10,11,12,14,16,18,20,24,28,32,36,48,72];
                     var cur=el.size||14;
-                    var s='<select class="forge-hb-tb-size-sel" data-sz title="'+hbEsc(hbi18n.fontSize)+'">';
+                    var s='<select class="fabricator-hb-tb-size-sel" data-sz title="'+hbEsc(hbi18n.fontSize)+'">';
                     sizes.forEach(function(n){
                         s+='<option value="'+n+'"'+(n===cur?' selected':'')+'>'+n+' pt</option>';
                     });
                     return s+'</select>';
                 }())
-                +'<input type="color" data-p="color" value="'+hbEsc(el.color||'#1d2327')+'" class="forge-hb-tb-color" title="'+hbEsc(hbi18n.color)+'">'
+                +'<input type="color" data-p="color" value="'+hbEsc(el.color||'#1d2327')+'" class="fabricator-hb-tb-color" title="'+hbEsc(hbi18n.color)+'">'
                 +'</div>';
-            h+='<div class="forge-hb-prop-group forge-hb-prop-group--editor"><span>'+hbEsc(hbi18n.text)+'</span>'
-                +'<div class="forge-hb-title-editor" contenteditable="true" spellcheck="false" '
+            h+='<div class="fabricator-hb-prop-group fabricator-hb-prop-group--editor"><span>'+hbEsc(hbi18n.text)+'</span>'
+                +'<div class="fabricator-hb-title-editor" contenteditable="true" spellcheck="false" '
                 +'style="font-size:'+(el.size||14)+'pt;color:'+hbEsc(el.color||'#1d2327')+';text-align:'+hbEsc(el.align||'left')+';">'
                 +(el.content||el.text||'{form_title}')
                 +'</div></div>'
                 +'</div>';
         } else if(el.type==='html'){
-            h+='<div class="forge-hb-prop-group"><span>'+hbEsc(hbi18n.htmlCode)+'</span><textarea data-p="html"></textarea></div>';
+            h+='<div class="fabricator-hb-prop-group"><span>'+hbEsc(hbi18n.htmlCode)+'</span><textarea data-p="html"></textarea></div>';
             h+='<p style="font-size:11px;color:#888;margin:0">'+hbEsc(hbi18n.htmlNote)+'</p>';
         }
 
@@ -831,7 +831,7 @@
         }
 
         /* Rich-text editor (title element) */
-        var titleEd   = hbProps.querySelector('.forge-hb-title-editor');
+        var titleEd   = hbProps.querySelector('.fabricator-hb-title-editor');
         var savedRange = null;
 
         /* Save selection whenever focus might leave the editor */
@@ -918,7 +918,7 @@
 
         /* Underline-style split button */
         var ulChevron = hbProps.querySelector('[data-action="ul-menu"]');
-        var ulMenu    = hbProps.querySelector('.forge-hb-ul-menu');
+        var ulMenu    = hbProps.querySelector('.fabricator-hb-ul-menu');
         if(ulChevron && ulMenu){
             ulChevron.addEventListener('mousedown', function(e){
                 e.preventDefault(); ulMenu.hidden=!ulMenu.hidden;
@@ -983,7 +983,7 @@
             ['bold','italic','underline','strikeThrough'].forEach(function(cmd){
                 var btn=hbProps.querySelector('button[data-cmd="'+cmd+'"]');
                 if(!btn) return;
-                try{ btn.classList.toggle('forge-hb-tb-btn--active',
+                try{ btn.classList.toggle('fabricator-hb-tb-btn--active',
                     document.queryCommandState(cmd)); }
                 catch(ex){}
             });
@@ -1006,7 +1006,7 @@
                         );
                     }
                 }
-                btn.classList.toggle('forge-hb-tb-btn--active', active);
+                btn.classList.toggle('fabricator-hb-tb-btn--active', active);
             });
         }
         document.addEventListener('selectionchange', function hbSC(){
@@ -1059,7 +1059,7 @@
             btn.addEventListener('click', function(){
                 el.fit=btn.dataset.fit;
                 hbProps.querySelectorAll('button[data-fit]').forEach(function(b){
-                    b.classList.toggle('forge-hb-fit-btn--active', b===btn);
+                    b.classList.toggle('fabricator-hb-fit-btn--active', b===btn);
                 });
                 hbRender();
             });
@@ -1094,28 +1094,28 @@
     }
 
     /* Wire up toolbar / dialog buttons */
-    ['forge-open-header-builder','forge-open-header-builder-card'].forEach(function(id){
+    ['fabricator-open-header-builder','fabricator-open-header-builder-card'].forEach(function(id){
         var btn=document.getElementById(id);
         if(btn) btn.addEventListener('click', hbOpen);
     });
 
-    ['forge-hb-close','forge-hb-cancel'].forEach(function(id){
+    ['fabricator-hb-close','fabricator-hb-cancel'].forEach(function(id){
         var btn=document.getElementById(id);
         if(btn) btn.addEventListener('click', hbCancel);
     });
 
-    var hbOverlay=document.getElementById('forge-hb-overlay');
+    var hbOverlay=document.getElementById('fabricator-hb-overlay');
     if(hbOverlay) hbOverlay.addEventListener('click', hbCancel);
 
-    var hbApplyBtn=document.getElementById('forge-hb-apply');
+    var hbApplyBtn=document.getElementById('fabricator-hb-apply');
     if(hbApplyBtn) hbApplyBtn.addEventListener('click', hbApply);
 
-    var hbAddTitle=document.getElementById('forge-hb-add-title');
+    var hbAddTitle=document.getElementById('fabricator-hb-add-title');
     if(hbAddTitle) hbAddTitle.addEventListener('click',function(){ hbAdd('title'); });
-    var hbAddImage=document.getElementById('forge-hb-add-image');
+    var hbAddImage=document.getElementById('fabricator-hb-add-image');
     if(hbAddImage) hbAddImage.addEventListener('click', hbPickImageAndAdd);
 
-    var hbRowsInp=document.getElementById('forge-hb-rows');
+    var hbRowsInp=document.getElementById('fabricator-hb-rows');
     if(hbRowsInp) hbRowsInp.addEventListener('input',function(){
         hbLayout.rows=Math.max(2,Math.min(30,parseInt(this.value)||8));
         hbRender();
@@ -1213,23 +1213,23 @@
         return _origBuild(s);
     };
 
-    window.forgePdfUpdatePreview = updatePreview;
+    window.fabricatorPdfUpdatePreview = updatePreview;
     updatePreview();
 }());
 
-/* ---- AJAX save for #forge-pdf-layout-form (no page reload) ---- */
+/* ---- AJAX save for #fabricator-pdf-layout-form (no page reload) ---- */
 (function(){
-    var form = document.getElementById('forge-pdf-layout-form');
+    var form = document.getElementById('fabricator-pdf-layout-form');
     if (!form) return;
     function showNotice(msg, isError) {
-        var existing = document.querySelector('.forge-settings-notice');
+        var existing = document.querySelector('.fabricator-settings-notice');
         if (existing) existing.remove();
         var n = document.createElement('div');
-        n.className = 'forge-settings-notice forge-settings-notice--'
+        n.className = 'fabricator-settings-notice fabricator-settings-notice--'
             + (isError ? 'error' : 'success');
         n.innerHTML = '<i class="fa-solid fa-'
             + (isError ? 'circle-xmark' : 'circle-check') + '"></i> ' + msg;
-        var topbar = document.querySelector('.forge-settings-topbar');
+        var topbar = document.querySelector('.fabricator-settings-topbar');
         var ref = topbar || form;
         ref.parentNode.insertBefore(n, ref);
         n.scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -1243,12 +1243,12 @@
     }
     form.addEventListener('submit', function(e){
         e.preventDefault();
-        var btn = document.querySelector('[form="forge-pdf-layout-form"][type="submit"]')
+        var btn = document.querySelector('[form="fabricator-pdf-layout-form"][type="submit"]')
             || form.querySelector('button[type="submit"]');
         var origHtml = btn ? btn.innerHTML : '';
-        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="forge-spinner"></span> ' + I18N.saving; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fabricator-spinner"></span> ' + I18N.saving; }
         var fd = new FormData(form);
-        fd.set('action', 'forge_save_pdf_layout');
+        fd.set('action', 'fabricator_save_pdf_layout');
         requestAnimationFrame(function(){ requestAnimationFrame(function(){
         fetch(DATA.ajaxUrl, {method:'POST', body:fd})
             .then(function(r){
@@ -1271,7 +1271,7 @@
                 if (data.success) {
                     showNotice(data.data.message, false);
                     if (data.data.snapshot !== undefined) {
-                        var snapInput = form.querySelector('[name="forge_pdf_layout_snapshot"]');
+                        var snapInput = form.querySelector('[name="fabricator_pdf_layout_snapshot"]');
                         if (snapInput) { snapInput.value = data.data.snapshot; }
                     }
                 } else {

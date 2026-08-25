@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\PDF;
+namespace FabricatorForms\PDF;
 
 defined('ABSPATH') || exit;
 
@@ -32,7 +32,7 @@ class HashSeal
     // scopes the KDF to this plugin/version so the same admin password can't be replayed
     // against a different PBKDF2 use elsewhere. Actual entropy comes from the admin
     // password plus the random per-key salt, not from this constant.
-    private const PEPPER     = 'forge_seal_kdf_v1';
+    private const PEPPER     = 'fabricator_seal_kdf_v1';
     // OWASP Password Storage Cheat Sheet (2023 revision) recommends >=600,000
     // iterations for PBKDF2-HMAC-SHA256; 200,000 was the pre-2023 baseline and is
     // now under-provisioned against offline brute-force of the admin-chosen
@@ -63,33 +63,33 @@ class HashSeal
     /* ------------------------------------------------------------------ */
 
     /**
-     * True when the admin has opted in and FORGE_SEAL_MASTER_KEY is defined.
+     * True when the admin has opted in and FABRICATOR_SEAL_MASTER_KEY is defined.
      *
      * @return bool True when encryption is active and the master key constant is set.
      */
     public static function isEncryptionEnabled(): bool
     {
-        return get_option('forge_forms_seal_encryption') === 'enabled'
-            && defined('FORGE_SEAL_MASTER_KEY')
-            && (string) FORGE_SEAL_MASTER_KEY !== '';
+        return get_option('fabricator_forms_seal_encryption') === 'enabled'
+            && defined('FABRICATOR_SEAL_MASTER_KEY')
+            && (string) FABRICATOR_SEAL_MASTER_KEY !== '';
     }
 
     /**
-     * Returns the binary master key from the FORGE_SEAL_MASTER_KEY constant.
+     * Returns the binary master key from the FABRICATOR_SEAL_MASTER_KEY constant.
      *
      * @return string Binary master key.
      */
     private static function masterKey(): string
     {
-        if (!defined('FORGE_SEAL_MASTER_KEY') || (string) FORGE_SEAL_MASTER_KEY === '') {
+        if (!defined('FABRICATOR_SEAL_MASTER_KEY') || (string) FABRICATOR_SEAL_MASTER_KEY === '') {
             throw new \RuntimeException(
-                'ForgeForms: FORGE_SEAL_MASTER_KEY is not defined. '
+                'FabricatorForms: FABRICATOR_SEAL_MASTER_KEY is not defined. '
                 . 'Add it to wp-config.php or disable encryption in plugin settings.'
             );
         }
-        $bin = hex2bin((string) FORGE_SEAL_MASTER_KEY);
+        $bin = hex2bin((string) FABRICATOR_SEAL_MASTER_KEY);
         if ($bin === false || strlen($bin) !== 32) {
-            throw new \RuntimeException('ForgeForms: FORGE_SEAL_MASTER_KEY must be a 64-char hex string.');
+            throw new \RuntimeException('FabricatorForms: FABRICATOR_SEAL_MASTER_KEY must be a 64-char hex string.');
         }
         return $bin;
     }
@@ -113,7 +113,7 @@ class HashSeal
             $tag
         );
         if ($ct === false) {
-            throw new \RuntimeException('ForgeForms: key encryption failed.');
+            throw new \RuntimeException('FabricatorForms: key encryption failed.');
         }
         return self::ENC_PREFIX . base64_encode($iv . $tag . $ct);
     }
@@ -131,7 +131,7 @@ class HashSeal
         }
         $data = base64_decode(substr($value, strlen(self::ENC_PREFIX)));
         if ($data === false || strlen($data) < 29) {
-            throw new \RuntimeException('ForgeForms: encrypted key data is malformed.');
+            throw new \RuntimeException('FabricatorForms: encrypted key data is malformed.');
         }
         $iv  = substr($data, 0, 12);
         $tag = substr($data, 12, 16);
@@ -139,7 +139,7 @@ class HashSeal
         $pt  = openssl_decrypt($ct, 'aes-256-gcm', self::masterKey(), OPENSSL_RAW_DATA, $iv, $tag);
         if ($pt === false) {
             throw new \RuntimeException(
-                'ForgeForms: key decryption failed — master key may be incorrect or missing.'
+                'FabricatorForms: key decryption failed — master key may be incorrect or missing.'
             );
         }
         return $pt;
@@ -161,18 +161,18 @@ class HashSeal
     public static function encryptExistingKeys(): void
     {
         // Active key
-        $raw = get_option('forge_forms_seal_key');
+        $raw = get_option('fabricator_forms_seal_key');
         if ($raw) {
             $rec = json_decode((string) $raw, true);
             $not_yet_encrypted = strncmp((string)($rec['key'] ?? ''), self::ENC_PREFIX, strlen(self::ENC_PREFIX)) !== 0;
             if (is_array($rec) && isset($rec['uuid'], $rec['key']) && $not_yet_encrypted) {
                 $rec['key'] = self::encryptKey($rec['key']);
-                update_option('forge_forms_seal_key', wp_json_encode($rec), false);
+                update_option('fabricator_forms_seal_key', wp_json_encode($rec), false);
             }
         }
 
         // History
-        $history = get_option('forge_forms_seal_key_history', []);
+        $history = get_option('fabricator_forms_seal_key_history', []);
         if (!is_array($history)) {
             return;
         }
@@ -187,7 +187,7 @@ class HashSeal
         }
         unset($entry);
         if ($changed) {
-            update_option('forge_forms_seal_key_history', $history, false);
+            update_option('fabricator_forms_seal_key_history', $history, false);
         }
     }
 
@@ -203,7 +203,7 @@ class HashSeal
      */
     private static function getActiveKeyRecord(): array
     {
-        $raw = get_option('forge_forms_seal_key');
+        $raw = get_option('fabricator_forms_seal_key');
         if ($raw) {
             $decoded = json_decode((string) $raw, true);
             if (is_array($decoded) && isset($decoded['uuid'], $decoded['key'])) {
@@ -218,7 +218,7 @@ class HashSeal
         $uuid    = self::generateUuid();
         $raw_key = bin2hex(random_bytes(self::KDF_LEN));
         update_option(
-            'forge_forms_seal_key',
+            'fabricator_forms_seal_key',
             wp_json_encode(['uuid' => $uuid, 'key' => self::maybeEncrypt($raw_key)]),
             false
         );
@@ -242,7 +242,7 @@ class HashSeal
     private static function setPendingDownload(string $uuid, string $plaintext_key): void
     {
         set_transient(
-            'forge_forms_seal_key_pending_download',
+            'fabricator_forms_seal_key_pending_download',
             wp_json_encode(
                 [
                 'uuid'       => $uuid,
@@ -342,7 +342,7 @@ class HashSeal
         // Defense-in-depth: mirror the capability check above — don't rely solely on
         // the caller (currently FormSettings::handleRotateKey()) to have already
         // verified a CSRF nonce for this request.
-        if (!$nonce_verified && check_ajax_referer('forge_rotate_key', 'nonce', false) === false) {
+        if (!$nonce_verified && check_ajax_referer('fabricator_rotate_key', 'nonce', false) === false) {
             throw new \RuntimeException('Invalid or missing security token.');
         }
 
@@ -358,7 +358,7 @@ class HashSeal
         $retired_at = gmdate('Y-m-d H:i:s') . ' UTC';
 
         $current = self::getActiveKeyRecord();
-        $history = get_option('forge_forms_seal_key_history', []);
+        $history = get_option('fabricator_forms_seal_key_history', []);
         if (!is_array($history)) {
             $history = [];
         }
@@ -377,11 +377,11 @@ class HashSeal
         $new_raw_key = self::deriveKey($password, $new_uuid);
 
         update_option(
-            'forge_forms_seal_key',
+            'fabricator_forms_seal_key',
             wp_json_encode(['uuid' => $new_uuid, 'key' => self::maybeEncrypt($new_raw_key)]),
             false
         );
-        update_option('forge_forms_seal_key_history', $history, false);
+        update_option('fabricator_forms_seal_key_history', $history, false);
         self::setPendingDownload($new_uuid, $new_raw_key);
 
         return ['uuid' => $new_uuid, 'key' => $new_raw_key, 'created_at' => $retired_at];
@@ -402,11 +402,11 @@ class HashSeal
             throw new \RuntimeException('Insufficient permissions to claim the pending seal key download.');
         }
 
-        $raw = get_transient('forge_forms_seal_key_pending_download');
+        $raw = get_transient('fabricator_forms_seal_key_pending_download');
         if (!$raw) {
             return null;
         }
-        delete_transient('forge_forms_seal_key_pending_download');
+        delete_transient('fabricator_forms_seal_key_pending_download');
         $record = json_decode((string) $raw, true);
         if (is_array($record) && isset($record['uuid'], $record['key'])) {
             return $record;
@@ -441,7 +441,7 @@ class HashSeal
             return ['valid' => false, 'key_status' => null, 'compromised' => false];
         }
 
-        $history = get_option('forge_forms_seal_key_history', []);
+        $history = get_option('fabricator_forms_seal_key_history', []);
         if (!is_array($history)) {
             return ['valid' => false, 'key_status' => null, 'compromised' => false];
         }
@@ -483,7 +483,7 @@ class HashSeal
             throw new \RuntimeException('Insufficient permissions to view the seal key history.');
         }
 
-        $history = get_option('forge_forms_seal_key_history', []);
+        $history = get_option('fabricator_forms_seal_key_history', []);
         if (!is_array($history)) {
             return [];
         }
@@ -532,7 +532,7 @@ class HashSeal
         // Defense-in-depth: mirror the capability check above — don't rely solely on
         // the caller (currently FormSettings::handleAddLegacyKey()) to have already
         // verified a CSRF nonce for this request.
-        if (!$nonce_verified && check_ajax_referer('forge_add_legacy_key', 'nonce', false) === false) {
+        if (!$nonce_verified && check_ajax_referer('fabricator_add_legacy_key', 'nonce', false) === false) {
             throw new \RuntimeException('Invalid or missing security token.');
         }
 
@@ -541,7 +541,7 @@ class HashSeal
         $compromised      = $safe_status === 'compromised-legacy';
 
         $user    = wp_get_current_user();
-        $history = get_option('forge_forms_seal_key_history', []);
+        $history = get_option('fabricator_forms_seal_key_history', []);
         if (!is_array($history)) {
             $history = [];
         }
@@ -554,7 +554,7 @@ class HashSeal
             'retired_by_id'    => (int) $user->ID,
             'retired_by_login' => (string) $user->user_login,
         ];
-        update_option('forge_forms_seal_key_history', $history, false);
+        update_option('fabricator_forms_seal_key_history', $history, false);
     }
 
     /* ------------------------------------------------------------------ */
@@ -576,7 +576,7 @@ class HashSeal
     {
         $json = wp_json_encode($data);
         if ($json === false) {
-            throw new \RuntimeException('ForgeForms HashSeal: failed to JSON-encode payload for HMAC');
+            throw new \RuntimeException('FabricatorForms HashSeal: failed to JSON-encode payload for HMAC');
         }
         return hash_hmac('sha256', $json, self::getKey());
     }

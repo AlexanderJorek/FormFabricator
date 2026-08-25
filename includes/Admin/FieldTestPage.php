@@ -11,7 +11,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -20,7 +20,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Admin;
+namespace FabricatorForms\Admin;
 
 defined('ABSPATH') || exit;
 
@@ -43,15 +43,15 @@ class FieldTestPage
     }
 
     /**
-     * Appends forge-list-page body class on the test page.
+     * Appends fabricator-list-page body class on the test page.
      *
      * @param string $classes Current body classes.
      */
     public static function bodyClass(string $classes): string
     {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
-        if (isset($_GET['page']) && $_GET['page'] === 'forge-field-tests') {
-            $classes .= ' forge-list-page';
+        if (isset($_GET['page']) && $_GET['page'] === 'fabricator-field-tests') {
+            $classes .= ' fabricator-list-page';
         }
         return $classes;
     }
@@ -67,11 +67,11 @@ class FieldTestPage
             return;
         }
         add_submenu_page(
-            'forge-forms',
+            'fabricator-forms',
             'Field Tests',
             'Field Tests',
             'manage_options',
-            'forge-field-tests',
+            'fabricator-field-tests',
             [self::class, 'render']
         );
     }
@@ -144,7 +144,7 @@ class FieldTestPage
         return $found ? true : (($what ?: $needle) . ' not found in output');
     }
 
-    private static function expectError(mixed $value, array $config, \ForgeForms\Fields\BaseField $h): bool|string
+    private static function expectError(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h): bool|string
     {
         $r = $h->validate($value, $config);
         self::$lastIn  = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : (string)$value;
@@ -152,7 +152,7 @@ class FieldTestPage
         return (is_string($r) && $r !== '') ? true : 'expected error string, got ' . var_export($r, true);
     }
 
-    private static function expectOk(mixed $value, array $config, \ForgeForms\Fields\BaseField $h): bool|string
+    private static function expectOk(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h): bool|string
     {
         $r = $h->validate($value, $config);
         self::$lastIn  = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : (string)$value;
@@ -160,7 +160,7 @@ class FieldTestPage
         return $r === true ? true : 'expected true, got ' . var_export($r, true);
     }
 
-    private static function expectMap(mixed $value, array $config, \ForgeForms\Fields\BaseField $h, string $expected): bool|string
+    private static function expectMap(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h, string $expected): bool|string
     {
         $r = $h->map($value, $config);
         self::$lastIn  = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : var_export($value, true);
@@ -168,7 +168,7 @@ class FieldTestPage
         return $r === $expected ? true : 'expected ' . var_export($expected, true) . ', got ' . var_export($r, true);
     }
 
-    private static function expectMapContains(mixed $value, array $config, \ForgeForms\Fields\BaseField $h, string ...$needles): bool|string
+    private static function expectMapContains(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h, string ...$needles): bool|string
     {
         $r = $h->map($value, $config);
         self::$lastIn  = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : var_export($value, true);
@@ -181,7 +181,7 @@ class FieldTestPage
         return true;
     }
 
-    private static function schemaIntegrity(\ForgeForms\Fields\BaseField $h): bool|string
+    private static function schemaIntegrity(\FabricatorForms\Fields\BaseField $h): bool|string
     {
         // These schema types are composite UI widgets with no single config key of their own
         $noKeyTypes = ['subfields', 'rating_preview', 'notice'];
@@ -205,7 +205,7 @@ class FieldTestPage
         return empty($missing) ? true : 'schema keys missing from getDefaultConfig(): ' . implode(', ', $missing);
     }
 
-    private static function renderBasic(\ForgeForms\Fields\BaseField $h, array $cfg, string $fid = 'field-test-1'): bool|string
+    private static function renderBasic(\FabricatorForms\Fields\BaseField $h, array $cfg, string $fid = 'field-test-1'): bool|string
     {
         $html = $h->render($cfg, $fid);
         self::$lastIn  = 'field_id=' . $fid;
@@ -218,8 +218,8 @@ class FieldTestPage
         if (!str_contains($html, $fid)) {
             return 'render() output does not contain field_id';
         }
-        if (!str_contains($html, 'forge-field')) {
-            return 'render() output missing forge-field class';
+        if (!str_contains($html, 'fabricator-field')) {
+            return 'render() output missing fabricator-field class';
         }
         return true;
     }
@@ -229,7 +229,7 @@ class FieldTestPage
     private static function testText(): void
     {
         self::section('text');
-        $h   = new \ForgeForms\Fields\TextField();
+        $h   = new \FabricatorForms\Fields\TextField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'text','label'=>'Name']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -278,7 +278,7 @@ class FieldTestPage
     private static function testTextarea(): void
     {
         self::section('textarea');
-        $h   = new \ForgeForms\Fields\TextareaField();
+        $h   = new \FabricatorForms\Fields\TextareaField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'textarea','label'=>'Nachricht']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -309,7 +309,7 @@ class FieldTestPage
     private static function testEmail(): void
     {
         self::section('email');
-        $h   = new \ForgeForms\Fields\EmailField();
+        $h   = new \FabricatorForms\Fields\EmailField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'email','label'=>'E-Mail']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -346,7 +346,7 @@ class FieldTestPage
     private static function testName(): void
     {
         self::section('name');
-        $h   = new \ForgeForms\Fields\NameField();
+        $h   = new \FabricatorForms\Fields\NameField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'name','label'=>'Name','expanded'=>false]);
         $exp = array_merge($cfg, [
             'expanded'=>true,'fname_enabled'=>true,'fname_label'=>'Vorname','fname_required'=>true,
@@ -395,7 +395,7 @@ class FieldTestPage
     private static function testPhone(): void
     {
         self::section('phone');
-        $h   = new \ForgeForms\Fields\PhoneField();
+        $h   = new \FabricatorForms\Fields\PhoneField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'phone','label'=>'Telefon']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -447,7 +447,7 @@ class FieldTestPage
     private static function testNumber(): void
     {
         self::section('number');
-        $h   = new \ForgeForms\Fields\NumberField();
+        $h   = new \FabricatorForms\Fields\NumberField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'number','label'=>'Anzahl']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -476,7 +476,7 @@ class FieldTestPage
     private static function testAddress(): void
     {
         self::section('address');
-        $h   = new \ForgeForms\Fields\AddressField();
+        $h   = new \FabricatorForms\Fields\AddressField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'address','label'=>'Adresse','expanded'=>false]);
         $exp = array_merge($cfg, [
             'expanded'=>true,
@@ -542,19 +542,19 @@ class FieldTestPage
     private static function testDate(): void
     {
         self::section('date');
-        $h   = new \ForgeForms\Fields\DateField();
+        $h   = new \FabricatorForms\Fields\DateField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'date','label'=>'Datum']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
         self::run('render basic', fn() => self::renderBasic($h, $cfg));
         self::run('render show_picker=true → cal btn', function () use ($h, $cfg) {
-            return self::contains($h->render(array_merge($cfg, ['show_picker'=>true]), 'f1'), 'forge-date-cal-btn');
+            return self::contains($h->render(array_merge($cfg, ['show_picker'=>true]), 'f1'), 'fabricator-date-cal-btn');
         });
         self::run('render prefill_today attr', function () use ($h, $cfg) {
             return self::contains($h->render(array_merge($cfg, ['prefill_today'=>true]), 'f1'), 'data-prefill-today');
         });
         self::run('render show_picker=false → no cal btn', function () use ($h, $cfg) {
-            return !str_contains($h->render(array_merge($cfg, ['show_picker'=>false]), 'f1'), 'forge-date-cal-btn')
+            return !str_contains($h->render(array_merge($cfg, ['show_picker'=>false]), 'f1'), 'fabricator-date-cal-btn')
                 ? true : 'calendar button present when show_picker=false';
         });
         self::run('validate required empty', fn() => self::expectError('', array_merge($cfg, ['required'=>true]), $h));
@@ -585,7 +585,7 @@ class FieldTestPage
     private static function testTime(): void
     {
         self::section('time');
-        $h   = new \ForgeForms\Fields\TimeField();
+        $h   = new \FabricatorForms\Fields\TimeField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'time','label'=>'Uhrzeit']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -615,7 +615,7 @@ class FieldTestPage
     private static function testCurrency(): void
     {
         self::section('currency');
-        $h   = new \ForgeForms\Fields\CurrencyField();
+        $h   = new \FabricatorForms\Fields\CurrencyField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'currency','label'=>'Betrag','currency'=>'EUR']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -649,7 +649,7 @@ class FieldTestPage
     {
         self::section('select');
         $opts = [['value'=>'a','label'=>'Alpha','default'=>false],['value'=>'b','label'=>'Beta','default'=>true]];
-        $h    = new \ForgeForms\Fields\SelectField();
+        $h    = new \FabricatorForms\Fields\SelectField();
         $cfg  = array_merge($h->getDefaultConfig(), ['type'=>'select','label'=>'Auswahl','options'=>$opts]);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -707,7 +707,7 @@ class FieldTestPage
     {
         self::section('radio');
         $opts = [['value'=>'x','label'=>'X-Ray','default'=>false],['value'=>'y','label'=>'Yankee','default'=>false]];
-        $h    = new \ForgeForms\Fields\RadioField();
+        $h    = new \FabricatorForms\Fields\RadioField();
         $cfg  = array_merge($h->getDefaultConfig(), ['type'=>'radio','label'=>'Radio','options'=>$opts]);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -719,11 +719,11 @@ class FieldTestPage
             return is_string($h->render(array_merge($cfg, ['other_option'=>true]), 'f1')) ? true : 'render threw';
         });
         self::run('render layout=false → no horizontal class', function () use ($h, $cfg) {
-            return !str_contains($h->render(array_merge($cfg, ['layout'=>false]), 'f1'), 'forge-radio-group--horizontal')
+            return !str_contains($h->render(array_merge($cfg, ['layout'=>false]), 'f1'), 'fabricator-radio-group--horizontal')
                 ? true : 'horizontal class present when layout=false';
         });
         self::run('render layout=true → horizontal class', function () use ($h, $cfg) {
-            return self::contains($h->render(array_merge($cfg, ['layout'=>true]), 'f1'), 'forge-radio-group--horizontal');
+            return self::contains($h->render(array_merge($cfg, ['layout'=>true]), 'f1'), 'fabricator-radio-group--horizontal');
         });
         self::run('render default-selected fallback (no value)', function () use ($h, $cfg) {
             $optsD = [['value'=>'x','label'=>'X-Ray','default'=>false],['value'=>'y','label'=>'Yankee','default'=>true]];
@@ -772,7 +772,7 @@ class FieldTestPage
     {
         self::section('checkbox');
         $opts = [['value'=>'one','label'=>'Eins','default'=>true],['value'=>'two','label'=>'Zwei','default'=>false],['value'=>'three','label'=>'Drei','default'=>false]];
-        $h    = new \ForgeForms\Fields\CheckboxField();
+        $h    = new \FabricatorForms\Fields\CheckboxField();
         $cfg  = array_merge($h->getDefaultConfig(), ['type'=>'checkbox','label'=>'Checkboxen','options'=>$opts]);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -787,7 +787,7 @@ class FieldTestPage
             return self::contains($h->render(array_merge($cfg, ['other_option'=>true]), 'f1'), '__other__');
         });
         self::run('render layout=false → no horizontal class', function () use ($h, $cfg) {
-            return !str_contains($h->render(array_merge($cfg, ['layout'=>false]), 'f1'), 'forge-checkbox-group--horizontal')
+            return !str_contains($h->render(array_merge($cfg, ['layout'=>false]), 'f1'), 'fabricator-checkbox-group--horizontal')
                 ? true : 'horizontal class present when layout=false';
         });
         self::run('render default pre-checked options (no value)', function () use ($h, $cfg) {
@@ -836,7 +836,7 @@ class FieldTestPage
     private static function testUpload(): void
     {
         self::section('upload');
-        $h   = new \ForgeForms\Fields\UploadField();
+        $h   = new \FabricatorForms\Fields\UploadField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'upload','label'=>'Datei']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -880,7 +880,7 @@ class FieldTestPage
     private static function testSignature(): void
     {
         self::section('signature');
-        $h   = new \ForgeForms\Fields\SignatureField();
+        $h   = new \FabricatorForms\Fields\SignatureField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'signature','label'=>'Unterschrift','export_format'=>'png']);
 
         $validPng = 'data:image/png;base64,'.base64_encode("\x89PNG\r\n\x1a\n".str_repeat("\x00", 100));
@@ -913,7 +913,7 @@ class FieldTestPage
     private static function testRating(): void
     {
         self::section('rating');
-        $h   = new \ForgeForms\Fields\RatingField();
+        $h   = new \FabricatorForms\Fields\RatingField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'rating','label'=>'Bewertung','max'=>5,'icon_type'=>'star']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -958,7 +958,7 @@ class FieldTestPage
     private static function testSlider(): void
     {
         self::section('slider');
-        $h   = new \ForgeForms\Fields\SliderField();
+        $h   = new \FabricatorForms\Fields\SliderField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'slider','label'=>'Slider','min'=>0,'max'=>100,'step'=>1,'ranged'=>false]);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -992,7 +992,7 @@ class FieldTestPage
     private static function testCaptcha(): void
     {
         self::section('captcha');
-        $h   = new \ForgeForms\Fields\CaptchaField();
+        $h   = new \FabricatorForms\Fields\CaptchaField();
         $cfg = $h->getDefaultConfig();
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -1008,7 +1008,7 @@ class FieldTestPage
     private static function testConsent(): void
     {
         self::section('consent');
-        $h   = new \ForgeForms\Fields\ConsentField();
+        $h   = new \FabricatorForms\Fields\ConsentField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'consent','label'=>'Einwilligung','consent_text'=>'Ich stimme zu.']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -1040,7 +1040,7 @@ class FieldTestPage
     private static function testGdpr(): void
     {
         self::section('gdpr');
-        $h   = new \ForgeForms\Fields\GdprField();
+        $h   = new \FabricatorForms\Fields\GdprField();
         $cfg = array_merge($h->getDefaultConfig(), [
             'type'=>'gdpr','label'=>'DSGVO',
             'privacy_policy_url'=>'https://example.com/privacy',
@@ -1078,7 +1078,7 @@ class FieldTestPage
     private static function testHtml(): void
     {
         self::section('html');
-        $h   = new \ForgeForms\Fields\HtmlField();
+        $h   = new \FabricatorForms\Fields\HtmlField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'html','label'=>'','html_content'=>'<p>Hello <strong>World</strong></p>']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -1161,7 +1161,7 @@ class FieldTestPage
     private static function testGroup(): void
     {
         self::section('group');
-        $h   = new \ForgeForms\Fields\GroupField();
+        $h   = new \FabricatorForms\Fields\GroupField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'group','label'=>'Gruppe','children'=>[]]);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -1169,7 +1169,7 @@ class FieldTestPage
         self::run('hasRequired=false', fn() => !$h->hasRequired() ? true : 'expected false');
         self::run('includeInEmailSummary=false', fn() => !$h->includeInEmailSummary() ? true : 'expected false');
         self::run('render returns string', fn() => is_string($h->render($cfg, 'f1')) ? true : 'render failed');
-        self::run('render opens forge-field-group', fn() => self::contains($h->render($cfg, 'f1'), 'forge-field-group'));
+        self::run('render opens fabricator-field-group', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-field-group'));
         self::run('map always empty string', fn() => self::expectMap(null, $cfg, $h, ''));
         self::run('mapNormalized empty → []', function () use ($h, $cfg) {
             $r = $h->mapNormalized('f1', 'Group', [], $cfg, []);
@@ -1205,7 +1205,7 @@ class FieldTestPage
     private static function testPageBreak(): void
     {
         self::section('pagebreak');
-        $h   = new \ForgeForms\Fields\PageBreakField();
+        $h   = new \FabricatorForms\Fields\PageBreakField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'pagebreak','label'=>'','prev_btn'=>'Zurück','next_btn'=>'Weiter']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -1222,7 +1222,7 @@ class FieldTestPage
         });
         self::run('renderBreak page 2 has nav', function () use ($h, $cfg) {
             $html = $h->renderBreak($cfg, 2);
-            return str_contains($html, 'forge-btn-next') && str_contains($html, 'forge-btn-prev') ? true : 'nav missing';
+            return str_contains($html, 'fabricator-btn-next') && str_contains($html, 'fabricator-btn-prev') ? true : 'nav missing';
         });
         // page 1: bottom nav uses <span></span> instead of prev button
         self::run('renderBreak page 1 bottom has span', function () use ($h, $cfg) {
@@ -1241,7 +1241,7 @@ class FieldTestPage
     private static function testPageHeader(): void
     {
         self::section('page-header');
-        $h   = new \ForgeForms\Fields\PageHeaderField();
+        $h   = new \FabricatorForms\Fields\PageHeaderField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'page-header','label'=>'']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -1258,7 +1258,7 @@ class FieldTestPage
             $html = $h->render($cfg, 'f1');
             self::$lastIn  = json_encode($cfg);
             self::$lastOut = $html;
-            return str_contains($html, 'forge-page-header') ? true : 'container class missing';
+            return str_contains($html, 'fabricator-page-header') ? true : 'container class missing';
         });
         self::run('render show_names=false → data-show-names="0"', function () use ($h, $cfg) {
             $html = $h->render(array_merge($cfg, ['show_names'=>false]), 'f1');
@@ -1294,7 +1294,7 @@ class FieldTestPage
     private static function testPostData(): void
     {
         self::section('postdata');
-        $h   = new \ForgeForms\Fields\PostDataField();
+        $h   = new \FabricatorForms\Fields\PostDataField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'postdata','label'=>'Beitragsinfo','post_field'=>['post_title']]);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -1325,7 +1325,7 @@ class FieldTestPage
     private static function testWebsite(): void
     {
         self::section('website');
-        $h   = new \ForgeForms\Fields\WebsiteField();
+        $h   = new \FabricatorForms\Fields\WebsiteField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'website','label'=>'Webseite']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -1345,7 +1345,7 @@ class FieldTestPage
     private static function testSepa(): void
     {
         self::section('sepa');
-        $h   = new \ForgeForms\Fields\SepaField();
+        $h   = new \FabricatorForms\Fields\SepaField();
         $cfg = array_merge($h->getDefaultConfig(), [
             'type'=>'sepa','label'=>'SEPA-Mandat',
             'mandate_title'=>'SEPA Lastschriftmandat',
@@ -1361,9 +1361,9 @@ class FieldTestPage
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
         self::run('render basic', fn() => self::renderBasic($h, $cfg));
         self::run('render mandate title', fn() => self::contains($h->render($cfg, 'f1'), 'SEPA Lastschriftmandat'));
-        self::run('render IBAN input class', fn() => self::contains($h->render($cfg, 'f1'), 'forge-sepa-iban'));
-        self::run('render BIC input class', fn() => self::contains($h->render($cfg, 'f1'), 'forge-sepa-bic'));
-        self::run('render holder input class', fn() => self::contains($h->render($cfg, 'f1'), 'forge-sepa-holder'));
+        self::run('render IBAN input class', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-sepa-iban'));
+        self::run('render BIC input class', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-sepa-bic'));
+        self::run('render holder input class', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-sepa-holder'));
         self::run('render <canvas for sig', fn() => self::contains($h->render($cfg, 'f1'), '<canvas'));
         self::run('render creditor_id in output', fn() => self::contains($h->render($cfg, 'f1'), 'DE98ZZZ09999999999'));
         self::run('render country_filter → data attr present', function () use ($h, $cfg) {
@@ -1429,7 +1429,7 @@ class FieldTestPage
     private static function testRegistryCoverage(): void
     {
         self::section('FieldRegistry coverage');
-        $registry    = \ForgeForms\Fields\FieldRegistry::all();
+        $registry    = \FabricatorForms\Fields\FieldRegistry::all();
         $testedTypes = [
             'text', 'textarea', 'email', 'name', 'phone', 'number', 'address',
             'date', 'time', 'currency', 'select', 'radio', 'checkbox', 'upload',
@@ -1450,8 +1450,8 @@ class FieldTestPage
     // ── JS test helpers ──────────────────────────────────────────────────────
 
     /**
-     * Generates the same window.ForgeValidators / ForgeEmptyChecks / ForgeFieldInits /
-     * ForgeSkipValidation globals that Assets::enqueueFront() emits, so the JS test
+     * Generates the same window.FabricatorValidators / FabricatorEmptyChecks / FabricatorFieldInits /
+     * FabricatorSkipValidation globals that Assets::enqueueFront() emits, so the JS test
      * harness has the real field implementations available on the admin test page.
      */
     private static function generateFrontGlobals(): string
@@ -1462,7 +1462,7 @@ class FieldTestPage
         $inits = [];
         $skip = [];
 
-        foreach (\ForgeForms\Fields\FieldRegistry::all() as $type => $class) {
+        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
             $handler = new $class();
 
             $entry = $handler->getClientEmptyCheck();
@@ -1489,18 +1489,18 @@ class FieldTestPage
             }
         }
 
-        $js = "window.__FORGE_TEST__=true;\n";
-        $js .= "window.ForgeForms={ajaxUrl:''};\n";
-        $js .= 'window.ForgeValidators=' . (!empty($pairs)
+        $js = "window.__FABRICATOR_TEST__=true;\n";
+        $js .= "window.FabricatorForms={ajaxUrl:''};\n";
+        $js .= 'window.FabricatorValidators=' . (!empty($pairs)
             ? '{' . implode(',', $pairs) . '}'
             : '{}') . ";\n";
-        $js .= 'window.ForgeEmptyChecks=' . (!empty($emptyChecks)
+        $js .= 'window.FabricatorEmptyChecks=' . (!empty($emptyChecks)
             ? '{' . implode(',', $emptyChecks) . '}'
             : '{}') . ";\n";
-        $js .= 'window.ForgeFieldInits=' . (!empty($inits)
+        $js .= 'window.FabricatorFieldInits=' . (!empty($inits)
             ? '{' . implode(',', $inits) . '}'
             : '{}') . ";\n";
-        $js .= 'window.ForgeSkipValidation=' . (!empty($skip)
+        $js .= 'window.FabricatorSkipValidation=' . (!empty($skip)
             ? '[' . implode(',', $skip) . ']'
             : '[]') . ";\n";
 
@@ -1509,26 +1509,26 @@ class FieldTestPage
 
     private static function renderJsTests(): void
     {
-        echo '<div id="forge-js-tests" style="color:#555;font-style:italic;">Running JS tests…</div>';
+        echo '<div id="fabricator-js-tests" style="color:#555;font-style:italic;">Running JS tests…</div>';
 
         // Dependency chain (globals -> front.js -> harness) enforces execution order via WP's
         // own script-dependency system, rather than relying on raw echo/output order.
-        wp_register_script('forge-fieldtest-globals', false, [], FORGE_FORMS_VERSION, true);
-        wp_enqueue_script('forge-fieldtest-globals');
-        wp_add_inline_script('forge-fieldtest-globals', self::generateFrontGlobals());
+        wp_register_script('fabricator-fieldtest-globals', false, [], FABRICATOR_FORMS_VERSION, true);
+        wp_enqueue_script('fabricator-fieldtest-globals');
+        wp_add_inline_script('fabricator-fieldtest-globals', self::generateFrontGlobals());
 
         wp_enqueue_script(
-            'forge-fieldtest-front',
-            FORGE_FORMS_URL . 'assets/js/front.js',
-            ['forge-fieldtest-globals'],
-            FORGE_FORMS_VERSION,
+            'fabricator-fieldtest-front',
+            FABRICATOR_FORMS_URL . 'assets/js/front.js',
+            ['fabricator-fieldtest-globals'],
+            FABRICATOR_FORMS_VERSION,
             true
         );
         wp_enqueue_script(
-            'forge-fieldtest-harness',
-            FORGE_FORMS_URL . 'assets/js/admin-fieldtest.js',
-            ['forge-fieldtest-front'],
-            FORGE_FORMS_VERSION,
+            'fabricator-fieldtest-harness',
+            FABRICATOR_FORMS_URL . 'assets/js/admin-fieldtest.js',
+            ['fabricator-fieldtest-front'],
+            FABRICATOR_FORMS_VERSION,
             true
         );
     }
@@ -1591,25 +1591,25 @@ class FieldTestPage
         $allOk    = self::$fail === 0;
 
 
-        echo '<div class="wrap forge-list-wrap">';
+        echo '<div class="wrap fabricator-list-wrap">';
         echo '<hr class="wp-header-end" style="display:none">';
 
-        $phpBadge = '<span class="forge-tab-badge ' . ($allOk ? 'forge-tab-badge--pass' : 'forge-tab-badge--fail') . '">'
+        $phpBadge = '<span class="fabricator-tab-badge ' . ($allOk ? 'fabricator-tab-badge--pass' : 'fabricator-tab-badge--fail') . '">'
             . ($allOk
                 ? '<i class="fa-solid fa-check" aria-hidden="true"></i> ' . $total
                 : '<i class="fa-solid fa-xmark" aria-hidden="true"></i> ' . self::$fail . '/' . $total) . '</span>';
 
-        echo '<div class="forge-test-topbar">';
-        echo '<h1 class="forge-test-title">Field Tests</h1>';
-        echo '<div class="forge-test-tabs">';
+        echo '<div class="fabricator-test-topbar">';
+        echo '<h1 class="fabricator-test-title">Field Tests</h1>';
+        echo '<div class="fabricator-test-tabs">';
         // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $phpBadge is built from a boolean and internal integer counts only, no user input.
-        echo '<div class="forge-test-tab active" data-panel="forge-panel-php">PHP' . $phpBadge . '</div>';
-        echo '<div class="forge-test-tab" data-panel="forge-panel-js">JS <span id="forge-js-tab-badge" class="forge-tab-badge forge-tab-badge--loading">…</span></div>';
+        echo '<div class="fabricator-test-tab active" data-panel="fabricator-panel-php">PHP' . $phpBadge . '</div>';
+        echo '<div class="fabricator-test-tab" data-panel="fabricator-panel-js">JS <span id="fabricator-js-tab-badge" class="fabricator-tab-badge fabricator-tab-badge--loading">…</span></div>';
         echo '</div>';
         echo '</div>';
 
         // PHP panel
-        echo '<div id="forge-panel-php" class="forge-test-panel active">';
+        echo '<div id="fabricator-panel-php" class="fabricator-test-panel active">';
         if (!$allOk) {
             $copyText = esc_js(implode("\n", self::$failLines));
             echo '<div style="margin-bottom:10px;">';
@@ -1620,7 +1620,7 @@ class FieldTestPage
                 . '<i class="fa-regular fa-clipboard" aria-hidden="true"></i> Copy failures</button>';
             echo '</div>';
         }
-        echo '<table id="forge-php-tests" class="forge-test-table">';
+        echo '<table id="fabricator-php-tests" class="fabricator-test-table">';
         echo '<colgroup>'
             . '<col style="width:24px">'
             . '<col style="width:26%">'
@@ -1642,15 +1642,15 @@ class FieldTestPage
         echo '</div>';
 
         // JS panel
-        echo '<div id="forge-panel-js" class="forge-test-panel">';
+        echo '<div id="fabricator-panel-js" class="fabricator-test-panel">';
         self::renderJsTests();
         echo '</div>';
 
         wp_enqueue_script(
-            'forge-fieldtest-tabs',
-            FORGE_FORMS_URL . 'assets/js/admin-fieldtest-tabs.js',
+            'fabricator-fieldtest-tabs',
+            FABRICATOR_FORMS_URL . 'assets/js/admin-fieldtest-tabs.js',
             [],
-            FORGE_FORMS_VERSION,
+            FABRICATOR_FORMS_VERSION,
             true
         );
 

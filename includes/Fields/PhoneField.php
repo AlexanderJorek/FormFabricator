@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -66,7 +66,7 @@ class PhoneField extends BaseField
                 if (!inp || !inp.value.trim()) return null;
                 var mode = inp.dataset.phoneMode || '';
                 if (!mode) return null;
-                var _i18n = window.ForgeForms && window.ForgeForms.i18n;
+                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                 var v = inp.value.replace(/[\s\-\(\)\/]/g, '');
                 if (mode === 'any') {
                     return /^\+?[0-9]{7,15}$/.test(v)

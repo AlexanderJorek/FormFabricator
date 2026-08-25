@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,13 +19,13 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Form;
+namespace FabricatorForms\Form;
 
-use ForgeForms\Fields\FieldRegistry;
-use ForgeForms\Form\FormModel;
-use ForgeForms\Admin\FormSettings;
-use ForgeForms\PDF\Generator;
-use ForgeForms\PDF\PdfUtils;
+use FabricatorForms\Fields\FieldRegistry;
+use FabricatorForms\Form\FormModel;
+use FabricatorForms\Admin\FormSettings;
+use FabricatorForms\PDF\Generator;
+use FabricatorForms\PDF\PdfUtils;
 
 defined('ABSPATH') || exit;
 
@@ -83,15 +83,15 @@ class MailSender
         add_action(
             'wp_mail_failed',
             static function (\WP_Error $error): void {
-                \ForgeForms\forge_log(
-                    'ForgeForms MailSender: wp_mail_failed — ' . $error->get_error_message()
+                \FabricatorForms\fabricator_log(
+                    'FabricatorForms MailSender: wp_mail_failed — ' . $error->get_error_message()
                 );
             }
         );
     }
 
     /**
-     * Hooked into forge_forms_submission; generates and emails the submission PDF. Generates the PDF once and
+     * Hooked into fabricator_forms_submission; generates and emails the submission PDF. Generates the PDF once and
      * sends one email per enabled notification, attaching the PDF to those with attach_pdf = true.
      *
      * @param int       $form_id The form post ID.
@@ -100,14 +100,14 @@ class MailSender
      */
     public static function onSubmission(int $form_id, array $mapped, FormModel $form): void
     {
-        \ForgeForms\forge_log(
-            "ForgeForms MailSender: onSubmission fired for form {$form_id}, "
+        \FabricatorForms\fabricator_log(
+            "FabricatorForms MailSender: onSubmission fired for form {$form_id}, "
             . count($form->notifications ?? []) . ' notification(s) configured'
         );
 
         if (empty($form->notifications)) {
-            \ForgeForms\forge_log(
-                "ForgeForms MailSender: no notifications for form {$form_id}, aborting"
+            \FabricatorForms\fabricator_log(
+                "FabricatorForms MailSender: no notifications for form {$form_id}, aborting"
             );
             return;
         }
@@ -119,8 +119,8 @@ class MailSender
         $uploads = self::materializeUploadAttachments($mapped);
 
         if ($pdf_path === false) {
-            \ForgeForms\forge_log(
-                "ForgeForms MailSender: PDF generation failed for form {$form_id}"
+            \FabricatorForms\fabricator_log(
+                "FabricatorForms MailSender: PDF generation failed for form {$form_id}"
             );
         }
 
@@ -137,15 +137,15 @@ class MailSender
             }
         }
 
-        $global_from_email = get_option('forge_forms_from_email')
+        $global_from_email = get_option('fabricator_forms_from_email')
             ?: get_option('admin_email');
-        $global_from_name  = get_option('forge_forms_from_name')
+        $global_from_name  = get_option('fabricator_forms_from_name')
             ?: get_bloginfo('name');
 
         foreach ($form->notifications as $notif) {
             if (empty($notif['enabled'])) {
-                \ForgeForms\forge_log(
-                    'ForgeForms MailSender: notification '
+                \FabricatorForms\fabricator_log(
+                    'FabricatorForms MailSender: notification '
                     . self::logSafe($notif['slug'] ?? '?') . ' disabled, skipping'
                 );
                 continue;
@@ -153,12 +153,12 @@ class MailSender
 
             $to = ($notif['recipient_mode'] ?? 'single') === 'routing'
                 ? self::resolveRoutedRecipient($notif, $mapped, $form)
-                : self::resolveRecipient(\ForgeForms\Utils\Sanitize::str($notif['to'] ?? null), $mapped, $form);
+                : self::resolveRecipient(\FabricatorForms\Utils\Sanitize::str($notif['to'] ?? null), $mapped, $form);
             if (empty($to)) {
                 // Don't log $notif['to'] verbatim — in routing mode it's derived from a
                 // submitted field value and could itself be personal data.
-                \ForgeForms\forge_log(
-                    'ForgeForms MailSender: notification ' . self::logSafe($notif['slug'] ?? '?')
+                \FabricatorForms\fabricator_log(
+                    'FabricatorForms MailSender: notification ' . self::logSafe($notif['slug'] ?? '?')
                     . ' has no resolvable recipient, skipping'
                 );
                 continue;
@@ -169,23 +169,23 @@ class MailSender
             $should_attach_uploads = !empty($notif['attach_uploads']);
 
             $subject = self::replacePlaceholders(
-                \ForgeForms\Utils\Sanitize::str($notif['subject'] ?? null, __('New Submission', 'formfabricator')),
+                \FabricatorForms\Utils\Sanitize::str($notif['subject'] ?? null, __('New Submission', 'formfabricator')),
                 $mapped,
                 $form
             );
             $body    = self::buildEmailBody(
-                \ForgeForms\Utils\Sanitize::str($notif['body'] ?? null),
+                \FabricatorForms\Utils\Sanitize::str($notif['body'] ?? null),
                 $mapped,
                 $form
             );
 
             $notif_email = self::replacePlaceholders(
-                \ForgeForms\Utils\Sanitize::str($notif['from_email'] ?? null),
+                \FabricatorForms\Utils\Sanitize::str($notif['from_email'] ?? null),
                 $mapped,
                 $form
             );
             $notif_name  = self::replacePlaceholders(
-                \ForgeForms\Utils\Sanitize::str($notif['from_name'] ?? null),
+                \FabricatorForms\Utils\Sanitize::str($notif['from_name'] ?? null),
                 $mapped,
                 $form
             );
@@ -212,7 +212,7 @@ class MailSender
             ];
 
             $reply_to = self::resolveRecipient(
-                \ForgeForms\Utils\Sanitize::str($notif['reply_to'] ?? null),
+                \FabricatorForms\Utils\Sanitize::str($notif['reply_to'] ?? null),
                 $mapped,
                 $form
             );
@@ -262,8 +262,8 @@ class MailSender
 
             remove_action('phpmailer_init', $altBodySetter);
 
-            \ForgeForms\forge_log(
-                'ForgeForms MailSender: wp_mail to ' . self::maskEmail($to) . ' returned '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms MailSender: wp_mail to ' . self::maskEmail($to) . ' returned '
                 . ($sent ? 'true' : 'false')
             );
         }
@@ -274,7 +274,7 @@ class MailSender
                 if ($pdf_path && file_exists($pdf_path)) {
                     wp_delete_file($pdf_path);
                     if (file_exists($pdf_path)) {
-                        \ForgeForms\forge_log("ForgeForms MailSender: failed to remove temp PDF {$pdf_path}");
+                        \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp PDF {$pdf_path}");
                     }
                 }
                 $tmp_dir = $uploads['tmp_dir'] ?? '';
@@ -282,7 +282,7 @@ class MailSender
                     foreach (glob($tmp_dir . '*') ?: [] as $f) {
                         wp_delete_file($f);
                         if (file_exists($f)) {
-                            \ForgeForms\forge_log("ForgeForms MailSender: failed to remove temp file {$f}");
+                            \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp file {$f}");
                         }
                     }
                     // This shutdown-function cleanup runs after a front-end form submission (no WP admin
@@ -291,7 +291,7 @@ class MailSender
                     // directory, not user-facing WP_Filesystem-managed content.
                     // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- see comment above
                     if (!@rmdir($tmp_dir)) {
-                        \ForgeForms\forge_log("ForgeForms MailSender: failed to remove temp dir {$tmp_dir}");
+                        \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp dir {$tmp_dir}");
                     }
                 }
             }
@@ -317,12 +317,12 @@ class MailSender
         /* Use a per-request unique directory so original filenames are
            preserved for mail clients and concurrent requests can never
            collide on the same path (wp_unique_filename is not atomic). */
-        $tmp_dir = get_temp_dir() . 'forge_' . wp_generate_uuid4() . DIRECTORY_SEPARATOR;
+        $tmp_dir = get_temp_dir() . 'fabricator_' . wp_generate_uuid4() . DIRECTORY_SEPARATOR;
         // Harden against shared/world-listable system temp dirs, same as Generator.php's PDF temp dir.
         $prev_umask = umask(0077);
         try {
             if (!wp_mkdir_p($tmp_dir)) {
-                \ForgeForms\forge_log("ForgeForms: could not create temp dir {$tmp_dir}");
+                \FabricatorForms\fabricator_log("FabricatorForms: could not create temp dir {$tmp_dir}");
                 return $result;
             }
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- runs during front-end AJAX submission handling, no WP_Filesystem credentials available; mirrors Generator.php.
@@ -343,8 +343,8 @@ class MailSender
                 $name = sanitize_file_name($file['name'] ?? 'upload');
                 $dest = $tmp_dir . uniqid('', true) . '_' . $name;
                 if (file_put_contents($dest, $binary) === false) {
-                    \ForgeForms\forge_log(
-                        "ForgeForms: failed to write temp file {$dest}"
+                    \FabricatorForms\fabricator_log(
+                        "FabricatorForms: failed to write temp file {$dest}"
                     );
                     continue;
                 }
@@ -524,7 +524,7 @@ class MailSender
         ];
 
         $needs_all_fields = str_contains($text, '{all_fields}');
-        $inline           = get_option('forge_forms_field_layout', 'block') === 'inline';
+        $inline           = get_option('fabricator_forms_field_layout', 'block') === 'inline';
         $all = '';
         // Field IDs are admin-chosen when building the form — if one happens to
         // equal a reserved token name (e.g. a field literally called
@@ -560,14 +560,14 @@ class MailSender
                 // instead of silently overwriting/dropping it.
                 $alias_key = '{field_' . $key . '}';
                 if (isset($tokens[$alias_key])) {
-                    \ForgeForms\forge_log(
-                        "ForgeForms MailSender: field id '{$key}' collides with the "
+                    \FabricatorForms\fabricator_log(
+                        "FabricatorForms MailSender: field id '{$key}' collides with the "
                         . 'placeholder alias namespace; its value was dropped.'
                     );
                 } else {
                     $tokens[$alias_key] = $token;
-                    \ForgeForms\forge_log(
-                        "ForgeForms MailSender: field id '{$key}' collides with a reserved "
+                    \FabricatorForms\fabricator_log(
+                        "FabricatorForms MailSender: field id '{$key}' collides with a reserved "
                         . "placeholder name; use {field_{$key}} in templates to reference it."
                     );
                 }

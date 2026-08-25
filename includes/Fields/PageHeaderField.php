@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,12 +19,12 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
 // Structural field: renders a step/breadcrumb bar for multi-page forms. The number of steps and the
-// current/reachable state are resolved client-side (front.js) from the actual .forge-form-page count, since
+// current/reachable state are resolved client-side (front.js) from the actual .fabricator-form-page count, since
 // that isn't known at render time relative to this field's position. This field only emits the container plus
 // the admin-configured display mode and optional page names.
 class PageHeaderField extends BaseField
@@ -37,43 +37,43 @@ class PageHeaderField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-page-steps {
+.fabricator-page-steps {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    margin: 0 0 var(--forge-gap);
+    margin: 0 0 var(--fabricator-gap);
     flex-wrap: wrap;
 }
-.forge-page-step {
+.fabricator-page-step {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border: 1px solid var(--forge-border-input);
-    background: var(--forge-bg);
-    color: var(--forge-text-muted);
-    border-radius: var(--forge-radius);
+    border: 1px solid var(--fabricator-border-input);
+    background: var(--fabricator-bg);
+    color: var(--fabricator-text-muted);
+    border-radius: var(--fabricator-radius);
     padding: 6px 12px;
     font-size: 13px;
-    font-family: var(--forge-font);
+    font-family: var(--fabricator-font);
     cursor: pointer;
     transition: background .1s, border-color .1s, color .1s;
 }
-.forge-page-step:disabled {
+.fabricator-page-step:disabled {
     cursor: not-allowed;
     opacity: .5;
 }
-.forge-page-step.is-reachable:not(:disabled):hover {
-    border-color: var(--forge-accent);
-    color: var(--forge-accent);
+.fabricator-page-step.is-reachable:not(:disabled):hover {
+    border-color: var(--fabricator-accent);
+    color: var(--fabricator-accent);
 }
-.forge-page-step.is-active {
-    background: var(--forge-accent);
-    border-color: var(--forge-accent);
+.fabricator-page-step.is-active {
+    background: var(--fabricator-accent);
+    border-color: var(--fabricator-accent);
     color: #fff;
     font-weight: 600;
 }
-.forge-page-step-num {
+.fabricator-page-step-num {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -83,7 +83,7 @@ class PageHeaderField extends BaseField
     background: rgba(0, 0, 0, .08);
     font-size: 11px;
 }
-.forge-page-step.is-active .forge-page-step-num {
+.fabricator-page-step.is-active .fabricator-page-step-num {
     background: rgba(255, 255, 255, .25);
 }
 CSS;
@@ -173,26 +173,26 @@ CSS;
             );
         }
 
-        return '<div class="forge-page-header"'
+        return '<div class="fabricator-page-header"'
             . ' data-show-names="' . ($show_names ? '1' : '0') . '"'
             . ' data-names="' . esc_attr((string)wp_json_encode($names)) . '"'
             . '></div>';
     }
 
-    // Builds the step buttons and wires them to the shared page-nav infra in front.js (data-forge-goto-page
-    // click delegation + the forge:page-change event dispatched by initPageBreaks()).
+    // Builds the step buttons and wires them to the shared page-nav infra in front.js (data-fabricator-goto-page
+    // click delegation + the fabricator:page-change event dispatched by initPageBreaks()).
     public function getClientInit(): string
     {
         return <<<'JS'
         function (root) {
-            root.querySelectorAll('.forge-page-header').forEach(function (headerEl) {
-                if (headerEl.dataset.forgeStepsInit) return;
-                headerEl.dataset.forgeStepsInit = '1';
+            root.querySelectorAll('.fabricator-page-header').forEach(function (headerEl) {
+                if (headerEl.dataset.fabricatorStepsInit) return;
+                headerEl.dataset.fabricatorStepsInit = '1';
 
-                var form = headerEl.closest('.forge-form');
+                var form = headerEl.closest('.fabricator-form');
                 if (!form) return;
 
-                var pages = Array.from(form.querySelectorAll('.forge-form-page'));
+                var pages = Array.from(form.querySelectorAll('.fabricator-form-page'));
                 var total = pages.length;
                 if (!total) return;
 
@@ -206,7 +206,7 @@ CSS;
                  * stays hidden until the visitor actually reaches its own page.
                  * That lets an admin put a small entry/splash page ahead of the
                  * bar without it being counted as "step 1". */
-                var containingPage = headerEl.closest('.forge-form-page');
+                var containingPage = headerEl.closest('.fabricator-form-page');
                 var nativePage     = containingPage ? pages.indexOf(containingPage) : 0;
                 if (nativePage === -1) nativePage = 0;
                 var stepCount = Math.max(0, total - nativePage);
@@ -216,21 +216,21 @@ CSS;
                 try { names = JSON.parse(headerEl.dataset.names || '[]'); } catch (e) { names = []; }
 
                 var stepsWrap = document.createElement('div');
-                stepsWrap.className = 'forge-page-steps';
+                stepsWrap.className = 'fabricator-page-steps';
                 for (var i = 0; i < stepCount; i++) {
                     var btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.className = 'forge-page-step';
-                    btn.setAttribute('data-forge-goto-page', String(nativePage + i));
+                    btn.className = 'fabricator-page-step';
+                    btn.setAttribute('data-fabricator-goto-page', String(nativePage + i));
 
                     var numSpan = document.createElement('span');
-                    numSpan.className = 'forge-page-step-num';
+                    numSpan.className = 'fabricator-page-step-num';
                     numSpan.textContent = String(i + 1);
                     btn.appendChild(numSpan);
 
                     if (showNames && names[i]) {
                         var nameSpan = document.createElement('span');
-                        nameSpan.className = 'forge-page-step-name';
+                        nameSpan.className = 'fabricator-page-step-name';
                         // textContent, not innerHTML — names[i] is server-sanitized
                         // (wp_strip_all_tags) but this is the real XSS boundary,
                         // not the PHP-side stripping.
@@ -252,7 +252,7 @@ CSS;
                     });
                 }
 
-                form.addEventListener('forge:page-change', function (e) {
+                form.addEventListener('fabricator:page-change', function (e) {
                     update(e.detail.index, e.detail.furthest);
                 });
                 update(0, 0);

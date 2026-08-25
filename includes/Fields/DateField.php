@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -36,23 +36,23 @@ class DateField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-date-wrap { display: flex; align-items: center; gap: 8px; }
-.forge-date-text { flex: 1; }
-.forge-date-cal-btn {
+.fabricator-date-wrap { display: flex; align-items: center; gap: 8px; }
+.fabricator-date-text { flex: 1; }
+.fabricator-date-cal-btn {
     flex-shrink: 0;
-    height: var(--forge-input-height);
+    height: var(--fabricator-input-height);
     padding: 0 12px;
-    background: var(--forge-bg-muted);
-    border: 1px solid var(--forge-border-input);
-    border-radius: var(--forge-radius);
+    background: var(--fabricator-bg-muted);
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
     cursor: pointer;
-    color: var(--forge-text-muted);
+    color: var(--fabricator-text-muted);
     font-size: 14px;
     transition: background .1s;
 }
-.forge-date-cal-btn:hover { background: var(--forge-border); }
-.forge-date-wrap { position: relative; }
-.forge-date-picker-hidden {
+.fabricator-date-cal-btn:hover { background: var(--fabricator-border); }
+.fabricator-date-wrap { position: relative; }
+.fabricator-date-picker-hidden {
     position: absolute;
     visibility: hidden;
     pointer-events: none;
@@ -96,18 +96,18 @@ CSS;
     {
         return <<<'JS'
         function (root) {
-            root.querySelectorAll('.forge-date-cal-btn').forEach(function (btn) {
+            root.querySelectorAll('.fabricator-date-cal-btn').forEach(function (btn) {
                 btn.addEventListener('click', function () {
-                    var wrap   = this.closest('.forge-date-wrap');
-                    var picker = wrap && wrap.querySelector('.forge-date-picker-hidden');
+                    var wrap   = this.closest('.fabricator-date-wrap');
+                    var picker = wrap && wrap.querySelector('.fabricator-date-picker-hidden');
                     if (!picker) return;
                     picker.showPicker ? picker.showPicker() : picker.click();
                 });
             });
-            root.querySelectorAll('.forge-date-picker-hidden').forEach(function (picker) {
+            root.querySelectorAll('.fabricator-date-picker-hidden').forEach(function (picker) {
                 picker.addEventListener('change', function () {
-                    var wrap = this.closest('.forge-date-wrap');
-                    var text = wrap && wrap.querySelector('.forge-date-text');
+                    var wrap = this.closest('.fabricator-date-wrap');
+                    var text = wrap && wrap.querySelector('.fabricator-date-text');
                     if (!text || !this.value) return;
                     var parts = this.value.split('-');
                     if (parts.length === 3) {
@@ -115,7 +115,7 @@ CSS;
                     }
                 });
             });
-            root.querySelectorAll('.forge-date-text[data-prefill-today="true"]').forEach(function (inp) {
+            root.querySelectorAll('.fabricator-date-text[data-prefill-today="true"]').forEach(function (inp) {
                 if (inp.value) return;
                 var now = new Date();
                 var d   = String(now.getDate()).padStart(2, '0');
@@ -135,10 +135,10 @@ CSS;
     {
         return [['rule' => 'date-format', 'fn' => <<<'JS'
             function (fieldEl) {
-                var inp = fieldEl.querySelector('.forge-date-text');
+                var inp = fieldEl.querySelector('.fabricator-date-text');
                 if (!inp || !inp.value.trim()) return null;
                 var v = inp.value.trim();
-                var _i18n = window.ForgeForms && window.ForgeForms.i18n;
+                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                 if (!/^\d{2}\.\d{2}\.\d{4}$/.test(v))
                     return (_i18n && _i18n.date_invalid_format) || 'Please enter a date in DD.MM.YYYY format.';
                 var p  = v.split('.');
@@ -167,10 +167,10 @@ CSS;
         $prefill  = !empty($config['prefill_today']) ? ' data-prefill-today="true"' : '';
         $picker   = !empty($config['show_picker']);
 
-        $inner = '<div class="forge-date-wrap">'
+        $inner = '<div class="fabricator-date-wrap">'
             . '<input type="text" id="' . esc_attr($field_id) . '"'
             . ' name="' . esc_attr($field_id) . '"'
-            . ' class="forge-input forge-date-text"'
+            . ' class="fabricator-input fabricator-date-text"'
             . ' placeholder="' . esc_attr__('DD.MM.YYYY', 'formfabricator') . '"'
             . ' maxlength="10"'
             // Not every DateField instance represents a birthdate (appointment date,
@@ -182,7 +182,7 @@ CSS;
             . $prefill . $req . '>';
 
         if ($picker) {
-            $inner .= '<button type="button" class="forge-date-cal-btn" data-for="' . esc_attr($field_id) . '"'
+            $inner .= '<button type="button" class="fabricator-date-cal-btn" data-for="' . esc_attr($field_id) . '"'
                 . ' aria-label="' . esc_attr__('Open calendar', 'formfabricator') . '" title="' . esc_attr__('Open calendar', 'formfabricator') . '">'
                 . '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"'
                 . ' viewBox="0 0 24 24" fill="none" stroke="currentColor"'
@@ -194,7 +194,7 @@ CSS;
                 . '<line x1="3" y1="10" x2="21" y2="10"/>'
                 . '</svg>'
                 . '</button>'
-                . '<input type="date" class="forge-date-picker-hidden" aria-hidden="true" tabindex="-1"'
+                . '<input type="date" class="fabricator-date-picker-hidden" aria-hidden="true" tabindex="-1"'
                 . ' data-for="' . esc_attr($field_id) . '">';
         }
 

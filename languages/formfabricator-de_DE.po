@@ -678,7 +678,7 @@ msgstr "Eingetragen — Weiter"
 msgid "Master key detected"
 msgstr "Master-Schlüssel erkannt"
 
-#. translators: 1: FORGE_SEAL_MASTER_KEY constant as code element, 2: wp-config.php as code element
+#. translators: 1: FABRICATOR_SEAL_MASTER_KEY constant as code element, 2: wp-config.php as code element
 #: includes/Admin/FormSettings.php:293
 #, php-format
 msgid "A valid %1$s is entered in %2$s. Click \"Complete setup\" to generate the first seal key and finish the setup."
@@ -1145,8 +1145,8 @@ msgid "No pending key download found."
 msgstr "Kein ausstehender Schlüssel-Download gefunden."
 
 #: includes/Admin/FormSettings.php:2394
-msgid "FORGE_SEAL_MASTER_KEY not found. Please check wp-config.php and try again."
-msgstr "FORGE_SEAL_MASTER_KEY nicht gefunden. Bitte prüfen Sie die wp-config.php und versuchen Sie es erneut."
+msgid "FABRICATOR_SEAL_MASTER_KEY not found. Please check wp-config.php and try again."
+msgstr "FABRICATOR_SEAL_MASTER_KEY nicht gefunden. Bitte prüfen Sie die wp-config.php und versuchen Sie es erneut."
 
 #: includes/Admin/FormSettings.php:2407
 msgid "Setup session expired. Please start again."
@@ -1618,8 +1618,8 @@ msgstr "Konnte PDF-Datei nicht lesen: %s."
 #. translators: %s: uploaded file name.
 #: includes/Admin/Verificationpage.php:1300
 #, php-format
-msgid "%s does not contain a forge-pdf seal and cannot be verified."
-msgstr "%s enthält kein forge-pdf-Siegel und kann nicht verifiziert werden."
+msgid "%s does not contain a fabricator-pdf seal and cannot be verified."
+msgstr "%s enthält kein fabricator-pdf-Siegel und kann nicht verifiziert werden."
 
 #: includes/Admin/Verificationpage.php:1306
 msgid "Parsing PDF…"

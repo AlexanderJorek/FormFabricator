@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -38,54 +38,54 @@ class CheckboxField extends BaseField
         // phpcs:disable Generic.Files.LineLength -- the checkbox-checkmark background-image is an
         // inline SVG data URI; splitting it across lines risks corrupting the encoded markup.
         return <<<'CSS'
-.forge-checkbox-group {
+.fabricator-checkbox-group {
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
-.forge-checkbox-group--horizontal {
+.fabricator-checkbox-group--horizontal {
     flex-direction: row;
     flex-wrap: wrap;
     gap: 16px;
 }
-.forge-checkbox-label {
+.fabricator-checkbox-label {
     display: flex;
     align-items: center;
     gap: 9px;
     cursor: pointer;
     font-size: 14px;
-    color: var(--forge-text);
+    color: var(--fabricator-text);
     line-height: 1.4;
     user-select: none;
 }
-.forge-checkbox-label input[type="checkbox"] {
+.fabricator-checkbox-label input[type="checkbox"] {
     appearance: none;
     -webkit-appearance: none;
     width: 18px;
     height: 18px;
     flex-shrink: 0;
-    border: 2px solid var(--forge-border-input);
-    border-radius: var(--forge-radius-sm);
-    background: var(--forge-bg);
+    border: 2px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius-sm);
+    background: var(--fabricator-bg);
     cursor: pointer;
     transition: border-color .15s, background .15s;
     position: relative;
 }
-.forge-checkbox-label input[type="checkbox"]:checked {
-    border-color: var(--forge-accent);
-    background-color: var(--forge-accent);
+.fabricator-checkbox-label input[type="checkbox"]:checked {
+    border-color: var(--fabricator-accent);
+    background-color: var(--fabricator-accent);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10'%3E%3Cpolyline points='1,5 4.5,8.5 11,1' stroke='%23ffffff' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
     background-size: 11px 9px;
 }
-.forge-checkbox-label input[type="checkbox"]:focus-visible {
+.fabricator-checkbox-label input[type="checkbox"]:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--forge-accent) 25%, transparent);
+        color-mix(in srgb, var(--fabricator-accent) 25%, transparent);
 }
-.forge-checkbox-label:hover input[type="checkbox"]:not(:checked) {
-    border-color: var(--forge-accent);
+.fabricator-checkbox-label:hover input[type="checkbox"]:not(:checked) {
+    border-color: var(--fabricator-accent);
 }
 CSS;
         // phpcs:enable Generic.Files.LineLength
@@ -125,13 +125,13 @@ CSS;
     {
         return [['rule' => 'checkbox-count', 'fn' => <<<'JS'
             function (fieldEl) {
-                var group = fieldEl.querySelector('.forge-checkbox-group');
+                var group = fieldEl.querySelector('.fabricator-checkbox-group');
                 if (!group) return null;
                 var min = parseInt(group.dataset.minSelections || '0', 10);
                 var max = parseInt(group.dataset.maxSelections || '0', 10);
                 if (!min && !max) return null;
                 var cnt = fieldEl.querySelectorAll('input[type="checkbox"]:checked').length;
-                var _i18n = window.ForgeForms && window.ForgeForms.i18n;
+                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                 if (min > 0 && cnt < min) return (_i18n && _i18n.checkbox_min ? _i18n.checkbox_min.replace('%d', min) : 'Please select at least ' + min + ' option(s).');
                 if (max > 0 && cnt > max) return (_i18n && _i18n.checkbox_max ? _i18n.checkbox_max.replace('%d', max) : 'Please select at most ' + max + ' option(s).');
                 return null;
@@ -175,7 +175,7 @@ CSS;
         $other_text = is_array($value) ? trim((string)($value['__other_text__'] ?? '')) : '';
         $selected   = is_array($value) ? $value : (array)$value;
         unset($selected['__other_text__']);
-        $layout   = !empty($config['layout']) ? ' forge-checkbox-group--horizontal' : '';
+        $layout   = !empty($config['layout']) ? ' fabricator-checkbox-group--horizontal' : '';
 
         $min_sel   = (int)($config['min_selections'] ?? 0);
         $max_sel   = (int)($config['max_selections'] ?? 0);
@@ -187,13 +187,13 @@ CSS;
             $sel_attrs .= ' data-max-selections="' . $max_sel . '"';
         }
 
-        $inner = '<div class="forge-checkbox-group' . $layout . '" role="group"' . $sel_attrs . '>';
+        $inner = '<div class="fabricator-checkbox-group' . $layout . '" role="group"' . $sel_attrs . '>';
         foreach ($options as $i => $opt) {
             $opt_val   = is_array($opt) ? ($opt['value'] ?? '') : $opt;
             $opt_label = is_array($opt) ? ($opt['label'] ?? $opt_val) : $opt;
             $id_i      = $field_id . '-' . $i;
             $checked   = in_array((string)$opt_val, array_map('strval', $selected), true) ? ' checked' : '';
-            $inner .= '<label class="forge-checkbox-label">'
+            $inner .= '<label class="fabricator-checkbox-label">'
                 . '<input type="checkbox" id="' . esc_attr($id_i)
                 . '" name="' . esc_attr($field_id) . '[]"'
                 . ' value="' . esc_attr((string)$opt_val) . '" autocomplete="off"' . $checked . '> '
@@ -202,12 +202,12 @@ CSS;
         if (!empty($config['other_option'])) {
             $other_id  = $field_id . '-other';
             $other_chk = in_array('__other__', array_map('strval', $selected), true) ? ' checked' : '';
-            $inner .= '<label class="forge-checkbox-label">'
+            $inner .= '<label class="fabricator-checkbox-label">'
                 . '<input type="checkbox" id="' . esc_attr($other_id) . '" name="' . esc_attr($field_id) . '[]"'
                 . ' value="__other__"' . $other_chk . '> ' . esc_html__('Other…', 'formfabricator') . '</label>';
             $show  = $other_chk ? '' : ' style="display:none"';
             $inner .= '<input type="text" name="' . esc_attr($field_id) . '_other"'
-                . ' class="forge-input forge-other-input" value="' . esc_attr($other_text) . '"'
+                . ' class="fabricator-input fabricator-other-input" value="' . esc_attr($other_text) . '"'
                 . ' placeholder="' . esc_attr__('Please specify', 'formfabricator') . '"' . $show
                 . self::otherInputAttrs($config) . '>';
         }

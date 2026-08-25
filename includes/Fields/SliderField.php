@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -36,8 +36,8 @@ class SliderField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-slider-wrap { display: flex; align-items: center; gap: 14px; }
-.forge-slider-custom {
+.fabricator-slider-wrap { display: flex; align-items: center; gap: 14px; }
+.fabricator-slider-custom {
     flex: 1;
     padding: 9px 0;
     cursor: pointer;
@@ -45,47 +45,47 @@ class SliderField extends BaseField
     -webkit-user-select: none;
     touch-action: none;
 }
-.forge-slider-custom:focus { outline: none; }
-.forge-slider-track {
+.fabricator-slider-custom:focus { outline: none; }
+.fabricator-slider-track {
     position: relative;
     height: 4px;
     border-radius: 2px;
-    background: var(--forge-border-input);
+    background: var(--fabricator-border-input);
 }
-.forge-slider-fill {
+.fabricator-slider-fill {
     position: absolute;
     left: 0; top: 0;
     height: 100%;
     border-radius: 2px;
-    background: var(--forge-accent);
+    background: var(--fabricator-accent);
     pointer-events: none;
 }
-.forge-slider-thumb {
+.fabricator-slider-thumb {
     position: absolute;
     top: 50%;
     width: 14px; height: 14px;
     border-radius: 50%;
-    background: var(--forge-accent);
+    background: var(--fabricator-accent);
     border: 2px solid #fff;
     box-shadow: 0 1px 3px rgba(0,0,0,.3);
     transform: translate(-50%, -50%);
     transition: box-shadow .1s;
     cursor: grab;
 }
-.forge-slider-thumb:active { cursor: grabbing; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
-.forge-slider-custom:focus .forge-slider-thumb,
-.forge-slider-thumb:focus {
+.fabricator-slider-thumb:active { cursor: grabbing; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+.fabricator-slider-custom:focus .fabricator-slider-thumb,
+.fabricator-slider-thumb:focus {
     outline: none;
     box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--forge-accent) 25%, transparent),
+        color-mix(in srgb, var(--fabricator-accent) 25%, transparent),
         0 1px 3px rgba(0,0,0,.3);
 }
-.forge-slider-value {
+.fabricator-slider-value {
     font-size: 13px;
     font-weight: 600;
     min-width: 32px;
     text-align: center;
-    color: var(--forge-text-muted);
+    color: var(--fabricator-text-muted);
 }
 CSS;
     }
@@ -134,13 +134,13 @@ CSS;
     {
         return <<<'JS'
         function (root) {
-            root.querySelectorAll('.forge-slider-wrap').forEach(function (wrap) {
+            root.querySelectorAll('.fabricator-slider-wrap').forEach(function (wrap) {
                 var min  = parseFloat(wrap.dataset.min  || 0);
                 var max  = parseFloat(wrap.dataset.max  || 100);
                 var step = parseFloat(wrap.dataset.step || 1);
-                var isRange = wrap.classList.contains('forge-slider-wrap--range');
-                var track = wrap.querySelector('.forge-slider-track');
-                var fill  = wrap.querySelector('.forge-slider-fill');
+                var isRange = wrap.classList.contains('fabricator-slider-wrap--range');
+                var track = wrap.querySelector('.fabricator-slider-track');
+                var fill  = wrap.querySelector('.fabricator-slider-fill');
                 function snap(raw) {
                     var stepped = Math.round((raw - min) / step) * step + min;
                     return Math.min(max, Math.max(min, parseFloat(stepped.toFixed(10))));
@@ -152,9 +152,9 @@ CSS;
                     return snap(min + ratio * (max - min));
                 }
                 if (!isRange) {
-                    var thumb  = wrap.querySelector('.forge-slider-thumb');
+                    var thumb  = wrap.querySelector('.fabricator-slider-thumb');
                     var input  = wrap.querySelector('input[type="hidden"]');
-                    var disp   = wrap.querySelector('.forge-slider-value');
+                    var disp   = wrap.querySelector('.fabricator-slider-value');
                     var curVal = parseFloat(wrap.dataset.value || min);
                     function setVal(v, writeInput) {
                         curVal = v;
@@ -163,7 +163,7 @@ CSS;
                         fill.style.width = p + '%';
                         if (writeInput && input) input.value = v;
                         if (disp)  disp.textContent = v;
-                        wrap.querySelector('.forge-slider-custom').setAttribute('aria-valuenow', v);
+                        wrap.querySelector('.fabricator-slider-custom').setAttribute('aria-valuenow', v);
                     }
                     /* Visual-only init — hidden input stays '' until user interacts */
                     setVal(curVal, false);
@@ -186,7 +186,7 @@ CSS;
                     }
                     track.addEventListener('mousedown',  function (e) { e.preventDefault(); startDrag(e.clientX); });
                     track.addEventListener('touchstart', function (e) { e.preventDefault(); startDrag(e.touches[0].clientX); }, { passive: false });
-                    var slider = wrap.querySelector('.forge-slider-custom');
+                    var slider = wrap.querySelector('.fabricator-slider-custom');
                     slider.addEventListener('keydown', function (e) {
                         var delta = 0;
                         if (e.key === 'ArrowRight' || e.key === 'ArrowUp')   delta =  step;
@@ -196,12 +196,12 @@ CSS;
                         if (delta) { e.preventDefault(); setVal(snap(curVal + delta), true); }
                     });
                 } else {
-                    var thumbFrom = wrap.querySelector('.forge-slider-thumb--from');
-                    var thumbTo   = wrap.querySelector('.forge-slider-thumb--to');
-                    var inputFrom = wrap.querySelector('.forge-slider-input-from');
-                    var inputTo   = wrap.querySelector('.forge-slider-input-to');
-                    var dispFrom  = wrap.querySelector('.forge-slider-from-display');
-                    var dispTo    = wrap.querySelector('.forge-slider-to-display');
+                    var thumbFrom = wrap.querySelector('.fabricator-slider-thumb--from');
+                    var thumbTo   = wrap.querySelector('.fabricator-slider-thumb--to');
+                    var inputFrom = wrap.querySelector('.fabricator-slider-input-from');
+                    var inputTo   = wrap.querySelector('.fabricator-slider-input-to');
+                    var dispFrom  = wrap.querySelector('.fabricator-slider-from-display');
+                    var dispTo    = wrap.querySelector('.fabricator-slider-to-display');
                     var from = parseFloat(wrap.dataset.from || min);
                     var to   = parseFloat(wrap.dataset.to   || max);
                     function setRange(writeInput) {
@@ -270,41 +270,41 @@ CSS;
         if ($ranged) {
             $val_from = (float)(is_array($value) ? ($value['from'] ?? $min) : $min);
             $val_to   = (float)(is_array($value) ? ($value['to']   ?? $max) : $max);
-            $inner = '<div class="forge-slider-wrap forge-slider-wrap--range"'
+            $inner = '<div class="fabricator-slider-wrap fabricator-slider-wrap--range"'
                 . ' data-min="' . $min . '" data-max="' . $max . '" data-step="' . $step . '"'
                 . ' data-from="' . $val_from . '" data-to="' . $val_to . '">'
-                . '<div class="forge-slider-custom forge-slider-custom--range" role="group">'
-                . '<div class="forge-slider-track">'
-                . '<div class="forge-slider-fill"></div>'
-                . '<div class="forge-slider-thumb forge-slider-thumb--from" tabindex="0" role="slider"'
+                . '<div class="fabricator-slider-custom fabricator-slider-custom--range" role="group">'
+                . '<div class="fabricator-slider-track">'
+                . '<div class="fabricator-slider-fill"></div>'
+                . '<div class="fabricator-slider-thumb fabricator-slider-thumb--from" tabindex="0" role="slider"'
                 . ' aria-valuemin="' . $min . '" aria-valuemax="' . $max . '" aria-valuenow="' . $val_from . '"></div>'
-                . '<div class="forge-slider-thumb forge-slider-thumb--to" tabindex="0" role="slider"'
+                . '<div class="fabricator-slider-thumb fabricator-slider-thumb--to" tabindex="0" role="slider"'
                 . ' aria-valuemin="' . $min . '" aria-valuemax="' . $max . '" aria-valuenow="' . $val_to . '"></div>'
                 . '</div></div>'
                 . '<input type="hidden" name="' . esc_attr($field_id)
-                . '[from]" class="forge-slider-input-from" value="">'
+                . '[from]" class="fabricator-slider-input-from" value="">'
                 . '<input type="hidden" name="' . esc_attr($field_id)
-                . '[to]"   class="forge-slider-input-to"   value="">'
-                . '<span class="forge-slider-value">'
-                . '<span class="forge-slider-from-display">' . $val_from . '</span>'
+                . '[to]"   class="fabricator-slider-input-to"   value="">'
+                . '<span class="fabricator-slider-value">'
+                . '<span class="fabricator-slider-from-display">' . $val_from . '</span>'
                 . ' – '
-                . '<span class="forge-slider-to-display">' . $val_to . '</span>'
+                . '<span class="fabricator-slider-to-display">' . $val_to . '</span>'
                 . '</span>'
                 . '</div>';
         } else {
             $val   = (float)($value ?? $min);
-            $inner = '<div class="forge-slider-wrap"'
+            $inner = '<div class="fabricator-slider-wrap"'
                 . ' data-min="' . $min . '" data-max="' . $max . '" data-step="' . $step . '"'
                 . ' data-value="' . $val . '">'
-                . '<div class="forge-slider-custom" role="slider" tabindex="0"'
+                . '<div class="fabricator-slider-custom" role="slider" tabindex="0"'
                 . ' aria-valuemin="' . $min . '" aria-valuemax="' . $max . '" aria-valuenow="' . $val . '">'
-                . '<div class="forge-slider-track">'
-                . '<div class="forge-slider-fill"></div>'
-                . '<div class="forge-slider-thumb"></div>'
+                . '<div class="fabricator-slider-track">'
+                . '<div class="fabricator-slider-fill"></div>'
+                . '<div class="fabricator-slider-thumb"></div>'
                 . '</div></div>'
                 . '<input type="hidden" name="' . esc_attr($field_id)
                 . '" id="' . esc_attr($field_id) . '" value="">'
-                . '<span class="forge-slider-value">' . $val . '</span>'
+                . '<span class="fabricator-slider-value">' . $val . '</span>'
                 . '</div>';
         }
 
@@ -402,15 +402,15 @@ CSS;
     {
         return [['rule' => 'slider-range', 'fn' => <<<'JS'
             function (fieldEl) {
-                var wrap = fieldEl.querySelector('.forge-slider-wrap');
+                var wrap = fieldEl.querySelector('.fabricator-slider-wrap');
                 if (!wrap) return null;
                 var min = parseFloat(wrap.dataset.min);
                 var max = parseFloat(wrap.dataset.max);
-                var _i18n = window.ForgeForms && window.ForgeForms.i18n;
+                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                 var invalidMsg = (_i18n && _i18n.slider_invalid_value) || 'Please enter a valid value.';
-                if (wrap.classList.contains('forge-slider-wrap--range')) {
-                    var fromInp = fieldEl.querySelector('.forge-slider-input-from');
-                    var toInp   = fieldEl.querySelector('.forge-slider-input-to');
+                if (wrap.classList.contains('fabricator-slider-wrap--range')) {
+                    var fromInp = fieldEl.querySelector('.fabricator-slider-input-from');
+                    var toInp   = fieldEl.querySelector('.fabricator-slider-input-to');
                     if (!fromInp || !toInp) return null;
                     var from = parseFloat(fromInp.value);
                     var to   = parseFloat(toInp.value);

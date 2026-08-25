@@ -10,17 +10,17 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
-namespace ForgeForms\Admin;
+namespace FabricatorForms\Admin;
 
 defined('ABSPATH') || exit;
 
-use ForgeForms\Form\FormModel;
-use ForgeForms\Form\FormSelectModel;
-use ForgeForms\Form\FormRenderer;
+use FabricatorForms\Form\FormModel;
+use FabricatorForms\Form\FormSelectModel;
+use FabricatorForms\Form\FormRenderer;
 
 /**
  * Admin editor for reusable select-field option lists.
@@ -35,8 +35,8 @@ class FormSelectList
     public static function init(): void
     {
         add_action('admin_menu', [self::class, 'menu']);
-        add_action('wp_ajax_forge_fsel_save', [self::class, 'ajaxSave']);
-        add_action('wp_ajax_forge_fsel_delete', [self::class, 'ajaxDelete']);
+        add_action('wp_ajax_fabricator_fsel_save', [self::class, 'ajaxSave']);
+        add_action('wp_ajax_fabricator_fsel_delete', [self::class, 'ajaxDelete']);
         add_filter('admin_body_class', [self::class, 'bodyClass']);
     }
 
@@ -49,8 +49,8 @@ class FormSelectList
     public static function bodyClass(string $classes): string
     {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
-        if (isset($_GET['page']) && $_GET['page'] === 'forge-forms-select') {
-            $classes .= ' forge-list-page';
+        if (isset($_GET['page']) && $_GET['page'] === 'fabricator-forms-select') {
+            $classes .= ' fabricator-list-page';
         }
         return $classes;
     }
@@ -62,13 +62,13 @@ class FormSelectList
      */
     public static function menu(): void
     {
-        if (\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (\FabricatorForms\Plugin::userCan('edit_forms')) {
             add_submenu_page(
-                'forge-forms',
+                'fabricator-forms',
                 __('Form Selection', 'formfabricator'),
                 __('Form Selection', 'formfabricator'),
                 'read',
-                'forge-forms-select',
+                'fabricator-forms-select',
                 [self::class, 'render']
             );
         }
@@ -85,103 +85,103 @@ class FormSelectList
      */
     public static function render(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
         $selects    = FormSelectModel::getAll();
         $all_forms  = FormModel::getAll();
-        $save_nonce = wp_create_nonce('forge_fsel_save');
+        $save_nonce = wp_create_nonce('fabricator_fsel_save');
         ?>
-        <canvas id="forge-particle-canvas"></canvas>
+        <canvas id="fabricator-particle-canvas"></canvas>
 
-        <div class="wrap forge-list-wrap">
-            <div class="forge-title-pill"><?php esc_html_e('Form Selection', 'formfabricator'); ?></div>
+        <div class="wrap fabricator-list-wrap">
+            <div class="fabricator-title-pill"><?php esc_html_e('Form Selection', 'formfabricator'); ?></div>
             <hr class="wp-header-end" style="display:none">
 
             <?php $noSelects = empty($selects) ? ' hidden' : ''; ?>
-            <div class="forge-list-toolbar" id="forge-fsel-toolbar">
+            <div class="fabricator-list-toolbar" id="fabricator-fsel-toolbar">
                 <!-- Left: select-all + bulk actions -->
-                <div class="forge-toolbar-left" id="forge-fsel-toolbar-left"<?php echo esc_attr($noSelects); ?>>
-                    <label class="forge-select-all-wrap">
-                        <input type="checkbox" id="forge-fsel-select-all" title="<?php echo esc_attr__('Select all', 'formfabricator'); ?>">
+                <div class="fabricator-toolbar-left" id="fabricator-fsel-toolbar-left"<?php echo esc_attr($noSelects); ?>>
+                    <label class="fabricator-select-all-wrap">
+                        <input type="checkbox" id="fabricator-fsel-select-all" title="<?php echo esc_attr__('Select all', 'formfabricator'); ?>">
                     </label>
-                    <div class="forge-bulk-bar" id="forge-fsel-bulk-bar" hidden>
-                        <span class="forge-bulk-count" id="forge-fsel-bulk-count"></span>
-                        <div class="forge-bulk-action-wrap">
-                            <button class="button forge-list-btn" id="forge-fsel-bulk-action-btn">
-                                <span id="forge-fsel-bulk-action-label"><?php esc_html_e('Choose action', 'formfabricator'); ?></span> &#9660;
+                    <div class="fabricator-bulk-bar" id="fabricator-fsel-bulk-bar" hidden>
+                        <span class="fabricator-bulk-count" id="fabricator-fsel-bulk-count"></span>
+                        <div class="fabricator-bulk-action-wrap">
+                            <button class="button fabricator-list-btn" id="fabricator-fsel-bulk-action-btn">
+                                <span id="fabricator-fsel-bulk-action-label"><?php esc_html_e('Choose action', 'formfabricator'); ?></span> &#9660;
                             </button>
-                            <div class="forge-row-dropdown" id="forge-fsel-bulk-action-dd" hidden>
-                                <button class="forge-dd-item forge-dd-item--danger" data-action="delete">
+                            <div class="fabricator-row-dropdown" id="fabricator-fsel-bulk-action-dd" hidden>
+                                <button class="fabricator-dd-item fabricator-dd-item--danger" data-action="delete">
                                     <i class="fa-solid fa-trash"></i> <?php esc_html_e('Delete', 'formfabricator'); ?>
                                 </button>
                             </div>
                         </div>
-                        <button class="button forge-list-btn button-primary" id="forge-fsel-bulk-apply">
+                        <button class="button fabricator-list-btn button-primary" id="fabricator-fsel-bulk-apply">
                             <?php esc_html_e('Apply', 'formfabricator'); ?>
                         </button>
                     </div>
                 </div>
                 <!-- Center: search -->
-                <div class="forge-toolbar-center" id="forge-fsel-toolbar-center"<?php echo esc_attr($noSelects); ?>>
-                    <input type="search" id="forge-fsel-form-search"
+                <div class="fabricator-toolbar-center" id="fabricator-fsel-toolbar-center"<?php echo esc_attr($noSelects); ?>>
+                    <input type="search" id="fabricator-fsel-form-search"
                            placeholder="<?php echo esc_attr__('Search selections…', 'formfabricator'); ?>" autocomplete="off">
                 </div>
                 <!-- Right: new -->
-                <div class="forge-toolbar-right">
-                    <button type="button" class="button button-primary forge-list-btn forge-fsel-new-btn">
+                <div class="fabricator-toolbar-right">
+                    <button type="button" class="button button-primary fabricator-list-btn fabricator-fsel-new-btn">
                         <?php esc_html_e('+ New Selection', 'formfabricator'); ?>
                     </button>
                 </div>
             </div>
 
-            <div class="forge-list-empty" id="forge-fsel-empty"<?php echo !empty($selects) ? ' hidden' : ''; ?>>
+            <div class="fabricator-list-empty" id="fabricator-fsel-empty"<?php echo !empty($selects) ? ' hidden' : ''; ?>>
                 <h2><?php esc_html_e('No form selections yet', 'formfabricator'); ?></h2>
                 <p><?php esc_html_e('Create your first selection and embed it via shortcode on any page.', 'formfabricator'); ?></p>
-                <button type="button" class="button button-primary forge-fsel-new-btn">
+                <button type="button" class="button button-primary fabricator-fsel-new-btn">
                     <?php esc_html_e('+ Create First Selection', 'formfabricator'); ?>
                 </button>
             </div>
 
-            <div class="forge-form-list" id="forge-fsel-list">
+            <div class="fabricator-form-list" id="fabricator-fsel-list">
                 <?php foreach ($selects as $fsel) : ?>
                     <?php self::renderRow($fsel); ?>
                 <?php endforeach; ?>
-                <div class="forge-no-results" id="forge-fsel-no-results" hidden></div>
+                <div class="fabricator-no-results" id="fabricator-fsel-no-results" hidden></div>
             </div>
         </div>
 
         <!-- Editor modal -->
-        <div id="forge-fsel-modal" class="forge-modal-backdrop" hidden>
-            <div class="forge-modal forge-modal--settings" role="dialog" aria-modal="true">
+        <div id="fabricator-fsel-modal" class="fabricator-modal-backdrop" hidden>
+            <div class="fabricator-modal fabricator-modal--settings" role="dialog" aria-modal="true">
 
-                <div class="forge-modal-header">
-                    <div class="forge-settings-titlerow">
-                        <span class="forge-settings-field-icon">
+                <div class="fabricator-modal-header">
+                    <div class="fabricator-settings-titlerow">
+                        <span class="fabricator-settings-field-icon">
                             <i class="fa-solid fa-layer-group"></i>
                         </span>
-                        <h2 class="forge-modal-title" id="forge-fsel-modal-title"><?php esc_html_e('Edit selection', 'formfabricator'); ?></h2>
+                        <h2 class="fabricator-modal-title" id="fabricator-fsel-modal-title"><?php esc_html_e('Edit selection', 'formfabricator'); ?></h2>
                     </div>
-                    <button class="forge-modal-close" type="button" id="forge-fsel-cancel">&#x2715;</button>
+                    <button class="fabricator-modal-close" type="button" id="fabricator-fsel-cancel">&#x2715;</button>
                 </div>
 
-                <div class="forge-stab-bar">
-                    <button class="forge-stab forge-stab-active"><?php esc_html_e('General', 'formfabricator'); ?></button>
+                <div class="fabricator-stab-bar">
+                    <button class="fabricator-stab fabricator-stab-active"><?php esc_html_e('General', 'formfabricator'); ?></button>
                 </div>
 
-                <div class="forge-modal-body forge-settings-body">
-                    <div class="forge-stab-panel forge-stab-active">
+                <div class="fabricator-modal-body fabricator-settings-body">
+                    <div class="fabricator-stab-panel fabricator-stab-active">
 
-                        <div class="forge-sp-row">
-                            <label class="forge-sp-label"><?php esc_html_e('Name of this selection', 'formfabricator'); ?></label>
-                            <input type="text" id="forge-fsel-title-input" class="forge-sp-input"
+                        <div class="fabricator-sp-row">
+                            <label class="fabricator-sp-label"><?php esc_html_e('Name of this selection', 'formfabricator'); ?></label>
+                            <input type="text" id="fabricator-fsel-title-input" class="fabricator-sp-input"
                                    placeholder="<?php echo esc_attr__('e.g. Contact Selection', 'formfabricator'); ?>">
                         </div>
 
-                        <div class="forge-sp-row">
-                            <label class="forge-sp-label"><?php esc_html_e('Forms in this selection', 'formfabricator'); ?></label>
-                            <div class="forge-fsel-cols-header" id="forge-fsel-col-header" hidden>
+                        <div class="fabricator-sp-row">
+                            <label class="fabricator-sp-label"><?php esc_html_e('Forms in this selection', 'formfabricator'); ?></label>
+                            <div class="fabricator-fsel-cols-header" id="fabricator-fsel-col-header" hidden>
                                 <span></span>
                                 <span><?php esc_html_e('Form', 'formfabricator'); ?></span>
                                 <span><?php esc_html_e('Label', 'formfabricator'); ?></span>
@@ -189,28 +189,28 @@ class FormSelectList
                                 <span><i class="fa-regular fa-star"></i></span>
                                 <span></span>
                             </div>
-                            <div id="forge-fsel-items"
+                            <div id="fabricator-fsel-items"
                                  style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;">
                                 <!-- items injected by JS -->
                             </div>
 
                             <!-- Add button + dropdown -->
                             <div style="position:relative;">
-                                <button type="button" class="forge-sp-add-option" id="forge-fsel-add-btn">
+                                <button type="button" class="fabricator-sp-add-option" id="fabricator-fsel-add-btn">
                                     <i class="fa-solid fa-plus"></i> <?php esc_html_e('Add form', 'formfabricator'); ?>
                                 </button>
-                                <div id="forge-fsel-search-wrap" hidden
+                                <div id="fabricator-fsel-search-wrap" hidden
                                      style="position:absolute;left:0;right:0;z-index:1000;
                                             background:#fff;border:1px solid #dcdcde;
                                             border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);
                                             overflow:hidden;">
-                                    <div class="forge-fsel-search-row">
-                                        <i class="fa-solid fa-magnifying-glass forge-fsel-search-icon"></i>
-                                        <input type="text" id="forge-fsel-search"
-                                               class="forge-fsel-search-input"
+                                    <div class="fabricator-fsel-search-row">
+                                        <i class="fa-solid fa-magnifying-glass fabricator-fsel-search-icon"></i>
+                                        <input type="text" id="fabricator-fsel-search"
+                                               class="fabricator-fsel-search-input"
                                                placeholder="<?php echo esc_attr__('Search form…', 'formfabricator'); ?>" autocomplete="off">
                                     </div>
-                                    <div id="forge-fsel-search-results"
+                                    <div id="fabricator-fsel-search-results"
                                          style="max-height:200px;overflow-y:auto;
                                                 border-top:1px solid #f0f0f1;"></div>
                                 </div>
@@ -220,20 +220,20 @@ class FormSelectList
                     </div>
                 </div>
 
-                <div class="forge-settings-footer">
-                    <button class="forge-btn-primary" id="forge-fsel-save"><?php esc_html_e('Save', 'formfabricator'); ?></button>
+                <div class="fabricator-settings-footer">
+                    <button class="fabricator-btn-primary" id="fabricator-fsel-save"><?php esc_html_e('Save', 'formfabricator'); ?></button>
                 </div>
 
             </div>
         </div>
 
         <!-- Delete confirmation modal -->
-        <div id="forge-fsel-del-modal" class="forge-modal-backdrop" hidden>
-            <div class="forge-modal">
-                <p class="forge-modal-msg"><?php esc_html_e('Really delete form selection?', 'formfabricator'); ?></p>
-                <div class="forge-modal-actions">
-                    <button class="button forge-list-btn" id="forge-fsel-del-cancel"><?php esc_html_e('Cancel', 'formfabricator'); ?></button>
-                    <button class="button forge-list-btn forge-btn-danger" id="forge-fsel-del-confirm"><?php esc_html_e('Delete', 'formfabricator'); ?></button>
+        <div id="fabricator-fsel-del-modal" class="fabricator-modal-backdrop" hidden>
+            <div class="fabricator-modal">
+                <p class="fabricator-modal-msg"><?php esc_html_e('Really delete form selection?', 'formfabricator'); ?></p>
+                <div class="fabricator-modal-actions">
+                    <button class="button fabricator-list-btn" id="fabricator-fsel-del-cancel"><?php esc_html_e('Cancel', 'formfabricator'); ?></button>
+                    <button class="button fabricator-list-btn fabricator-btn-danger" id="fabricator-fsel-del-confirm"><?php esc_html_e('Delete', 'formfabricator'); ?></button>
                 </div>
             </div>
         </div>
@@ -250,48 +250,48 @@ class FormSelectList
      */
     private static function renderRow(FormSelectModel $fsel): void
     {
-        $shortcode = '[forge_form_select id="' . $fsel->id . '"]';
+        $shortcode = '[fabricator_form_select id="' . $fsel->id . '"]';
         $count     = count($fsel->items);
-        $del_nonce = wp_create_nonce('forge_fsel_delete_' . $fsel->id);
+        $del_nonce = wp_create_nonce('fabricator_fsel_delete_' . $fsel->id);
         ?>
-        <div class="forge-form-row"
+        <div class="fabricator-form-row"
              data-id="<?php echo esc_attr($fsel->id); ?>"
              data-title="<?php echo esc_attr(strtolower($fsel->title)); ?>">
-            <label class="forge-row-check-wrap">
-                <input type="checkbox" class="forge-row-check"
+            <label class="fabricator-row-check-wrap">
+                <input type="checkbox" class="fabricator-row-check"
                        value="<?php echo esc_attr($fsel->id); ?>"
                        data-del-nonce="<?php echo esc_attr($del_nonce); ?>">
             </label>
-            <div class="forge-form-row-icon">
+            <div class="fabricator-form-row-icon">
                 <i class="fa-solid fa-layer-group"></i>
             </div>
-            <div class="forge-form-row-main">
-                <span class="forge-form-row-title forge-fsel-edit-link"
+            <div class="fabricator-form-row-main">
+                <span class="fabricator-form-row-title fabricator-fsel-edit-link"
                       style="cursor:pointer;"
                       data-id="<?php echo esc_attr($fsel->id); ?>">
                     <?php echo esc_html($fsel->title); ?>
                 </span>
-                <div class="forge-form-row-meta">
+                <div class="fabricator-form-row-meta">
                     <?php // translators: %d: number of forms in the selection. ?>
                     <span><?php echo esc_html(sprintf(_n('%d Form', '%d Forms', $count, 'formfabricator'), $count)); ?></span>
-                    <span class="forge-meta-sep">&middot;</span>
-                    <code class="forge-form-row-code"><?php echo esc_html($shortcode); ?></code>
+                    <span class="fabricator-meta-sep">&middot;</span>
+                    <code class="fabricator-form-row-code"><?php echo esc_html($shortcode); ?></code>
                 </div>
             </div>
-            <div class="forge-form-row-actions">
-                <button type="button" class="button forge-btn-edit forge-fsel-edit-btn"
+            <div class="fabricator-form-row-actions">
+                <button type="button" class="button fabricator-btn-edit fabricator-fsel-edit-btn"
                         data-id="<?php echo esc_attr($fsel->id); ?>">
                     <?php esc_html_e('Edit', 'formfabricator'); ?>
                 </button>
-                <div class="forge-row-menu-wrap">
-                    <button class="button forge-row-menu-btn" title="<?php echo esc_attr__('More actions', 'formfabricator'); ?>">&#8942;</button>
-                    <div class="forge-row-dropdown" hidden>
-                        <button class="forge-dd-item forge-copy-shortcode"
+                <div class="fabricator-row-menu-wrap">
+                    <button class="button fabricator-row-menu-btn" title="<?php echo esc_attr__('More actions', 'formfabricator'); ?>">&#8942;</button>
+                    <div class="fabricator-row-dropdown" hidden>
+                        <button class="fabricator-dd-item fabricator-copy-shortcode"
                                 data-code="<?php echo esc_attr($shortcode); ?>">
                             <i class="fa-solid fa-clipboard"></i> <?php esc_html_e('Copy shortcode', 'formfabricator'); ?>
                         </button>
-                        <div class="forge-dd-sep"></div>
-                        <button class="forge-dd-item forge-dd-item--danger forge-fsel-del-btn"
+                        <div class="fabricator-dd-sep"></div>
+                        <button class="fabricator-dd-item fabricator-dd-item--danger fabricator-fsel-del-btn"
                                 data-id="<?php echo esc_attr($fsel->id); ?>"
                                 data-nonce="<?php echo esc_attr($del_nonce); ?>">
                             <i class="fa-solid fa-trash"></i> <?php esc_html_e('Delete', 'formfabricator'); ?>
@@ -314,15 +314,15 @@ class FormSelectList
      */
     public static function ajaxSave(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             wp_send_json_error(['message' => 'Forbidden'], 403);
         }
-        check_ajax_referer('forge_fsel_save', 'nonce');
+        check_ajax_referer('fabricator_fsel_save', 'nonce');
 
         $id        = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
         // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via the outer sanitize_text_field() call; WPCS loses track through the intermediate Sanitize::str() static call.
-        $title     = sanitize_text_field(\ForgeForms\Utils\Sanitize::str(wp_unslash($_POST['title'] ?? '')));
-        $items_raw = json_decode(\ForgeForms\Utils\Sanitize::str(sanitize_textarea_field(wp_unslash($_POST['items'] ?? '[]'))), true);
+        $title     = sanitize_text_field(\FabricatorForms\Utils\Sanitize::str(wp_unslash($_POST['title'] ?? '')));
+        $items_raw = json_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_textarea_field(wp_unslash($_POST['items'] ?? '[]'))), true);
         if (!is_array($items_raw)) {
             wp_send_json_error(['message' => 'Invalid data.']);
         }
@@ -359,11 +359,11 @@ class FormSelectList
      */
     public static function ajaxDelete(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             wp_send_json_error(['message' => 'Forbidden'], 403);
         }
         $id = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
-        check_ajax_referer('forge_fsel_delete_' . $id, 'nonce');
+        check_ajax_referer('fabricator_fsel_delete_' . $id, 'nonce');
 
         FormSelectModel::delete($id, true);
         wp_send_json_success();
@@ -374,7 +374,7 @@ class FormSelectList
     /* ------------------------------------------------------------------ */
 
     /**
-     * Renders the forge_form_select shortcode output.
+     * Renders the fabricator_form_select shortcode output.
      *
      * @param array $atts Shortcode attributes.
      * @return string Rendered HTML output.
@@ -496,8 +496,8 @@ class FormSelectList
         ];
         ?>
         wp_localize_script(
-            'forge-forms-admin-formselect',
-            'ForgeFormSelectPage',
+            'fabricator-forms-admin-formselect',
+            'FabricatorFormSelectPage',
             [
             'i18n'      => $fsel_i18n,
             'ajaxUrl'   => admin_url('admin-ajax.php'),

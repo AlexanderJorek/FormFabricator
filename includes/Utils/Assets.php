@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Utils;
+namespace FabricatorForms\Utils;
 
 defined('ABSPATH') || exit;
 
@@ -37,7 +37,7 @@ class Assets
     public const FONT_AWESOME_VERSION = '6.5.2';
 
     /**
-     * Enqueues front-end CSS and JS for pages containing a forge form.
+     * Enqueues front-end CSS and JS for pages containing a fabricator form.
      *
      * @return void
      */
@@ -50,42 +50,42 @@ class Assets
         }
 
         \wp_enqueue_style(
-            'forge-forms-front',
-            FORGE_FORMS_URL . 'assets/css/front.css',
+            'fabricator-forms-front',
+            FABRICATOR_FORMS_URL . 'assets/css/front.css',
             [],
-            FORGE_FORMS_VERSION
+            FABRICATOR_FORMS_VERSION
         );
 
         /* Only override CSS variables when the user has explicitly saved a value.
            If no option exists yet, front.css defaults apply (or the theme wins). */
-        $accent = \get_option('forge_forms_accent_color', false);
-        $border = \get_option('forge_forms_border_color', false);
+        $accent = \get_option('fabricator_forms_accent_color', false);
+        $border = \get_option('fabricator_forms_border_color', false);
         $vars   = [];
         if ($accent && preg_match('/^#[0-9a-fA-F]{6}$/', $accent)) {
-            $vars[] = '--forge-accent: ' . $accent;
+            $vars[] = '--fabricator-accent: ' . $accent;
         }
         if ($border && preg_match('/^#[0-9a-fA-F]{6}$/', $border)) {
-            $vars[] = '--forge-border-input: ' . $border;
+            $vars[] = '--fabricator-border-input: ' . $border;
         }
         if (!empty($vars)) {
-            \wp_add_inline_style('forge-forms-front', ':root { ' . implode('; ', $vars) . '; }');
+            \wp_add_inline_style('fabricator-forms-front', ':root { ' . implode('; ', $vars) . '; }');
         }
 
         \wp_enqueue_script(
-            'forge-forms-front',
-            FORGE_FORMS_URL . 'assets/js/front.js',
+            'fabricator-forms-front',
+            FABRICATOR_FORMS_URL . 'assets/js/front.js',
             [],
-            FORGE_FORMS_VERSION,
+            FABRICATOR_FORMS_VERSION,
             true
         );
 
         \wp_localize_script(
-            'forge-forms-front',
-            'ForgeForms',
+            'fabricator-forms-front',
+            'FabricatorForms',
             [
             'ajaxUrl'      => \admin_url('admin-ajax.php'),
             'ibanBicUrl'   => \admin_url('admin-ajax.php'),
-            'ibanBicNonce' => \wp_create_nonce('forge_iban_bic'),
+            'ibanBicNonce' => \wp_create_nonce('fabricator_iban_bic'),
             'i18n'         => [
                 'submitting'              => __('Sending…', 'formfabricator'),
                 'error_server'            => __('Server error. Please try again.', 'formfabricator'),
@@ -173,7 +173,7 @@ class Assets
         $inits       = [];
         $skip        = [];
 
-        foreach (\ForgeForms\Fields\FieldRegistry::all() as $type => $class) {
+        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
             $handler = new $class();
 
             $css = trim($handler->getStyles());
@@ -206,33 +206,33 @@ class Assets
         }
 
         if (!empty($fieldCss)) {
-            \wp_add_inline_style('forge-forms-front', implode("\n", $fieldCss));
+            \wp_add_inline_style('fabricator-forms-front', implode("\n", $fieldCss));
         }
         if (!empty($emptyChecks)) {
             \wp_add_inline_script(
-                'forge-forms-front',
-                'window.ForgeEmptyChecks={' . implode(',', $emptyChecks) . '};',
+                'fabricator-forms-front',
+                'window.FabricatorEmptyChecks={' . implode(',', $emptyChecks) . '};',
                 'before'
             );
         }
         if (!empty($pairs)) {
             \wp_add_inline_script(
-                'forge-forms-front',
-                'window.ForgeValidators={' . implode(',', $pairs) . '};',
+                'fabricator-forms-front',
+                'window.FabricatorValidators={' . implode(',', $pairs) . '};',
                 'before'
             );
         }
         if (!empty($inits)) {
             \wp_add_inline_script(
-                'forge-forms-front',
-                'window.ForgeFieldInits={' . implode(',', $inits) . '};',
+                'fabricator-forms-front',
+                'window.FabricatorFieldInits={' . implode(',', $inits) . '};',
                 'before'
             );
         }
         if (!empty($skip)) {
             \wp_add_inline_script(
-                'forge-forms-front',
-                'window.ForgeSkipValidation=[' . implode(',', $skip) . '];',
+                'fabricator-forms-front',
+                'window.FabricatorSkipValidation=[' . implode(',', $skip) . '];',
                 'before'
             );
         }
@@ -240,16 +240,16 @@ class Assets
         /* Form-select shortcode assets — must be enqueued before wp_head() */
         if (self::pageHasFormSelect()) {
             \wp_enqueue_style(
-                'forge-form-select',
-                FORGE_FORMS_URL . 'assets/css/form-select.css',
+                'fabricator-form-select',
+                FABRICATOR_FORMS_URL . 'assets/css/form-select.css',
                 [],
-                FORGE_FORMS_VERSION
+                FABRICATOR_FORMS_VERSION
             );
             \wp_enqueue_script(
-                'forge-form-select',
-                FORGE_FORMS_URL . 'assets/js/form-select.js',
+                'fabricator-form-select',
+                FABRICATOR_FORMS_URL . 'assets/js/form-select.js',
                 [],
-                FORGE_FORMS_VERSION,
+                FABRICATOR_FORMS_VERSION,
                 true
             );
         }
@@ -264,8 +264,8 @@ class Assets
     private static function enqueueFontAwesome(): void
     {
         \wp_enqueue_style(
-            'forge-forms-font-awesome',
-            FORGE_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css',
+            'fabricator-forms-font-awesome',
+            FABRICATOR_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css',
             [],
             self::FONT_AWESOME_VERSION
         );
@@ -279,14 +279,14 @@ class Assets
     public static function enqueueAdmin(string $hook): void
     {
         /* Form editor page */
-        if (str_contains($hook, 'forge-forms-editor')) {
+        if (str_contains($hook, 'fabricator-forms-editor')) {
             self::enqueueFontAwesome();
 
             \wp_enqueue_style(
-                'forge-forms-admin',
-                FORGE_FORMS_URL . 'assets/css/admin.css',
-                ['forge-forms-font-awesome'],
-                FORGE_FORMS_VERSION
+                'fabricator-forms-admin',
+                FABRICATOR_FORMS_URL . 'assets/css/admin.css',
+                ['fabricator-forms-font-awesome'],
+                FABRICATOR_FORMS_VERSION
             );
             self::addAdminCssVars();
 
@@ -294,126 +294,126 @@ class Assets
             \wp_enqueue_script('wp-color-picker');
 
             \wp_enqueue_script(
-                'forge-forms-builder',
-                FORGE_FORMS_URL . 'assets/js/admin-builder.js',
+                'fabricator-forms-builder',
+                FABRICATOR_FORMS_URL . 'assets/js/admin-builder.js',
                 [],
-                FORGE_FORMS_VERSION,
+                FABRICATOR_FORMS_VERSION,
                 true
             );
             \wp_enqueue_script(
-                'forge-forms-editor-canvas',
-                FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                'fabricator-forms-editor-canvas',
+                FABRICATOR_FORMS_URL . 'assets/js/admin-editor-canvas.js',
                 [],
-                FORGE_FORMS_VERSION,
+                FABRICATOR_FORMS_VERSION,
                 true
             );
             \wp_enqueue_script(
-                'forge-forms-editor-lock',
-                FORGE_FORMS_URL . 'assets/js/admin-editor-lock.js',
+                'fabricator-forms-editor-lock',
+                FABRICATOR_FORMS_URL . 'assets/js/admin-editor-lock.js',
                 ['jquery'],
-                FORGE_FORMS_VERSION,
+                FABRICATOR_FORMS_VERSION,
                 true
             );
 
             \wp_enqueue_media();
 
         /* General admin pages (non-editor) */
-        } elseif (str_contains($hook, 'forge-forms')) {
+        } elseif (str_contains($hook, 'fabricator-forms')) {
             self::enqueueFontAwesome();
             \wp_enqueue_style(
-                'forge-forms-admin',
-                FORGE_FORMS_URL . 'assets/css/admin.css',
-                ['forge-forms-font-awesome'],
-                FORGE_FORMS_VERSION
+                'fabricator-forms-admin',
+                FABRICATOR_FORMS_URL . 'assets/css/admin.css',
+                ['fabricator-forms-font-awesome'],
+                FABRICATOR_FORMS_VERSION
             );
             self::addAdminCssVars();
-            if (str_ends_with($hook, 'forge-forms')) {
+            if (str_ends_with($hook, 'fabricator-forms')) {
                 \wp_enqueue_script(
-                    'forge-forms-editor-canvas',
-                    FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                    'fabricator-forms-editor-canvas',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-editor-canvas.js',
                     [],
-                    FORGE_FORMS_VERSION,
+                    FABRICATOR_FORMS_VERSION,
                     true
                 );
                 \wp_enqueue_script(
-                    'forge-forms-admin-formlist',
-                    FORGE_FORMS_URL . 'assets/js/admin-formlist.js',
+                    'fabricator-forms-admin-formlist',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-formlist.js',
                     [],
-                    FORGE_FORMS_VERSION,
-                    true
-                );
-            }
-            if (str_contains($hook, 'forge-forms-select')) {
-                \wp_enqueue_script(
-                    'forge-forms-editor-canvas',
-                    FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
-                    [],
-                    FORGE_FORMS_VERSION,
-                    true
-                );
-                \wp_enqueue_script(
-                    'forge-forms-admin-formselect',
-                    FORGE_FORMS_URL . 'assets/js/admin-formselect.js',
-                    [],
-                    FORGE_FORMS_VERSION,
+                    FABRICATOR_FORMS_VERSION,
                     true
                 );
             }
-            $needs_picker = str_contains($hook, 'forge-forms-settings')
-                         || str_contains($hook, 'forge-forms-pdf-layout');
+            if (str_contains($hook, 'fabricator-forms-select')) {
+                \wp_enqueue_script(
+                    'fabricator-forms-editor-canvas',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                    [],
+                    FABRICATOR_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'fabricator-forms-admin-formselect',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-formselect.js',
+                    [],
+                    FABRICATOR_FORMS_VERSION,
+                    true
+                );
+            }
+            $needs_picker = str_contains($hook, 'fabricator-forms-settings')
+                         || str_contains($hook, 'fabricator-forms-pdf-layout');
             if ($needs_picker) {
                 \wp_enqueue_style('wp-color-picker');
                 \wp_enqueue_script('wp-color-picker');
             }
-            if (str_contains($hook, 'forge-forms-settings')) {
+            if (str_contains($hook, 'fabricator-forms-settings')) {
                 \wp_enqueue_script(
-                    'forge-forms-editor-canvas',
-                    FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                    'fabricator-forms-editor-canvas',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-editor-canvas.js',
                     [],
-                    FORGE_FORMS_VERSION,
+                    FABRICATOR_FORMS_VERSION,
                     true
                 );
                 \wp_enqueue_script(
-                    'forge-forms-settings-lock',
-                    FORGE_FORMS_URL . 'assets/js/admin-settings-lock.js',
+                    'fabricator-forms-settings-lock',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-settings-lock.js',
                     ['jquery'],
-                    FORGE_FORMS_VERSION,
+                    FABRICATOR_FORMS_VERSION,
                     true
                 );
                 \wp_enqueue_script(
-                    'forge-forms-admin-settings',
-                    FORGE_FORMS_URL . 'assets/js/admin-settings.js',
+                    'fabricator-forms-admin-settings',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-settings.js',
                     ['jquery', 'wp-color-picker'],
-                    FORGE_FORMS_VERSION,
+                    FABRICATOR_FORMS_VERSION,
                     true
                 );
             }
-            if (str_contains($hook, 'forge-forms-pdf-layout')) {
+            if (str_contains($hook, 'fabricator-forms-pdf-layout')) {
                 \wp_enqueue_script(
-                    'forge-forms-editor-canvas',
-                    FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                    'fabricator-forms-editor-canvas',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-editor-canvas.js',
                     [],
-                    FORGE_FORMS_VERSION,
+                    FABRICATOR_FORMS_VERSION,
                     true
                 );
                 \wp_enqueue_script(
-                    'forge-forms-pdflayout-lock',
-                    FORGE_FORMS_URL . 'assets/js/admin-pdflayout-lock.js',
+                    'fabricator-forms-pdflayout-lock',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-pdflayout-lock.js',
                     ['jquery'],
-                    FORGE_FORMS_VERSION,
+                    FABRICATOR_FORMS_VERSION,
                     true
                 );
                 \wp_enqueue_script(
-                    'forge-forms-admin-pdflayout',
-                    FORGE_FORMS_URL . 'assets/js/admin-pdflayout.js',
+                    'fabricator-forms-admin-pdflayout',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-pdflayout.js',
                     ['wp-color-picker'],
-                    FORGE_FORMS_VERSION,
+                    FABRICATOR_FORMS_VERSION,
                     true
                 );
-                $fn = 'window.forgePdfUpdatePreview';
+                $fn = 'window.fabricatorPdfUpdatePreview';
                 $cb = 'if(' . $fn . ')setTimeout(' . $fn . ',0);';
                 $picker_js = 'jQuery(function($){'
-                    . '$(".forge-iris-input").wpColorPicker({'
+                    . '$(".fabricator-iris-input").wpColorPicker({'
                     . 'change:function(){' . $cb . '},'
                     . 'clear:function(){' . $cb . '}'
                     . '});});';
@@ -422,60 +422,60 @@ class Assets
         }
 
         /* Field test harness (dev-only, WP_DEBUG-gated — see Plugin.php::load()) */
-        if (str_contains($hook, 'forge-field-tests')) {
+        if (str_contains($hook, 'fabricator-field-tests')) {
             \wp_enqueue_style(
-                'forge-forms-admin-fieldtest',
-                FORGE_FORMS_URL . 'assets/css/admin-fieldtest.css',
+                'fabricator-forms-admin-fieldtest',
+                FABRICATOR_FORMS_URL . 'assets/css/admin-fieldtest.css',
                 [],
-                FORGE_FORMS_VERSION
+                FABRICATOR_FORMS_VERSION
             );
         }
 
         /* Verification page */
-        if (str_contains($hook, 'forge-pdf-verification')) {
+        if (str_contains($hook, 'fabricator-pdf-verification')) {
             \wp_enqueue_style(
-                'forge-forms-admin',
-                FORGE_FORMS_URL . 'assets/css/admin.css',
+                'fabricator-forms-admin',
+                FABRICATOR_FORMS_URL . 'assets/css/admin.css',
                 [],
-                FORGE_FORMS_VERSION
+                FABRICATOR_FORMS_VERSION
             );
             self::addAdminCssVars();
             \wp_enqueue_style(
-                'forge-forms-admin-verification',
-                FORGE_FORMS_URL . 'assets/css/admin-verification.css',
-                ['forge-forms-admin'],
-                FORGE_FORMS_VERSION
+                'fabricator-forms-admin-verification',
+                FABRICATOR_FORMS_URL . 'assets/css/admin-verification.css',
+                ['fabricator-forms-admin'],
+                FABRICATOR_FORMS_VERSION
             );
             \wp_enqueue_script(
-                'forge-forms-admin-verification',
-                FORGE_FORMS_URL . 'assets/js/admin-verification.js',
+                'fabricator-forms-admin-verification',
+                FABRICATOR_FORMS_URL . 'assets/js/admin-verification.js',
                 [],
-                FORGE_FORMS_VERSION,
+                FABRICATOR_FORMS_VERSION,
                 true
             );
             \wp_localize_script(
-                'forge-forms-admin-verification',
-                'ForgeVerifyPage',
+                'fabricator-forms-admin-verification',
+                'FabricatorVerifyPage',
                 ['i18n' => ['remove' => __('Remove', 'formfabricator')]]
             );
             /* pdf.js 6.x is ES-modules only, so verification.js registers as a script module and
-               imports pdf.mjs itself. wp_localize_script has no module equivalent, so ForgeVerifier
+               imports pdf.mjs itself. wp_localize_script has no module equivalent, so FabricatorVerifier
                data is injected via a separate src-less classic script instead. */
-            \wp_register_script('forge-verifier-data', false, [], FORGE_FORMS_VERSION, true);
-            \wp_enqueue_script('forge-verifier-data');
+            \wp_register_script('fabricator-verifier-data', false, [], FABRICATOR_FORMS_VERSION, true);
+            \wp_enqueue_script('fabricator-verifier-data');
             \wp_enqueue_script_module(
-                'forge-forms-verification',
-                FORGE_FORMS_URL . 'assets/js/verification.js',
+                'fabricator-forms-verification',
+                FABRICATOR_FORMS_URL . 'assets/js/verification.js',
                 [],
-                FORGE_FORMS_VERSION
+                FABRICATOR_FORMS_VERSION
             );
             \wp_localize_script(
-                'forge-verifier-data',
-                'ForgeVerifier',
+                'fabricator-verifier-data',
+                'FabricatorVerifier',
                 [
                 'ajaxUrl'     => \admin_url('admin-ajax.php'),
-                'nonce'       => \wp_create_nonce('forge_verifier_nonce'),
-                'pdfJsWorker' => FORGE_FORMS_URL . 'vendor/pdfjs/pdf.worker.mjs',
+                'nonce'       => \wp_create_nonce('fabricator_verifier_nonce'),
+                'pdfJsWorker' => FABRICATOR_FORMS_URL . 'vendor/pdfjs/pdf.worker.mjs',
                 'i18n'        => [
                     'loading'          => __('Loading…', 'formfabricator'),
                     'pdf_loading'      => __('Loading PDF…', 'formfabricator'),
@@ -506,14 +506,14 @@ class Assets
     }
 
     /**
-     * Injects --forge-admin-accent and --forge-hover-color onto the forge-forms-admin stylesheet.
+     * Injects --fabricator-admin-accent and --fabricator-hover-color onto the fabricator-forms-admin stylesheet.
      *
      * @return void
      */
     private static function addAdminCssVars(): void
     {
-        $hover        = \get_option('forge_forms_hover_color', '#1d2327');
-        $admin_accent = \get_option('forge_forms_admin_accent', '#2271b1');
+        $hover        = \get_option('fabricator_forms_hover_color', '#1d2327');
+        $admin_accent = \get_option('fabricator_forms_admin_accent', '#2271b1');
         if (!preg_match('/^#[0-9a-fA-F]{6}$/', $hover)) {
             $hover = '#1d2327';
         }
@@ -534,20 +534,20 @@ class Assets
         $hover_fg  = $hover_lum > 0.55 ? '#1d2327' : $hover;
 
         \wp_add_inline_style(
-            'forge-forms-admin',
-            ':root { --forge-admin-accent: ' . $admin_accent
-                . '; --forge-admin-accent--rgb: ' . $r . ',' . $g . ',' . $b
-                . '; --forge-hover-color: ' . $hover
-                . '; --forge-hover-color-fg: ' . $hover_fg
-                . '; --forge-accent-text: ' . $accent_text
-                . '; --forge-admin-accent-fg: ' . $accent_fg . '; }'
+            'fabricator-forms-admin',
+            ':root { --fabricator-admin-accent: ' . $admin_accent
+                . '; --fabricator-admin-accent--rgb: ' . $r . ',' . $g . ',' . $b
+                . '; --fabricator-hover-color: ' . $hover
+                . '; --fabricator-hover-color-fg: ' . $hover_fg
+                . '; --fabricator-accent-text: ' . $accent_text
+                . '; --fabricator-admin-accent-fg: ' . $accent_fg . '; }'
         );
     }
 
     /**
-     * Returns true when the current post contains a [forge_form] shortcode.
+     * Returns true when the current post contains a [fabricator_form] shortcode.
      *
-     * @return bool True when a forge form shortcode is present in the post content.
+     * @return bool True when a fabricator form shortcode is present in the post content.
      */
     private static function pageHasForm(): bool
     {
@@ -555,15 +555,15 @@ class Assets
         if (!$post || !\is_a($post, 'WP_Post')) {
             return false;
         }
-        // NOTE: the unanchored '[forge_form' prefix also matches '[forge_form_select' —
+        // NOTE: the unanchored '[fabricator_form' prefix also matches '[fabricator_form_select' —
         // harmless here since a form-select page needs these front-end assets too
-        return str_contains((string)$post->post_content, '[forge_form');
+        return str_contains((string)$post->post_content, '[fabricator_form');
     }
 
     /**
-     * Returns true when the current post contains a [forge_form_select] shortcode.
+     * Returns true when the current post contains a [fabricator_form_select] shortcode.
      *
-     * @return bool True when a [forge_form_select] shortcode is found in the post.
+     * @return bool True when a [fabricator_form_select] shortcode is found in the post.
      */
     private static function pageHasFormSelect(): bool
     {
@@ -571,6 +571,6 @@ class Assets
         if (!$post || !\is_a($post, 'WP_Post')) {
             return false;
         }
-        return str_contains((string)$post->post_content, '[forge_form_select');
+        return str_contains((string)$post->post_content, '[fabricator_form_select');
     }
 }

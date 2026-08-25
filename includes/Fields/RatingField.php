@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -36,21 +36,21 @@ class RatingField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-rating-group { display: inline-flex; gap: 2px; }
-.forge-rating-star {
+.fabricator-rating-group { display: inline-flex; gap: 2px; }
+.fabricator-rating-star {
     position: relative;
     display: inline-block;
     line-height: 1;
     cursor: pointer;
 }
-.forge-rating-bg {
+.fabricator-rating-bg {
     display: block;
     font-size: 30px;
-    color: var(--forge-border);
+    color: var(--fabricator-border);
     user-select: none;
     transition: color .1s;
 }
-.forge-rating-fill {
+.fabricator-rating-fill {
     position: absolute;
     top: 0; left: 0;
     display: block;
@@ -62,19 +62,19 @@ class RatingField extends BaseField
     clip-path: inset(0 100% 0 0);
     transition: clip-path .1s;
 }
-.forge-rating-star--full .forge-rating-fill { clip-path: inset(0 0% 0 0); }
-.forge-rating-star--half .forge-rating-fill { clip-path: inset(0 50% 0 0); }
-.forge-rating-zone {
+.fabricator-rating-star--full .fabricator-rating-fill { clip-path: inset(0 0% 0 0); }
+.fabricator-rating-star--half .fabricator-rating-fill { clip-path: inset(0 50% 0 0); }
+.fabricator-rating-zone {
     position: absolute;
     top: 0;
     height: 100%;
     display: block;
     cursor: pointer;
 }
-.forge-rating-zone input { display: none; }
-.forge-rating-zone-half { left: 0; width: 50%; }
-.forge-rating-zone-full { right: 0; width: 50%; }
-.forge-rating-zone-full--only { left: 0; right: 0; width: 100%; }
+.fabricator-rating-zone input { display: none; }
+.fabricator-rating-zone-half { left: 0; width: 50%; }
+.fabricator-rating-zone-full { right: 0; width: 50%; }
+.fabricator-rating-zone-full--only { left: 0; right: 0; width: 100%; }
 CSS;
     }
 
@@ -110,7 +110,7 @@ CSS;
      */
     public function getClientEmptyCheck(): array
     {
-        return ['fn' => "function(f){return !f.querySelector('.forge-rating-group input:checked');}"];
+        return ['fn' => "function(f){return !f.querySelector('.fabricator-rating-group input:checked');}"];
     }
 
     /**
@@ -122,15 +122,15 @@ CSS;
     {
         return <<<'JS'
         function (root) {
-            root.querySelectorAll('.forge-rating-group').forEach(function (group) {
-                var stars = Array.from(group.querySelectorAll('.forge-rating-star'));
+            root.querySelectorAll('.fabricator-rating-group').forEach(function (group) {
+                var stars = Array.from(group.querySelectorAll('.fabricator-rating-star'));
                 function highlight(val) {
                     stars.forEach(function (star) {
                         var n    = parseInt(star.dataset.star, 10);
                         var full = n <= Math.floor(val);
                         var half = !full && val % 1 !== 0 && n === Math.ceil(val);
-                        star.classList.toggle('forge-rating-star--full', full);
-                        star.classList.toggle('forge-rating-star--half', half);
+                        star.classList.toggle('fabricator-rating-star--full', full);
+                        star.classList.toggle('fabricator-rating-star--half', half);
                     });
                 }
                 function restoreChecked() {
@@ -138,13 +138,13 @@ CSS;
                     highlight(checked ? parseFloat(checked.value) : 0);
                 }
                 group.addEventListener('mouseover', function (e) {
-                    var zone = e.target.closest('.forge-rating-zone');
+                    var zone = e.target.closest('.fabricator-rating-zone');
                     if (!zone) return;
                     var radio = zone.querySelector('input[type="radio"]');
                     if (radio) highlight(parseFloat(radio.value));
                 });
                 group.addEventListener('mouseleave', restoreChecked);
-                group.querySelectorAll('.forge-rating-zone').forEach(function (zone) {
+                group.querySelectorAll('.fabricator-rating-zone').forEach(function (zone) {
                     var radio = zone.querySelector('input[type="radio"]');
                     if (!radio) return;
                     zone.addEventListener('click', function () {
@@ -185,12 +185,12 @@ CSS;
         $req       = !empty($config['required']) ? ' data-required="true"' : '';
         $custom_url = $custom ? esc_url($config['custom_icon_url'], ['http', 'https']) : '';
 
-        $inner = '<div class="forge-rating-group" role="group"'
+        $inner = '<div class="fabricator-rating-group" role="group"'
             . ' aria-label="' . esc_attr($config['label'] ?? __('Rating', 'formfabricator')) . '"'
             . ' data-half="' . ($half ? '1' : '0') . '"'
             . $req . '>';
 
-        /* One .forge-rating-star container per visible star.
+        /* One .fabricator-rating-star container per visible star.
          * Each container holds two invisible click zones (left=half, right=full)
          * and a visual background + filled overlay controlled by JS classes. */
         for ($i = 1; $i <= $max; $i++) {
@@ -200,7 +200,7 @@ CSS;
             $checked_half   = ((float)$val === (float)$v_half) ? ' checked' : '';
             $glyph          = esc_html($icons['filled']);
 
-            $inner .= '<span class="forge-rating-star" data-star="' . $i . '">';
+            $inner .= '<span class="fabricator-rating-star" data-star="' . $i . '">';
 
             if ($custom_url) {
                 /* Custom image: background image tile, filled overlay clips left half */
@@ -209,33 +209,33 @@ CSS;
                 $fill_style = 'position:absolute;top:0;left:0;width:30px;height:30px;'
                     . 'background:url(' . esc_url($custom_url) . ') center/contain no-repeat;'
                     . 'pointer-events:none;';
-                $inner .= '<span class="forge-rating-bg" style="' . esc_attr($base_style) . '"></span>';
-                $inner .= '<span class="forge-rating-fill" style="' . esc_attr($fill_style) . '"></span>';
+                $inner .= '<span class="fabricator-rating-bg" style="' . esc_attr($base_style) . '"></span>';
+                $inner .= '<span class="fabricator-rating-fill" style="' . esc_attr($fill_style) . '"></span>';
             } else {
-                $inner .= '<span class="forge-rating-bg">' . $glyph . '</span>';
-                $inner .= '<span class="forge-rating-fill">' . $glyph . '</span>';
+                $inner .= '<span class="fabricator-rating-bg">' . $glyph . '</span>';
+                $inner .= '<span class="fabricator-rating-fill">' . $glyph . '</span>';
             }
 
             if ($half) {
-                $inner .= '<label class="forge-rating-zone forge-rating-zone-half"'
+                $inner .= '<label class="fabricator-rating-zone fabricator-rating-zone-half"'
                     . ' title="' . $v_half . '">'
                     . '<input type="radio" name="' . esc_attr($field_id)
                     . '" value="' . $v_half . '"' . $checked_half . '>'
                     . '</label>';
-                $inner .= '<label class="forge-rating-zone forge-rating-zone-full"'
+                $inner .= '<label class="fabricator-rating-zone fabricator-rating-zone-full"'
                     . ' title="' . $v_full . '">'
                     . '<input type="radio" name="' . esc_attr($field_id)
                     . '" value="' . $v_full . '"' . $checked_full . '>'
                     . '</label>';
             } else {
-                $inner .= '<label class="forge-rating-zone forge-rating-zone-full forge-rating-zone-full--only"'
+                $inner .= '<label class="fabricator-rating-zone fabricator-rating-zone-full fabricator-rating-zone-full--only"'
                     . ' title="' . $v_full . '">'
                     . '<input type="radio" name="' . esc_attr($field_id)
                     . '" value="' . $v_full . '"' . $checked_full . '>'
                     . '</label>';
             }
 
-            $inner .= '</span>'; /* .forge-rating-star */
+            $inner .= '</span>'; /* .fabricator-rating-star */
         }
         $inner .= '</div>';
 

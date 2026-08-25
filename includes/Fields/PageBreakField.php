@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -36,68 +36,68 @@ class PageBreakField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-form-page { display: none; }
-.forge-form-page.forge-page-active { display: block; }
-.forge-page-nav {
+.fabricator-form-page { display: none; }
+.fabricator-form-page.fabricator-page-active { display: block; }
+.fabricator-page-nav {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: var(--forge-gap);
+    margin-top: var(--fabricator-gap);
     padding: 14px 0 0;
-    border-top: 1px solid var(--forge-border);
+    border-top: 1px solid var(--fabricator-border);
     gap: 10px;
 }
-.forge-page-nav--top {
+.fabricator-page-nav--top {
     display: flex;
     align-items: center;
     border-top: none;
     padding: 0;
-    margin: 0 0 var(--forge-gap);
+    margin: 0 0 var(--fabricator-gap);
 }
-.forge-btn {
+.fabricator-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 9px 20px;
-    border-radius: var(--forge-radius);
-    border: 1px solid var(--forge-border-input);
-    background: var(--forge-bg);
-    color: var(--forge-text-muted);
+    border-radius: var(--fabricator-radius);
+    border: 1px solid var(--fabricator-border-input);
+    background: var(--fabricator-bg);
+    color: var(--fabricator-text-muted);
     font-size: 14px;
-    font-family: var(--forge-font);
+    font-family: var(--fabricator-font);
     cursor: pointer;
     transition: background .1s, border-color .1s;
 }
-.forge-btn:hover {
-    background: var(--forge-bg-subtle);
-    border-color: var(--forge-text-subtle);
+.fabricator-btn:hover {
+    background: var(--fabricator-bg-subtle);
+    border-color: var(--fabricator-text-subtle);
 }
-.forge-btn-next {
+.fabricator-btn-next {
     margin-left: auto;
-    background: var(--forge-accent);
-    border-color: var(--forge-accent);
+    background: var(--fabricator-accent);
+    border-color: var(--fabricator-accent);
     color: #fff;
     font-weight: 600;
 }
-.forge-btn-next:hover,
-.forge-btn-next:focus,
-.forge-btn-next:focus-visible {
-    background: var(--forge-accent-dark);
-    border-color: var(--forge-accent-dark);
+.fabricator-btn-next:hover,
+.fabricator-btn-next:focus,
+.fabricator-btn-next:focus-visible {
+    background: var(--fabricator-accent-dark);
+    border-color: var(--fabricator-accent-dark);
     color: #fff;
     outline: none;
 }
-.forge-page-nav--top .forge-btn-prev {
+.fabricator-page-nav--top .fabricator-btn-prev {
     border-color: transparent;
     background: transparent;
-    color: var(--forge-accent);
+    color: var(--fabricator-accent);
     padding-left: 0; padding-right: 0;
     font-size: 13px;
 }
-.forge-page-nav--top .forge-btn-prev:hover {
+.fabricator-page-nav--top .fabricator-btn-prev:hover {
     background: transparent;
     border-color: transparent;
-    color: var(--forge-accent-dark);
+    color: var(--fabricator-accent-dark);
     text-decoration: underline;
 }
 CSS;
@@ -192,14 +192,14 @@ CSS;
         $prev_label = esc_html($config['prev_btn'] ?? __('← Back', 'formfabricator'));
         $next_label = esc_html($config['next_btn'] ?? __('Next →', 'formfabricator'));
         $prev_btn   = $page > 1
-            ? '<button type="button" class="forge-btn forge-btn-prev">' . $prev_label . '</button>'
+            ? '<button type="button" class="fabricator-btn fabricator-btn-prev">' . $prev_label . '</button>'
             : '<span></span>';
-        $next_btn   = '<button type="button" class="forge-btn forge-btn-next">' . $next_label . '</button>';
-        return '<div class="forge-page-nav">' . $prev_btn . $next_btn . '</div>'
+        $next_btn   = '<button type="button" class="fabricator-btn fabricator-btn-next">' . $next_label . '</button>';
+        return '<div class="fabricator-page-nav">' . $prev_btn . $next_btn . '</div>'
             . '</div>'
-            . '<div class="forge-form-page" data-page="' . $page . '">'
-            . '<div class="forge-page-nav forge-page-nav--top">'
-            . '<button type="button" class="forge-btn forge-btn-prev">' . $prev_label . '</button>'
+            . '<div class="fabricator-form-page" data-page="' . $page . '">'
+            . '<div class="fabricator-page-nav fabricator-page-nav--top">'
+            . '<button type="button" class="fabricator-btn fabricator-btn-prev">' . $prev_label . '</button>'
             . '</div>';
     }
 

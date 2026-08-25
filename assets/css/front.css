@@ -5,139 +5,139 @@
  */
 
 /* ── Design tokens ────────────────────────────────────────────────────────────
- * --forge-accent is the only colour the user configures (Settings → Appearance).
+ * --fabricator-accent is the only colour the user configures (Settings → Appearance).
  * PHP injects it as an inline <style> on the page; every component references
  * it here so changing the single variable recolours the entire form.
  * ──────────────────────────────────────────────────────────────────────────── */
 :root {
-    --forge-accent:        #f59e0b;
-    --forge-accent-dark:   #d97706;
-    --forge-accent-light:  #fffbeb;
+    --fabricator-accent:        #f59e0b;
+    --fabricator-accent-dark:   #d97706;
+    --fabricator-accent-light:  #fffbeb;
 
-    --forge-text:          #1d2327;
-    --forge-text-muted:    #50575e;
-    --forge-text-subtle:   #787c82;
+    --fabricator-text:          #1d2327;
+    --fabricator-text-muted:    #50575e;
+    --fabricator-text-subtle:   #787c82;
 
-    --forge-border:        #dcdcde;
-    --forge-border-input:  #c9cdd4;
+    --fabricator-border:        #dcdcde;
+    --fabricator-border-input:  #c9cdd4;
 
-    --forge-bg:            #ffffff;
-    --forge-bg-subtle:     #f6f7f7;
-    --forge-bg-muted:      #f0f0f1;
+    --fabricator-bg:            #ffffff;
+    --fabricator-bg-subtle:     #f6f7f7;
+    --fabricator-bg-muted:      #f0f0f1;
 
-    --forge-error:         #b32d2e;
-    --forge-error-bg:      #fce8e8;
-    --forge-success:       #00a32a;
-    --forge-success-bg:    #d6f5df;
+    --fabricator-error:         #b32d2e;
+    --fabricator-error-bg:      #fce8e8;
+    --fabricator-success:       #00a32a;
+    --fabricator-success-bg:    #d6f5df;
 
-    --forge-radius:        5px;
-    --forge-radius-sm:     3px;
-    --forge-input-height:  40px;
-    --forge-font:          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --forge-font-size:     15px;
-    --forge-gap:           20px;
+    --fabricator-radius:        5px;
+    --fabricator-radius-sm:     3px;
+    --fabricator-input-height:  40px;
+    --fabricator-font:          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --fabricator-font-size:     15px;
+    --fabricator-gap:           20px;
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */
-.forge-form-wrap {
+.fabricator-form-wrap {
     width: 100%;
-    font-family: var(--forge-font);
-    font-size: var(--forge-font-size);
-    color: var(--forge-text);
+    font-family: var(--fabricator-font);
+    font-size: var(--fabricator-font-size);
+    color: var(--fabricator-text);
 }
 
 /* ── Messages ─────────────────────────────────────────────────────────────── */
-.forge-form-messages {
+.fabricator-form-messages {
     padding: 12px 16px;
-    border-radius: var(--forge-radius);
-    margin-bottom: var(--forge-gap);
+    border-radius: var(--fabricator-radius);
+    margin-bottom: var(--fabricator-gap);
     font-size: 14px;
     border: 1px solid transparent;
 }
-.forge-form-messages.success {
-    background: var(--forge-success-bg);
-    border-color: var(--forge-success);
+.fabricator-form-messages.success {
+    background: var(--fabricator-success-bg);
+    border-color: var(--fabricator-success);
     color: #006400;
 }
-.forge-form-messages.error {
-    background: var(--forge-error-bg);
-    border-color: var(--forge-error);
-    color: var(--forge-error);
+.fabricator-form-messages.error {
+    background: var(--fabricator-error-bg);
+    border-color: var(--fabricator-error);
+    color: var(--fabricator-error);
 }
 
 /* ── Field wrapper ────────────────────────────────────────────────────────── */
-.forge-field {
-    margin-bottom: var(--forge-gap);
+.fabricator-field {
+    margin-bottom: var(--fabricator-gap);
 }
 
-.forge-label {
+.fabricator-label {
     display: block;
     font-size: 13px;
     font-weight: 600;
     letter-spacing: .01em;
-    color: var(--forge-text);
+    color: var(--fabricator-text);
     margin-bottom: 6px;
 }
 
-.forge-required {
-    color: var(--forge-error);
+.fabricator-required {
+    color: var(--fabricator-error);
     margin-left: 2px;
 }
 
-.forge-field-description {
+.fabricator-field-description {
     font-size: 12px;
-    color: var(--forge-text-muted);
+    color: var(--fabricator-text-muted);
     margin: 0 0 6px;
     line-height: 1.5;
 }
 
-.forge-field-hint {
+.fabricator-field-hint {
     font-size: 12px;
-    color: var(--forge-text-subtle);
+    color: var(--fabricator-text-subtle);
     margin: 5px 0 0;
     line-height: 1.5;
 }
 
-.forge-field-error {
+.fabricator-field-error {
     font-size: 12px;
-    color: var(--forge-error);
+    color: var(--fabricator-error);
     margin-top: 4px;
     line-height: 1.4;
 }
-.forge-field-error:empty {
+.fabricator-field-error:empty {
     display: none;
 }
 
 /* ── Inputs ───────────────────────────────────────────────────────────────── */
-.forge-input {
+.fabricator-input {
     display: block;
     width: 100%;
     box-sizing: border-box;
-    height: var(--forge-input-height);
+    height: var(--fabricator-input-height);
     padding: 0 12px;
-    border: 1px solid var(--forge-border-input) !important;
-    border-radius: var(--forge-radius);
+    border: 1px solid var(--fabricator-border-input) !important;
+    border-radius: var(--fabricator-radius);
     font-size: 14px;
-    font-family: var(--forge-font);
-    color: var(--forge-text);
-    background: var(--forge-bg) !important;
+    font-family: var(--fabricator-font);
+    color: var(--fabricator-text);
+    background: var(--fabricator-bg) !important;
     transition: border-color .15s, box-shadow .15s;
     appearance: none !important;
     -webkit-appearance: none !important;
     outline: 0 !important;
     box-shadow: none !important;
 }
-/* Scope with .forge-form to beat theme stylesheets that load after ours */
-.forge-form .forge-input:focus,
-.forge-form .forge-input:focus-visible {
-    border-color: var(--forge-accent) !important;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--forge-accent) 15%, transparent) !important;
+/* Scope with .fabricator-form to beat theme stylesheets that load after ours */
+.fabricator-form .fabricator-input:focus,
+.fabricator-form .fabricator-input:focus-visible {
+    border-color: var(--fabricator-accent) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--fabricator-accent) 15%, transparent) !important;
 }
-.forge-input::placeholder {
-    color: var(--forge-text-subtle);
+.fabricator-input::placeholder {
+    color: var(--fabricator-text-subtle);
 }
 
-textarea.forge-input {
+textarea.fabricator-input {
     height: auto;
     padding: 10px 12px;
     resize: vertical;
@@ -146,8 +146,8 @@ textarea.forge-input {
 }
 
 /* Visible native selects (e.g. NameField prefix) — restore the chevron that
-   appearance:none strips, and ensure the same forge focus ring as text inputs. */
-select.forge-input:not(.forge-select-native) {
+   appearance:none strips, and ensure the same fabricator focus ring as text inputs. */
+select.fabricator-input:not(.fabricator-select-native) {
     padding-right: 32px;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238c8f94' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
@@ -155,8 +155,8 @@ select.forge-input:not(.forge-select-native) {
     cursor: pointer;
 }
 
-/* Native select is hidden — JS replaces it with .forge-select-custom */
-select.forge-input.forge-select-native {
+/* Native select is hidden — JS replaces it with .fabricator-select-custom */
+select.fabricator-input.fabricator-select-native {
     position: absolute;
     opacity: 0;
     pointer-events: none;
@@ -165,159 +165,159 @@ select.forge-input.forge-select-native {
 }
 
 /* Custom dropdown */
-.forge-select-wrap {
+.fabricator-select-wrap {
     position: relative;
 }
-.forge-select-custom {
+.fabricator-select-custom {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    height: var(--forge-input-height);
+    height: var(--fabricator-input-height);
     padding: 0 12px;
-    border: 1px solid var(--forge-border-input);
-    border-radius: var(--forge-radius);
-    background: var(--forge-bg);
-    color: var(--forge-text);
-    font-size: var(--forge-font-size);
-    font-family: var(--forge-font);
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
+    background: var(--fabricator-bg);
+    color: var(--fabricator-text);
+    font-size: var(--fabricator-font-size);
+    font-family: var(--fabricator-font);
     cursor: pointer;
     user-select: none;
     outline: none;
     transition: border-color .15s, box-shadow .15s;
 }
-.forge-select-custom:focus,
-.forge-select-custom[aria-expanded="true"] {
-    border-color: var(--forge-accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--forge-accent) 15%, transparent);
+.fabricator-select-custom:focus,
+.fabricator-select-custom[aria-expanded="true"] {
+    border-color: var(--fabricator-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--fabricator-accent) 15%, transparent);
 }
-.forge-select-display {
+.fabricator-select-display {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.forge-select-display--placeholder {
-    color: var(--forge-text-muted);
+.fabricator-select-display--placeholder {
+    color: var(--fabricator-text-muted);
 }
-.forge-select-arrow {
+.fabricator-select-arrow {
     font-size: 24px;
-    color: var(--forge-text-muted);
+    color: var(--fabricator-text-muted);
     transition: transform .15s;
     flex-shrink: 0;
 }
-.forge-select-custom[aria-expanded="true"] .forge-select-arrow {
+.fabricator-select-custom[aria-expanded="true"] .fabricator-select-arrow {
     transform: rotate(180deg);
 }
-.forge-select-panel {
+.fabricator-select-panel {
     display: none;
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
     right: 0;
-    background: var(--forge-bg);
-    border: 1px solid var(--forge-border-input);
-    border-radius: var(--forge-radius);
+    background: var(--fabricator-bg);
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
     box-shadow: 0 4px 12px rgba(0,0,0,.1);
     z-index: 999;
     max-height: 260px;
     overflow-y: auto;
 }
-.forge-select-custom[aria-expanded="true"] .forge-select-panel {
+.fabricator-select-custom[aria-expanded="true"] .fabricator-select-panel {
     display: block;
 }
-.forge-select-option {
+.fabricator-select-option {
     padding: 9px 12px;
     cursor: pointer;
-    font-size: var(--forge-font-size);
-    color: var(--forge-text);
-    border-bottom: 1px solid var(--forge-border);
+    font-size: var(--fabricator-font-size);
+    color: var(--fabricator-text);
+    border-bottom: 1px solid var(--fabricator-border);
     transition: background .1s;
 }
-.forge-select-option:last-child {
+.fabricator-select-option:last-child {
     border-bottom: none;
 }
-.forge-select-option:hover,
-.forge-select-option--focused {
-    background: var(--forge-accent-light);
+.fabricator-select-option:hover,
+.fabricator-select-option--focused {
+    background: var(--fabricator-accent-light);
 }
-.forge-select-option--selected {
+.fabricator-select-option--selected {
     font-weight: 600;
-    color: var(--forge-accent);
+    color: var(--fabricator-accent);
 }
-.forge-select-option--placeholder {
-    color: var(--forge-text-muted);
+.fabricator-select-option--placeholder {
+    color: var(--fabricator-text-muted);
 }
 
 /* ── Submit ───────────────────────────────────────────────────────────────── */
-.forge-form-footer {
+.fabricator-form-footer {
     margin-top: 24px;
     padding-top: 20px;
-    border-top: 1px solid var(--forge-border);
+    border-top: 1px solid var(--fabricator-border);
     display: flex;
     justify-content: flex-end;
 }
-.forge-submit-btn {
+.fabricator-submit-btn {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 11px 32px;
-    background: var(--forge-accent);
+    background: var(--fabricator-accent);
     color: #fff;
     border: none;
-    border-radius: var(--forge-radius);
+    border-radius: var(--fabricator-radius);
     font-size: 15px;
     font-weight: 600;
-    font-family: var(--forge-font);
+    font-family: var(--fabricator-font);
     cursor: pointer;
     transition: background .15s;
 }
-@keyframes forge-btn-spin {
+@keyframes fabricator-btn-spin {
     to { transform: rotate(360deg); }
 }
-.forge-submit-spinner {
+.fabricator-submit-spinner {
     display: inline-block;
     width: 14px;
     height: 14px;
     border: 2px solid rgba(255,255,255,.4);
     border-top-color: #fff;
     border-radius: 50%;
-    animation: forge-btn-spin .7s linear infinite;
+    animation: fabricator-btn-spin .7s linear infinite;
     flex-shrink: 0;
 }
-.forge-submit-btn:hover {
-    background: var(--forge-accent-dark);
+.fabricator-submit-btn:hover {
+    background: var(--fabricator-accent-dark);
 }
-.forge-submit-btn:disabled {
+.fabricator-submit-btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
 }
 
 /* ── Multi-column row layout ──────────────────────────────────────────────── */
-.forge-row {
+.fabricator-row {
     display: flex;
     gap: 16px;
     margin-bottom: 0;
 }
-.forge-col {
+.fabricator-col {
     min-width: 0;
 }
-.forge-col-12 {
+.fabricator-col-12 {
     flex: 0 0 100%;
     width: 100%;
 }
-.forge-col-6 {
+.fabricator-col-6 {
     flex: 0 0 calc(50% - 8px);
     width: calc(50% - 8px);
 }
-.forge-row--pair .forge-col-6[style*="display: none"] + .forge-col-6,
-.forge-row--pair .forge-col-6:has(+ .forge-col-6[style*="display: none"]) {
+.fabricator-row--pair .fabricator-col-6[style*="display: none"] + .fabricator-col-6,
+.fabricator-row--pair .fabricator-col-6:has(+ .fabricator-col-6[style*="display: none"]) {
     flex: 0 0 100%;
     width: 100%;
 }
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
-    .forge-row   { flex-direction: column; gap: 0; }
-    .forge-col-6 { flex: 0 0 100%; width: 100%; }
+    .fabricator-row   { flex-direction: column; gap: 0; }
+    .fabricator-col-6 { flex: 0 0 100%; width: 100%; }
 }

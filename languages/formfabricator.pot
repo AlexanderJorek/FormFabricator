@@ -12,7 +12,7 @@ msgstr ""
 "POT-Creation-Date: 2026-08-01T00:00:00+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
-"X-Domain: form-forge\n"
+"X-Domain: form-fabricator\n"
 
 #. Plugin Name of the plugin
 #: forge-forms.php
@@ -677,7 +677,7 @@ msgstr ""
 msgid "Master key detected"
 msgstr ""
 
-#. translators: 1: FORGE_SEAL_MASTER_KEY constant as code element, 2: wp-config.php as code element
+#. translators: 1: FABRICATOR_SEAL_MASTER_KEY constant as code element, 2: wp-config.php as code element
 #: includes/Admin/FormSettings.php:293
 #, php-format
 msgid "A valid %1$s is entered in %2$s. Click \"Complete setup\" to generate the first seal key and finish the setup."
@@ -1144,7 +1144,7 @@ msgid "No pending key download found."
 msgstr ""
 
 #: includes/Admin/FormSettings.php:2394
-msgid "FORGE_SEAL_MASTER_KEY not found. Please check wp-config.php and try again."
+msgid "FABRICATOR_SEAL_MASTER_KEY not found. Please check wp-config.php and try again."
 msgstr ""
 
 #: includes/Admin/FormSettings.php:2407
@@ -1617,7 +1617,7 @@ msgstr ""
 #. translators: %s: uploaded file name.
 #: includes/Admin/Verificationpage.php:1300
 #, php-format
-msgid "%s does not contain a forge-pdf seal and cannot be verified."
+msgid "%s does not contain a fabricator-pdf seal and cannot be verified."
 msgstr ""
 
 #: includes/Admin/Verificationpage.php:1306

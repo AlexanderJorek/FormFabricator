@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -57,32 +57,32 @@ class CurrencyField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-currency-wrap {
+.fabricator-currency-wrap {
     display: flex;
     align-items: stretch;
-    border: 1px solid var(--forge-border-input) !important;
-    border-radius: var(--forge-radius);
+    border: 1px solid var(--fabricator-border-input) !important;
+    border-radius: var(--fabricator-radius);
     overflow: hidden;
     transition: border-color .15s, box-shadow .15s;
 }
-.forge-currency-wrap:focus-within {
-    border-color: var(--forge-accent) !important;
+.fabricator-currency-wrap:focus-within {
+    border-color: var(--fabricator-accent) !important;
     box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--forge-accent) 15%, transparent) !important;
+        color-mix(in srgb, var(--fabricator-accent) 15%, transparent) !important;
 }
-.forge-currency-symbol {
+.fabricator-currency-symbol {
     display: flex;
     align-items: center;
     padding: 0 12px;
-    background: var(--forge-bg-subtle);
-    border-right: 1px solid var(--forge-border-input);
+    background: var(--fabricator-bg-subtle);
+    border-right: 1px solid var(--fabricator-border-input);
     font-size: 13px;
     font-weight: 600;
-    color: var(--forge-text-muted);
+    color: var(--fabricator-text-muted);
     white-space: nowrap;
     flex-shrink: 0;
 }
-.forge-currency-wrap .forge-currency-input {
+.fabricator-currency-wrap .fabricator-currency-input {
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
@@ -90,14 +90,14 @@ class CurrencyField extends BaseField
     min-width: 0;
     -moz-appearance: textfield !important;
 }
-.forge-currency-wrap .forge-currency-input:focus,
-.forge-currency-wrap .forge-currency-input:focus-visible {
+.fabricator-currency-wrap .fabricator-currency-input:focus,
+.fabricator-currency-wrap .fabricator-currency-input:focus-visible {
     border: none !important;
     box-shadow: none !important;
     outline: none !important;
 }
-.forge-currency-input::-webkit-outer-spin-button,
-.forge-currency-input::-webkit-inner-spin-button {
+.fabricator-currency-input::-webkit-outer-spin-button,
+.fabricator-currency-input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
@@ -127,10 +127,10 @@ CSS;
         $req     = !empty($config['required']) ? ' required aria-required="true"' : '';
         $min_attr = ($config['min_value'] ?? '') !== '' ? ' min="' . esc_attr((string)$config['min_value']) . '"' : '';
         $max_attr = ($config['max_value'] ?? '') !== '' ? ' max="' . esc_attr((string)$config['max_value']) . '"' : '';
-        $inner   = '<div class="forge-currency-wrap">'
-            . '<span class="forge-currency-symbol">' . esc_html($symbol) . '</span>'
+        $inner   = '<div class="fabricator-currency-wrap">'
+            . '<span class="fabricator-currency-symbol">' . esc_html($symbol) . '</span>'
             . '<input type="number" step="0.01" id="' . esc_attr($field_id) . '" name="' . esc_attr($field_id) . '"'
-            . ' class="forge-input forge-currency-input" placeholder="0,00"'
+            . ' class="fabricator-input fabricator-currency-input" placeholder="0,00"'
             . ' value="' . esc_attr((string)($value ?? '')) . '"'
             . $min_attr . $max_attr . $req . '>'
             . '</div>';
@@ -184,7 +184,7 @@ CSS;
                 var inp = fieldEl.querySelector('input[type="number"]');
                 if (!inp || inp.value.trim() === '') return null;
                 var val = parseFloat(inp.value);
-                var _i18n = window.ForgeForms && window.ForgeForms.i18n;
+                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                 if (isNaN(val)) return (_i18n && _i18n.currency_invalid_amount) || 'Please enter a valid amount.';
                 var min = inp.getAttribute('min');
                 var max = inp.getAttribute('max');

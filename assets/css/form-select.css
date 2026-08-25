@@ -27,7 +27,7 @@
 }
 .fsel-trigger:hover,
 .fsel-trigger[aria-expanded="true"] {
-    border-color: var(--forge-accent, #2271b1);
+    border-color: var(--fabricator-accent, #2271b1);
 }
 .fsel-trigger-inner {
     display: flex;

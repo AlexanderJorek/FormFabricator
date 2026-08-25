@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,9 +19,9 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Admin;
+namespace FabricatorForms\Admin;
 
-use ForgeForms\Fields\FieldRegistry;
+use FabricatorForms\Fields\FieldRegistry;
 
 defined('ABSPATH') || exit;
 
@@ -86,9 +86,9 @@ class PDFLayoutEditor
     {
         add_action('admin_menu', [self::class, 'addPage']);
         add_action('admin_body_class', [self::class, 'bodyClass']);
-        add_action('wp_ajax_forge_forms_pdf_preview', [self::class, 'ajaxPreview']);
-        add_action('wp_ajax_forge_save_pdf_layout', [self::class, 'handleSave']);
-        add_action('wp_ajax_forge_forms_unlock_pdf_layout', [self::class, 'ajaxUnlock']);
+        add_action('wp_ajax_fabricator_forms_pdf_preview', [self::class, 'ajaxPreview']);
+        add_action('wp_ajax_fabricator_save_pdf_layout', [self::class, 'handleSave']);
+        add_action('wp_ajax_fabricator_forms_unlock_pdf_layout', [self::class, 'ajaxUnlock']);
         add_filter('heartbeat_received', [self::class, 'heartbeatReceived'], 10, 2);
     }
 
@@ -101,15 +101,15 @@ class PDFLayoutEditor
      */
     public static function heartbeatReceived(array $response, array $data): array
     {
-        if (empty($data['forge_pdf_layout_lock']) || !\ForgeForms\Plugin::userCan('edit_pdf_layout')) {
+        if (empty($data['fabricator_pdf_layout_lock']) || !\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             return $response;
         }
-        $lock_owner = \ForgeForms\Utils\AdminLock::check('pdf_layout');
+        $lock_owner = \FabricatorForms\Utils\AdminLock::check('pdf_layout');
         if ($lock_owner) {
             $user = get_userdata($lock_owner);
-            $response['forge_pdf_layout_lock_conflict'] = $user ? $user->display_name : __('another user', 'formfabricator');
+            $response['fabricator_pdf_layout_lock_conflict'] = $user ? $user->display_name : __('another user', 'formfabricator');
         } else {
-            \ForgeForms\Utils\AdminLock::acquire('pdf_layout');
+            \FabricatorForms\Utils\AdminLock::acquire('pdf_layout');
         }
         return $response;
     }
@@ -121,11 +121,11 @@ class PDFLayoutEditor
      */
     public static function ajaxUnlock(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             wp_send_json_error(['message' => 'Forbidden'], 403);
         }
-        check_ajax_referer('forge_forms_admin_nonce', 'nonce');
-        \ForgeForms\Utils\AdminLock::release('pdf_layout', get_current_user_id());
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AdminLock::release('pdf_layout', get_current_user_id());
         wp_send_json_success();
     }
 
@@ -136,14 +136,14 @@ class PDFLayoutEditor
      */
     public static function ajaxPreview(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             wp_send_json_error(['message' => 'Forbidden'], 403);
         }
-        check_ajax_referer('forge_forms_admin_nonce', 'nonce');
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
         /* ---- Rate limit: PDF generation is expensive; throttle per-user preview requests. ---- */
         $rl_key = 'pdf_layout_preview_' . get_current_user_id();
-        if (\ForgeForms\Utils\RateLimiter::increment($rl_key, 5) > 5) {
+        if (\FabricatorForms\Utils\RateLimiter::increment($rl_key, 5) > 5) {
             wp_send_json_error(['message' => 'Please wait before requesting another preview.'], 429);
         }
 
@@ -151,22 +151,22 @@ class PDFLayoutEditor
         if (!empty($_POST['settings'])) {
             /* wp_unslash is required — WordPress's wp_magic_quotes() slashes all $_POST values */
             // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via the outer sanitize_textarea_field() call; WPCS loses track through the intermediate Sanitize::str() static call.
-            $raw = json_decode(sanitize_textarea_field(\ForgeForms\Utils\Sanitize::str(wp_unslash($_POST['settings'] ?? ''))), true);
+            $raw = json_decode(sanitize_textarea_field(\FabricatorForms\Utils\Sanitize::str(wp_unslash($_POST['settings'] ?? ''))), true);
             if (!is_array($raw)) {
-                \ForgeForms\forge_log('ajaxPreview: settings JSON decode failed — ' . json_last_error_msg());
+                \FabricatorForms\fabricator_log('ajaxPreview: settings JSON decode failed — ' . json_last_error_msg());
             }
             if (is_array($raw)) {
                 $defs = self::defaults();
                 $sanitized_hl = self::sanitizeHeaderLayout((array) ($raw['header_layout'] ?? []), false);
                 $preview_opts = [
-                    'logo_url'        => esc_url_raw(\ForgeForms\Utils\Sanitize::str($raw['logo_url'] ?? '')),
+                    'logo_url'        => esc_url_raw(\FabricatorForms\Utils\Sanitize::str($raw['logo_url'] ?? '')),
                     'logo_width'      => min(400, max(40, (int) ($raw['logo_width']     ?? 180))),
-                    'accent_color'    => sanitize_hex_color(\ForgeForms\Utils\Sanitize::str($raw['accent_color']    ?? '')) ?: $defs['accent_color'],
-                    'separator_color' => sanitize_hex_color(\ForgeForms\Utils\Sanitize::str($raw['separator_color'] ?? '')) ?: $defs['separator_color'],
-                    'font_family'     => sanitize_key(\ForgeForms\Utils\Sanitize::str($raw['font_family'] ?? '', 'dejavusans')),
+                    'accent_color'    => sanitize_hex_color(\FabricatorForms\Utils\Sanitize::str($raw['accent_color']    ?? '')) ?: $defs['accent_color'],
+                    'separator_color' => sanitize_hex_color(\FabricatorForms\Utils\Sanitize::str($raw['separator_color'] ?? '')) ?: $defs['separator_color'],
+                    'font_family'     => sanitize_key(\FabricatorForms\Utils\Sanitize::str($raw['font_family'] ?? '', 'dejavusans')),
                     'font_size_body'  => min(20, max(6, (int) ($raw['font_size_body'] ?? 11))),
                     'title_size'      => min(36, max(10, (int) ($raw['title_size']     ?? 14))),
-                    'footer_text'     => sanitize_textarea_field(\ForgeForms\Utils\Sanitize::str($raw['footer_text'] ?? '')),
+                    'footer_text'     => sanitize_textarea_field(\FabricatorForms\Utils\Sanitize::str($raw['footer_text'] ?? '')),
                     'margin_top'      => min(50, max(0, (int) ($raw['margin_top']    ?? 15))),
                     'margin_bottom'   => min(50, max(0, (int) ($raw['margin_bottom'] ?? 15))),
                     'margin_left'     => min(50, max(0, (int) ($raw['margin_left']   ?? 15))),
@@ -182,7 +182,7 @@ class PDFLayoutEditor
                     'header_layout'   => $sanitized_hl,
                 ];
                 add_filter(
-                    'pre_option_forge_forms_pdf_layout',
+                    'pre_option_fabricator_forms_pdf_layout',
                     static function () use ($preview_opts): array {
                         return $preview_opts;
                     },
@@ -195,7 +195,7 @@ class PDFLayoutEditor
 
         // form_id=0 signals to Generator/HashSeal that this is a throwaway layout preview,
         // not a real submission — it must not be persisted or count toward seal history
-        $path = \ForgeForms\PDF\Generator::generate($dummy, 0, __('Layout Preview', 'formfabricator'));
+        $path = \FabricatorForms\PDF\Generator::generate($dummy, 0, __('Layout Preview', 'formfabricator'));
 
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $path is the return value of PDF\Generator::generate(), an internally-computed temp-file path, not attacker input.
         if (!$path || !file_exists($path)) {
@@ -224,8 +224,8 @@ class PDFLayoutEditor
     {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
         $current_page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : '';
-        if ($current_page === 'forge-forms-pdf-layout') {
-            $classes .= ' forge-list-page';
+        if ($current_page === 'fabricator-forms-pdf-layout') {
+            $classes .= ' fabricator-list-page';
         }
         return $classes;
     }
@@ -237,20 +237,20 @@ class PDFLayoutEditor
      */
     public static function addPage(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             return;
         }
-        // Registered with the generic 'read' capability because ForgeForms uses its own
+        // Registered with the generic 'read' capability because FabricatorForms uses its own
         // userCan('edit_pdf_layout') capability model rather than a real WP capability;
         // real enforcement happens above (addPage bails already) and again at the top
         // of render(). Any new callback reachable from this menu item MUST re-check
         // userCan('edit_pdf_layout') itself — do not rely on this menu registration alone.
         $hook = add_submenu_page(
-            'forge-forms',
+            'fabricator-forms',
             __('FormFabricator PDF Layout', 'formfabricator'),
             __('PDF Layout', 'formfabricator'),
             'read',
-            'forge-forms-pdf-layout',
+            'fabricator-forms-pdf-layout',
             [self::class, 'render']
         );
         add_action(
@@ -271,7 +271,7 @@ class PDFLayoutEditor
      */
     public static function render(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
@@ -279,15 +279,15 @@ class PDFLayoutEditor
 
         $saved      = false;
         $save_error = '';
-        if (isset($_POST['forge_pdf_layout_nonce'])
-            && wp_verify_nonce(sanitize_key($_POST['forge_pdf_layout_nonce']), 'forge_pdf_layout')
+        if (isset($_POST['fabricator_pdf_layout_nonce'])
+            && wp_verify_nonce(sanitize_key($_POST['fabricator_pdf_layout_nonce']), 'fabricator_pdf_layout')
         ) {
             $save_error = self::save();
             $saved      = $save_error === '';
         }
 
         $defs = self::defaults();
-        $opts = array_merge($defs, (array) get_option('forge_forms_pdf_layout', []));
+        $opts = array_merge($defs, (array) get_option('fabricator_forms_pdf_layout', []));
 
         if (!is_array($opts['section_hidden'])) {
             $opts['section_hidden'] = $defs['section_hidden'];
@@ -303,7 +303,7 @@ class PDFLayoutEditor
 
         $site_name         = get_bloginfo('name');
         $site_url          = get_bloginfo('url');
-        $field_layout_mode = get_option('forge_forms_field_layout', 'block');
+        $field_layout_mode = get_option('fabricator_forms_field_layout', 'block');
 
         /* Same sample data as the server-rendered PDF preview, so both
            previews show identical text and images. */
@@ -320,18 +320,18 @@ class PDFLayoutEditor
 
         // Advisory notice only — save()'s snapshot-hash check is the real guard.
         $lock_owner_name = '';
-        $lock_owner_id   = \ForgeForms\Utils\AdminLock::check('pdf_layout');
+        $lock_owner_id   = \FabricatorForms\Utils\AdminLock::check('pdf_layout');
         if ($lock_owner_id) {
             $lock_owner_user = get_userdata($lock_owner_id);
             $lock_owner_name = $lock_owner_user ? $lock_owner_user->display_name : __('another user', 'formfabricator');
         } else {
-            \ForgeForms\Utils\AdminLock::acquire('pdf_layout');
+            \FabricatorForms\Utils\AdminLock::acquire('pdf_layout');
         }
         wp_enqueue_script('heartbeat');
-        $lock_admin_nonce = wp_create_nonce('forge_forms_admin_nonce');
+        $lock_admin_nonce = wp_create_nonce('fabricator_forms_admin_nonce');
         wp_localize_script(
-            'forge-forms-pdflayout-lock',
-            'ForgePdfLayoutLock',
+            'fabricator-forms-pdflayout-lock',
+            'FabricatorPdfLayoutLock',
             [
             'nonce'   => $lock_admin_nonce,
             'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -342,15 +342,15 @@ class PDFLayoutEditor
             ]
         );
         wp_localize_script(
-            'forge-forms-admin-pdflayout',
-            'ForgePdfLayoutPage',
+            'fabricator-forms-admin-pdflayout',
+            'FabricatorPdfLayoutPage',
             [
             'i18n' => self::pdfLayoutI18n(),
             'data' => [
                 'siteName'        => $site_name,
                 'siteUrl'         => $site_url,
                 'ajaxUrl'         => admin_url('admin-ajax.php'),
-                'nonce'           => wp_create_nonce('forge_forms_admin_nonce'),
+                'nonce'           => wp_create_nonce('fabricator_forms_admin_nonce'),
                 'dummySignature'  => $dummy_signature,
                 'dummyText'       => $dummy_text,
                 'dummyUpload'     => $dummy_upload,
@@ -359,24 +359,24 @@ class PDFLayoutEditor
             ]
         );
         ?>
-<canvas id="forge-particle-canvas"></canvas>
-<div class="wrap forge-list-wrap">
-    <div class="forge-title-pill"><i class="fa-solid fa-file-pdf"></i> <?php echo esc_html__('PDF Layout', 'formfabricator'); ?></div>
+<canvas id="fabricator-particle-canvas"></canvas>
+<div class="wrap fabricator-list-wrap">
+    <div class="fabricator-title-pill"><i class="fa-solid fa-file-pdf"></i> <?php echo esc_html__('PDF Layout', 'formfabricator'); ?></div>
     <hr class="wp-header-end" style="display:none">
 
         <?php if ($saved) : ?>
-        <div class="forge-settings-notice forge-settings-notice--success">
+        <div class="fabricator-settings-notice fabricator-settings-notice--success">
             <i class="fa-solid fa-circle-check"></i> <?php echo esc_html__('Layout saved.', 'formfabricator'); ?>
         </div>
         <?php elseif ($save_error !== '') : ?>
-        <div class="forge-settings-notice forge-settings-notice--error">
+        <div class="fabricator-settings-notice fabricator-settings-notice--error">
             <i class="fa-solid fa-triangle-exclamation"></i> <?php echo esc_html($save_error); ?>
         </div>
         <?php endif; ?>
-        <div id="forge-lock-notice" class="forge-settings-notice forge-settings-notice--error"
+        <div id="fabricator-lock-notice" class="fabricator-settings-notice fabricator-settings-notice--error"
              style="<?php echo $lock_owner_name === '' ? 'display:none;' : ''; ?>">
             <i class="fa-solid fa-lock"></i>
-            <span id="forge-lock-notice-text">
+            <span id="fabricator-lock-notice-text">
                 <?php
                 echo esc_html(
                     $lock_owner_name !== ''
@@ -392,34 +392,34 @@ class PDFLayoutEditor
         </div>
         <?php // Heartbeat lock notice: assets/js/admin-pdflayout-lock.js (enqueued in Utils/Assets.php) -- previously an inline <script> block here. ?>
 
-    <form method="post" id="forge-pdf-layout-form">
-        <?php wp_nonce_field('forge_pdf_layout', 'forge_pdf_layout_nonce'); ?>
-        <input type="hidden" name="forge_pdf_layout_snapshot" value="<?php echo esc_attr(self::snapshot()); ?>">
-        <input type="hidden" name="section_hidden" id="forge-section-hidden-input"
+    <form method="post" id="fabricator-pdf-layout-form">
+        <?php wp_nonce_field('fabricator_pdf_layout', 'fabricator_pdf_layout_nonce'); ?>
+        <input type="hidden" name="fabricator_pdf_layout_snapshot" value="<?php echo esc_attr(self::snapshot()); ?>">
+        <input type="hidden" name="section_hidden" id="fabricator-section-hidden-input"
             value="<?php echo esc_attr(implode(',', $opts['section_hidden'])); ?>">
-        <input type="hidden" name="header_layout_json" id="forge-header-layout-input"
+        <input type="hidden" name="header_layout_json" id="fabricator-header-layout-input"
             value="<?php echo esc_attr(wp_json_encode($opts['header_layout'] ?? ['rows' => 8, 'elements' => []])); ?>">
 
-        <div class="forge-pdf-editor-wrap">
+        <div class="fabricator-pdf-editor-wrap">
 
             <!-- ── Settings Panel ── -->
-            <div class="forge-pdf-settings-panel">
+            <div class="fabricator-pdf-settings-panel">
 
-                <div class="forge-settings-card">
-                    <h2 class="forge-settings-card-title"><i class="fa-solid fa-table-columns"></i> <?php echo esc_html__('Header', 'formfabricator'); ?></h2>
-                    <div class="forge-settings-field">
-                        <p class="forge-card-hint">
+                <div class="fabricator-settings-card">
+                    <h2 class="fabricator-settings-card-title"><i class="fa-solid fa-table-columns"></i> <?php echo esc_html__('Header', 'formfabricator'); ?></h2>
+                    <div class="fabricator-settings-field">
+                        <p class="fabricator-card-hint">
                             <?php echo esc_html__('Arrange titles, logos and other content via drag & drop.', 'formfabricator'); ?>
                         </p>
-                        <button type="button" class="button button-primary forge-hb-open-btn"
-                            id="forge-open-header-builder-card">
+                        <button type="button" class="button button-primary fabricator-hb-open-btn"
+                            id="fabricator-open-header-builder-card">
                             <i class="fa-solid fa-pen-to-square"></i> <?php echo esc_html__('Edit header', 'formfabricator'); ?>
                         </button>
                     </div>
                 </div>
 
-                <div class="forge-settings-card">
-                    <h2 class="forge-settings-card-title"><i class="fa-solid fa-palette"></i> <?php echo esc_html__('Colors', 'formfabricator'); ?></h2>
+                <div class="fabricator-settings-card">
+                    <h2 class="fabricator-settings-card-title"><i class="fa-solid fa-palette"></i> <?php echo esc_html__('Colors', 'formfabricator'); ?></h2>
 
                     <?php
                     $color_fields = [
@@ -429,12 +429,12 @@ class PDFLayoutEditor
                     foreach ($color_fields as [$id, $lbl, $default]) :
                         $eid = esc_attr($id);
                         ?>
-                    <div class="forge-settings-field">
+                    <div class="fabricator-settings-field">
                         <label for="<?php echo esc_attr($eid); ?>"><?php echo esc_html($lbl); ?></label>
                         <input type="text" id="<?php echo esc_attr($eid); ?>"
                                name="<?php echo esc_attr($eid); ?>"
                                value="<?php echo esc_attr($opts[$id]); ?>"
-                               class="forge-iris-input"
+                               class="fabricator-iris-input"
                                data-default-color="<?php echo esc_attr($default); ?>"
                                autocomplete="off" data-lpignore="true"
                                data-1p-ignore data-bwignore spellcheck="false">
@@ -442,10 +442,10 @@ class PDFLayoutEditor
                     <?php endforeach; ?>
                 </div>
 
-                <div class="forge-settings-card">
-                    <h2 class="forge-settings-card-title"><i class="fa-solid fa-font"></i> <?php echo esc_html__('Typography', 'formfabricator'); ?></h2>
+                <div class="fabricator-settings-card">
+                    <h2 class="fabricator-settings-card-title"><i class="fa-solid fa-font"></i> <?php echo esc_html__('Typography', 'formfabricator'); ?></h2>
 
-                    <div class="forge-settings-field">
+                    <div class="fabricator-settings-field">
                         <label for="font_family"><?php echo esc_html__('Font', 'formfabricator'); ?></label>
                         <select id="font_family" name="font_family">
                             <?php foreach ($fonts as $val => $lbl) : ?>
@@ -456,7 +456,7 @@ class PDFLayoutEditor
                         </select>
                     </div>
 
-                    <div class="forge-settings-field">
+                    <div class="fabricator-settings-field">
                         <label for="font_size_body"><?php echo esc_html__('Base font size:', 'formfabricator'); ?>
                             <span id="font-size-body-val"><?php echo (int) $opts['font_size_body']; ?></span> <?php echo esc_html__('pt', 'formfabricator'); ?>
                         </label>
@@ -464,7 +464,7 @@ class PDFLayoutEditor
                             min="8" max="14" step="1" value="<?php echo (int) $opts['font_size_body']; ?>">
                     </div>
 
-                    <div class="forge-settings-field">
+                    <div class="fabricator-settings-field">
                         <label for="title_size"><?php echo esc_html__('Title size:', 'formfabricator'); ?>
                             <span id="title-size-val"><?php echo (int) $opts['title_size']; ?></span> <?php echo esc_html__('pt', 'formfabricator'); ?>
                         </label>
@@ -473,11 +473,11 @@ class PDFLayoutEditor
                     </div>
                 </div>
 
-                <div class="forge-settings-card">
-                    <h2 class="forge-settings-card-title">
+                <div class="fabricator-settings-card">
+                    <h2 class="fabricator-settings-card-title">
                         <i class="fa-solid fa-arrows-left-right-to-line"></i> <?php echo esc_html__('Page margins (mm)', 'formfabricator'); ?>
                     </h2>
-                    <div class="forge-margins-grid">
+                    <div class="fabricator-margins-grid">
                         <?php
                         $margin_sides = [
                             'top'    => __('Top', 'formfabricator'),
@@ -487,7 +487,7 @@ class PDFLayoutEditor
                         ];
                         foreach ($margin_sides as $side => $lbl) :
                             ?>
-                        <div class="forge-settings-field">
+                        <div class="fabricator-settings-field">
                             <label for="margin_<?php echo esc_attr($side); ?>"><?php echo esc_html($lbl); ?>:
                                 <span id="margin-<?php echo esc_attr($side); ?>-val">
                                     <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $side only ever takes the literal values from $margin_sides above; output is (int)-cast regardless. ?>
@@ -503,27 +503,27 @@ class PDFLayoutEditor
                     </div>
                 </div>
 
-                <div class="forge-settings-card">
-                    <h2 class="forge-settings-card-title">
+                <div class="fabricator-settings-card">
+                    <h2 class="fabricator-settings-card-title">
                         <i class="fa-solid fa-table-list"></i> <?php echo esc_html__('Sections', 'formfabricator'); ?>
                     </h2>
-                    <p class="forge-settings-hint" style="margin-top:0">
+                    <p class="fabricator-settings-hint" style="margin-top:0">
                         <?php echo esc_html__('Eye icon to show/hide.', 'formfabricator'); ?>
                     </p>
-                    <ul id="forge-sections-sortable" class="forge-sections-list">
+                    <ul id="fabricator-sections-sortable" class="fabricator-sections-list">
                         <?php foreach (array_keys(self::sectionLabels()) as $slug) :
                             $is_hidden = in_array($slug, $opts['section_hidden'], true);
                             ?>
-                        <li class="forge-section-item<?php echo $is_hidden ? ' forge-section-hidden' : ''; ?>"
+                        <li class="fabricator-section-item<?php echo $is_hidden ? ' fabricator-section-hidden' : ''; ?>"
                             data-slug="<?php echo esc_attr($slug); ?>">
                             <span><?php echo esc_html(self::sectionLabels()[$slug]); ?></span>
                             <?php if ($slug === 'header') : ?>
-                            <button type="button" class="forge-section-edit-btn"
-                                id="forge-open-header-builder" title="<?php echo esc_attr__('Edit header', 'formfabricator'); ?>">
+                            <button type="button" class="fabricator-section-edit-btn"
+                                id="fabricator-open-header-builder" title="<?php echo esc_attr__('Edit header', 'formfabricator'); ?>">
                                 <i class="fa-solid fa-pen-to-square"></i>
                             </button>
                             <?php endif; ?>
-                            <button type="button" class="forge-section-toggle" title="<?php echo esc_attr__('Show/Hide', 'formfabricator'); ?>">
+                            <button type="button" class="fabricator-section-toggle" title="<?php echo esc_attr__('Show/Hide', 'formfabricator'); ?>">
                                 <i class="fa-solid <?php echo $is_hidden ? 'fa-eye-slash' : 'fa-eye'; ?>"></i>
                             </button>
                         </li>
@@ -531,16 +531,16 @@ class PDFLayoutEditor
                     </ul>
                 </div>
 
-                <div class="forge-settings-card">
-                    <h2 class="forge-settings-card-title"><i class="fa-solid fa-shoe-prints"></i> <?php echo esc_html__('Footer', 'formfabricator'); ?></h2>
-                    <div class="forge-settings-field">
+                <div class="fabricator-settings-card">
+                    <h2 class="fabricator-settings-card-title"><i class="fa-solid fa-shoe-prints"></i> <?php echo esc_html__('Footer', 'formfabricator'); ?></h2>
+                    <div class="fabricator-settings-field">
                         <label for="footer_text"><?php echo esc_html__('Footer text', 'formfabricator'); ?></label>
                         <textarea id="footer_text" name="footer_text" rows="3"
                             placeholder="<?php echo esc_attr__('e.g. Company name · Address · Phone', 'formfabricator'); ?>"
                         ><?php echo esc_textarea($opts['footer_text']); ?></textarea>
-                        <div class="forge-placeholder-chips">
+                        <div class="fabricator-placeholder-chips">
                             <?php foreach (['{site_name}','{site_url}','{date}'] as $token) : ?>
-                            <button type="button" class="forge-placeholder-chip"
+                            <button type="button" class="fabricator-placeholder-chip"
                                 data-insert="<?php echo esc_attr($token); ?>"><?php echo esc_html($token); ?></button>
                             <?php endforeach; ?>
                         </div>
@@ -548,69 +548,69 @@ class PDFLayoutEditor
                 </div>
 
 
-            </div><!-- /.forge-pdf-settings-panel -->
+            </div><!-- /.fabricator-pdf-settings-panel -->
 
             <!-- ── Preview Panel ── -->
-            <div class="forge-pdf-preview-panel">
-                <div class="forge-preview-toolbar">
+            <div class="fabricator-pdf-preview-panel">
+                <div class="fabricator-preview-toolbar">
                     <span><i class="fa-solid fa-eye"></i> <?php echo esc_html__('Preview (A4)', 'formfabricator'); ?></span>
                     <div style="display:flex;gap:8px;">
-                        <button type="submit" class="button button-primary" form="forge-pdf-layout-form">
+                        <button type="submit" class="button button-primary" form="fabricator-pdf-layout-form">
                             <i class="fa-solid fa-floppy-disk"></i> <?php echo esc_html__('Save', 'formfabricator'); ?>
                         </button>
-                        <button type="button" class="button" id="forge-pdf-preview-btn">
+                        <button type="button" class="button" id="fabricator-pdf-preview-btn">
                             <i class="fa-solid fa-file-pdf"></i> <?php echo esc_html__('Open PDF', 'formfabricator'); ?>
                         </button>
                     </div>
                 </div>
-                <div class="forge-preview-stage">
-                    <div class="forge-preview-stage-inner" id="forge-preview-stage-inner">
-                        <div class="forge-a4-paper" id="forge-a4-paper"></div>
+                <div class="fabricator-preview-stage">
+                    <div class="fabricator-preview-stage-inner" id="fabricator-preview-stage-inner">
+                        <div class="fabricator-a4-paper" id="fabricator-a4-paper"></div>
                     </div>
                 </div>
             </div>
 
-        </div><!-- /.forge-pdf-editor-wrap -->
+        </div><!-- /.fabricator-pdf-editor-wrap -->
     </form>
 </div>
 
 <!-- ── Header Builder Modal ── -->
-<div id="forge-hb-modal" class="forge-hb-modal" hidden>
-    <div class="forge-hb-overlay" id="forge-hb-overlay"></div>
-    <div class="forge-hb-dialog">
+<div id="fabricator-hb-modal" class="fabricator-hb-modal" hidden>
+    <div class="fabricator-hb-overlay" id="fabricator-hb-overlay"></div>
+    <div class="fabricator-hb-dialog">
 
-        <div class="forge-hb-dialog-head">
+        <div class="fabricator-hb-dialog-head">
             <span><i class="fa-solid fa-table-cells-large"></i> <?php echo esc_html__('Edit header', 'formfabricator'); ?></span>
-            <button type="button" class="forge-hb-dialog-head-close"
-                id="forge-hb-close" title="<?php echo esc_attr__('Close', 'formfabricator'); ?>">&#x2715;</button>
+            <button type="button" class="fabricator-hb-dialog-head-close"
+                id="fabricator-hb-close" title="<?php echo esc_attr__('Close', 'formfabricator'); ?>">&#x2715;</button>
         </div>
 
-        <div class="forge-hb-toolbar">
-            <button type="button" class="button" id="forge-hb-add-title">
+        <div class="fabricator-hb-toolbar">
+            <button type="button" class="button" id="fabricator-hb-add-title">
                 <i class="fa-solid fa-heading"></i> <?php echo esc_html__('Title', 'formfabricator'); ?>
             </button>
-            <button type="button" class="button" id="forge-hb-add-image"><i class="fa-solid fa-image"></i> <?php echo esc_html__('Image', 'formfabricator'); ?></button>
+            <button type="button" class="button" id="fabricator-hb-add-image"><i class="fa-solid fa-image"></i> <?php echo esc_html__('Image', 'formfabricator'); ?></button>
             <div style="width:1px;height:24px;background:#c3c4c7;margin:0 4px;"></div>
             <label><?php echo esc_html__('Height (rows of 5 mm):', 'formfabricator'); ?>
-                <input type="number" id="forge-hb-rows" min="2" max="30" value="8" style="width:52px">
+                <input type="number" id="fabricator-hb-rows" min="2" max="30" value="8" style="width:52px">
             </label>
             <span style="font-size:11px;color:#888;margin-left:4px;">
                 <?php echo esc_html__('← Drag to position · Corners to resize · Del to delete', 'formfabricator'); ?>
             </span>
         </div>
 
-        <div class="forge-hb-body">
-            <div class="forge-hb-canvas-wrap">
-                <div id="forge-hb-canvas" class="forge-hb-canvas"></div>
+        <div class="fabricator-hb-body">
+            <div class="fabricator-hb-canvas-wrap">
+                <div id="fabricator-hb-canvas" class="fabricator-hb-canvas"></div>
             </div>
-            <div class="forge-hb-props" id="forge-hb-props">
-                <p class="forge-hb-empty"><?php echo esc_html__('Select element', 'formfabricator'); ?><br><?php echo esc_html__('to edit', 'formfabricator'); ?></p>
+            <div class="fabricator-hb-props" id="fabricator-hb-props">
+                <p class="fabricator-hb-empty"><?php echo esc_html__('Select element', 'formfabricator'); ?><br><?php echo esc_html__('to edit', 'formfabricator'); ?></p>
             </div>
         </div>
 
-        <div class="forge-hb-dialog-footer">
-            <button type="button" class="button" id="forge-hb-cancel"><?php echo esc_html__('Cancel', 'formfabricator'); ?></button>
-            <button type="button" class="button button-primary" id="forge-hb-apply">
+        <div class="fabricator-hb-dialog-footer">
+            <button type="button" class="button" id="fabricator-hb-cancel"><?php echo esc_html__('Cancel', 'formfabricator'); ?></button>
+            <button type="button" class="button button-primary" id="fabricator-hb-apply">
                 <i class="fa-solid fa-check"></i> <?php echo esc_html__('Apply', 'formfabricator'); ?>
             </button>
         </div>
@@ -705,10 +705,10 @@ class PDFLayoutEditor
      */
     public static function handleSave(): void
     {
-        if (!\ForgeForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             wp_send_json_error(['message' => 'Forbidden'], 403);
         }
-        check_ajax_referer('forge_pdf_layout', 'forge_pdf_layout_nonce');
+        check_ajax_referer('fabricator_pdf_layout', 'fabricator_pdf_layout_nonce');
         $error = self::save();
         if ($error !== '') {
             wp_send_json_error(['message' => $error], 409);
@@ -722,13 +722,13 @@ class PDFLayoutEditor
      * @return void
      */
     /**
-     * Optimistic-concurrency snapshot hash of the current forge_forms_pdf_layout option.
+     * Optimistic-concurrency snapshot hash of the current fabricator_forms_pdf_layout option.
      *
      * @return string Snapshot hash.
      */
     private static function snapshot(): string
     {
-        return md5(wp_json_encode(get_option('forge_forms_pdf_layout', [])));
+        return md5(wp_json_encode(get_option('fabricator_forms_pdf_layout', [])));
     }
 
     /**
@@ -743,18 +743,18 @@ class PDFLayoutEditor
         // but this method should not rely solely on callers remembering to check —
         // a single missed gate anywhere in the admin layer would otherwise be a
         // full privilege-escalation/CSRF path with no second line of defense.
-        if (!\ForgeForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             return __('Insufficient permissions.', 'formfabricator');
         }
-        if (!isset($_POST['forge_pdf_layout_nonce'])
-            || !wp_verify_nonce(sanitize_key(wp_unslash($_POST['forge_pdf_layout_nonce'])), 'forge_pdf_layout')
+        if (!isset($_POST['fabricator_pdf_layout_nonce'])
+            || !wp_verify_nonce(sanitize_key(wp_unslash($_POST['fabricator_pdf_layout_nonce'])), 'fabricator_pdf_layout')
         ) {
             return __('Security check failed. Please reload and try again.', 'formfabricator');
         }
 
         // Optimistic-concurrency guard: reject a save if the option changed since this snapshot.
-        $expected_snapshot = isset($_POST['forge_pdf_layout_snapshot'])
-            ? sanitize_text_field(wp_unslash($_POST['forge_pdf_layout_snapshot']))
+        $expected_snapshot = isset($_POST['fabricator_pdf_layout_snapshot'])
+            ? sanitize_text_field(wp_unslash($_POST['fabricator_pdf_layout_snapshot']))
             : '';
         if ($expected_snapshot !== '' && $expected_snapshot !== self::snapshot()) {
             return __('The PDF layout was changed elsewhere since this page loaded. Please reload and try again.', 'formfabricator');
@@ -776,7 +776,7 @@ class PDFLayoutEditor
         $header_layout_decoded = json_decode((string) wp_unslash($_POST['header_layout_json'] ?? '{}'), true);
 
         update_option(
-            'forge_forms_pdf_layout',
+            'fabricator_forms_pdf_layout',
             [
             'logo_url'        => esc_url_raw((string) wp_unslash($_POST['logo_url'] ?? '')),
             'logo_width'      => min(400, max(40, absint(wp_unslash($_POST['logo_width'] ?? 180)))),
@@ -798,7 +798,7 @@ class PDFLayoutEditor
             ]
         );
 
-        delete_transient('forge_pdf_template_fingerprints');
+        delete_transient('fabricator_pdf_template_fingerprints');
         return '';
     }
 
@@ -833,8 +833,8 @@ class PDFLayoutEditor
 
         $attachment_id = media_sideload_image($src, 0, null, 'id');
         if (is_wp_error($attachment_id)) {
-            \ForgeForms\forge_log(
-                'ForgeForms PDFLayoutEditor: failed to sideload header image '
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms PDFLayoutEditor: failed to sideload header image '
                 . $src . ' — ' . $attachment_id->get_error_message()
             );
             return '';
@@ -901,16 +901,16 @@ class PDFLayoutEditor
                 $item['size']  = min(72, max(6, (int) ($el['size'] ?? 18)));
                 $item['bold']  = !empty($el['bold']);
                 $item['align'] = in_array($el['align'] ?? '', ['left', 'center', 'right'], true) ? $el['align'] : 'left';
-                $item['color'] = sanitize_hex_color(\ForgeForms\Utils\Sanitize::str($el['color'] ?? '')) ?: '#1d2327';
+                $item['color'] = sanitize_hex_color(\FabricatorForms\Utils\Sanitize::str($el['color'] ?? '')) ?: '#1d2327';
             } elseif ($type === 'image') {
-                $src = self::resolveImageSrc(esc_url_raw(\ForgeForms\Utils\Sanitize::str($el['src'] ?? '')), $persist);
+                $src = self::resolveImageSrc(esc_url_raw(\FabricatorForms\Utils\Sanitize::str($el['src'] ?? '')), $persist);
                 if ($src === '') {
                     continue;
                 }
                 $item['src'] = $src;
                 $item['fit'] = in_array($el['fit'] ?? '', ['contain', 'cover', 'fill'], true) ? $el['fit'] : 'contain';
             } elseif ($type === 'html') {
-                $item['html'] = wp_kses_post(\ForgeForms\Utils\Sanitize::str($el['html'] ?? ''));
+                $item['html'] = wp_kses_post(\FabricatorForms\Utils\Sanitize::str($el['html'] ?? ''));
             }
             $elements[] = $item;
         }

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.3
+ * @version   1.0.4
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace ForgeForms\Fields;
+namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
@@ -75,27 +75,27 @@ class UploadField extends BaseField
     public function getStyles(): string
     {
         return <<<'CSS'
-.forge-upload-zone {
+.fabricator-upload-zone {
     position: relative;
-    border: 2px dashed var(--forge-border-input);
-    border-radius: var(--forge-radius);
-    background: var(--forge-bg);
+    border: 2px dashed var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
+    background: var(--fabricator-bg);
     transition: border-color .15s, background .15s;
     cursor: pointer;
 }
-.forge-upload-zone:hover,
-.forge-upload-zone.forge-upload-zone--drag {
-    border-color: var(--forge-accent);
-    background: var(--forge-accent-light);
+.fabricator-upload-zone:hover,
+.fabricator-upload-zone.fabricator-upload-zone--drag {
+    border-color: var(--fabricator-accent);
+    background: var(--fabricator-accent-light);
 }
-.forge-upload-input {
+.fabricator-upload-input {
     position: absolute;
     inset: 0;
     opacity: 0;
     cursor: pointer;
     width: 100%; height: 100%;
 }
-.forge-upload-zone-body {
+.fabricator-upload-zone-body {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -105,16 +105,16 @@ class UploadField extends BaseField
     pointer-events: none;
     text-align: center;
 }
-.forge-upload-icon { font-size: 28px; color: var(--forge-text-subtle); line-height: 1; }
-.forge-upload-prompt { font-size: 14px; color: var(--forge-text-muted); }
-.forge-upload-link { color: var(--forge-accent); text-decoration: underline; }
-.forge-upload-error {
+.fabricator-upload-icon { font-size: 28px; color: var(--fabricator-text-subtle); line-height: 1; }
+.fabricator-upload-prompt { font-size: 14px; color: var(--fabricator-text-muted); }
+.fabricator-upload-link { color: var(--fabricator-accent); text-decoration: underline; }
+.fabricator-upload-error {
     font-size: 13px;
-    color: var(--forge-error, #cc1818);
+    color: var(--fabricator-error, #cc1818);
     min-height: 1.2em;
     margin-top: 4px;
 }
-.forge-upload-filelist {
+.fabricator-upload-filelist {
     list-style: none;
     margin: 6px 0 0;
     padding: 0;
@@ -122,24 +122,24 @@ class UploadField extends BaseField
     flex-wrap: wrap;
     gap: 6px;
 }
-.forge-upload-chip {
+.fabricator-upload-chip {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     padding: 3px 8px 3px 10px;
-    background: var(--forge-accent-light, #e8f0fe);
-    border: 1px solid var(--forge-accent, #2271b1);
+    background: var(--fabricator-accent-light, #e8f0fe);
+    border: 1px solid var(--fabricator-accent, #2271b1);
     border-radius: 20px;
     font-size: 12px;
-    color: var(--forge-text, #1d2327);
+    color: var(--fabricator-text, #1d2327);
     max-width: 240px;
 }
-.forge-upload-chip-name {
+.fabricator-upload-chip-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.forge-upload-chip-remove {
+.fabricator-upload-chip-remove {
     flex-shrink: 0;
     background: none;
     border: none;
@@ -147,9 +147,9 @@ class UploadField extends BaseField
     padding: 0 2px;
     line-height: 1;
     font-size: 16px;
-    color: var(--forge-text-muted, #646970);
+    color: var(--fabricator-text-muted, #646970);
 }
-.forge-upload-chip-remove:hover { color: var(--forge-error, #cc1818); }
+.fabricator-upload-chip-remove:hover { color: var(--fabricator-error, #cc1818); }
 CSS;
     }
 
@@ -187,12 +187,12 @@ CSS;
     {
         return <<<'JS'
         function (root) {
-            root.querySelectorAll('.forge-upload-zone').forEach(function (zone) {
-                var input    = zone.querySelector('.forge-upload-input');
+            root.querySelectorAll('.fabricator-upload-zone').forEach(function (zone) {
+                var input    = zone.querySelector('.fabricator-upload-input');
                 var errEl    = zone.parentNode
-                    ? zone.parentNode.querySelector('.forge-upload-error') : null;
+                    ? zone.parentNode.querySelector('.fabricator-upload-error') : null;
                 var listEl   = zone.parentNode
-                    ? zone.parentNode.querySelector('.forge-upload-filelist') : null;
+                    ? zone.parentNode.querySelector('.fabricator-upload-filelist') : null;
                 var multiple = zone.dataset.multiple === '1';
                 var maxFiles = parseInt(zone.dataset.maxFiles || '0', 10);
 
@@ -204,7 +204,7 @@ CSS;
                 function showNotice(msg) {
                     if (!errEl) return;
                     errEl.textContent = msg;
-                    errEl.style.color = 'var(--forge-warning, #996600)';
+                    errEl.style.color = 'var(--fabricator-warning, #996600)';
                 }
                 function clearError() {
                     if (!errEl) return;
@@ -212,7 +212,7 @@ CSS;
                     errEl.style.color = '';
                 }
                 function publishCount(n) {
-                    zone.dataset.forgeFileCount = String(n);
+                    zone.dataset.fabricatorFileCount = String(n);
                 }
                 function renderChips(files) {
                     if (!listEl) return;
@@ -222,15 +222,15 @@ CSS;
                     publishCount(files.length);
                     Array.from(files).forEach(function (file, idx) {
                         var li   = document.createElement('li');
-                        li.className = 'forge-upload-chip';
+                        li.className = 'fabricator-upload-chip';
                         var nm  = document.createElement('span');
-                        nm.className   = 'forge-upload-chip-name';
+                        nm.className   = 'fabricator-upload-chip-name';
                         nm.textContent = file.name;
                         nm.title       = file.name;
                         var btn = document.createElement('button');
                         btn.type      = 'button';
-                        btn.className = 'forge-upload-chip-remove';
-                        var _i18n = window.ForgeForms && window.ForgeForms.i18n;
+                        btn.className = 'fabricator-upload-chip-remove';
+                        var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                         btn.setAttribute(
                             'aria-label', ((_i18n && _i18n.upload_remove_prefix) || 'Remove: ') + file.name
                         );
@@ -270,7 +270,7 @@ CSS;
                 }
                 function checkLimit(files) {
                     if (maxFiles > 0 && files.length > maxFiles) {
-                        var _i18nL = window.ForgeForms && window.ForgeForms.i18n;
+                        var _i18nL = window.FabricatorForms && window.FabricatorForms.i18n;
                         showError(
                             (_i18nL && _i18nL.upload_too_many)
                                 ? _i18nL.upload_too_many.replace('%d', maxFiles)
@@ -287,7 +287,7 @@ CSS;
                         allowed = [allowed[0]];
                     }
                     if (!allowed.length) {
-                        var _i18nA = window.ForgeForms && window.ForgeForms.i18n;
+                        var _i18nA = window.FabricatorForms && window.FabricatorForms.i18n;
                         showError((_i18nA && _i18nA.upload_no_types) || 'No allowed file types in selection.');
                         return;
                     }
@@ -299,7 +299,7 @@ CSS;
                         renderChips(input.files);
                         var skipped = all.length - allowed.length;
                         if (skipped > 0) {
-                            var _i18nS = window.ForgeForms && window.ForgeForms.i18n;
+                            var _i18nS = window.FabricatorForms && window.FabricatorForms.i18n;
                             var _skippedMsg = skipped === 1
                                 ? ((_i18nS && _i18nS.upload_skipped_one) || '1 file was skipped due to file type.')
                                 : ((_i18nS && _i18nS.upload_skipped_many) || '%d files were skipped due to file type.').replace('%d', skipped);
@@ -317,26 +317,26 @@ CSS;
                         form.addEventListener('reset', function () {
                             renderChips(null);
                         });
-                        if (!form.dataset.forgeOverflowBound) {
-                            form.dataset.forgeOverflowBound = '1';
-                            form.addEventListener('forge:upload-overflow', function (ev) {
+                        if (!form.dataset.fabricatorOverflowBound) {
+                            form.dataset.fabricatorOverflowBound = '1';
+                            form.addEventListener('fabricator:upload-overflow', function (ev) {
                                 var firstField = null;
-                                form.querySelectorAll('.forge-upload-zone').forEach(
+                                form.querySelectorAll('.fabricator-upload-zone').forEach(
                                     function (z) {
-                                        var zi = z.querySelector('.forge-upload-input');
+                                        var zi = z.querySelector('.fabricator-upload-input');
                                         var ze = z.parentNode
                                             ? z.parentNode.querySelector(
-                                                '.forge-upload-error'
+                                                '.fabricator-upload-error'
                                             ) : null;
                                         if (!ze || !zi || !zi.files || !zi.files.length) {
                                             return;
                                         }
-                                        var _i18nO = window.ForgeForms && window.ForgeForms.i18n;
+                                        var _i18nO = window.FabricatorForms && window.FabricatorForms.i18n;
                                         ze.textContent = (_i18nO && _i18nO.upload_overflow)
                                             ? _i18nO.upload_overflow.replace('%1$d', ev.detail.total).replace('%2$d', ev.detail.max)
                                             : 'Too many files total (' + ev.detail.total + '). Max. ' + ev.detail.max + ' per submission.';
                                         if (!firstField) {
-                                            firstField = z.closest('.forge-field') || z;
+                                            firstField = z.closest('.fabricator-field') || z;
                                         }
                                     }
                                 );
@@ -353,14 +353,14 @@ CSS;
                 }
                 zone.addEventListener('dragover', function (e) {
                     e.preventDefault();
-                    zone.classList.add('forge-upload-zone--drag');
+                    zone.classList.add('fabricator-upload-zone--drag');
                 });
                 zone.addEventListener('dragleave', function () {
-                    zone.classList.remove('forge-upload-zone--drag');
+                    zone.classList.remove('fabricator-upload-zone--drag');
                 });
                 zone.addEventListener('drop', function (e) {
                     e.preventDefault();
-                    zone.classList.remove('forge-upload-zone--drag');
+                    zone.classList.remove('fabricator-upload-zone--drag');
                     if (!input || !e.dataTransfer.files.length) return;
                     applyFiles(e.dataTransfer.files);
                 });
@@ -388,29 +388,29 @@ CSS;
         // Cap client-side hint to the server's actual max_file_uploads ini limit — no point
         // letting the user pick more files than PHP will accept from the multipart request
         $max_files = $multiple ? max(1, (int)(ini_get('max_file_uploads') ?: 20)) : 1;
-        $inner  = '<div class="forge-upload-zone"'
+        $inner  = '<div class="fabricator-upload-zone"'
             . ' data-multiple="' . ($multiple ? '1' : '0') . '"'
             . ' data-max-files="' . $max_files . '"'
             . '>';
         $inner .= '<input type="file" id="' . esc_attr($field_id) . '" name="'
             . esc_attr($field_id) . ($multiple ? '[]' : '') . '"'
-            . ' class="forge-upload-input"' . $acc_attr . $multiple . $req . '>';
-        $inner .= '<div class="forge-upload-zone-body" aria-hidden="true">'
-            . '<span class="forge-upload-icon">↑</span>'
-            . '<span class="forge-upload-prompt">' . esc_html__('Drop file here or', 'formfabricator') . ' '
-            . '<span class="forge-upload-link">' . esc_html__('click to select', 'formfabricator') . '</span>'
+            . ' class="fabricator-upload-input"' . $acc_attr . $multiple . $req . '>';
+        $inner .= '<div class="fabricator-upload-zone-body" aria-hidden="true">'
+            . '<span class="fabricator-upload-icon">↑</span>'
+            . '<span class="fabricator-upload-prompt">' . esc_html__('Drop file here or', 'formfabricator') . ' '
+            . '<span class="fabricator-upload-link">' . esc_html__('click to select', 'formfabricator') . '</span>'
             . '</span>'
             . '</div>';
         $inner .= '</div>';
-        $inner .= '<div class="forge-upload-error" role="alert"></div>';
-        $inner .= '<ul class="forge-upload-filelist" aria-live="polite"></ul>';
+        $inner .= '<div class="fabricator-upload-error" role="alert"></div>';
+        $inner .= '<ul class="fabricator-upload-filelist" aria-live="polite"></ul>';
 
         if ($accept !== '') {
-            $inner .= '<p class="forge-field-hint">'
+            $inner .= '<p class="fabricator-field-hint">'
                 // translators: %s: comma-separated list of allowed file extensions.
                 . sprintf(__('Allowed file types: %s', 'formfabricator'), esc_html($accept)) . '</p>';
         }
-        $inner .= '<p class="forge-field-hint">'
+        $inner .= '<p class="fabricator-field-hint">'
             // translators: %s: maximum file size in megabytes.
             . sprintf(__('Maximum file size: %s MB', 'formfabricator'), $max) . '</p>';
 
@@ -692,8 +692,8 @@ CSS;
             );
 
             if (!$tmp || !is_readable($tmp) || !is_uploaded_file($tmp)) {
-                \ForgeForms\forge_log(
-                    "ForgeForms: Upload file not readable: {$name}"
+                \FabricatorForms\fabricator_log(
+                    "FabricatorForms: Upload file not readable: {$name}"
                 );
                 continue;
             }
