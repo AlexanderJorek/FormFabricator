@@ -23,7 +23,7 @@ msgstr ""
 
 #. Plugin URI of the plugin
 #: forge-forms.php
-msgid "https://github.com/AlexanderJorek/FormForge"
+msgid "https://github.com/AlexanderJorek/FormFabricator"
 msgstr ""
 
 #. Description of the plugin
@@ -3539,6 +3539,12 @@ msgstr ""
 msgid "Loading PDF…"
 msgstr ""
 
+#. translators: %1$d: download progress percentage, 0-100 (substituted client-side).
+#: includes/Utils/Assets.php:342
+#, php-format
+msgid "Downloading… (%1$d%%)"
+msgstr ""
+
 #. translators: %1$d: current page number, %2$d: total page count (both substituted client-side).
 #: includes/Utils/Assets.php:343
 #, php-format
@@ -3556,7 +3562,20 @@ msgid "Waiting in queue (%1$ds)…"
 msgstr ""
 
 #: includes/Utils/Assets.php:348
+msgid "Waiting to download…"
+msgstr ""
+
+#: includes/Utils/Assets.php:349
+msgid "Waiting for a free verification slot…"
+msgstr ""
+
+#: includes/Utils/Assets.php:348
 msgid "Rate limited — retrying…"
+msgstr ""
+
+#: includes/Utils/Assets.php:349
+#, php-format
+msgid "Server busy — retrying in %1$ds…"
 msgstr ""
 
 #: includes/Utils/Assets.php:349

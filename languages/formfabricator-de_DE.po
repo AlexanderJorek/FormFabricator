@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: FormFabricator 1.0.0\n"
-"Report-Msgid-Bugs-To: https://github.com/AlexanderJorek/FormForge/issues\n"
+"Report-Msgid-Bugs-To: https://github.com/AlexanderJorek/FormFabricator/issues\n"
 "POT-Creation-Date: 2026-08-01T00:00:00+00:00\n"
 "PO-Revision-Date: 2026-08-01T00:00:00+00:00\n"
 "Last-Translator: Alexander Jorek <Alexander-Jorek@gmx.de>\n"
@@ -24,7 +24,7 @@ msgstr "FormFabricator"
 
 #. Plugin URI of the plugin
 #: forge-forms.php
-msgid "https://github.com/AlexanderJorek/FormForge"
+msgid "https://github.com/AlexanderJorek/FormFabricator"
 msgstr ""
 
 #. Description of the plugin
@@ -3540,6 +3540,12 @@ msgstr "Dieses Land ist nicht zugelassen."
 msgid "Loading PDF…"
 msgstr "PDF wird geladen…"
 
+#. translators: %1$d: download progress percentage, 0-100 (substituted client-side).
+#: includes/Utils/Assets.php:342
+#, php-format
+msgid "Downloading… (%1$d%%)"
+msgstr "Wird heruntergeladen… (%1$d%%)"
+
 #. translators: %1$d: current page number, %2$d: total page count (both substituted client-side).
 #: includes/Utils/Assets.php:343
 #, php-format
@@ -3557,8 +3563,21 @@ msgid "Waiting in queue (%1$ds)…"
 msgstr "Wartet in der Warteschlange (%1$ds)…"
 
 #: includes/Utils/Assets.php:348
+msgid "Waiting to download…"
+msgstr "Wartet auf Download…"
+
+#: includes/Utils/Assets.php:349
+msgid "Waiting for a free verification slot…"
+msgstr "Wartet auf einen freien Prüfplatz…"
+
+#: includes/Utils/Assets.php:348
 msgid "Rate limited — retrying…"
 msgstr "Ratenbegrenzt — wird wiederholt…"
+
+#: includes/Utils/Assets.php:349
+#, php-format
+msgid "Server busy — retrying in %1$ds…"
+msgstr "Server ausgelastet — Wiederholung in %1$ds…"
 
 #: includes/Utils/Assets.php:349
 msgid "Processing response…"

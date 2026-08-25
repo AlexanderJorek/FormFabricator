@@ -10,8 +10,8 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.2
- * @link      https://github.com/AlexanderJorek/FormForge
+ * @version   1.0.3
+ * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -99,6 +99,7 @@ class Plugin
             'Utils/ClientIp.php',
             'Utils/RateLimiter.php',
             'Utils/SingleUseToken.php',
+            'Utils/ConcurrencySlot.php',
             'Utils/AdminLock.php',
             'Utils/Sanitize.php',
         ]);
@@ -147,11 +148,7 @@ class Plugin
         add_action('wp_ajax_forge_forms_submit', [Form\FormProcessor::class, 'handle']);
         add_action('wp_ajax_nopriv_forge_forms_submit', [Form\FormProcessor::class, 'handle']);
 
-        /* Mints a fresh forge_nonce/forge_submission_token pair on demand. Deliberately not
-           embedded in FormRenderer's HTML (which is served to every visitor of a page-cache-
-           eligible page) — front.js calls this immediately before submit instead, so the two
-           per-visitor replay-protection values never need the page itself to be uncacheable.
-           See FormRenderer::render() and FormProcessor::handle() for the full rationale. */
+        /* Mints a fresh forge_nonce/forge_submission_token pair; not embedded in cacheable form HTML. */
         add_action('wp_ajax_forge_forms_get_token', [self::class, 'ajaxGetToken']);
         add_action('wp_ajax_nopriv_forge_forms_get_token', [self::class, 'ajaxGetToken']);
 
@@ -193,6 +190,12 @@ class Plugin
             wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'forge_su_sweep_expired');
         }
 
+        /* Sweeps expired forge_cs_* concurrency-slot rows — same rationale as the sweep above. */
+        add_action('forge_cs_sweep_expired', [Utils\ConcurrencySlot::class, 'cronSweepExpired']);
+        if (!wp_next_scheduled('forge_cs_sweep_expired')) {
+            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'forge_cs_sweep_expired');
+        }
+
         /* Remove deleted forms from all FormSelect lists */
         add_action('before_delete_post', [Form\FormSelectModel::class, 'removeFormId'], 10, 1);
 
@@ -224,6 +227,7 @@ class Plugin
      */
     public static function ajaxGetToken(): void
     {
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- endpoint mints the nonce/token pair itself; rate-limited per IP+form instead (see method docblock).
         $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
         if (!$form_id || !Form\FormModel::get($form_id)) {
             wp_send_json_error();

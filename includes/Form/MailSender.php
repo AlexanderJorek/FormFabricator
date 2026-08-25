@@ -10,8 +10,8 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.2
- * @link      https://github.com/AlexanderJorek/FormForge
+ * @version   1.0.3
+ * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -325,7 +325,7 @@ class MailSender
                 \ForgeForms\forge_log("ForgeForms: could not create temp dir {$tmp_dir}");
                 return $result;
             }
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- shutdown-context, mirrors Generator.php.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- runs during front-end AJAX submission handling, no WP_Filesystem credentials available; mirrors Generator.php.
             chmod($tmp_dir, 0700);
         } finally {
             umask($prev_umask);

@@ -10,8 +10,8 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.2
- * @link      https://github.com/AlexanderJorek/FormForge
+ * @version   1.0.3
+ * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -115,8 +115,7 @@ class FormRenderer
             >
                 <input type="hidden" name="action"     value="forge_forms_submit">
                 <input type="hidden" name="form_id"    value="<?php echo esc_attr($form_id); ?>">
-                <!-- Filled in by front.js from forge_forms_get_token immediately before submit —
-                     never rendered server-side, see the comment above render()'s $ajax_url line. -->
+                <!-- Filled in by front.js from forge_forms_get_token immediately before submit. -->
                 <input type="hidden" name="forge_nonce" value="" class="forge-nonce-field">
                 <input type="hidden" name="forge_submission_token" value="" class="forge-submission-token-field">
                 <!-- Honeypot -->

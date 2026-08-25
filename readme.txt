@@ -2,9 +2,9 @@
 Contributors: alexanderjorek
 Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
-Tested up to: 6.8
+Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -47,8 +47,7 @@ Google reCAPTCHA [Terms of Service](https://policies.google.com/terms) | [Privac
 **openiban.com IBAN/BIC lookup** (SEPA field)
 If a form contains a SEPA Direct Debit field, every time a site visitor finishes typing a syntactically valid IBAN into that field, their browser automatically sends that IBAN to:
 `https://openiban.com/validate/`
-to look up and auto-fill the matching BIC. This happens live on the public-facing form for every visitor who fills in the IBAN field on a form containing a SEPA field — not just in the admin editor. No other submission data is sent.
-openiban.com [Terms of Service](https://openiban.com/terms.html)
+to look up and auto-fill the matching BIC. This happens live on the public-facing form for every visitor who fills in the IBAN field on a form containing a SEPA field — not just in the admin editor. No other submission data is sent. openiban.com is a free lookup service built on the [MIT-licensed goiban-service](https://github.com/apilayer/goiban-service#the-mit-license-mit); it does not currently publish a separate terms-of-service page.
 
 == Installation ==
 
@@ -77,6 +76,12 @@ FormFabricator generates a cryptographic seal key used to make generated PDFs ta
 Yes — the PDF Layout Editor (under FormFabricator → PDF Layout) lets you configure the logo, colors, fonts, margins, and header/footer content used when rendering submissions to PDF.
 
 == Changelog ==
+
+= 1.0.3 =
+* Fixed: the PDF verification page could pile up dozens of simultaneous downloads/checks during a large batch scan, slowing or stalling the server; scans are now throttled to a few files at a time with clear "waiting…" status messages.
+* Improved: admin pages now load their scripts and styles as proper, cacheable files instead of inline code on the page, for faster admin page loads and better compatibility with other plugins/security scanners.
+* Hardening: re-audited every security-suppressed code line in the plugin (~120 sites) and corrected two inaccurate internal code comments found in the process; no actual issues found.
+* Internal: renamed remaining references from FormForge to FormFabricator in build tooling and stylesheets (cosmetic only, no functional change).
 
 = 1.0.2 =
 * Security: updated the bundled PDF-viewer library (pdf.js) to the latest version, closing a known vulnerability in PDF handling on the verification page.

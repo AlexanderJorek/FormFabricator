@@ -17,8 +17,8 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.2
- * @link      https://github.com/AlexanderJorek/FormForge
+ * @version   1.0.3
+ * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License

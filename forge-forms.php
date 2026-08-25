@@ -2,9 +2,9 @@
 
 /**
  * Plugin Name:       FormFabricator
- * Plugin URI:        https://github.com/AlexanderJorek/FormForge
+ * Plugin URI:        https://github.com/AlexanderJorek/FormFabricator
  * Description:       Custom drag-and-drop form builder with PDF generation and email delivery.
- * Version:           1.0.2
+ * Version:           1.0.3
  * Requires at least: 6.5
  * Requires PHP:      8.1
  * Author:            Alexander Jorek
@@ -19,7 +19,7 @@ defined('ABSPATH') || exit;
 
 define('FORGE_FORMS_PATH', plugin_dir_path(__FILE__));
 define('FORGE_FORMS_URL', plugin_dir_url(__FILE__));
-define('FORGE_FORMS_VERSION', '1.0.2');
+define('FORGE_FORMS_VERSION', '1.0.3');
 define('FORGE_FORMS_BASENAME', plugin_basename(__FILE__));
 
 $forge_composer_autoload = FORGE_FORMS_PATH . 'vendor/autoload.php';

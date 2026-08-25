@@ -10,8 +10,8 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.2
- * @link      https://github.com/AlexanderJorek/FormForge
+ * @version   1.0.3
+ * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -119,10 +119,10 @@ class PostDataField extends BaseField
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- form-wide nonce already verified in FormProcessor::handle(); _source_post_id is validated via get_post() below.
-        $submitted   = $_POST[$field_id] ?? null;
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- form-wide nonce already verified in FormProcessor::handle(); the only value actually used from this array (_source_post_id) is unslashed and absint()'d below before use.
+        $submitted   = isset($_POST[$field_id]) ? wp_unslash($_POST[$field_id]) : null;
         $source_id   = is_array($submitted) && isset($submitted['_source_post_id'])
-            ? absint(wp_unslash($submitted['_source_post_id']))
+            ? absint($submitted['_source_post_id'])
             : 0;
         $post = $source_id ? get_post($source_id) : null;
 

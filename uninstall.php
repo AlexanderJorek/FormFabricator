@@ -10,8 +10,8 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.2
- * @link      https://github.com/AlexanderJorek/FormForge
+ * @version   1.0.3
+ * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -100,6 +100,17 @@ $wpdb->query(
     $wpdb->prepare(
         "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
         $wpdb->esc_like('forge_su_') . '%'
+    )
+);
+wp_cache_delete('alloptions', 'options');
+
+/* Remove concurrency-slot rows (forge_cs_*) for the same reason as the rate-limiter
+   rows above — see Utils/ConcurrencySlot.php. */
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see forge_rl_ cleanup comment above
+$wpdb->query(
+    $wpdb->prepare(
+        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+        $wpdb->esc_like('forge_cs_') . '%'
     )
 );
 wp_cache_delete('alloptions', 'options');

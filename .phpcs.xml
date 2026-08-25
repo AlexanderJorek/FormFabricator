@@ -1,11 +1,10 @@
 <?xml version="1.0"?>
-<ruleset name="FormForge">
-    <description>FormForge coding standard</description>
+<ruleset name="FormFabricator">
+    <description>FormFabricator coding standard</description>
 
     <file>forge-forms.php</file>
     <file>uninstall.php</file>
     <file>includes</file>
-    <file>tests</file>
 
     <exclude-pattern>vendor/*</exclude-pattern>
     <exclude-pattern>assets/*</exclude-pattern>

@@ -10,8 +10,8 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.2
- * @link      https://github.com/AlexanderJorek/FormForge
+ * @version   1.0.3
+ * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
 namespace ForgeForms\Admin;
@@ -58,6 +58,28 @@ add_action(
             \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rate-limited user ' . get_current_user_id() . '.');
             wp_send_json_error(['message' => 'Please wait before verifying another PDF.'], 429);
         }
+
+        /* ---- Global concurrency cap: at most 3 of this handler running at once, across
+           everyone (the per-user throttle above only spaces out one tab's own requests). ---- */
+        $forge_cs_bucket = 'verify';
+        $forge_cs_token  = \ForgeForms\Utils\ConcurrencySlot::acquire($forge_cs_bucket, 3, 900);
+        if ($forge_cs_token === false) {
+            \ForgeForms\forge_log('ForgeForms forge_verify_push_lines: rejected — concurrency cap reached.');
+            wp_send_json_error(
+                [
+                'message'     => 'Server busy verifying other PDFs right now.',
+                'code'        => 'busy',
+                'retry_after' => 8,
+                ],
+                429
+            );
+        }
+        // Releases the slot on script end (covers wp_die() too); TTL is the rare-case backstop.
+        register_shutdown_function(
+            static function () use ($forge_cs_bucket, $forge_cs_token) {
+                \ForgeForms\Utils\ConcurrencySlot::release($forge_cs_bucket, $forge_cs_token);
+            }
+        );
 
         /* ---- Input ---- */
         $pdf_token   = sanitize_key($_POST['pdf_token'] ?? '');
@@ -563,6 +585,9 @@ final class Verificationpage
                 wp_die('Security check failed', 'Error', ['response' => 403]);
             }
         }
+        // Collected during the upload loop below, then localized once (not echoed per-file as
+        // inline <script> tags) — see the wp_localize_script() call after the loop.
+        $verification_queue = [];
         if ($is_request_post && !empty($_FILES['pdfs']['name'][0])) {
             // Process uploaded files
             $upload_dir = wp_upload_dir();
@@ -730,315 +755,16 @@ final class Verificationpage
                         admin_url('admin-ajax.php')
                     );
 
-                    $push_payload = wp_json_encode(
-                        ['url' => esc_url_raw($serve_url), 'token' => $token, 'name' => $safe_name],
-                        JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-                    );
-                    if ($push_payload === false) {
-                        \ForgeForms\forge_log('FF: wp_json_encode failed for push payload — skipping PDF.');
-                        continue;
-                    }
-                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $push_payload is wp_json_encode() output with JSON_HEX_* flags, safe for inline <script> context.
-                    echo "<script>
-                        window.FORGE_VERIFICATION_QUEUE = window.FORGE_VERIFICATION_QUEUE || [];
-                        window.FORGE_VERIFICATION_QUEUE.push({$push_payload});
-                        if (window.FORGE_VERIFICATION_PROCESS_PDF) {
-                            window.FORGE_VERIFICATION_PROCESS_PDF({$push_payload});
-                        }
-                    </script>";
+                    $verification_queue[] = ['url' => esc_url_raw($serve_url), 'token' => $token, 'name' => $safe_name];
                 }
             }
         }
 
+        // Localized once for the whole batch; verification.js reads this on load to seed its queue.
+        wp_localize_script('forge-verifier-data', 'ForgeVerifierQueueData', $verification_queue);
+
         // --- Render drag-and-drop form with nonce ---
-        echo '<style>
-            /* move style before flex children so it is not a flex item */
-            #forge-pdf-idle-state {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                flex: 1;
-                min-height: 0;
-                padding: 40px 20px;
-            }
-            #forge-pdf-idle-state .forge-pdf-idle-card,
-            #forge-pdf-scan-more-backdrop .forge-pdf-idle-card {
-                background: #fff;
-                border: 1px solid #dcdcde;
-                border-radius: 8px;
-                padding: 48px 56px;
-                text-align: center;
-                max-width: 520px;
-                width: 100%;
-                box-shadow: 0 1px 3px rgba(0,0,0,.07);
-            }
-            #forge-pdf-idle-state h2 {
-                font-size: 20px;
-                font-weight: 600;
-                margin: 0 0 8px;
-                color: #1d2327;
-            }
-            #forge-pdf-idle-state > .forge-pdf-idle-card > p {
-                color: #787c82;
-                margin: 0 0 28px;
-                font-size: 14px;
-            }
-            #drop-zone {
-                border: 2px dashed #c3c4c7;
-                border-radius: 6px;
-                padding: 28px 20px;
-                cursor: pointer;
-                transition: border-color .15s, background .15s;
-                background: #f6f7f7;
-                color: #50575e;
-                font-size: 14px;
-                margin-bottom: 16px;
-            }
-            #drop-zone-more {
-                border: 2px dashed #c3c4c7;
-                border-radius: 6px;
-                padding: 28px 20px;
-                cursor: pointer;
-                transition: border-color .15s, background .15s;
-                background: #f6f7f7;
-                color: #50575e;
-                font-size: 14px;
-                margin-bottom: 16px;
-                text-align: center;
-            }
-            #drop-zone:hover, #drop-zone.forge-pdf-dragover,
-            #drop-zone-more:hover, #drop-zone-more.forge-pdf-dragover {
-                border-color: var(--forge-admin-accent);
-                background: color-mix(in srgb, var(--forge-admin-accent) 8%, #fff);
-                color: var(--forge-admin-accent);
-            }
-            #forge-pdf-file-queue,
-            #forge-pdf-file-queue-more {
-                list-style: none;
-                margin: 0 0 16px;
-                padding: 0;
-                text-align: left;
-            }
-            #forge-pdf-file-queue li,
-            #forge-pdf-file-queue-more li {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: 6px 10px;
-                border-radius: 4px;
-                font-size: 13px;
-                color: #1d2327;
-                background: #f6f7f7;
-                margin-bottom: 4px;
-            }
-            #forge-pdf-file-queue li:last-child,
-            #forge-pdf-file-queue-more li:last-child { margin-bottom: 0; }
-            #forge-pdf-file-queue .forge-pdf-remove-file,
-            #forge-pdf-file-queue-more .forge-pdf-remove-file {
-                background: none;
-                border: none;
-                cursor: pointer;
-                color: #787c82;
-                font-size: 16px;
-                line-height: 1;
-                padding: 0 2px;
-            }
-            #forge-pdf-file-queue .forge-pdf-remove-file:hover,
-            #forge-pdf-file-queue-more .forge-pdf-remove-file:hover { color: #b32d2e; }
-
-            /* ── Scan-more modal overlay ── */
-            #forge-pdf-scan-more-backdrop {
-                display: none;
-                position: fixed;
-                inset: 0;
-                background: rgba(0,0,0,.45);
-                z-index: 99998;
-                align-items: center;
-                justify-content: center;
-            }
-            #forge-pdf-scan-more-backdrop.forge-pdf-open {
-                display: flex;
-            }
-            #forge-pdf-scan-more-backdrop .forge-pdf-idle-card {
-                position: relative;
-                max-width: 520px;
-                width: calc(100% - 40px);
-                animation: forge-pdf-modal-in .15s ease;
-            }
-            @keyframes forge-pdf-modal-in {
-                from { opacity: 0; transform: translateY(-12px); }
-                to   { opacity: 1; transform: translateY(0);     }
-            }
-            #forge-pdf-scan-more-close {
-                position: absolute;
-                top: 12px;
-                right: 14px;
-                background: none;
-                border: none;
-                font-size: 20px;
-                line-height: 1;
-                cursor: pointer;
-                color: #787c82;
-            }
-            #forge-pdf-scan-more-close:hover { color: #1d2327; }
-
-            /* ── Upload-in-progress overlay ──
-               A native <form> POST gives the browser zero hooks for upload progress —
-               it just sits on the current page until the whole request/response
-               round-trip finishes. With several large PDFs (e.g. 20 files x 17MB) that
-               round-trip is dominated by the user\'s own upload bandwidth and can take
-               a while, during which the page would otherwise show no feedback at all
-               and look hung. This is shown immediately on submit, before the browser\'s
-               own (real, native) form submission proceeds — deliberately NOT an
-               XHR-driven submit: that would need to swap the resulting page content in
-               via JS afterward, and document.write()-ing a full new page over the live
-               one does NOT reset the JS global scope, so the response\'s own <script>
-               tags (this page\'s inline script, the enqueued verification.js, even
-               wp-admin\'s own scripts) collide with the still-alive top-level
-               const/let bindings from the original load and throw redeclaration
-               errors, breaking the page. A real native submit avoids that entirely by
-               giving the browser an actual fresh navigation/JS realm — the only cost
-               is no byte-accurate progress bar, just this indeterminate indicator. */
-            #forge-pdf-upload-overlay {
-                display: none;
-                position: fixed;
-                inset: 0;
-                background: rgba(0,0,0,.45);
-                z-index: 99998;
-                align-items: center;
-                justify-content: center;
-            }
-            #forge-pdf-upload-overlay.forge-pdf-open { display: flex; }
-            #forge-pdf-upload-overlay .forge-pdf-idle-card {
-                max-width: 420px;
-                width: calc(100% - 40px);
-                text-align: center;
-            }
-            #forge-pdf-upload-spinner {
-                width: 36px;
-                height: 36px;
-                margin: 4px auto 16px;
-                border: 4px solid #dcdcde;
-                border-top-color: var(--forge-admin-accent);
-                border-radius: 50%;
-                animation: forge-pdf-spin 0.8s linear infinite;
-            }
-            @keyframes forge-pdf-spin {
-                to { transform: rotate(360deg); }
-            }
-
-            /* ── Forge-coloured primary actions ── */
-            #forge-pdf-verify-btn:not([disabled]) {
-                background: var(--forge-admin-accent) !important;
-                border-color: var(--forge-admin-accent) !important;
-                color: var(--forge-accent-text, #fff) !important;
-            }
-            #forge-pdf-verify-btn:not([disabled]):hover {
-                background: color-mix(in srgb, var(--forge-admin-accent) 82%, #000) !important;
-                border-color: color-mix(in srgb, var(--forge-admin-accent) 82%, #000) !important;
-            }
-
-            /* ── Floating scan-more trigger ── */
-            #forge-pdf-scan-more-btn {
-                display: none;
-                position: fixed;
-                bottom: 28px;
-                left: calc(50% + 80px); /* +80px centres in content area alongside 160px WP sidebar */
-                transform: translateX(-50%);
-                z-index: 99997;
-                background: var(--forge-admin-accent);
-                color: var(--forge-accent-text, #fff);
-                border: none;
-                border-radius: 8px;
-                padding: 11px 22px;
-                font-size: 13px;
-                font-weight: 500;
-                cursor: pointer;
-                box-shadow: 0 4px 14px rgb(0 0 0 / 25%);
-                letter-spacing: .01em;
-            }
-            #forge-pdf-scan-more-btn:hover { background: color-mix(in srgb, var(--forge-admin-accent) 82%, #000); }
-            #forge-pdf-scan-more-btn.forge-pdf-visible { display: block; }
-
-            /* ── Verification summary panel ── */
-            .forge-pdf-summary-panel {
-                border: 2px solid #c3c4c7;
-                border-radius: 6px;
-                overflow: hidden;
-                margin-bottom: 14px;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }
-            .forge-pdf-summary-verdict {
-                padding: 11px 16px;
-                font-size: 15px;
-                font-weight: 700;
-                letter-spacing: .01em;
-            }
-            .forge-pdf-verdict-pass       { background: #00a32a; color: #fff; }
-            .forge-pdf-verdict-fail       { background: #b32d2e; color: #fff; }
-            .forge-pdf-verdict-compromised { background: #d97706; color: #fff; }
-            .forge-pdf-verdict-rotated    { background: #65a30d; color: #fff; }
-            .forge-pdf-summary-table {
-                width: 100%;
-                border-collapse: collapse;
-                background: #fff;
-            }
-            .forge-pdf-summary-table tr { border-bottom: 1px solid #f0f0f1; }
-            .forge-pdf-summary-table tr:last-child { border-bottom: none; }
-            .forge-pdf-chk-icon {
-                width: 28px; padding: 7px 2px 7px 12px; font-size: 14px; vertical-align: middle;
-            }
-            .forge-pdf-chk-name {
-                padding: 7px 6px; font-size: 13px; font-weight: 600;
-                white-space: nowrap; vertical-align: middle;
-            }
-            .forge-pdf-chk-name a { text-decoration: none; color: inherit; }
-            .forge-pdf-chk-name a:hover { text-decoration: underline; }
-            .forge-pdf-chk-reason {
-                padding: 7px 12px 7px 4px; font-size: 12px; color: #50575e; vertical-align: middle;
-            }
-            .forge-pdf-chk-pass .forge-pdf-chk-icon { color: #00a32a; }
-            .forge-pdf-chk-fail .forge-pdf-chk-icon { color: #b32d2e; }
-            .forge-pdf-chk-fail .forge-pdf-chk-reason { color: #b32d2e; font-weight: 500; }
-            .forge-pdf-chk-warn .forge-pdf-chk-icon { color: #996800; }
-            .forge-pdf-chk-warn .forge-pdf-chk-reason { color: #996800; }
-
-            /* ── Detail section wrappers ── */
-            .forge-pdf-detail-section { margin: 6px 0; }
-            .forge-pdf-detail-hdr { display: none; }
-            .forge-pdf-detail-badge {
-                font-size: 10px; font-weight: 700; padding: 2px 6px;
-                border-radius: 3px; white-space: nowrap; line-height: 1.6;
-            }
-            .forge-pdf-badge-pass { background: #d6f5df; color: #00a32a; }
-            .forge-pdf-badge-fail { background: #fce8e8; color: #b32d2e; }
-            .forge-pdf-badge-info { background: #f0f0f1; color: #50575e; }
-            /* summary panel check icons */
-            .forge-pdf-summary-table th, .forge-pdf-summary-table td {
-                padding: 7px 10px; vertical-align: middle; font-size: 13px;
-            }
-            .forge-pdf-summary-table th:first-child, .forge-pdf-summary-table td:first-child {
-                width: 28px; font-size: 15px; text-align: center;
-            }
-            .forge-pdf-summary-table th:nth-child(2), .forge-pdf-summary-table td:nth-child(2) { width: 220px; }
-            .forge-pdf-summary-table thead th { font-weight: 600; border-bottom: 2px solid #e0e0e0; }
-            span.forge-pdf-chk-pass     { color: #00a32a; font-weight: 700; }
-            span.forge-pdf-chk-fail     { color: #b32d2e; font-weight: 700; }
-            span.forge-pdf-chk-warn     { color: #996800; font-weight: 700; }
-            span.forge-pdf-chk-rotated  { color: #65a30d; font-weight: 700; }
-            /* clickable summary rows */
-            tr.forge-pdf-summary-row { cursor: pointer; transition: background .1s; }
-            tr.forge-pdf-summary-row:hover { background: #f0f6fc; }
-            .forge-pdf-row-ok         { color: #00a32a; font-weight: 600; }
-            .forge-pdf-row-fail       { color: #b32d2e; font-weight: 600; }
-            .forge-pdf-row-warn       { color: #d97706; font-weight: 600; }
-            .forge-pdf-row-rotated    { color: #65a30d; font-weight: 600; }
-            .forge-pdf-verdict-legacy { background: #1a56db; color: #fff; }
-            .forge-pdf-row-caret-cell { width: 20px; text-align: right; color: #787c82; }
-            .forge-pdf-row-caret { font-size: 18px; line-height: 1; transition: transform .15s; }
-            tr.forge-pdf-summary-row:hover .forge-pdf-row-caret { color: #2271b1; }
-        </style>';
+        // Verification page styles: assets/css/admin-verification.css (enqueued in Utils/Assets.php).
 
         echo '<form id="pdf-upload-form" method="post" enctype="multipart/form-data">';
         wp_nonce_field('forge_verifier_upload', 'forge_verifier_nonce');
@@ -1095,323 +821,7 @@ final class Verificationpage
         ';
         // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
 
-        // --- JS drag & drop + file queue with remove ---
-        echo '<script>
-        const dropZone   = document.getElementById("drop-zone");
-        const fileInput  = document.getElementById("pdf-input");
-        const fileQueue  = document.getElementById("forge-pdf-file-queue");
-        const verifyBtn  = document.getElementById("forge-pdf-verify-btn");
-
-        let stagedFiles = [];
-
-        function mergeFiles(incoming) {
-            const names = new Set(stagedFiles.map(f => f.name));
-            Array.from(incoming).forEach(f => { if (!names.has(f.name)) stagedFiles.push(f); });
-            rebuildInput();
-            renderQueue();
-        }
-
-        function removeFile(name) {
-            stagedFiles = stagedFiles.filter(f => f.name !== name);
-            rebuildInput();
-            renderQueue();
-        }
-
-        function rebuildInput() {
-            const dt = new DataTransfer();
-            stagedFiles.forEach(f => dt.items.add(f));
-            fileInput.files = dt.files;
-        }
-
-        function renderQueue() {
-            fileQueue.innerHTML = "";
-            stagedFiles.forEach(function(f) {
-                const li   = document.createElement("li");
-                const name = document.createElement("span");
-                name.textContent = f.name;
-                const btn  = document.createElement("button");
-                btn.type      = "button";
-                btn.className = "forge-pdf-remove-file";
-                btn.title     = "' . esc_js(__('Remove', 'formfabricator')) . '";
-                btn.textContent = "×";
-                btn.addEventListener("click", () => removeFile(f.name));
-                li.appendChild(name);
-                li.appendChild(btn);
-                fileQueue.appendChild(li);
-            });
-            verifyBtn.disabled = stagedFiles.length === 0;
-        }
-
-        dropZone.addEventListener("click", () => fileInput.click());
-
-        dropZone.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            dropZone.classList.add("forge-pdf-dragover");
-        });
-
-        dropZone.addEventListener("dragleave", (e) => {
-            e.preventDefault();
-            dropZone.classList.remove("forge-pdf-dragover");
-        });
-
-        dropZone.addEventListener("drop", (e) => {
-            e.preventDefault();
-            dropZone.classList.remove("forge-pdf-dragover");
-            mergeFiles(e.dataTransfer.files);
-        });
-
-        fileInput.addEventListener("change", () => mergeFiles(fileInput.files));
-
-        const uploadForm    = document.getElementById("pdf-upload-form");
-        const uploadOverlay = document.getElementById("forge-pdf-upload-overlay");
-
-        /* Shows the "still uploading" indicator, then lets the browser\'s own real
-           form submission proceed (does NOT preventDefault / intercept it). With
-           several large PDFs (e.g. 20 files x 17MB) the native POST\'s upload phase
-           is dominated by the visitor\'s own upload bandwidth and can look hung
-           with no feedback otherwise. Deliberately NOT XHR-driven: that would need
-           to swap the resulting page in via JS afterward, and there\'s no safe way
-           to do that on the live document — document.write()-ing the response over
-           the current page does not reset the JS global scope, so the response\'s
-           own <script> tags (this inline script, the enqueued verification.js,
-           even wp-admin\'s own scripts) collide with the still-alive top-level
-           const/let bindings from the original load and throw redeclaration
-           errors. A real native submit sidesteps that entirely via an actual
-           fresh navigation — the only cost is no byte-accurate percentage, just
-           this indeterminate spinner. */
-        function showUploadingOverlay() {
-            document.getElementById("forge-pdf-idle-state").style.display = "none";
-            document.getElementById("forge-pdf-scan-more-btn").classList.add("forge-pdf-visible");
-            uploadOverlay.classList.add("forge-pdf-open");
-        }
-
-        uploadForm.addEventListener("submit", showUploadingOverlay);
-
-        // ── Scan-more modal ──
-        const backdrop      = document.getElementById("forge-pdf-scan-more-backdrop");
-        const scanMoreBtn   = document.getElementById("forge-pdf-scan-more-btn");
-        const dropZoneMore  = document.getElementById("drop-zone-more");
-        const fileInputMore = document.getElementById("pdf-input-more");
-        const fileQueueMore = document.getElementById("forge-pdf-file-queue-more");
-        const verifyMoreBtn = document.getElementById("forge-pdf-verify-more-btn");
-
-        let stagedFilesMore = [];
-
-        function openScanMore() { backdrop.classList.add("forge-pdf-open"); }
-        function closeScanMore() {
-            backdrop.classList.remove("forge-pdf-open");
-            stagedFilesMore = [];
-            renderQueueMore();
-        }
-
-        scanMoreBtn.addEventListener("click", openScanMore);
-        document.getElementById("forge-pdf-scan-more-close").addEventListener("click", closeScanMore);
-        backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeScanMore(); });
-
-        function mergeFilesMore(incoming) {
-            const names = new Set(stagedFilesMore.map(f => f.name));
-            Array.from(incoming).forEach(f => { if (!names.has(f.name)) stagedFilesMore.push(f); });
-            renderQueueMore();
-        }
-
-        function removeFileMore(name) {
-            stagedFilesMore = stagedFilesMore.filter(f => f.name !== name);
-            renderQueueMore();
-        }
-
-        function renderQueueMore() {
-            fileQueueMore.innerHTML = "";
-            stagedFilesMore.forEach(function(f) {
-                const li   = document.createElement("li");
-                const name = document.createElement("span");
-                name.textContent = f.name;
-                const btn  = document.createElement("button");
-                btn.type = "button"; btn.className = "forge-pdf-remove-file";
-                btn.title = "' . esc_js(__('Remove', 'formfabricator')) . '"; btn.textContent = "×";
-                btn.addEventListener("click", () => removeFileMore(f.name));
-                li.appendChild(name); li.appendChild(btn);
-                fileQueueMore.appendChild(li);
-            });
-            verifyMoreBtn.disabled = stagedFilesMore.length === 0;
-        }
-
-        dropZoneMore.addEventListener("click", () => fileInputMore.click());
-        dropZoneMore.addEventListener("dragover",  (e) => {
-            e.preventDefault(); dropZoneMore.classList.add("forge-pdf-dragover");
-        });
-        dropZoneMore.addEventListener("dragleave", (e) => {
-            e.preventDefault(); dropZoneMore.classList.remove("forge-pdf-dragover");
-        });
-        dropZoneMore.addEventListener("drop", (e) => {
-            e.preventDefault();
-            dropZoneMore.classList.remove("forge-pdf-dragover"); mergeFilesMore(e.dataTransfer.files);
-        });
-        fileInputMore.addEventListener("change", () => mergeFilesMore(fileInputMore.files));
-
-        verifyMoreBtn.addEventListener("click", () => {
-            if (!stagedFilesMore.length) return;
-            // Inject files into the main form and submit
-            const dt = new DataTransfer();
-            stagedFilesMore.forEach(f => dt.items.add(f));
-            fileInput.files = dt.files;
-            closeScanMore();
-            document.getElementById("forge-pdf-scan-more-btn").classList.remove("forge-pdf-visible");
-            // form.submit() bypasses the "submit" event entirely (a well-known DOM
-            // quirk) — show the overlay explicitly since that handler won\'t fire.
-            showUploadingOverlay();
-            uploadForm.submit();
-        });
-        </script>';
-
-        echo '</div></div>'; // #forge-verification-body + .forge-verification-wrap
-
-        echo '
-        <script>
-        (function () {
-            if (window.FORGE_PDF_IMAGE_TOGGLE_READY) return;
-            window.FORGE_PDF_IMAGE_TOGGLE_READY = true;
-
-            document.addEventListener(\'click\', function (e) {
-                const btn = e.target.closest(\'.forge-pdf-toggle\');
-                if (!btn) return;
-
-                e.preventDefault();
-
-                const id = btn.getAttribute(\'data-target\');
-                if (!id) return;
-
-                const el = document.getElementById(id);
-                if (!el) return;
-
-                const isHidden = el.classList.contains(\'forge-pdf-hidden\');
-                el.classList.toggle(\'forge-pdf-hidden\', !isHidden);
-                el.classList.toggle(\'forge-pdf-visible\', isHidden);
-
-                // Rotate arrow on sub-toggle buttons.
-                btn.classList.toggle(\'forge-pdf-open\', isHidden);
-
-                // Show or hide the parent section wrapper to match content visibility.
-                const section = el.closest(\'.forge-pdf-detail-section\');
-                if (section) {
-                    if (isHidden) {
-                        section.style.display = \'block\';
-                    } else {
-                        // Only hide the section if no other content inside is still open.
-                        const stillOpen = section.querySelector(
-                            \'.forge-pdf-detail-content:not(.forge-pdf-hidden), .forge-pdf-visible\'
-                        );
-                        if (!stillOpen) {
-                            section.style.display = \'none\';
-                        }
-                    }
-                }
-            });
-
-            // Reveal any section whose content was auto-opened in PHP (e.g. FAIL state).
-            document.querySelectorAll(\'.forge-pdf-detail-section\').forEach(function (sec) {
-                const content = sec.querySelector(\'.forge-pdf-detail-content\');
-                if (content && !content.classList.contains(\'forge-pdf-hidden\')) {
-                    sec.style.display = \'block\';
-                }
-            });
-        })();
-        </script>
-        ';
-
-        echo '
-        <script>
-        (function () {
-            if (window.FORGE_PDF_IMAGE_SLOT_READY) return;
-            window.FORGE_PDF_IMAGE_SLOT_READY = true;
-
-            function processImageSlots(root) {
-                root = root || document;
-
-                const blocks = root.querySelectorAll(\'.img-slot-content\');
-                if (!blocks.length) return;
-
-                blocks.forEach(block => {
-                    const uid = block.dataset.slot;
-                    const slot = document.getElementById(uid);
-
-                    if (!slot) {
-                        return;
-                    }
-
-                    slot.innerHTML = \'\';
-                    slot.appendChild(block);
-
-                    // Start hidden but layout-safe
-                    slot.classList.add(\'forge-pdf-hidden\');
-
-                    // Ensure images trigger reflow when loaded
-                    slot.querySelectorAll(\'img\').forEach(img => {
-                        if (!img.complete) {
-                            img.onload = () => img.style.height = \'auto\';
-                        }
-                    });
-                });
-            }
-
-            document.addEventListener(\'DOMContentLoaded\', () => {
-                processImageSlots(document);
-            });
-
-            // Expose for AJAX
-            window.FORGE_PDF_processImageSlots = processImageSlots;
-        })();
-        </script>
-        ';
-
-        echo '<style>
-        /* PDF segment header */
-        .forge-pdf-pdf-hdr {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            overflow: hidden;
-            width: 100%;
-        }
-        .forge-pdf-pdf-hdr-name {
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            min-width: 0;
-        }
-        .forge-pdf-pdf-hdr-verdict {
-            flex-shrink: 0;
-            white-space: nowrap;
-        }
-
-        /* Layout-safe hidden state: participate in layout but invisible */
-        .forge-pdf-hidden {
-            display: none;
-            visibility: hidden;
-            max-height: 0;
-            overflow: hidden;
-        }
-
-        /* Visible state */
-        .forge-pdf-visible {
-            display: block;
-            visibility: visible;
-            max-height: none;
-            overflow: visible;
-        }
-
-        /* Ensure slots take full width and include all children */
-        .img-slot, .img-slot-content {
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        /* Ensure the container wraps all children correctly */
-        .img-slot-content > * {
-            display: block;
-            width: 100%;
-        }
-        </style>';
+        // Drag & drop, file queue, and image-slot JS lives in assets/js/admin-verification.js.
     }
 
     private static array $image_slots = [];
@@ -1473,10 +883,8 @@ final class Verificationpage
      */
     public static function handleUpload(array $file, array $visualLines = [], string $progressKey = ''): void
     {
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- this method builds its HTML
-        // report from values that are already esc_html()/esc_attr()'d at assignment, int-cast, sha256 hashes,
-        // or drawn from fixed internal string enums (e.g. $colorspace); WPCS can't trace escaping through
-        // double-quoted string interpolation. Re-audit if new echo/interpolation is added below.
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- values here are already
+        // escaped/int-cast/hashed/regex-constrained; WPCS can't trace escaping through interpolation.
         self::$progressKey = $progressKey;
         // Wall-clock checkpoint: this handler runs under a raised 1800s hard ceiling
         // (see set_time_limit(1800) at the top of wp_ajax_forge_verify_push_lines) that

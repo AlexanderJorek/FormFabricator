@@ -162,8 +162,9 @@ function _forgeUpdateCard(card, step, pct) {
     if (p) p.textContent = Math.round(shown) + ' %';
 }
 
-/* ── Queue for PDFs pushed by PHP ── */
-window.FORGE_VERIFICATION_QUEUE = window.FORGE_VERIFICATION_QUEUE || [];
+/* ── Queue of PDFs to verify, localized once by Verificationpage.php's upload handler
+   (ForgeVerifierQueueData) rather than pushed via per-file inline <script> tags. ── */
+window.FORGE_VERIFICATION_QUEUE = window.ForgeVerifierQueueData || [];
 
 /* Server-side rate-limits forge_verify_push_lines to 1 call per 5 seconds per
    user (see Admin/Verificationpage.php). Batch-scanning several PDFs kicks
@@ -177,6 +178,58 @@ window.FORGE_VERIFICATION_QUEUE = window.FORGE_VERIFICATION_QUEUE || [];
    of a flat 5s. */
 var _forgeNextPushSlotAt = 0; // epoch ms
 var _forgePushSlotGapMs  = 5200; // grows on an actual 429 — see forceNextSlotLater() below
+
+/* Caps concurrent forge_serve_pdf downloads (pdf.js issues these internally, so there's no
+   response to reject-and-retry the way the verify call has — gated here instead). */
+var FORGE_MAX_CONCURRENT_LOADS = 3;
+var _forgeActiveLoads = 0;
+var _forgeLoadQueue   = [];
+
+function _forgeAcquireLoadSlot() {
+    return new Promise(function (resolve) {
+        function tryAcquire() {
+            if (_forgeActiveLoads < FORGE_MAX_CONCURRENT_LOADS) {
+                _forgeActiveLoads++;
+                resolve();
+            } else {
+                _forgeLoadQueue.push(tryAcquire);
+            }
+        }
+        tryAcquire();
+    });
+}
+
+function _forgeReleaseLoadSlot() {
+    _forgeActiveLoads--;
+    var next = _forgeLoadQueue.shift();
+    if (next) next();
+}
+
+/* Caps concurrent verify requests client-side too — the server's own cap can't stop the client
+   from optimistically showing "analyzing" the instant a request is sent, before it's accepted. */
+var FORGE_MAX_CONCURRENT_VERIFIES = 3;
+var _forgeActiveVerifies = 0;
+var _forgeVerifyQueue    = [];
+
+function _forgeAcquireVerifySlot() {
+    return new Promise(function (resolve) {
+        function tryAcquire() {
+            if (_forgeActiveVerifies < FORGE_MAX_CONCURRENT_VERIFIES) {
+                _forgeActiveVerifies++;
+                resolve();
+            } else {
+                _forgeVerifyQueue.push(tryAcquire);
+            }
+        }
+        tryAcquire();
+    });
+}
+
+function _forgeReleaseVerifySlot() {
+    _forgeActiveVerifies--;
+    var next = _forgeVerifyQueue.shift();
+    if (next) next();
+}
 
 /* Waits out $waitMs, invoking onTick(remainingMs) roughly once a second so the
    UI can show a live countdown instead of a number that's stale the instant
@@ -245,7 +298,8 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
     /* Overall bar is carved into non-overlapping bands per phase, in the order
        they actually occur, so the number only ever climbs:
          0-2   pdf_loading (start)
-         2-40  page-by-page text extraction (client-side, PDF.js)
+         2-12  downloading (real transferred-byte progress via pdf.js's onProgress)
+         12-40 page-by-page text extraction (client-side, PDF.js)
          40    queued / rate-limited-retry (before the request has gone out)
          42    request sent, awaiting server ("text extracted — analyzing")
          42-95 server's own verification-step progress, remapped via
@@ -258,18 +312,41 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
     }
 
     var i18n = (window.ForgeVerifier && window.ForgeVerifier.i18n) || {};
+    // Destroyed in the finally block below — pdf.js keeps decoded pages/worker state alive until .destroy().
+    let pdf;
+    let loadingTask;
     try {
+        var queuedForLoad = _forgeActiveLoads >= FORGE_MAX_CONCURRENT_LOADS;
+        if (queuedForLoad) {
+            _forgeUpdateCard(card, i18n.queued_for_download || 'Waiting to download…', 1);
+            card.classList.add('forge-vpc--queued');
+        }
+        await _forgeAcquireLoadSlot();
+        if (queuedForLoad) { card.classList.remove('forge-vpc--queued'); }
         _forgeUpdateCard(card, i18n.pdf_loading || 'Loading PDF…', 2);
-        // pdf.js 6.x removed eval()/Function() usage entirely, so CVE-2024-4367's isEvalSupported:false
-        // workaround no longer applies (that option no longer exists).
-        const pdf = await pdfjsLib.getDocument({
-            url: pdfUrl,
-            withCredentials: true
-        }).promise;
+        try {
+            // pdf.js 6.x removed eval()/Function() usage entirely, so CVE-2024-4367's isEvalSupported:false
+            // workaround no longer applies (that option no longer exists).
+            loadingTask = pdfjsLib.getDocument({
+                url: pdfUrl,
+                withCredentials: true
+            });
+            // Real download-progress bytes, into their own 2-12% sub-band.
+            loadingTask.onProgress = function (progressData) {
+                if (!progressData || !progressData.total) { return; }
+                var frac = Math.min(1, progressData.loaded / progressData.total);
+                var downloadMsg = (i18n.downloading || 'Downloading… (%1$d%%)').replace('%1$d', Math.round(frac * 100));
+                _forgeUpdateCard(card, downloadMsg, 2 + Math.round(frac * 10));
+            };
+            pdf = await loadingTask.promise;
+        } finally {
+            // Released once the file transfer settles, not tied to the extraction loop below.
+            _forgeReleaseLoadSlot();
+        }
         const allLines = [];
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            var pagePct = 2 + Math.round((pageNum - 1) / pdf.numPages * 38);
+            var pagePct = 12 + Math.round((pageNum - 1) / pdf.numPages * 28);
             var pageMsg = (i18n.page_reading || 'Reading page %1$d of %2$d…')
                 .replace('%1$d', pageNum).replace('%2$d', pdf.numPages);
             _forgeUpdateCard(card, pageMsg, pagePct);
@@ -346,21 +423,54 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
                 startProgressPoll();
             }
 
+            var queuedForVerify = _forgeActiveVerifies >= FORGE_MAX_CONCURRENT_VERIFIES;
+            if (queuedForVerify) {
+                _forgeUpdateCard(card, i18n.queued_for_verify || 'Waiting for a free verification slot…', 40);
+                card.classList.add('forge-vpc--queued');
+            }
+            await _forgeAcquireVerifySlot();
+            if (queuedForVerify) { card.classList.remove('forge-vpc--queued'); }
+
             // The throttle gate above schedules slots with a margin, but the actual
             // request can still land inside another one's window — client/server
             // clock drift, network jitter, or the PHP worker itself being queued
             // under load from a large batch. Retry a 429 instead of failing the
             // file outright; _forgeWidenPushSlotGap() also grows the gap for every
             // remaining file in the batch so repeat collisions become less likely.
+            // Verify slot is held through every retry below, not just the first attempt.
             var res;
-            var maxAttempts = 5;
-            for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-                res = await _forgeThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestStart);
-                if (res.status !== 429 || attempt === maxAttempts) { break; }
-                stopPoll();
-                _forgeWidenPushSlotGap();
-                _forgeUpdateCard(card, i18n.rate_limited_retry || 'Rate limited — retrying…', 40);
-                card.classList.add('forge-vpc--queued');
+            try {
+                var maxAttempts = 5;
+                for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+                    res = await _forgeThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestStart);
+                    if (res.status !== 429 || attempt === maxAttempts) { break; }
+                    stopPoll();
+
+                    // A 429 with code:"busy" means the server-side concurrency cap, not the generic throttle.
+                    var busyRetryAfter = null;
+                    try {
+                        var busyBody = await res.clone().json();
+                        if (busyBody && busyBody.data && busyBody.data.code === 'busy') {
+                            busyRetryAfter = Number(busyBody.data.retry_after) || 8;
+                        }
+                    } catch (_) { /* not JSON or already consumed — fall through to generic retry */ }
+
+                    if (busyRetryAfter !== null) {
+                        card.classList.add('forge-vpc--queued');
+                        await _forgeCountdown(busyRetryAfter * 1000, function (remainingMs) {
+                            var busyMsg = (i18n.server_busy_retry || 'Server busy — retrying in %1$ds…')
+                                .replace('%1$d', Math.ceil(remainingMs / 1000));
+                            _forgeUpdateCard(card, busyMsg, 40);
+                        });
+                    } else {
+                        _forgeWidenPushSlotGap();
+                        _forgeUpdateCard(card, i18n.rate_limited_retry || 'Rate limited — retrying…', 40);
+                        card.classList.add('forge-vpc--queued');
+                    }
+                }
+            } finally {
+                // Rendering the result below is pure client-side work — no need to hold the slot for it.
+                _forgeReleaseVerifySlot();
             }
             stopPoll();
             _forgeUpdateCard(card, i18n.processing || 'Processing response…', 98);
@@ -410,13 +520,22 @@ window.FORGE_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
         card.classList.add('forge-vpc--error');
         done();
         return [];
+    } finally {
+        // typeof-guarded: pdf.destroy() isn't reliably present on the resolved proxy across pdf.js versions.
+        if (loadingTask && typeof loadingTask.destroy === 'function') {
+            try { loadingTask.destroy(); } catch (destroyErr) { console.error('[FormFabricator] loadingTask.destroy() failed for', pdfUrl, destroyErr); }
+        } else if (pdf && typeof pdf.destroy === 'function') {
+            try { pdf.destroy(); } catch (destroyErr) { console.error('[FormFabricator] pdf.destroy() failed for', pdfUrl, destroyErr); }
+        }
     }
 };
 
 /* Process any PDFs queued before this script loaded */
 if (window.FORGE_VERIFICATION_QUEUE.length) {
     window.FORGE_VERIFICATION_QUEUE.forEach(function (item) {
-        window.FORGE_VERIFICATION_PROCESS_PDF(item);
+        Promise.resolve(window.FORGE_VERIFICATION_PROCESS_PDF(item)).catch(function (err) {
+            console.error('[FormFabricator] Unhandled error processing queued PDF', item, err);
+        });
     });
     window.FORGE_VERIFICATION_QUEUE = [];
 }

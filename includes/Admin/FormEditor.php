@@ -10,8 +10,8 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.2
- * @link      https://github.com/AlexanderJorek/FormForge
+ * @version   1.0.3
+ * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -203,6 +203,19 @@ class FormEditor
            already-registered handle here is safe; wp_localize_script() only
            stores the data, the inline <script> is printed later at footer time. */
         \wp_localize_script('forge-forms-builder', 'ForgeBuilderI18n', self::builderI18n());
+        \wp_localize_script(
+            'forge-forms-editor-lock',
+            'ForgeEditorLock',
+            [
+            'formId'  => $form ? $form->id : 0,
+            'nonce'   => $nonce,
+            'ajaxUrl' => \admin_url('admin-ajax.php'),
+            'i18n'    => [
+                // translators: %s: display name of the user currently editing this page.
+                'lockConflict' => __('Currently being edited by %s. Saving may conflict.', 'formfabricator'),
+            ],
+            ]
+        );
 
         if ($perf_mode) {
             $php_ms = round((microtime(true) - $perf_start) * 1000, 2);
@@ -282,112 +295,7 @@ class FormEditor
 
         </div><!-- #forge-editor -->
         </div>
-        <script>
-        (function() {
-            var canvas = document.getElementById('forge-particle-canvas');
-            if (!canvas) return;
-            var ctx = canvas.getContext('2d');
-            var mouse = { x: -9999, y: -9999 };
-            var _ah = getComputedStyle(document.documentElement).getPropertyValue('--forge-admin-accent').trim()||'#2271b1';
-            var _rgb = function(h){return parseInt(h.slice(1,3),16)+','+parseInt(h.slice(3,5),16)+','+parseInt(h.slice(5,7),16);};
-            var DOTS = Math.min(120, Math.max(40, Math.round(window.innerWidth * window.innerHeight / 26000)));
-            var LINK = 150, SPEED = 1.0, COLOR = _rgb(_ah);
-            var particles = [], paused = false, FRAME_MS = 1000 / 30;
-            function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-            function rand(a, b) { return a + Math.random() * (b - a); }
-            function init() {
-                particles = [];
-                for (var i = 0; i < DOTS; i++) {
-                    particles.push({ x: rand(0, canvas.width), y: rand(0, canvas.height),
-                        vx: rand(-SPEED, SPEED), vy: rand(-SPEED, SPEED), r: rand(2, 3.5) });
-                }
-            }
-            function draw() {
-                if (paused) return;
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                for (var i = 0; i < particles.length; i++) {
-                    var p = particles[i];
-                    p.x += p.vx; p.y += p.vy;
-                    if (p.x < 0 || p.x > canvas.width)  p.vx *= -1;
-                    if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-                }
-                ctx.lineWidth = 1;
-                for (var i = 0; i < particles.length; i++) {
-                    for (var j = i + 1; j < particles.length; j++) {
-                        var dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y;
-                        var d = Math.sqrt(dx*dx + dy*dy);
-                        if (d < LINK) {
-                            ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y);
-                            ctx.lineTo(particles[j].x, particles[j].y);
-                            ctx.strokeStyle = 'rgba(' + COLOR + ',' + (1 - d/LINK) * 0.3 + ')';
-                            ctx.stroke();
-                        }
-                    }
-                    var mdx = particles[i].x - mouse.x, mdy = particles[i].y - mouse.y;
-                    var md = Math.sqrt(mdx*mdx + mdy*mdy);
-                    if (md < LINK) {
-                        ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y);
-                        ctx.lineTo(mouse.x, mouse.y);
-                        ctx.strokeStyle = 'rgba(' + COLOR + ',' + (1 - md/LINK) * 0.55 + ')';
-                        ctx.stroke();
-                    }
-                }
-                ctx.fillStyle = 'rgba(' + COLOR + ', 0.5)';
-                for (var i = 0; i < particles.length; i++) {
-                    ctx.beginPath(); ctx.arc(particles[i].x, particles[i].y, particles[i].r, 0, Math.PI*2); ctx.fill();
-                }
-                setTimeout(function() { requestAnimationFrame(draw); }, FRAME_MS - 2);
-            }
-            document.addEventListener('mousemove', function(e) { mouse.x = e.clientX; mouse.y = e.clientY; });
-            document.addEventListener('visibilitychange', function() {
-                paused = document.hidden;
-                if (!paused) requestAnimationFrame(draw);
-            });
-            window.addEventListener('resize', function() { resize(); init(); });
-            resize(); init(); requestAnimationFrame(draw);
-        }());
-        </script>
-        <?php if ($form) : ?>
-        <script>
-        var formId = <?php echo (int) $form->id; ?>;
-        (function ($) {
-            if (!$ || !$.fn || !$(document).on) { return; }
-            $(document).on('heartbeat-send', function (e, data) {
-                data.forge_forms_lock = formId;
-            });
-            $(document).on('heartbeat-tick', function (e, data) {
-                if (data.forge_forms_lock_conflict) {
-                    var notice = document.getElementById('forge-lock-notice');
-                    var msg = <?php echo wp_json_encode(__('Currently being edited by %s. Saving may conflict.', 'formfabricator')); ?>
-                        .replace('%s', data.forge_forms_lock_conflict);
-                    if (notice) {
-                        notice.textContent = msg;
-                        notice.style.display = '';
-                    } else {
-                        var status = document.getElementById('forge-save-status');
-                        if (status && status.parentNode) {
-                            var span = document.createElement('span');
-                            span.id = 'forge-lock-notice';
-                            span.className = 'forge-ss--err';
-                            span.textContent = msg;
-                            status.parentNode.insertBefore(span, status.nextSibling);
-                        }
-                    }
-                }
-            });
-        }(window.jQuery));
-        /* sendBeacon (not fetch/XHR) survives the page actually unloading. */
-        window.addEventListener('pagehide', function () {
-            if (!navigator.sendBeacon) { return; }
-            var body = new URLSearchParams({
-                action: 'forge_forms_unlock_form',
-                nonce: <?php echo wp_json_encode($nonce); ?>,
-                form_id: String(formId)
-            });
-            navigator.sendBeacon(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, body);
-        });
-        </script>
-        <?php endif; ?>
+        <?php // Particle background + heartbeat lock notice: assets/js/admin-editor-canvas.js and assets/js/admin-editor-lock.js. ?>
         <?php
     }
 
@@ -492,9 +400,7 @@ class FormEditor
             }
         }
 
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- hardcoded plugin-relative path, not attacker- or request-influenced.
-        $front_js = (string)file_get_contents(FORGE_FORMS_PATH . 'assets/js/front.js');
-        $css_url  = \FORGE_FORMS_URL . 'assets/css/front.css';
+        $css_url = \FORGE_FORMS_URL . 'assets/css/front.css';
 
         $globals = 'window.ForgeForms={'
             . 'ajaxUrl:"",ibanBicUrl:"",'
@@ -561,38 +467,6 @@ class FormEditor
             . '</div>'
             . '</div>';
 
-        $toolbar_js = '(function(){
-
-/* ── Skip-required toggle ── */
-var cb = document.getElementById("fpt-skip-required");
-if (cb) {
-    cb.addEventListener("change", function () {
-        window.ForgeIgnoreRequired = this.checked;
-    });
-}
-
-/* ── Fake fetch so preview submissions don\'t fire real AJAX ── */
-var _origFetch = window.fetch;
-window.fetch = function (url, opts) {
-    var isSubmit = (url === "" || url === location.href)
-        && opts && opts.body instanceof FormData
-        && typeof opts.body.get === "function"
-        && opts.body.get("action") === "forge_forms_submit";
-    if (isSubmit) {
-        return new Promise(function (resolve) {
-            setTimeout(function () {
-                resolve(new Response(
-                    JSON.stringify({success:true,data:{message:""}}),
-                    {status:200,headers:{"Content-Type":"application/json"}}
-                ));
-            }, 700);
-        });
-    }
-    return _origFetch.apply(this, arguments);
-};
-
-}());';
-
         $page = '<!DOCTYPE html><html lang="' . esc_attr(str_replace('_', '-', get_locale())) . '"><head>'
             . '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             . '<title>' . esc_html__('Preview', 'formfabricator') . '</title>'
@@ -619,8 +493,11 @@ window.fetch = function (url, opts) {
             . '</head><body>'
             . '<div id="forge-preview-content">' . $html . '</div>'
             . $toolbar_html
-            . '<script>' . $globals . $front_js . '</script>'
-            . '<script>' . $toolbar_js . '</script>'
+            . '<script>' . $globals . '</script>'
+            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- standalone preview HTML document returned via wp_send_json_success(), not rendered through the WP page pipeline (no wp_head/wp_footer to enqueue into); both are this plugin's own local assets, not external/offloaded resources.
+            . '<script src="' . \esc_url(FORGE_FORMS_URL . 'assets/js/front.js') . '"></script>'
+            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- see comment above.
+            . '<script src="' . \esc_url(FORGE_FORMS_URL . 'assets/js/admin-preview-toolbar.js') . '"></script>'
             . '</body></html>';
 
         \wp_send_json_success(['html' => $page]);
@@ -953,7 +830,7 @@ window.fetch = function (url, opts) {
 
         foreach ($passes as $label => $pattern) {
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceDyn -- $pattern/$replacements are drawn from the hardcoded $passes/$replacements arrays above, not attacker input; no /e modifier is used anywhere in this codebase.
-            $after = preg_replace($pattern, $replacements[$label], $html);
+            $after = preg_replace($pattern, $replacements[$label], $html) ?? $html;
             if ($after !== $html) {
                 // Count-only, no stripped content — safe to log unconditionally
                 // (not gated behind WP_DEBUG) so production sites keep an audit

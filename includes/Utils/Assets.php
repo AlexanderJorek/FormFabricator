@@ -10,8 +10,8 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.2
- * @link      https://github.com/AlexanderJorek/FormForge
+ * @version   1.0.3
+ * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -300,6 +300,20 @@ class Assets
                 FORGE_FORMS_VERSION,
                 true
             );
+            \wp_enqueue_script(
+                'forge-forms-editor-canvas',
+                FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                [],
+                FORGE_FORMS_VERSION,
+                true
+            );
+            \wp_enqueue_script(
+                'forge-forms-editor-lock',
+                FORGE_FORMS_URL . 'assets/js/admin-editor-lock.js',
+                ['jquery'],
+                FORGE_FORMS_VERSION,
+                true
+            );
 
             \wp_enqueue_media();
 
@@ -313,13 +327,89 @@ class Assets
                 FORGE_FORMS_VERSION
             );
             self::addAdminCssVars();
+            if (str_ends_with($hook, 'forge-forms')) {
+                \wp_enqueue_script(
+                    'forge-forms-editor-canvas',
+                    FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                    [],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'forge-forms-admin-formlist',
+                    FORGE_FORMS_URL . 'assets/js/admin-formlist.js',
+                    [],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
+            }
+            if (str_contains($hook, 'forge-forms-select')) {
+                \wp_enqueue_script(
+                    'forge-forms-editor-canvas',
+                    FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                    [],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'forge-forms-admin-formselect',
+                    FORGE_FORMS_URL . 'assets/js/admin-formselect.js',
+                    [],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
+            }
             $needs_picker = str_contains($hook, 'forge-forms-settings')
                          || str_contains($hook, 'forge-forms-pdf-layout');
             if ($needs_picker) {
                 \wp_enqueue_style('wp-color-picker');
                 \wp_enqueue_script('wp-color-picker');
             }
+            if (str_contains($hook, 'forge-forms-settings')) {
+                \wp_enqueue_script(
+                    'forge-forms-editor-canvas',
+                    FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                    [],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'forge-forms-settings-lock',
+                    FORGE_FORMS_URL . 'assets/js/admin-settings-lock.js',
+                    ['jquery'],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'forge-forms-admin-settings',
+                    FORGE_FORMS_URL . 'assets/js/admin-settings.js',
+                    ['jquery', 'wp-color-picker'],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
+            }
             if (str_contains($hook, 'forge-forms-pdf-layout')) {
+                \wp_enqueue_script(
+                    'forge-forms-editor-canvas',
+                    FORGE_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                    [],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'forge-forms-pdflayout-lock',
+                    FORGE_FORMS_URL . 'assets/js/admin-pdflayout-lock.js',
+                    ['jquery'],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'forge-forms-admin-pdflayout',
+                    FORGE_FORMS_URL . 'assets/js/admin-pdflayout.js',
+                    ['wp-color-picker'],
+                    FORGE_FORMS_VERSION,
+                    true
+                );
                 $fn = 'window.forgePdfUpdatePreview';
                 $cb = 'if(' . $fn . ')setTimeout(' . $fn . ',0);';
                 $picker_js = 'jQuery(function($){'
@@ -331,6 +421,16 @@ class Assets
             }
         }
 
+        /* Field test harness (dev-only, WP_DEBUG-gated — see Plugin.php::load()) */
+        if (str_contains($hook, 'forge-field-tests')) {
+            \wp_enqueue_style(
+                'forge-forms-admin-fieldtest',
+                FORGE_FORMS_URL . 'assets/css/admin-fieldtest.css',
+                [],
+                FORGE_FORMS_VERSION
+            );
+        }
+
         /* Verification page */
         if (str_contains($hook, 'forge-pdf-verification')) {
             \wp_enqueue_style(
@@ -340,6 +440,24 @@ class Assets
                 FORGE_FORMS_VERSION
             );
             self::addAdminCssVars();
+            \wp_enqueue_style(
+                'forge-forms-admin-verification',
+                FORGE_FORMS_URL . 'assets/css/admin-verification.css',
+                ['forge-forms-admin'],
+                FORGE_FORMS_VERSION
+            );
+            \wp_enqueue_script(
+                'forge-forms-admin-verification',
+                FORGE_FORMS_URL . 'assets/js/admin-verification.js',
+                [],
+                FORGE_FORMS_VERSION,
+                true
+            );
+            \wp_localize_script(
+                'forge-forms-admin-verification',
+                'ForgeVerifyPage',
+                ['i18n' => ['remove' => __('Remove', 'formfabricator')]]
+            );
             /* pdf.js 6.x is ES-modules only, so verification.js registers as a script module and
                imports pdf.mjs itself. wp_localize_script has no module equivalent, so ForgeVerifier
                data is injected via a separate src-less classic script instead. */
@@ -361,12 +479,18 @@ class Assets
                 'i18n'        => [
                     'loading'          => __('Loading…', 'formfabricator'),
                     'pdf_loading'      => __('Loading PDF…', 'formfabricator'),
+                    // translators: %1$d: download progress percentage, 0-100 (substituted client-side).
+                    'downloading'      => __('Downloading… (%1$d%%)', 'formfabricator'),
                     // translators: %1$d: current page number, %2$d: total page count (both substituted client-side).
                     'page_reading'     => __('Reading page %1$d of %2$d…', 'formfabricator'),
                     'text_extracted'   => __('Text extracted — server analyzing…', 'formfabricator'),
                     // translators: %1$d: seconds remaining before this PDF's verification request is sent (substituted client-side).
                     'queued'           => __('Waiting in queue (%1$ds)…', 'formfabricator'),
+                    'queued_for_download' => __('Waiting to download…', 'formfabricator'),
+                    'queued_for_verify' => __('Waiting for a free verification slot…', 'formfabricator'),
                     'rate_limited_retry' => __('Rate limited — retrying…', 'formfabricator'),
+                    // translators: %1$d: seconds remaining before the next automatic retry (substituted client-side).
+                    'server_busy_retry' => __('Server busy — retrying in %1$ds…', 'formfabricator'),
                     'processing'       => __('Processing response…', 'formfabricator'),
                     'done'             => __('Done', 'formfabricator'),
                     // translators: %d: HTTP status code (substituted client-side).

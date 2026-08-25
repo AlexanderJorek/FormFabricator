@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Builds a clean, WordPress.org-ready copy of FormForge into build/form-forge/
-    and zips it to build/form-forge.zip.
+    Builds a clean, WordPress.org-ready copy of FormFabricator into build/formfabricator/
+    and zips it to build/formfabricator.zip.
 
 .DESCRIPTION
-    Copies the plugin into build/form-forge/, then runs `composer install
+    Copies the plugin into build/formfabricator/, then runs `composer install
     --no-dev` INSIDE that copy only. Your working vendor/ folder (with the dev
     tools like phpcs/wpcs) is never touched. Run this before every release.
 
@@ -16,8 +16,8 @@ $ErrorActionPreference = 'Stop'
 
 $root      = $PSScriptRoot
 $buildDir  = Join-Path $root 'build'
-$stageDir  = Join-Path $buildDir 'form-forge'
-$zipPath   = Join-Path $buildDir 'form-forge.zip'
+$stageDir  = Join-Path $buildDir 'formfabricator'
+$zipPath   = Join-Path $buildDir 'formfabricator.zip'
 
 Write-Host "Cleaning previous build..." -ForegroundColor Cyan
 if (Test-Path $buildDir) { Remove-Item -Recurse -Force $buildDir }
@@ -74,7 +74,7 @@ Copy-Item -Path (Join-Path $root 'vendor\pdfjs') -Destination (Join-Path $stageD
 
 # mpdf/mpdf ships ~80 TTF/OTF font files (DejaVu, FreeFont, and many others for
 # scripts like Devanagari/Khmer/Syriac/etc, ~88MB total) covering every font it
-# ever might need. FormForge only ever *selects* one of 4 families — see the
+# ever might need. FormFabricator only ever *selects* one of 4 families — see the
 # font_family match in includes/PDF/templates/layout.php ('dejavusans' [default],
 # 'dejavuserif', 'dejavusansmono', 'freemono') — and mPDF's autoScriptToLang/
 # autoLangToFont/useSubstitutions are all left at their default of false in
@@ -96,7 +96,7 @@ Copy-Item -Path (Join-Path $root 'vendor\pdfjs') -Destination (Join-Path $stageD
 # mPDF alias path that could reach a "trimmed away" file, keep the Condensed
 # companions too — they're cheap (~2.5MB combined for both families) next to the
 # ~85MB this step actually saves (which is almost entirely the CJK/Devanagari/
-# Khmer/Syriac/etc script fonts FormForge has no path to ever request). Trimming
+# Khmer/Syriac/etc script fonts FormFabricator has no path to ever request). Trimming
 # ONLY in the staged release build (never the working vendor/, which a plain
 # `composer install` would just restore anyway, and which stays full for local
 # testing). If you add a fifth selectable PDF font, add its files to $keepFonts

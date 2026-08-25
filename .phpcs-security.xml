@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
-<ruleset name="FormForge-Security">
+<ruleset name="FormFabricator-Security">
     <description>
-        Security-focused review ruleset for FormForge. Separate from .phpcs.xml
+        Security-focused review ruleset for FormFabricator. Separate from .phpcs.xml
         (which enforces day-to-day PSR-1/PSR-2 style) — this one is run manually
         or in CI as part of the security/code-quality review pass described in
         CLAUDE.md, covering the WordPress-Security and CWE-Top-25-oriented parts
