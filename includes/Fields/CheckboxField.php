@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,60 +35,7 @@ class CheckboxField extends BaseField
      */
     public function getStyles(): string
     {
-        // phpcs:disable Generic.Files.LineLength -- the checkbox-checkmark background-image is an
-        // inline SVG data URI; splitting it across lines risks corrupting the encoded markup.
-        return <<<'CSS'
-.fabricator-checkbox-group {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.fabricator-checkbox-group--horizontal {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 16px;
-}
-.fabricator-checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    cursor: pointer;
-    font-size: 14px;
-    color: var(--fabricator-text);
-    line-height: 1.4;
-    user-select: none;
-}
-.fabricator-checkbox-label input[type="checkbox"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    border: 2px solid var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius-sm);
-    background: var(--fabricator-bg);
-    cursor: pointer;
-    transition: border-color .15s, background .15s;
-    position: relative;
-}
-.fabricator-checkbox-label input[type="checkbox"]:checked {
-    border-color: var(--fabricator-accent);
-    background-color: var(--fabricator-accent);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10'%3E%3Cpolyline points='1,5 4.5,8.5 11,1' stroke='%23ffffff' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: 11px 9px;
-}
-.fabricator-checkbox-label input[type="checkbox"]:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--fabricator-accent) 25%, transparent);
-}
-.fabricator-checkbox-label:hover input[type="checkbox"]:not(:checked) {
-    border-color: var(--fabricator-accent);
-}
-CSS;
-        // phpcs:enable Generic.Files.LineLength
+        return self::readFieldAsset('assets/css/fields/CheckboxField.css');
     }
 
     /**
@@ -123,20 +70,7 @@ CSS;
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'checkbox-count', 'fn' => <<<'JS'
-            function (fieldEl) {
-                var group = fieldEl.querySelector('.fabricator-checkbox-group');
-                if (!group) return null;
-                var min = parseInt(group.dataset.minSelections || '0', 10);
-                var max = parseInt(group.dataset.maxSelections || '0', 10);
-                if (!min && !max) return null;
-                var cnt = fieldEl.querySelectorAll('input[type="checkbox"]:checked').length;
-                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                if (min > 0 && cnt < min) return (_i18n && _i18n.checkbox_min ? _i18n.checkbox_min.replace('%d', min) : 'Please select at least ' + min + ' option(s).');
-                if (max > 0 && cnt > max) return (_i18n && _i18n.checkbox_max ? _i18n.checkbox_max.replace('%d', max) : 'Please select at most ' + max + ' option(s).');
-                return null;
-            }
-            JS], self::otherTextClientRule()];
+        return [['rule' => 'checkbox-count', 'fn' => self::readFieldAsset('assets/js/fields/CheckboxField.checkbox-count.js')], self::otherTextClientRule()];
     }
 
     /**
@@ -223,10 +157,9 @@ CSS;
      */
     public function extractValue(string $field_id): mixed
     {
-        // Cap the number of submitted values BEFORE map_deep() walks them — a crafted
-        // array-valued POST otherwise costs unbounded O(n) sanitize calls (map_deep
-        // itself has no limit; slicing only after it ran would be too late).
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
+        self::assertRequestNonceVerified();
+        // Cap value count BEFORE map_deep() walks them; map_deep itself has no limit.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         $vals = isset($_POST[$field_id])
             // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce is verified once in FormProcessor::handle() before field extraction runs; value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray() below, WPCS doesn't recognize sanitization via the string-callback form.
             ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id]), 200), 'sanitize_text_field')
@@ -248,9 +181,7 @@ CSS;
      */
     public function extractFromRaw(mixed $raw): mixed
     {
-        // Same element-count cap as extractValue() — this is the group-copy path
-        // (up to 100 copies per GroupField), so an uncapped array here multiplies
-        // the same unbounded-sanitize-cost issue across every copy.
+        // Same element-count cap as extractValue(), applied per group copy (up to 100 copies).
         return is_array($raw)
             ? array_map(static fn($v) => sanitize_text_field(wp_unslash($v)), array_slice(array_values($raw), 0, 200))
             : [];
@@ -273,8 +204,7 @@ CSS;
     }
 
     /**
-     * Returns the actually-selected option values from an extractValue() array, excluding the internal
-     * __other_text__ companion entry so it never counts toward min/max selection limits or required checks.
+     * Returns selected option values, excluding __other_text__ so it never counts toward selection limits.
      *
      * @param array $value Raw value array from extractValue().
      * @return array Filtered, selected option values.

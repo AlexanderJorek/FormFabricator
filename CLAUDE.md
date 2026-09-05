@@ -77,11 +77,31 @@ After all findings: one paragraph of strategic recommendations for long-term NIS
 
 Static files in `assets/js/` served directly — no build step unless explicitly added.
 
+### No HEREDOC/NOWDOC
+
+WordPress.org prohibits HEREDOC/NOWDOC syntax in hosted plugins (their codesniffers can't
+verify escaping inside them) — this is an absolute rule, not a style preference. Field classes'
+embedded CSS/JS (`getStyles()`, `getClientInit()`, and any `fn` string inside
+`getClientValidation()`/`getClientEmptyCheck()`) live in their own real `.css`/`.js` files under
+`assets/css/fields/`/`assets/js/fields/`, named after the class (e.g. `UploadField.css`), and are
+read via `BaseField::readFieldAsset()` — giving real syntax highlighting/linting instead of a PHP
+string. When a class needs more than one such asset (multiple validation rules, an empty-check
+function), suffix the filename with the rule/purpose, e.g. `SepaField.iban.js`,
+`SepaField.sepa-bic.js`. Only a short, genuinely one-line JS/CSS literal may stay inline as a
+plain PHP string — the external-file split is for content that would otherwise need
+`. "\n" .`-joined concatenation. See `readFieldAsset()` in `BaseField.php`, and any field's
+`getStyles()`/`getClientInit()`/`getClientValidation()` for the pattern.
+
 ### Translations
 
 `languages/formfabricator.pot` (source strings) and `languages/formfabricator-de_DE.po`/`.mo` (German)
-are hand-maintained. There is no `msgfmt`/WP-CLI in this dev environment — to regenerate the
-`.mo` after editing a `.po` by hand, use the existing compiler, don't write a new one:
+are hand-maintained in the repo, for submission via translate.wordpress.org — `build.ps1` strips
+the `.po`/`.mo` from the shipped package (only the `.pot` ships), since WordPress core auto-loads
+a plugin's translation from `wp-content/languages/plugins/` on first use of its textdomain since
+WP 4.6, once this plugin is approved and a translation is published there. Nothing in this
+plugin's own code loads a bundled `.mo` at runtime. There is no `msgfmt`/WP-CLI in this dev
+environment — to regenerate the `.mo` after editing a `.po` by hand, use the existing compiler,
+don't write a new one:
 
 ```
 php languages/compile-mo.php languages/formfabricator-de_DE.po

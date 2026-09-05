@@ -1,0 +1,23 @@
+.fabricator-date-wrap { display: flex; align-items: center; gap: 8px; }
+.fabricator-date-text { flex: 1; }
+.fabricator-date-cal-btn {
+    flex-shrink: 0;
+    height: var(--fabricator-input-height);
+    padding: 0 12px;
+    background: var(--fabricator-bg-muted);
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
+    cursor: pointer;
+    color: var(--fabricator-text-muted);
+    font-size: 14px;
+    transition: background .1s;
+}
+.fabricator-date-cal-btn:hover { background: var(--fabricator-border); }
+.fabricator-date-wrap { position: relative; }
+.fabricator-date-picker-hidden {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+    width: 0; height: 0;
+    overflow: hidden;
+}

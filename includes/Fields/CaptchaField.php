@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -53,18 +53,13 @@ class CaptchaField extends BaseField
         return 'fa-solid fa-robot';
     }
 
-    // Does NOT enqueue the reCAPTCHA script — see render(). Loading google.com/recaptcha/api.js
-    // unconditionally would connect the visitor's browser to Google on every page load containing this field,
-    // before any interaction or consent (GDPR Art. 13 third-party disclosure). Instead the widget is loaded
-    // on demand, from a click-to-activate placeholder rendered in render().
+    // No unconditional script load here — connecting to Google before consent is a GDPR issue; see render().
     public function enqueueFrontScripts(): void
     {
     }
 
     /**
-     * Renders the field HTML. Renders a click-to-activate placeholder rather than the live widget: the
-     * reCAPTCHA script (and the connection to Google it triggers) is only loaded once the visitor explicitly
-     * clicks to enable it, not on page load.
+     * Renders a click-to-activate placeholder; the reCAPTCHA script loads only after an explicit click.
      *
      * @param array  $config   Field configuration.
      * @param string $field_id Unique field identifier.
@@ -99,7 +94,8 @@ class CaptchaField extends BaseField
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         $has_response = isset($_POST['g-recaptcha-response']);
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
         return $has_response ? sanitize_text_field(wp_unslash($_POST['g-recaptcha-response'])) : '';

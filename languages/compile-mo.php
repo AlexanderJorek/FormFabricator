@@ -1,10 +1,6 @@
 <?php
 /**
- * Compiles a .po file to a binary .mo file.
- * Usage: php compile-mo.php formfabricator-de_DE.po
- *
- * Build-time CLI tool only — run manually when translations change, never included
- * or executed by the plugin itself at runtime.
+ * Compiles a .po file to a binary .mo file. Build-time CLI tool only, not run by the plugin.
  */
 
 if ($argc < 2) {
@@ -20,10 +16,7 @@ if (!file_exists($poFile)) {
 
 $moFile = preg_replace('/\.po$/', '.mo', $poFile);
 
-// Parse .po file into msgid => msgstr pairs. Plural entries (msgid_plural +
-// msgstr[0]/msgstr[1]/...) are stored with the gettext-standard compound key
-// "singular\0plural" and NUL-joined translation forms, matching the MO binary
-// format's own plural convention (see GNU gettext's PO/MO format docs).
+// Plural entries are stored as "singular\0plural" keys with NUL-joined forms, per the MO binary format.
 $strings = [];
 $lines    = file($poFile, FILE_IGNORE_NEW_LINES);
 

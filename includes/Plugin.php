@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -45,6 +45,17 @@ class Plugin
 {
     private static bool $initialized = false;
 
+    // Every recurring cron hook this plugin schedules. Kept in one place so
+    // register_deactivation_hook() (forge-forms.php) can clear all of them without the
+    // cleanup list drifting out of sync as new sweeps are added here.
+    public const CRON_HOOKS = [
+        'fabricator_generator_sweep_tmp_dirs',
+        'fabricator_rl_sweep_expired',
+        'fabricator_su_sweep_expired',
+        'fabricator_cs_sweep_expired',
+        'fabricator_verifier_sweep_tmp_dirs',
+    ];
+
     /**
      * Bootstraps the plugin on first call; subsequent calls are no-ops.
      *
@@ -68,9 +79,7 @@ class Plugin
      */
     private static function load(): void
     {
-        // Load field classes, filtered against FieldRegistry::FIELD_MAP — glob()
-        // alone isn't a trust boundary, so this allowlist decides what actually
-        // gets included. FieldRegistry.php must load first so the constant exists.
+        // Filter glob() results against FieldRegistry::FIELD_MAP; glob() alone isn't a trust boundary.
         // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded literal path, not attacker- or request-influenced.
         include_once FABRICATOR_FORMS_PATH . 'includes/Fields/FieldRegistry.php';
         // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded literal path, not attacker- or request-influenced.
@@ -219,9 +228,7 @@ class Plugin
     }
 
     /**
-     * Mints a fresh fabricator_nonce/fabricator_submission_token pair, called by front.js right before submit
-     * so cached HTML never bakes in per-visitor values. Rate-limited per IP+form instead of nonce-guarded,
-     * since there's nothing yet to verify a nonce against.
+     * Mints a fresh nonce/token pair; rate-limited per IP+form since there's no nonce yet to verify.
      *
      * @return void
      */
@@ -258,21 +265,20 @@ class Plugin
      */
     public static function ajaxIbanBic(): void
     {
+        // Nonce is only emitted on pages embedding a form, so this can't be a bare IBAN/BIC oracle.
+        // Checked before the rate-limit increment below so an unauthenticated request without a
+        // valid nonce can't write wp_options rows via RateLimiter::increment() at all.
+        if (!check_ajax_referer('fabricator_iban_bic', 'nonce', false)) {
+            wp_send_json_error();
+            return;
+        }
+
         // Proxied through this WP endpoint (rather than calling openiban.com from the
         // browser) to avoid CORS issues and to rate-limit our own usage of their API.
         // See includes/Utils/ClientIp.php for the trusted-proxy-aware IP resolution.
         $ip  = Utils\ClientIp::resolve();
         $key = 'iban_' . hash_hmac('sha256', $ip, wp_salt('auth'));
         if (Utils\RateLimiter::increment($key, MINUTE_IN_SECONDS) > 20) {
-            wp_send_json_error();
-            return;
-        }
-
-        // Requires a nonce minted by Utils\Assets::enqueueFront() (only emitted on pages
-        // that actually embed a FormFabricator form) so this endpoint can't be driven as a bare
-        // anonymous IBAN-validation/BIC-harvesting oracle against openiban.com without ever
-        // having loaded a page containing a form.
-        if (!check_ajax_referer('fabricator_iban_bic', 'nonce', false)) {
             wp_send_json_error();
             return;
         }
@@ -311,10 +317,7 @@ class Plugin
     }
 
     /**
-     * Locales suggested privacy-policy text is available in: 'en' (the gettext source language, always
-     * available) plus every locale for which a languages/formfabricator-{locale}.mo file exists. A future
-     * translation contribution (a new .po/.mo dropped into languages/) shows up here automatically — no
-     * code change needed.
+     * Locales available for the privacy-policy text: 'en' plus every locale with a shipped .mo file.
      *
      * @return array<string,string> Locale code => human-readable language name.
      */
@@ -330,8 +333,7 @@ class Plugin
     }
 
     /**
-     * Human-readable name for a locale code, using WP core's own (offline, no-API-call) lookup table so
-     * newly-added locales get a sensible label without this plugin maintaining its own name list.
+     * Human-readable name for a locale code, using WP core's offline lookup table.
      *
      * @param string $locale Locale code, e.g. 'de_DE'.
      */
@@ -345,9 +347,7 @@ class Plugin
     }
 
     /**
-     * Raw (untranslated-container) paragraphs of the suggested privacy-policy text disclosing FormFabricator's two
-     * third-party data flows: openiban.com (SEPA IBAN lookups) and Google reCAPTCHA (the CAPTCHA field).
-     * Shared by privacyPolicyPlainText() below — one source of truth for the wording, two output formats.
+     * Raw privacy-policy paragraphs disclosing the two third-party data flows (openiban.com, Google reCAPTCHA).
      *
      * @return string[] Two paragraphs: [0] openiban.com, [1] Google reCAPTCHA.
      */
@@ -368,12 +368,7 @@ class Plugin
     }
 
     /**
-     * Suggested privacy-policy text (openiban.com + Google reCAPTCHA disclosures) as plain text, ready to
-     * copy-paste directly into a privacy policy page — via the normal gettext pipeline. Rendered in the
-     * language the caller (currently FormSettings::render()'s "Privacy Policy Text" card) asks for, not
-     * necessarily the site's current admin-UI locale — privacy-policy wording is content the admin is
-     * choosing for their published policy, independent of what language they run wp-admin in.
-     * withPluginLocale() handles the temporary locale switch.
+     * Suggested privacy-policy text, rendered in $lang regardless of the site's current admin-UI locale.
      *
      * @param string $lang Locale code from availablePrivacyLanguages().
      */
@@ -386,22 +381,10 @@ class Plugin
     }
 
     /**
-     * Runs $callback with this plugin's textdomain swapped to $locale instead of the site's current
-     * locale, then restores it — the standard pattern for rendering plugin strings in a language the
-     * caller picked explicitly (mirrors how core/WooCommerce render per-recipient-locale emails).
-     * Deliberately does NOT use switch_to_locale()/restore_previous_locale(): those mutate WP's global
-     * current-locale stack (affecting date formatting, every other loaded textdomain, etc.) for the
-     * whole rest of the request, and restoring via a second load_plugin_textdomain() call proved
-     * unreliable mid-request — callers ended up with 'formfabricator' strings still stuck in the requested
-     * $locale afterward. Instead this saves and restores only the global $l10n['formfabricator'] translation
-     * entry that __()/_e() actually read, which can't leave any state behind beyond that one array key.
-     * For $locale === 'en' this installs a NOOP_Translations object rather than just unsetting the array
-     * key. Simply unsetting it re-opens the door to WordPress's own "just in time" textdomain
-     * auto-loading (since WP 6.7): the next __()/_e() call for a domain with no $l10n entry gets
-     * silently reloaded from disk using the SITE's current locale (German, in the bug this was written
-     * to fix) — which is exactly what "requesting English" was trying to avoid. A NOOP_Translations
-     * instance keeps the array key present (so that auto-reload never triggers) while passing every
-     * string through untranslated, which is what "English" is supposed to mean here.
+     * Runs $callback with this plugin's textdomain swapped to $locale, then restores it; saves/restores only
+     * $l10n['formfabricator'] rather than switch_to_locale() to avoid mutating WP's global locale stack. For
+     * 'en' installs NOOP_Translations instead of unsetting the key, since unsetting re-triggers WP 6.7's
+     * just-in-time textdomain auto-reload (from the site's locale, not English) on the next __()/_e() call.
      *
      * @param string   $locale   Locale code, e.g. 'de_DE', or 'en' for the gettext source language (no
      *                           .mo to load).
@@ -420,7 +403,8 @@ class Plugin
             $l10n['formfabricator'] = new \NOOP_Translations();
         } elseif (preg_match('/^[A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?$/', $locale)) {
             unset($l10n['formfabricator']);
-            $mofile = FABRICATOR_FORMS_PATH . 'languages/formfabricator-' . $locale . '.mo';
+            // Reads from WP_LANG_DIR, where WordPress.org's language-pack system installs it (no bundled .mo ships).
+            $mofile = WP_LANG_DIR . '/plugins/formfabricator-' . $locale . '.mo';
             if (file_exists($mofile)) {
                 load_textdomain('formfabricator', $mofile);
             }
@@ -564,7 +548,7 @@ class Plugin
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing decision (which admin page to redirect to); gated by manage_options above, no data written.
         $current_page = sanitize_text_field(wp_unslash($_GET['page'] ?? ''));
         // Only redirect within FormFabricator pages, not the whole WP admin.
-        if (strncmp($current_page, 'fabricator-forms', 11) !== 0) {
+        if (strncmp($current_page, 'fabricator-forms', 16) !== 0) {
             return;
         }
         if ($current_page === 'fabricator-forms-settings') {

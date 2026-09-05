@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -323,7 +323,7 @@ class FormList
             </div>
         </div>
 
-        <?php // Form list page JS: assets/js/admin-formlist.js (enqueued in Utils/Assets.php) -- previously an inline <script> block here. ?>
+        <?php // Form list page JS lives in assets/js/admin-formlist.js, enqueued in Utils/Assets.php. ?>
         <?php
     }
 
@@ -571,9 +571,7 @@ class FormList
         if ($decoded === false) {
             wp_send_json_error(['message' => __('Invalid import string.', 'formfabricator')], 400);
         }
-        // Support both v2 (gzdeflate) and v1 (gzencode) strings.
-        // Bound the inflated size so a small crafted payload can't expand into a
-        // multi-gigabyte decompression bomb (CERT MEM10-C / resource exhaustion).
+        // Bound the inflated size to prevent a decompression bomb (CERT MEM10-C).
         $max_inflated_size = 5 * 1024 * 1024; // 5 MB is generous for a form export
         $json = @gzinflate($decoded, $max_inflated_size);
         if ($json === false) {
@@ -582,9 +580,7 @@ class FormList
         if ($json === false) {
             wp_send_json_error(['message' => __('Decompression failed.', 'formfabricator')], 400);
         }
-        // Import always creates a NEW form (FormModel::save() with no id) rather than
-        // overwriting an existing one, even if the exported payload originated from a
-        // form that still exists — avoids clobbering forms via a shared/pasted export string.
+        // Import always creates a NEW form rather than overwriting one with a matching id.
         $payload = json_decode($json, true);
         if (!is_array($payload)
             || !isset($payload['v'], $payload['t'], $payload['f'])
@@ -596,11 +592,7 @@ class FormList
         if ((int)$payload['v'] === 2) {
             $fields = self::restoreFieldDefaults($fields);
         }
-        // Route imported content through the same sanitizers ajaxSave() applies
-        // to admin-authored fields/notifications/settings — an import string
-        // is untrusted input (it may be pasted from anywhere) and must not
-        // bypass the HTML/config sanitization pipeline just because it arrives
-        // via a different admin action.
+        // Route imported content through the same sanitizers as ajaxSave() — it's untrusted input.
         $payload_title = $payload['t'];
         $result = FormModel::save(
             [
@@ -643,9 +635,7 @@ class FormList
             $defaults = $instance->getDefaultConfig();
             $compact  = [];
             foreach ($field as $k => $v) {
-                // Always keep structural keys ('type'/'id'/'col' are needed to reconstruct
-                // the field even if their value happens to match the type's default);
-                // drop any other key whose value equals the default to shrink the export string.
+                // Always keep structural keys; drop others matching the type's default to shrink the export.
                 if ($k === 'type' || $k === 'id' || $k === 'col') {
                     $compact[$k] = $v;
                 } elseif (!array_key_exists($k, $defaults) || $defaults[$k] !== $v) {

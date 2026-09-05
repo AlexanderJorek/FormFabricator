@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -56,52 +56,7 @@ class CurrencyField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-currency-wrap {
-    display: flex;
-    align-items: stretch;
-    border: 1px solid var(--fabricator-border-input) !important;
-    border-radius: var(--fabricator-radius);
-    overflow: hidden;
-    transition: border-color .15s, box-shadow .15s;
-}
-.fabricator-currency-wrap:focus-within {
-    border-color: var(--fabricator-accent) !important;
-    box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--fabricator-accent) 15%, transparent) !important;
-}
-.fabricator-currency-symbol {
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-    background: var(--fabricator-bg-subtle);
-    border-right: 1px solid var(--fabricator-border-input);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--fabricator-text-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-.fabricator-currency-wrap .fabricator-currency-input {
-    border: none !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    flex: 1;
-    min-width: 0;
-    -moz-appearance: textfield !important;
-}
-.fabricator-currency-wrap .fabricator-currency-input:focus,
-.fabricator-currency-wrap .fabricator-currency-input:focus-visible {
-    border: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-}
-.fabricator-currency-input::-webkit-outer-spin-button,
-.fabricator-currency-input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-CSS;
+        return self::readFieldAsset('assets/css/fields/CurrencyField.css');
     }
     /**
      * Returns the Font Awesome icon class.
@@ -179,24 +134,7 @@ CSS;
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'currency-range', 'fn' => <<<'JS'
-            function (fieldEl) {
-                var inp = fieldEl.querySelector('input[type="number"]');
-                if (!inp || inp.value.trim() === '') return null;
-                var val = parseFloat(inp.value);
-                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                if (isNaN(val)) return (_i18n && _i18n.currency_invalid_amount) || 'Please enter a valid amount.';
-                var min = inp.getAttribute('min');
-                var max = inp.getAttribute('max');
-                if (min !== null && min !== '' && val < parseFloat(min)) {
-                    return ((_i18n && _i18n.currency_min) || 'Minimum value: %s').replace('%s', min);
-                }
-                if (max !== null && max !== '' && val > parseFloat(max)) {
-                    return ((_i18n && _i18n.currency_max) || 'Maximum value: %s').replace('%s', max);
-                }
-                return null;
-            }
-            JS]];
+        return [['rule' => 'currency-range', 'fn' => self::readFieldAsset('assets/js/fields/CurrencyField.currency-range.js')]];
     }
 
     /**

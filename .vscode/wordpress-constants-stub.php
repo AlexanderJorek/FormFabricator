@@ -1,12 +1,7 @@
 <?php
 
 /**
- * Editor-only stub for WordPress core time constants.
- *
- * These are defined at runtime via define() in wp-includes/default-constants.php,
- * so they aren't picked up by static stub generators like php-stubs/wordpress-stubs.
- * This file is never loaded at runtime — it exists solely so Intelephense can
- * resolve the constants. See .vscode/settings.json (intelephense.environment.includePaths).
+ * Editor-only stub for WordPress core time constants; never loaded at runtime.
  */
 
 define('MINUTE_IN_SECONDS', 60);

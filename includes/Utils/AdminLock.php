@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,9 +24,7 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 /**
- * Reimplements WP core's post-lock "time:user" + soft-expiry pattern against a wp_options row,
- * for singleton admin screens with no post ID to attach postmeta to. Advisory only — each save
- * handler's own snapshot-hash comparison is the authoritative conflict guard.
+ * Reimplements WP core's post-lock pattern against wp_options for singleton screens with no post ID.
  */
 class AdminLock
 {

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,72 +35,7 @@ class PageBreakField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-form-page { display: none; }
-.fabricator-form-page.fabricator-page-active { display: block; }
-.fabricator-page-nav {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: var(--fabricator-gap);
-    padding: 14px 0 0;
-    border-top: 1px solid var(--fabricator-border);
-    gap: 10px;
-}
-.fabricator-page-nav--top {
-    display: flex;
-    align-items: center;
-    border-top: none;
-    padding: 0;
-    margin: 0 0 var(--fabricator-gap);
-}
-.fabricator-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 9px 20px;
-    border-radius: var(--fabricator-radius);
-    border: 1px solid var(--fabricator-border-input);
-    background: var(--fabricator-bg);
-    color: var(--fabricator-text-muted);
-    font-size: 14px;
-    font-family: var(--fabricator-font);
-    cursor: pointer;
-    transition: background .1s, border-color .1s;
-}
-.fabricator-btn:hover {
-    background: var(--fabricator-bg-subtle);
-    border-color: var(--fabricator-text-subtle);
-}
-.fabricator-btn-next {
-    margin-left: auto;
-    background: var(--fabricator-accent);
-    border-color: var(--fabricator-accent);
-    color: #fff;
-    font-weight: 600;
-}
-.fabricator-btn-next:hover,
-.fabricator-btn-next:focus,
-.fabricator-btn-next:focus-visible {
-    background: var(--fabricator-accent-dark);
-    border-color: var(--fabricator-accent-dark);
-    color: #fff;
-    outline: none;
-}
-.fabricator-page-nav--top .fabricator-btn-prev {
-    border-color: transparent;
-    background: transparent;
-    color: var(--fabricator-accent);
-    padding-left: 0; padding-right: 0;
-    font-size: 13px;
-}
-.fabricator-page-nav--top .fabricator-btn-prev:hover {
-    background: transparent;
-    border-color: transparent;
-    color: var(--fabricator-accent-dark);
-    text-decoration: underline;
-}
-CSS;
+        return self::readFieldAsset('assets/css/fields/PageBreakField.css');
     }
 
     /**
@@ -179,9 +114,7 @@ CSS;
     }
 
     /**
-     * Renders the page-transition HTML emitted at this break point. Closes the current page <div>, emits
-     * bottom nav (prev + next), opens the next page <div>, and adds a top-of-page prev button. The $page
-     * argument is the 1-based index of the page being opened (already incremented by FormRenderer).
+     * Closes the current page <div>, emits nav, and opens the next one.
      *
      * @param array $config Field configuration.
      * @param int   $page   Index of the page being opened (1 = first page after a break).

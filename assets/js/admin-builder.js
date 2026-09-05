@@ -9,15 +9,10 @@
 (function () {
 'use strict';
 
-/* Localized strings from FormEditor.php::builderI18n() (wp_localize_script,
-   handle 'fabricator-forms-builder'). Every lookup below falls back to an English
-   literal — matching the FabricatorForms.i18n pattern in front.js — so the builder
-   still renders (in English) if localization ever fails to load. */
+/* Falls back to English literals if localization fails to load. */
 var _i18n = (window.FabricatorBuilderI18n && window.FabricatorBuilderI18n.i18n) || {};
 
-/* Merges a localized {code: name} map (possibly empty/partial) on top of an
-   English-literal fallback map — ES5 for-in loop to match this file's style
-   (no Object.assign/spread used elsewhere here). */
+/* ES5 for-in, not Object.assign, to match this file's style. */
 function mergeI18nMap(fallback, localized) {
     var out = {};
     var k;
@@ -26,23 +21,11 @@ function mergeI18nMap(fallback, localized) {
     return out;
 }
 
-/* Field types that can never live inside a group's children list: 'group'
-   (no nested groups) and the structural page-flow fields, which only make
-   sense as direct top-level siblings of the page divs they act on. */
+/* No nested groups; page-flow fields must stay top-level siblings of the pages they act on. */
 var NO_GROUP_TYPES = ['group', 'pagebreak', 'page-header'];
 
-/* ── Drag-to-reorder ──────────────────────────────────────────────────────── *
- * makeSortable(list, handleSel, rowSel, onReorder)
- *   list       – container element
- *   handleSel  – CSS selector for the drag grip within each row
- *   rowSel     – CSS selector for draggable rows within list
- *   onReorder  – called with the new DOM order of rows after a drop
- */
 function makeSortable(list, handleSel, rowSel, onReorder) {
-    /* move/up listeners are on document, not list or item: the dragged item is
-       switched to position:fixed and can be moved anywhere on the page (or off
-       the list entirely) during the drag, so tracking must not depend on the
-       pointer staying over any particular element. */
+    /* Listeners are on document, not list/item: item goes position:fixed and can move anywhere during drag. */
     list.addEventListener('pointerdown', function (e) {
         var handle = e.target.closest(handleSel);
         if (!handle) { return; }
@@ -111,14 +94,7 @@ var PALETTE_GROUPS  = [];
 var TYPE_COLOR_MAP  = {};
 var _lastRenderedFieldsJson = null; /* dirty-check cache for renderFieldList */
 
-/* Client-side mirror of the form's JSON structure as read/written by
-   includes/Admin/FormEditor.php (see `data-form` on #fabricator-editor for the
-   initial payload, and bindSave() below for the save payload). `fields`
-   entries are plain objects keyed by field type + settings; a field with
-   type === 'group' additionally has a `children` array of the same shape
-   (see buildGroupRow/buildChildRow). Keep this shape in sync with
-   FormEditor.php's expected schema — the PHP side does not validate deeply,
-   so a shape drift here can silently corrupt saved forms. */
+/* Must stay in sync with FormEditor.php's schema — PHP doesn't validate deeply, so drift here silently corrupts saved forms. */
 var state = {
     fields: [], notifications: [], formName: _i18n.defaultFormName || 'New Form',
     settings: {
@@ -202,15 +178,7 @@ document.addEventListener('click', function (e) {
     showUnsavedDialog(function () { window.location.href = href; });
 }, true);
 
-/* Drag/drop state below is intentionally module-level (not passed through
-   closures) because drag operations span multiple independent DOM event
-   listeners (dragstart on a row, dragover/drop on the list, dragend on the
-   row) that all need to agree on "what is being dragged and where would it
-   land" without re-deriving it from the DOM each time. Two independent
-   "tracks" exist: dragSrcIdx/dropLineTarget for reordering top-level fields
-   (and pulling a child out of a group), and dragChildSrc/childGroupDropTarget
-   for reordering within a group's child list — see initDragDrop() and the
-   group-row equivalent in buildGroupRow(). */
+/* Module-level, not closure state: multiple independent DOM listeners (dragstart/dragover/dragend) must agree on drag state. */
 var dragSrcIdx           = null;
 var dragBrokenPartnerIdx = null; /* partner idx whose cols we set to 12 on dragstart */
 var dropSideMode         = null; /* 'left' | 'right' | null */
@@ -254,9 +222,7 @@ var cachedMidpoints = [];
 var rafPending      = false;
 var pendingY        = 0;
 
-/* ================================================================
- * Bootstrap
- * ================================================================ */
+/* Bootstrap */
 document.addEventListener('DOMContentLoaded', function () {
     var el = document.getElementById('fabricator-editor');
     if (el) {
@@ -290,8 +256,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } catch (e) { /* ignore */ }
     }
 
-    /* Emit one <style> block driving border-left-color via [data-type] so
-       buildFieldRow never needs to set an inline style per row. */
+    /* One <style> block drives border-left-color via [data-type], avoiding a per-row inline style. */
     (function () {
         var rules = '';
         for (var t in TYPE_COLOR_MAP) {
@@ -328,18 +293,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 0);
 });
 
-/* ================================================================
- * Field List
- * ================================================================ */
+/* Field List */
 function renderFieldList() {
     var list = document.getElementById('fabricator-field-list');
     if (!list) return;
     var json = JSON.stringify(state.fields);
     if (json === _lastRenderedFieldsJson) return;
-    /* renderFieldList() doubles as the dirty-flag setter: any state.fields
-       change that triggers a re-render also marks the form dirty, except the
-       very first call (bootstrap), which must not flip the unsaved-changes
-       guard for a freshly loaded form. */
+    /* Doubles as the dirty-flag setter, except the very first (bootstrap) call. */
     if (_lastRenderedFieldsJson !== null) { markDirty(); } /* skip initial render */
     _lastRenderedFieldsJson = json;
     list.innerHTML = '';
@@ -540,10 +500,7 @@ function buildFieldRow(field, idx) {
         var f = state.fields[dragSrcIdx];
         dragBrokenPartnerIdx = null;
         if (f && f.cols === 6) {
-            /* Find the actual pair partner via isSecondInPair, not just the first col-6 neighbor.
-               Must resolve partnerIdx (which reads cols on neighboring fields) BEFORE mutating
-               any cols below — isSecondInPair's parity check would itself be corrupted if the
-               dragged field's cols were already flipped to 12 at this point. */
+            /* Must resolve partnerIdx before mutating cols below — flipping cols first would corrupt isSecondInPair's parity check. */
             var partnerIdx = null;
             if (isSecondInPair(dragSrcIdx)) {
                 partnerIdx = dragSrcIdx - 1;
@@ -562,11 +519,7 @@ function buildFieldRow(field, idx) {
         }
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', String(dragSrcIdx));
-        /* setTimeout(0), not synchronous: the browser snapshots the drag image
-           from the element's current rendered state right after dragstart fires.
-           Hiding the row synchronously here would make the drag image blank/empty
-           in Firefox and some Chromium builds — deferring to the next tick lets
-           the native drag image get captured first. */
+        /* setTimeout(0): hiding synchronously would blank the native drag image in Firefox/Chromium. */
         setTimeout(function () {
             /* Hide from grid flow AND mark class so cacheMidpoints excludes it */
             row.style.display = 'none';
@@ -609,9 +562,7 @@ function buildFieldRow(field, idx) {
     return row;
 }
 
-/* ================================================================
- * Group field row (always full-width, expandable child list)
- * ================================================================ */
+/* Group field row (always full-width, expandable child list) */
 function buildGroupRow(field, idx) {
     var row      = document.createElement('div');
     row.className    = 'fabricator-field-row fabricator-field-row--group';
@@ -1019,9 +970,7 @@ function buildChildRow(child, childIdx, groupIdx, onRerender) {
     return row;
 }
 
-/* ================================================================
- * Drag & Drop
- * ================================================================ */
+/* Drag & Drop */
 function initDragDrop() {
     var list = document.getElementById('fabricator-field-list');
     if (!list) return;
@@ -1030,10 +979,7 @@ function initDragDrop() {
         if (dragSrcIdx === null && dragChildSrc === null) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        /* dragover can fire far more often than once per frame; only the most
-           recent pointer Y matters, so we stash it and let a single pending
-           rAF flush it, instead of recomputing the drop-line position (and
-           touching layout) on every event. */
+        /* dragover can fire many times per frame; stash the latest Y and let one pending rAF flush it. */
         pendingY = e.clientY;
         if (!rafPending) {
             rafPending = true;
@@ -1057,12 +1003,7 @@ function initDragDrop() {
         hideDropLine();
         list.classList.remove('fabricator-drag-active');
 
-        /* Child dragged OUT of group → becomes a top-level field.
-           This branch fires when a group-child row is dropped on the
-           top-level list (not the group's own child list) — dragChildSrc
-           is only set while a child drag is in progress, so its presence
-           here is what disambiguates "dropped into top-level list" from
-           the normal top-level reorder handled below. */
+        /* dragChildSrc set here means a group child was dropped on the top-level list — extract it. */
         if (dragChildSrc !== null) {
             clearGroupDropIndicators();
             if (!dropLineTarget) { dragChildSrc = null; cachedMidpoints = []; return; }
@@ -1107,10 +1048,7 @@ function initDragDrop() {
             insertIdx = parseInt(dropLineTarget.beforeEl.dataset.idx, 10);
         }
 
-        /* insertIdx was read from the pre-splice DOM order; once `from` is
-           spliced out of state.fields everything after it shifts down one
-           index, so if the target was after the source it must be decremented
-           to still point at the same field. */
+        /* insertIdx was read pre-splice; decrement if target was after the spliced-out source. */
         if (from < insertIdx) { insertIdx--; }
         dropLineTarget = null;
         if (insertIdx === from) { renderFieldList(); return; }
@@ -1123,13 +1061,7 @@ function initDragDrop() {
     });
 }
 
-/* Fields are laid out in a 12-column grid; cols===6 means "half width" and
-   only renders side-by-side correctly when paired with an immediately
-   adjacent cols===6 sibling (see isSecondInPair/cacheMidpoints, which skip
-   the second half of a pair when computing drop targets). Any reorder or
-   group-extraction can break that adjacency, so repairPairs() must run
-   after every mutation of state.fields to fall back orphaned halves to
-   full width (cols=12). */
+/* Must run after every state.fields mutation to reset any cols===6 field left without its adjacent pair partner. */
 /* Reset any cols=6 field that no longer has a consecutive partner */
 function repairPairs() {
     var i = 0;
@@ -1274,17 +1206,13 @@ function cacheMidpoints() {
     }
 }
 
-/* ================================================================
- * Add-field button
- * ================================================================ */
+/* Add-field button */
 function bindAddFieldButton() {
     var btn = document.getElementById('fabricator-add-field-btn');
     if (btn) btn.addEventListener('click', openFieldPickerModal);
 }
 
-/* ================================================================
- * Field Picker Modal
- * ================================================================ */
+/* Field Picker Modal */
 function createFieldPickerModal() {
     fieldPickerModal           = document.createElement('div');
     fieldPickerModal.id        = 'fabricator-field-modal';
@@ -1361,9 +1289,7 @@ function renderFieldPickerGroups(query) {
     var q = query.toLowerCase().trim();
 
     if (!q) {
-        /* Cache is keyed by context (top-level vs. inside a group) so opening
-           the picker in a group doesn't serve the cached top-level DOM that
-           still contains the "Feldgruppe" card. */
+        /* Keyed by context so a group-picker open doesn't reuse the top-level cached DOM (which has the "Feldgruppe" card). */
         var isGroupCtx = fieldPickerTargetGroup !== null;
         if (!fieldPickerCachedBody || fieldPickerCacheIsGroupCtx !== isGroupCtx) {
             fieldPickerCachedBody = buildPickerFragment(PALETTE_GROUPS, function (item) {
@@ -1412,9 +1338,7 @@ function onFieldPickerEsc(e) { if (e.key === 'Escape') closeFieldPickerModal(); 
 
 function addField(type, targetGroup) {
     var pal = findPaletteItem(type);
-    /* Deep-clone: pal.defaults is reused for every field of this type, and nested
-     * values (e.g. GroupField's 'conditions', Select's 'options') must not be shared
-     * by reference across instances. */
+    /* Deep-clone: pal.defaults is reused per field type, so nested values must not be shared by reference. */
     var field = pal && pal.defaults ? JSON.parse(JSON.stringify(pal.defaults)) : {};
     field.id   = generateId(type);
     field.type = type;
@@ -1441,9 +1365,7 @@ function addField(type, targetGroup) {
     }
 }
 
-/* ================================================================
- * Settings Modal
- * ================================================================ */
+/* Settings Modal */
 function createSettingsModal() {
     settingsModal           = document.createElement('div');
     settingsModal.id        = 'fabricator-settings-modal';
@@ -1588,9 +1510,7 @@ function buildGeneralTab(idx, field, pal) {
     spRow(panel, 'label', _i18n.labelField || 'Label', 'text', field.label || '', function (v) { change('label', v); });
     spCheckbox(panel, 'hide_label', _i18n.hideLabel || 'Hide label', !!field.hide_label, function (v) { change('hide_label', v); });
 
-    /* Hide the global "Pflichtfeld" checkbox for fields that manage required
-     * per sub-component (identified by having a subfields schema entry that is
-     * currently active — i.e. expanded mode). */
+    /* Hide global "Pflichtfeld" for fields that manage required per sub-component instead. */
     var hasActiveSubfields = schema.some(function (s) {
         if (s.type !== 'subfields') return false;
         if (!s.depends_on) return true;
@@ -1780,28 +1700,7 @@ function buildGeneralTab(idx, field, pal) {
     });
 }
 
-/* ─── Custom advanced-tab blocks ────────────────────────────────────────────
- *
- * Some field types need UI that the schema system can't express — multi-step
- * conditionals, tag inputs, nested pills, etc.  Instead of scattering
- * field-specific `if` branches inside buildAdvancedTab, each field registers
- * a render function here.
- *
- * HOW TO ADD A CUSTOM BLOCK FOR A NEW FIELD TYPE
- * ─────────────────────────────────────────────────
- * 1. Add a key matching the field's type string (same value used in
- *    FieldRegistry::registerDefaults() on the PHP side).
- * 2. Write a function(panel, field, change) where:
- *      panel  — the DOM element to append UI into
- *      field  — the live field config object (read current values from here)
- *      change — function(key, value) that persists a config change and saves
- * 3. The function runs BEFORE the schema-driven entries from getAdvancedSchema(),
- *    so schema entries always appear below your custom block.
- * 4. If your field has NO schema entries (advancedSchema returns []) you can
- *    put everything here.  If it has some, do both — schema handles the simple
- *    rows, the custom block handles the complex widget.
- *
- * ─────────────────────────────────────────────────────────────────────────── */
+/* Custom advanced-tab blocks: field-specific UI the schema system can't express; each renders BEFORE its schema-driven entries. */
 var FIELD_ADVANCED_BLOCKS = {
 
     sepa: function (panel, field, change) {
@@ -1978,10 +1877,7 @@ function buildAdvancedTab(idx, field) {
         _i18n.separateClassesHint || 'Separate multiple classes with spaces.'
     );
 
-    /* ---- Schema-driven advanced entries ----
-     * Rendered inside the "Darstellung" section, directly below Feld-ID.
-     * Custom blocks (FIELD_ADVANCED_BLOCKS) render after, for field-specific
-     * sections like the SEPA Länderfilter. */
+    /* ---- Schema-driven advanced entries (rendered below Feld-ID; custom blocks render after) ---- */
     var advPal = findPaletteItem(field.type);
     var advSchema = (advPal && advPal.advancedSchema) ? advPal.advancedSchema : [];
 
@@ -2070,8 +1966,7 @@ function buildAdvancedTab(idx, field) {
         }
     }
 
-    /* Run the custom block for this field type (e.g. SEPA Länderfilter, Phone mode).
-     * Placed last so field-specific sections appear below the shared Darstellung section. */
+    /* Placed last so field-specific sections appear below the shared Darstellung section. */
     if (FIELD_ADVANCED_BLOCKS[field.type]) {
         FIELD_ADVANCED_BLOCKS[field.type](panel, field, change);
     }
@@ -2345,9 +2240,7 @@ function buildConditionsTab(idx, field) {
     body.appendChild(addBtn);
 }
 
-/* ================================================================
- * Settings panel element builders
- * ================================================================ */
+/* Settings panel element builders */
 function spRow(parent, key, label, type, value, onChange, hint) {
     var row = document.createElement('div');
     row.className = 'fabricator-sp-row';
@@ -2469,11 +2362,7 @@ function spTextarea(parent, key, label, value, onChange, hint) {
     parent.appendChild(row);
 }
 
-/* One plain-text input per page this step bar actually owns. A page break
-   BEFORE the bar's own position doesn't count — that lets an admin put a
-   small entry page ahead of it (e.g. "Continue" splash) that the bar has no
-   knowledge of, then have it number/step only the pages from its own
-   position onward. */
+/* A page break before the bar's own position doesn't count, so an entry splash page can precede it unnumbered. */
 function spPageNamesList(parent, key, label, values, onChange, hint, fieldIdx) {
     var row = document.createElement('div');
     row.className = 'fabricator-sp-row';
@@ -2538,11 +2427,7 @@ function spInfoIcon(text) {
     icon.className = 'fa-solid fa-circle-info';
     wrap.appendChild(icon);
 
-    // Appended to <body> (not `wrap`) and position:fixed, because the settings
-    // modal has overflow:hidden for its rounded corners — an absolutely-positioned
-    // descendant tooltip gets silently clipped there instead of floating above the
-    // modal, the same problem fabricator-access-dropdown (FormSettings.php) already
-    // solves the same way.
+    // Appended to <body> (position:fixed), not `wrap` — the settings modal's overflow:hidden would clip an absolutely-positioned descendant tooltip (same fix as fabricator-access-dropdown in FormSettings.php).
     var tip = document.createElement('span');
     tip.className   = 'fabricator-info-tooltip';
     tip.textContent = text;
@@ -2685,11 +2570,7 @@ function spSelect(parent, key, label, options, value, onChange) {
     parent.appendChild(row);
 }
 
-/* Country names for IBAN-capable countries. English literal fallback map —
-   the actual values used at runtime come from window.FabricatorBuilderI18n.countryNames
-   (FormEditor.php::builderI18n(), which reuses the same __() msgids as
-   SepaField::ibanCountryOptions()); this object only fills in if that ever
-   fails to load. */
+/* English literal fallback; runtime values come from window.FabricatorBuilderI18n.countryNames. */
 var COUNTRY_NAMES_EN = {
     AD:'Andorra',AE:'United Arab Emirates',AL:'Albania',AT:'Austria',AZ:'Azerbaijan',
     BA:'Bosnia and Herzegovina',BE:'Belgium',BG:'Bulgaria',BH:'Bahrain',BR:'Brazil',
@@ -2718,10 +2599,7 @@ function spCountryTags(parent, key, label, values, onChange) {
     lbl.textContent = label;
     row.appendChild(lbl);
 
-    /*
-     * One unified box: chips + search input inline.
-     * Clicking anywhere in the box focuses the search input.
-     */
+    /* Unified box: chips + search input inline; clicking anywhere focuses the search input. */
     var box = document.createElement('div');
     box.className = 'fabricator-ctag-box';
 
@@ -2873,9 +2751,7 @@ function spCountryTags(parent, key, label, values, onChange) {
     parent.appendChild(row);
 }
 
-/* Calling codes for phone country filter — stored value is the code string e.g. '+49'.
-   English literal fallback map; runtime values come from
-   window.FabricatorBuilderI18n.phoneCodes (FormEditor.php::builderI18n()). */
+/* Stored value is the code string e.g. '+49'. English literal fallback; runtime values come from window.FabricatorBuilderI18n.phoneCodes. */
 var PHONE_CALLING_CODES_EN = {
     '+1':   'USA / Canada',   '+7':   'Russia',         '+20':  'Egypt',
     '+27':  'South Africa',   '+30':  'Greece',         '+31':  'Netherlands',
@@ -3051,11 +2927,7 @@ function spCallingCodeTags(parent, key, label, values, onChange) {
 }
 
 
-/*
- * Options list editor for select/radio/checkbox fields.
- * Each option is stored as {value, label, default}. Accepts plain strings
- * from legacy data and normalises them on first render.
- */
+/* Options list editor: accepts plain strings from legacy data and normalises them on first render. */
 function spOptionsList(parent, key, label, values, onChange) {
     var row = document.createElement('div');
     row.className = 'fabricator-sp-row';
@@ -3106,13 +2978,7 @@ function spOptionsList(parent, key, label, values, onChange) {
             labelInp.placeholder = _i18n.optionLabelPlaceholder || 'Label';
             labelInp.addEventListener('input', function () {
                 opts[i].label = this.value;
-                /* Auto-derive value from label only while the user hasn't manually
-                   diverged it. Detected by comparing the current stored value against
-                   slugify() of the label as it was BEFORE this keystroke (this.value
-                   minus its last char) — if they still match, the value was still
-                   being auto-generated up to now, so keep auto-deriving; if the user
-                   had hand-edited the value field, this comparison fails and the
-                   value is left alone. */
+                /* Only auto-derive value from label while it still matches slugify() of the label pre-keystroke; a hand-edited value breaks the match and stops auto-deriving. */
                 if (!opts[i].value || opts[i].value === slugify(this.value.slice(0, -1))) {
                     opts[i].value = slugify(this.value);
                     var vi = optRow.querySelector('.fabricator-sp-opt-value');
@@ -3329,8 +3195,7 @@ function spHtmlEditor(parent, key, label, value, onChange, opts) {
     parent.appendChild(row);
 }
 
-/* Rich text editor: sandboxed iframe in designMode (not contenteditable —
- * that strips the <html>/<head>/<body> wrapper and is an extension target). */
+/* designMode, not contenteditable — contenteditable strips the <html>/<head>/<body> wrapper. */
 /* HTML field editor: Visuell|Code toggle — same pattern as buildNotifContentTab */
 function spHtmlFieldEditor(parent, key, label, value, onChange) {
     var currentValue = value || '';
@@ -3448,9 +3313,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
     function doResize() {
         var doc = iframe.contentDocument;
         if (!doc || !doc.documentElement || !doc.body) return;
-        /* scroll metrics are unreliable with overflow:hidden containers
-           (e.g. rounded email "card" tables), so measure the real bottom
-           edge of every element instead. */
+        /* scroll metrics are unreliable with overflow:hidden containers, so measure real element bottom edges instead. */
         var max = 0;
         var nodes = doc.body.querySelectorAll('*');
         for (var i = 0; i < nodes.length; i++) {
@@ -3473,19 +3336,11 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
     function loadDoc(html) {
         var doc = iframe.contentDocument;
         if (!doc) {
-            /* iframe is in a detached subtree (inline row render) — defer until
-               the caller inserts the row into the live DOM. */
+            /* iframe is in a detached subtree — defer until caller inserts the row into the live DOM. */
             setTimeout(function () { loadDoc(html); }, 0);
             return;
         }
-        // id="fabricator-editor-preview-style" marks this block as display-only scaffolding for the
-        // small editor widget itself (padding/font/margin-reset so the iframe preview looks
-        // sensible) — never part of the admin's actual authored content. cleanRichDoc() strips
-        // any element carrying this id before either serialization mode runs. This matters most
-        // for the full-document path (the notification-body editor): without stripping it here,
-        // every notification email actually sent to recipients would carry this editor's own
-        // internal preview chrome (a specific 13px font/color/padding) baked into its markup,
-        // silently overriding whatever styling the admin actually intended for the email.
+        // id="fabricator-editor-preview-style" is display-only scaffolding; cleanRichDoc() strips it so it never leaks into a sent notification email.
         var hasHtmlDoc = /<html[\s>]/i.test(html || '');
         var full = hasHtmlDoc
             ? html
@@ -3497,11 +3352,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
         doc.designMode = 'on';
         doc.addEventListener('input', emitChange);
 
-        // Re-inject the scaffold whenever it's missing — not just for bare fragments. A
-        // previously-saved notification body is already a full <html> document by the time it's
-        // reloaded (e.g. reopening the modal, switching Code -> Visual), and since saving now
-        // correctly strips this scaffold (see above), reload has nothing to carry it forward with.
-        // Without this, the editor silently falls back to unstyled browser defaults on reload.
+        // Re-inject the scaffold whenever it's missing (e.g. reloading a saved doc, which had it stripped on save) or reload falls back to unstyled defaults.
         if (!doc.getElementById('fabricator-editor-preview-style')) {
             var scaffold = doc.createElement('style');
             scaffold.id = 'fabricator-editor-preview-style';
@@ -3518,9 +3369,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
             }
         }
 
-        /* Email markup is often a fixed-width table wider than the editor;
-           a horizontal scrollbar would eat into clientHeight and force an
-           unwanted vertical scroll too, so clip overflow-x instead. */
+        /* A horizontal scrollbar would eat into clientHeight and force unwanted vertical scroll, so clip overflow-x instead. */
         doc.documentElement.style.overflowX = 'hidden';
         doc.body.style.overflowX = 'hidden';
 
@@ -3538,9 +3387,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
     /* Catch late layout shifts (fonts, async assets). */
     setTimeout(resize, 300);
 
-    /* The tab this editor lives in starts hidden (display:none), so every
-       resize() call above measures a 0x0 box and falls back to 140px.
-       Re-measure the instant the tab actually becomes visible. */
+    /* Tab starts hidden, so resize() above measures a 0x0 box and falls back to 140px until it's visible. */
     if (window.IntersectionObserver) {
         var io = new IntersectionObserver(function (entries) {
             entries.forEach(function (entry) {
@@ -3551,21 +3398,14 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
     }
 }
 
-/* Strips scripts, event handlers, javascript:/vbscript: URIs, and known
- * Dark Reader artifacts from the iframe's live document, then serializes
- * it back with its doctype intact. */
-/* Shared cleaning pass (strips <script>, Dark Reader artifacts, on*="" handlers, javascript:/
-   vbscript: URIs) used by both serialization modes below — mutates $doc in place, returns nothing. */
+/* Shared cleaning pass used by both serialization modes below — mutates doc in place, returns nothing. */
 function cleanRichDoc(doc) {
     // The editor's own display-only scaffold (see loadDoc()) — never part of the admin's actual
     // authored content, and must not survive into either the fragment or the full-document
     // serialization below (the latter is what notification emails are literally sent as).
     var editorStyle = doc.getElementById('fabricator-editor-preview-style');
     if (editorStyle) { editorStyle.remove(); }
-    // loadDoc() also sets overflow-x:hidden directly on <html>/<body> (inline style, not the
-    // <style id="fabricator-editor-preview-style"> tag above) purely so a wide email table doesn't
-    // force an unwanted vertical scrollbar in the small editor widget. That's editor scaffolding
-    // too and must not leak into the stored/sent document.
+    // loadDoc() also sets overflow-x:hidden inline on <html>/<body> for the editor widget; that's scaffolding too and must not leak into the stored/sent document.
     [doc.documentElement, doc.body].forEach(function (el) {
         if (!el) { return; }
         el.style.removeProperty('overflow-x');
@@ -3588,25 +3428,16 @@ function cleanRichDoc(doc) {
     });
 }
 
-/* Full-document serialization — used only by the notification-body editor, which intentionally
-   stores a complete HTML document (see MailSender::buildEmailBody()). */
+/* Full-document serialization — used only by the notification-body editor, which stores a complete HTML document. */
 function sanitizeRichDoc(doc) {
-    // Clean a detached clone, not $doc itself — $doc is the iframe's *live*, currently-displayed
-    // document (this runs on every 'input' event while the admin is actively typing). Removing
-    // the editor's own display-only <style> from the live doc would break the visible editing
-    // surface (padding/font/margin-reset) the instant anything is typed; cleaning a clone keeps
-    // that scaffold intact for display while still keeping it out of the serialized/stored value.
+    // Clean a detached clone, not the live doc — stripping the editor's display <style> from the live doc would break the visible editing surface while the admin is typing.
     var clone = doc.cloneNode(true);
     cleanRichDoc(clone);
     return (clone.doctype ? '<!DOCTYPE ' + clone.doctype.name + '>' : '')
         + clone.documentElement.outerHTML;
 }
 
-/* Fragment-only serialization — used by editors whose stored value is an inline HTML fragment
-   rendered directly into a page/PDF/email body (e.g. HtmlField's html_content), not a full
-   document. Discards the doctype/<html>/<head> wrapper loadDoc() injects purely so the iframe
-   renders sensibly (including that function's own display-only <style> scaffold) — none of that
-   belongs in the stored value. */
+/* Fragment-only serialization: discards the doctype/<html>/<head> wrapper loadDoc() injects purely for iframe display. */
 function sanitizeRichDocFragment(doc) {
     // See sanitizeRichDoc()'s comment above — same reason to clean a clone, not the live doc.
     var clone = doc.cloneNode(true);
@@ -3614,8 +3445,7 @@ function sanitizeRichDocFragment(doc) {
     return clone.body ? clone.body.innerHTML : '';
 }
 
-/* Back-compat: migrates legacy body_html_content/body_text_content fields
-   into the single canonical HTML body field. */
+/* Back-compat: migrates legacy body_html_content/body_text_content into the canonical HTML body field. */
 function normalizeNotifBodyFields(notif) {
     if (notif.body === undefined) {
         var legacy = notif.body_html ? (notif.body_html_content || '')
@@ -3719,9 +3549,7 @@ function spTimeRow(parent, formatKey, prefillKey, formatVal, prefillVal, onChang
 
 /* Rating live preview — renders current icon/half/max config */
 function spRatingPreview(parent, field) {
-    /* Use only the filled glyph for every state — empty is the same glyph at low
-     * opacity. This eliminates the Unicode size mismatch between filled/outline
-     * pairs (● vs ○, ◆ vs ◇, etc.) which rendered at visually different sizes. */
+    /* Filled glyph at low opacity for "empty" state, avoiding the Unicode size mismatch between filled/outline glyph pairs. */
     var ICONS_JS = {
         star:    '★',
         heart:   '♥',
@@ -3785,12 +3613,7 @@ function spRatingPreview(parent, field) {
     parent.appendChild(wrap);
 }
 
-/*
- * Sub-fields editor — collapsible accordion cards, one per sub-field.
- * Header click expands/collapses. Enable toggle (optional fields) is
- * independent — it does not open/close the card.
- * Calls change(key, val) for every individual config key.
- */
+/* Sub-fields editor: enable toggle is independent of the header's expand/collapse click. */
 function spSubfields(parent, items, field, change) {
     spSectionTitle(parent, _i18n.subfieldsSection || 'Subfields');
 
@@ -3812,8 +3635,7 @@ function spSubfields(parent, items, field, change) {
         var header = document.createElement('div');
         header.className = 'fabricator-sp-subfield-hdr';
 
-        /* Enable toggle on the LEFT — always shown, stop-propagation so it
-           doesn't fire the accordion toggle handler on the header */
+        /* stop-propagation so the enable toggle doesn't also fire the accordion header handler */
         var togWrap = document.createElement('label');
         togWrap.className = 'fabricator-toggle fabricator-toggle--sm';
         togWrap.title     = _i18n.enableSubfield || 'Enable subfield';
@@ -3930,9 +3752,7 @@ function spSubfields(parent, items, field, change) {
     parent.appendChild(wrap);
 }
 
-/* ================================================================
- * Notifications — list + modal pattern (mirrors field list)
- * ================================================================ */
+/* Notifications — list + modal pattern (mirrors field list) */
 var notifModal    = null;
 var notifModalIdx = null;
 
@@ -4368,9 +4188,7 @@ function buildNotifContentTab(notif) {
     spRow(panel, 'notif-subject', _i18n.subject || 'Subject', 'text', notif.subject || '',
         function (v) { state.notifications[notifModalIdx].subject = v; });
 
-    /* Body: Visual | Code — both views read/write notif.body directly.
-       body_html is a transient in-memory flag for the active view; it's
-       never persisted, so every fresh load defaults to Visual. */
+    /* body_html is a transient in-memory flag for the active view, never persisted — every fresh load defaults to Visual. */
     var isHtml = !!notif.body_html;
     var bodyWrap = document.createElement('div');
     bodyWrap.className = 'fabricator-sp-row';
@@ -4433,9 +4251,7 @@ function buildNotifSenderTab(notif) {
     sr('bcc',        _i18n.bccEmails || 'BCC emails',                      _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
 }
 
-/* ================================================================
- * Submit button preview + settings modal
- * ================================================================ */
+/* Submit button preview + settings modal */
 var submitModal = null;
 
 function createSubmitModal() {
@@ -4759,9 +4575,7 @@ function renderSubmitPreview() {
     bar.appendChild(wrap);
 }
 
-/* ================================================================
- * Canvas tabs / form name / save
- * ================================================================ */
+/* Canvas tabs / form name / save */
 function bindCanvasTabs() {
     var tabs = document.querySelectorAll('.fabricator-tab-btn');
     tabs.forEach(function (btn) {
@@ -4818,10 +4632,7 @@ function bindSave() {
         var fd = new FormData();
         fd.append('action',    'fabricator_forms_save_form');
         fd.append('nonce',     NONCE);
-        /* btoa() only accepts Latin1; encodeURIComponent+unescape re-encodes the
-           UTF-8 JSON string into a Latin1-safe byte sequence first so field
-           labels/options with non-ASCII characters (e.g. German umlauts) survive
-           the round trip. PHP decodes with base64_decode() — see FormEditor.php. */
+        /* btoa() only accepts Latin1; encodeURIComponent+unescape re-encodes UTF-8 to Latin1-safe bytes first so umlauts survive. */
         fd.append('form_data', b64JsonEncode(payload));
         fetch(AJAX_URL, { method: 'POST', body: fd })
             .then(function (r) { return r.json(); })
@@ -4841,12 +4652,9 @@ function bindSave() {
     });
 }
 
-/* ================================================================
- * Form Preview
- * ================================================================ */
+/* Form Preview */
 
-/* base64 (via encodeURIComponent/unescape, since btoa is Latin1-only) so sanitize_*_field() on
-   the PHP side doesn't strip HTML tags out of the JSON, and non-ASCII text survives. */
+/* base64-encoded so sanitize_*_field() on the PHP side doesn't strip HTML tags out of the JSON. */
 function b64JsonEncode(value) {
     return btoa(unescape(encodeURIComponent(JSON.stringify(value))));
 }
@@ -4883,15 +4691,9 @@ function bindPreview() {
     });
 }
 
-/* ================================================================
- * Shared utilities
- * ================================================================ */
+/* Shared utilities */
 
-/*
- * Segmented pill control — shows all options at once as connected pills.
- * The selected one is filled (active), others are outlined.
- * Replaces the old single cycling-button mkSwap.
- */
+/* Segmented pill control: all options shown at once, selected one filled. */
 function mkSeg(values, labels, current, onChange) {
     var wrap = document.createElement('div');
     wrap.className = 'fabricator-seg';
@@ -4989,10 +4791,7 @@ function slugify(str) {
 function escHtml(str) {
     var d = document.createElement('div');
     d.appendChild(document.createTextNode(String(str || '')));
-    /* Text-node serialization only encodes &, <, > — several call sites splice
-       this into a quoted HTML attribute (e.g. style="background:...", class="...")
-       via string concatenation, where a raw " or ' would break out of the
-       attribute. Encode both so escHtml() is safe in attribute context too. */
+    /* Also encode " and ' (not just &,<,>) so this is safe when spliced into a quoted HTML attribute too. */
     return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 

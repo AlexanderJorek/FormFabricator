@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -216,7 +216,7 @@ class FormSettings
                 ?>
             </span>
         </div>
-        <?php // Heartbeat lock notice: assets/js/admin-settings-lock.js (enqueued in Utils/Assets.php) -- previously an inline <script> block here. ?>
+        <?php // Heartbeat lock notice JS lives in assets/js/admin-settings-lock.js, enqueued in Utils/Assets.php. ?>
 
         <?php if (!$setup_done_early) : ?>
         <div id="fabricator-setup-blocker"
@@ -792,11 +792,11 @@ class FormSettings
                         if ($raw_entry_key !== '') {
                             $fp_mid = substr(hash('sha256', $raw_entry_key), 0, 6);
                         }
-                        $uuid      = esc_html((string)($entry['uuid'] ?? '—'));
+                        $uuid      = (string)($entry['uuid'] ?? '—');
                         $sta       = (string)($entry['status'] ?? 'rotated');
                         $cmp       = !empty($entry['compromised']);
-                        $at        = esc_html((string)($entry['retired_at'] ?? '—'));
-                        $by        = esc_html((string)($entry['retired_by_login'] ?? '—'));
+                        $at        = (string)($entry['retired_at'] ?? '—');
+                        $by        = (string)($entry['retired_by_login'] ?? '—');
 
                         $extra_badge = '';
                         if ($sta === 'rotated-legacy') {
@@ -818,8 +818,7 @@ class FormSettings
                         <tr class="fabricator-key-uuid-row">
                             <td colspan="4">
                                 <span class="fabricator-key-uuid-lbl"><?php echo esc_html__('UUID:', 'formfabricator'); ?></span>
-                                <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $uuid is already esc_html()'d at assignment above. ?>
-                                <code class="fabricator-key-uuid-code"><?php echo $uuid; ?></code>
+                                <code class="fabricator-key-uuid-code"><?php echo esc_html($uuid); ?></code>
                             </td>
                         </tr>
                         <tr class="fabricator-key-data-row">
@@ -833,10 +832,8 @@ class FormSettings
                                     echo $extra_badge; ?>
                                 </span>
                             </td>
-                            <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $at is already esc_html()'d at assignment above. ?>
-                            <td><?php echo $at; ?></td>
-                            <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $by is already esc_html()'d at assignment above. ?>
-                            <td><?php echo $by; ?></td>
+                            <td><?php echo esc_html($at); ?></td>
+                            <td><?php echo esc_html($by); ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -1343,10 +1340,7 @@ class FormSettings
         if ($from_name_input !== '') {
             update_option('fabricator_forms_from_name', $from_name_input);
         }
-        // reCAPTCHA keys are hidden from non-full-admins in the UI (the
-        // Security card only renders for $is_full_admin) — enforce the same
-        // boundary server-side so a user with only the plugin's 'settings'
-        // capability can't set them via a raw POST to this handler.
+        // reCAPTCHA keys are hidden from non-full-admins in the UI; enforce that boundary server-side too against a raw POST.
         if (current_user_can('manage_options')) {
             $site_key = \FabricatorForms\Utils\Sanitize::str(sanitize_text_field(wp_unslash($_POST['recaptcha_site'] ?? '')));
             update_option('fabricator_forms_recaptcha_site_key', $site_key);

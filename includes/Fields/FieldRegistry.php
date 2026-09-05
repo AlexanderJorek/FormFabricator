@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -29,10 +29,7 @@ defined('ABSPATH') || exit;
 class FieldRegistry
 {
     /**
-     * Single point of definition for every field type: ClassName => 'group:slug'. Doubles as the Plugin.php
-     * load allowlist (filename alone isn't a trust boundary) and the palette group/order. slug is a
-     * typo-check only — getType() is still authoritative; registerDefaults() warns on mismatch. Add a
-     * field: implement the class, drop the file, add one line here.
+     * ClassName => 'group:slug' map. Also doubles as the Plugin.php load allowlist.
      *
      * @var array<string, string>
      */
@@ -149,10 +146,7 @@ class FieldRegistry
      */
     public static function registerDefaults(): void
     {
-        // Auto-discover all concrete BaseField subclasses already loaded by Plugin.php
-        // (which only loads classes listed in self::FIELD_MAP — see that constant).
-        // Files prefixed with _ (e.g. _ExampleField) are excluded at load time in
-        // Plugin.php, so they never appear here.
+        // Auto-discover concrete BaseField subclasses already loaded by Plugin.php (per FIELD_MAP).
         foreach (get_declared_classes() as $class) {
             if (!is_subclass_of($class, BaseField::class)) {
                 continue;
@@ -181,17 +175,11 @@ class FieldRegistry
     /**
      * Returns palette data as an array of groups for the builder UI.
      *
-     * Shape: [ { label, items: [ { type, label, icon, defaults, schema } ] } ]
-     * Order is explicit â€” most-used fields first.
-     *
      * @return array
      */
     public static function paletteGroups(): array
     {
-        // Keyed by locale: under a persistent-worker SAPI (RoadRunner, Swoole,
-        // FrankenPHP), a plain function-static would serve the first request's
-        // translated strings to every subsequent request in that worker,
-        // regardless of the current request's locale.
+        // Keyed by locale: avoids serving one request's translated strings to another under persistent-worker SAPIs.
         static $cache = [];
         $locale = determine_locale();
         if (isset($cache[$locale])) {
@@ -254,9 +242,7 @@ class FieldRegistry
     }
 
     /**
-     * Maps raw form submission values to a normalized array for PDF/email. Iterates form fields, calls each
-     * handler's mapNormalized(), and merges all returned entries. Fields that produce no output (pagebreak,
-     * empty html) return an empty array and are silently skipped.
+     * Maps raw form submission values to a normalized array for PDF/email.
      *
      * @param array $fields     Form field configuration array.
      * @param array $raw_values Raw submitted POST values.

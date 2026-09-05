@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -226,22 +226,13 @@ class FormRenderer
 
                 $next_handler = ($next && $next_cols === 6 && $next_id)
                     ? FieldRegistry::get($next['type'] ?? '') : null;
-                // Page-break and group-container fields have their own dedicated rendering
-                // path (renderBreak() / openTag()+children+closeTag()) and must never be
-                // treated as a 2-column pairing partner: calling render() on a group field
-                // directly hits its documented no-op fallback (openTag()+closeTag() with no
-                // children), silently dropping every field inside the group from the output
-                // even though FormProcessor still enforces their `required` rules server-side.
+                // Page-break/group fields must never pair: render() on a group field silently drops its children (no-op fallback).
                 if ($next_handler && ($next_handler->isPageBreak() || $next_handler->isGroupContainer())) {
                     $next_handler = null;
                 }
 
                 if ($next_handler) {
-                    // Each field's own condition goes on ITS OWN column, not the shared row —
-                    // that way the two fields still toggle independently, but stay visually
-                    // paired side by side (the row/flex layout is untouched either way; only
-                    // whichever column is hidden collapses) instead of each getting its own
-                    // full-width row and stacking vertically once conditions are satisfied.
+                    // Each field's condition goes on its own column, not the shared row, so the pair toggles independently.
                     $col_a_cond = !empty($field_cfg['conditions']['rules'])
                         ? ' data-conditions="' . esc_attr(wp_json_encode($field_cfg['conditions'])) . '"'
                         : '';

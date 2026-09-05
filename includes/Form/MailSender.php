@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -46,9 +46,7 @@ class MailSender
     }
 
     /**
-     * Masks an email address (or comma-separated list of them) for debug logging, keeping only enough to
-     * distinguish log lines during troubleshooting without writing full recipient addresses — personal data
-     * — into PHP's error_log, a sink this plugin doesn't control and can't clean up on uninstall.
+     * Masks an email address for debug logging, since error_log is a sink this plugin can't clean up on uninstall.
      *
      * @param mixed $value Email address, or comma-separated list of addresses.
      */
@@ -91,8 +89,7 @@ class MailSender
     }
 
     /**
-     * Hooked into fabricator_forms_submission; generates and emails the submission PDF. Generates the PDF once and
-     * sends one email per enabled notification, attaching the PDF to those with attach_pdf = true.
+     * Hooked into fabricator_forms_submission; generates the PDF once and sends one email per enabled notification.
      *
      * @param int       $form_id The form post ID.
      * @param array     $mapped  Normalized field data from FieldRegistry::mapSubmission().
@@ -124,15 +121,16 @@ class MailSender
             );
         }
 
-        /* PHPMailer assembles the full MIME message (base64'd attachments) in memory before send,
-           so raise the ceiling for large multi-file sets — only ever up, never down. */
+        /* Raise the memory ceiling for large multi-file mail assembly; restored right after, below. */
         $has_attachable_content = ($pdf_path !== false && $pdf_path !== '')
             || !empty($uploads['images'])
             || !empty($uploads['others']);
+        $raised_memory_limit = null;
         if ($has_attachable_content) {
             $current_limit = PdfUtils::phpMemoryLimitBytes();
             if ($current_limit !== -1 && $current_limit < 3072 * 1024 * 1024) {
-                // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- legitimate resource-limit raise, mirrors Verificationpage.php's pattern.
+                $raised_memory_limit = ini_get('memory_limit');
+                // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- legitimate resource-limit raise, mirrors Verificationpage.php's pattern; restored below once the mail loop finishes.
                 @ini_set('memory_limit', '3072M');
             }
         }
@@ -194,14 +192,7 @@ class MailSender
                 : $global_from_email;
             $from_name  = '' !== $notif_name ? $notif_name : $global_from_name;
 
-            /* from_name/subject may contain user-submitted placeholder values;
-               strip CR/LF so a submitter can't inject extra mail headers, then
-               run through sanitize_text_field() for the same reason the
-               recipient/reply-to paths do — it strips other control chars,
-               not just \r\n, that some MTAs also treat as line separators.
-               Also strip <, >, and , from from_name — otherwise a submitted
-               value could smuggle a second mailbox into the single From header
-               (e.g. "Name <a@a.com>, spoof@evil.com"). */
+            /* Strip CR/LF (header injection) and <, >, , from from_name (mailbox smuggling into the From header). */
             $from_name = sanitize_text_field(str_replace(["\r", "\n", '<', '>', ','], '', $from_name));
             $from_email = str_replace(["\r", "\n"], '', sanitize_email($from_email));
             $subject = sanitize_text_field(str_replace(["\r", "\n"], '', $subject));
@@ -223,8 +214,7 @@ class MailSender
             $attachments = [];
             if ($should_attach && $pdf_path && file_exists($pdf_path)) {
                 $attachments[] = $pdf_path;
-                /* Non-images can't be embedded in the PDF visually — always
-                   attach them alongside it so nothing is silently dropped. */
+                /* Non-images can't be embedded in the PDF, so always attach them alongside it. */
                 foreach ($uploads['others'] as $p) {
                     $attachments[] = $p;
                 }
@@ -242,9 +232,7 @@ class MailSender
                 }
             }
 
-            /* Plain text is never authored or stored — it's derived from the
-               HTML body at send time and attached as the multipart/alternative
-               part for clients that don't render HTML. */
+            /* Plain text is derived from the HTML body at send time for clients that don't render HTML. */
             $altBodySetter = static function ($phpmailer) use ($body): void {
                 $phpmailer->isHTML(true);
                 $phpmailer->Body    = $body;
@@ -268,6 +256,11 @@ class MailSender
             );
         }
 
+        if ($raised_memory_limit !== null) {
+            // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the limit raised above, not a new global change.
+            @ini_set('memory_limit', $raised_memory_limit);
+        }
+
         /* ---- Clean up PDF and upload temp dir after all emails sent ---- */
         register_shutdown_function(
             static function () use ($pdf_path, $uploads): void {
@@ -285,11 +278,7 @@ class MailSender
                             \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp file {$f}");
                         }
                     }
-                    // This shutdown-function cleanup runs after a front-end form submission (no WP admin
-                    // context and no request left to display a credentials prompt), so WP_Filesystem()
-                    // direct-mode initialization cannot be relied on here; $tmp_dir is a plugin-owned temp
-                    // directory, not user-facing WP_Filesystem-managed content.
-                    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- see comment above
+                    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- shutdown-function cleanup, no WP_Filesystem credentials available here.
                     if (!@rmdir($tmp_dir)) {
                         \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp dir {$tmp_dir}");
                     }
@@ -299,8 +288,7 @@ class MailSender
     }
 
     /**
-     * Writes non-image uploaded files to temp paths so wp_mail() can attach them. Each path preserves the
-     * original filename so mail clients display it right. Caller is responsible for unlinking after send.
+     * Writes non-image uploaded files to temp paths, preserving filenames, so wp_mail() can attach them.
      *
      * @param array $mapped Normalized submission data.
      * @return array Absolute paths to materialized temp files.
@@ -427,9 +415,7 @@ class MailSender
     }
 
     /**
-     * Translates a field's raw option value to its display label. Mirrors how field handlers (e.g.
-     * SelectField::map) render submitted values. Returns the input unchanged for non-choice fields or unknown
-     * options.
+     * Translates a field's raw option value to its display label, unchanged for non-choice fields or unknown options.
      *
      * @param FormModel $form     The form model instance.
      * @param string    $field_id Field identifier to look up.
@@ -507,16 +493,8 @@ class MailSender
         array $mapped,
         FormModel $form
     ): string {
-        // Build the full token => replacement map first, then substitute in a
-        // single strtr() pass. Sequential str_replace() calls re-scan the
-        // *entire* string after every replacement, so if a submitted field
-        // value happens to contain literal text like "{all_fields}" or
-        // "{other_field_id}", an earlier replacement could insert that text
-        // and a later pass would then expand it — letting a submitter's own
-        // free-text input trigger placeholders the template author never
-        // referenced. strtr() replaces all tokens in one left-to-right scan
-        // of the original string, so already-substituted content is never
-        // rescanned.
+        // Build the full token map then substitute via one strtr() pass, so a submitted value containing
+        // literal "{token}" text can't get expanded by a later sequential str_replace() re-scan.
         $tokens = [
             '{admin_email}' => get_option('admin_email'),
             '{form_title}'  => $form->title,
@@ -526,10 +504,7 @@ class MailSender
         $needs_all_fields = str_contains($text, '{all_fields}');
         $inline           = get_option('fabricator_forms_field_layout', 'block') === 'inline';
         $all = '';
-        // Field IDs are admin-chosen when building the form — if one happens to
-        // equal a reserved token name (e.g. a field literally called
-        // "admin_email"), it must not silently shadow the built-in token for
-        // every notification on that form.
+        // A field id matching a reserved token name (e.g. "admin_email") must not shadow the built-in token.
         $reserved_tokens = array_merge(array_keys($tokens), ['{all_fields}']);
 
         foreach ($mapped as $key => $entry) {
@@ -553,11 +528,7 @@ class MailSender
             if (!in_array($token_key, $reserved_tokens, true) && !isset($tokens[$token_key])) {
                 $tokens[$token_key] = $token;
             } else {
-                // Reserved collision (or a second field id colliding with the
-                // alias namespace itself, e.g. a field literally named
-                // "field_admin_email"): keep whatever already claimed this key
-                // intact, and expose this field's value under its own alias
-                // instead of silently overwriting/dropping it.
+                // Reserved collision: keep whatever already claimed this key and alias this field's value instead.
                 $alias_key = '{field_' . $key . '}';
                 if (isset($tokens[$alias_key])) {
                     \FabricatorForms\fabricator_log(
@@ -598,10 +569,7 @@ class MailSender
     }
 
     /**
-     * Builds a complete HTML email body from a template. The notification body is always stored as HTML
-     * (whether authored via the visual editor or the HTML source editor — they share one field), so the
-     * only decision left here is structural: wrap bare markup in a minimal document if the admin didn't
-     * already author a full one.
+     * Builds a complete HTML email body from a template, wrapping bare markup in a minimal document if needed.
      *
      * @param string    $body_template Email body template string (HTML).
      * @param array     $mapped        Mapped submission data.

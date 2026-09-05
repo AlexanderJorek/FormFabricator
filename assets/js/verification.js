@@ -7,17 +7,6 @@
 /* pdf.js 6.x ships ES modules only, so this loads as a <script type="module"> and imports pdf.mjs directly. */
 import * as pdfjsLib from '../../vendor/pdfjs/pdf.mjs';
 
-/* Strips <script>, on*="" handlers and javascript:/vbscript: URIs from a
-   server-rendered HTML fragment before it's assigned to innerHTML. Defense
-   in depth — the fragment is already escaped/kses'd server-side in
-   Verificationpage.php. */
-function _fabricatorSanitizeFragment(html) {
-    html = String(html || '').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-    html = html.replace(/[\s\/]+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-    html = html.replace(/\b(href|src)\s*=\s*(["'])\s*(?:javascript|vbscript)\s*:[^"']*\2/gi, '$1=$2#$2');
-    return html;
-}
-
 /* ── Particle canvas on the PHP-rendered canvas element ── */
 document.addEventListener('DOMContentLoaded', function () {
     var canvas = document.getElementById('fabricator-particle-canvas');
@@ -274,9 +263,11 @@ function _fabricatorWidenPushSlotGap() {
 window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
     if (!pdfInfo) return;
 
-    const pdfUrl   = typeof pdfInfo === 'string' ? pdfInfo : pdfInfo.url;
-    const pdfToken = typeof pdfInfo === 'string' ? null    : (pdfInfo.token || null);
-    const pdfName  = typeof pdfInfo === 'string' ? _fabricatorCardPdfName(pdfInfo) : (pdfInfo.name || _fabricatorCardPdfName(pdfInfo.url));
+    const pdfUrl    = typeof pdfInfo === 'string' ? pdfInfo : pdfInfo.url;
+    const pdfToken  = typeof pdfInfo === 'string' ? null    : (pdfInfo.token || null);
+    const pdfNonce  = typeof pdfInfo === 'string' ? null    : (pdfInfo.nonce || null);
+    const pdfAction = typeof pdfInfo === 'string' ? null    : (pdfInfo.action || 'fabricator_serve_pdf');
+    const pdfName   = typeof pdfInfo === 'string' ? _fabricatorCardPdfName(pdfInfo) : (pdfInfo.name || _fabricatorCardPdfName(pdfInfo.url));
     if (!pdfUrl) return;
 
     const container = document.getElementById('fabricator-pdf-verification-results') || document.body;
@@ -325,19 +316,50 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
         if (queuedForLoad) { card.classList.remove('fabricator-vpc--queued'); }
         _fabricatorUpdateCard(card, i18n.pdf_loading || 'Loading PDF…', 2);
         try {
+            // Fetched via POST (nonce/token in the body, not the URL — see Verificationpage.php)
+            // rather than handing pdf.js a GET url directly, so the secret download token never
+            // becomes a query-string param that could land in server logs or a Referer header.
+            var downloadBody = new URLSearchParams();
+            downloadBody.set('action', pdfAction || 'fabricator_serve_pdf');
+            downloadBody.set('nonce', pdfNonce || '');
+            downloadBody.set('token', pdfToken || '');
+            const downloadResp = await fetch(pdfUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: downloadBody
+            });
+            if (!downloadResp.ok) {
+                throw new Error('PDF download failed (' + downloadResp.status + ')');
+            }
+            const totalBytes = parseInt(downloadResp.headers.get('Content-Length') || '0', 10);
+            const reader = downloadResp.body ? downloadResp.body.getReader() : null;
+            let pdfBytes;
+            if (reader) {
+                const chunks = [];
+                let loaded = 0;
+                for (;;) {
+                    const { done: chunkDone, value } = await reader.read();
+                    if (chunkDone) { break; }
+                    chunks.push(value);
+                    loaded += value.length;
+                    if (totalBytes) {
+                        var frac = Math.min(1, loaded / totalBytes);
+                        var downloadMsg = (i18n.downloading || 'Downloading… (%1$d%%)').replace('%1$d', Math.round(frac * 100));
+                        _fabricatorUpdateCard(card, downloadMsg, 2 + Math.round(frac * 10));
+                    }
+                }
+                pdfBytes = new Uint8Array(loaded);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    pdfBytes.set(chunk, offset);
+                    offset += chunk.length;
+                }
+            } else {
+                pdfBytes = new Uint8Array(await downloadResp.arrayBuffer());
+            }
             // pdf.js 6.x removed eval()/Function() usage entirely, so CVE-2024-4367's isEvalSupported:false
             // workaround no longer applies (that option no longer exists).
-            loadingTask = pdfjsLib.getDocument({
-                url: pdfUrl,
-                withCredentials: true
-            });
-            // Real download-progress bytes, into their own 2-12% sub-band.
-            loadingTask.onProgress = function (progressData) {
-                if (!progressData || !progressData.total) { return; }
-                var frac = Math.min(1, progressData.loaded / progressData.total);
-                var downloadMsg = (i18n.downloading || 'Downloading… (%1$d%%)').replace('%1$d', Math.round(frac * 100));
-                _fabricatorUpdateCard(card, downloadMsg, 2 + Math.round(frac * 10));
-            };
+            loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
             pdf = await loadingTask.promise;
         } finally {
             // Released once the file transfer settles, not tied to the extraction loop below.
@@ -431,13 +453,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
             await _fabricatorAcquireVerifySlot();
             if (queuedForVerify) { card.classList.remove('fabricator-vpc--queued'); }
 
-            // The throttle gate above schedules slots with a margin, but the actual
-            // request can still land inside another one's window — client/server
-            // clock drift, network jitter, or the PHP worker itself being queued
-            // under load from a large batch. Retry a 429 instead of failing the
-            // file outright; _fabricatorWidenPushSlotGap() also grows the gap for every
-            // remaining file in the batch so repeat collisions become less likely.
-            // Verify slot is held through every retry below, not just the first attempt.
+            // Retry a 429 (clock drift/jitter can still collide slots) instead of failing the file; _fabricatorWidenPushSlotGap() also widens the gap for the rest of the batch.
             var res;
             try {
                 var maxAttempts = 5;
@@ -492,10 +508,13 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
 
             if (json.success === true && json.data && typeof json.data.html === 'string') {
                 // Server-rendered fragment: every dynamic value in it is passed through
-                // esc_html()/wp_kses() in Verificationpage.php before reaching here;
-                // _fabricatorSanitizeFragment() is an additional client-side backstop.
+                // esc_html()/wp_kses() in Verificationpage.php before reaching here. A
+                // hand-rolled regex sanitizer used to run on it client-side too, but a
+                // regex HTML sanitizer is inherently bypassable (nested/malformed tags,
+                // unusual attribute quoting) and gave false confidence without reliably
+                // adding protection beyond the server-side escaping this already depends on.
                 const tmp = document.createElement('div');
-                tmp.innerHTML = _fabricatorSanitizeFragment(json.data.html);
+                tmp.innerHTML = json.data.html;
                 card.parentNode.replaceChild(tmp.firstElementChild || tmp, card);
             } else {
                 console.error('[FormFabricator] Server returned error:', json);

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -119,12 +119,19 @@ class PostDataField extends BaseField
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- form-wide nonce already verified in FormProcessor::handle(); the only value actually used from this array (_source_post_id) is unslashed and absint()'d below before use.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); the only value actually used from this array (_source_post_id) is unslashed and absint()'d below before use.
         $submitted   = isset($_POST[$field_id]) ? wp_unslash($_POST[$field_id]) : null;
         $source_id   = is_array($submitted) && isset($submitted['_source_post_id'])
             ? absint($submitted['_source_post_id'])
             : 0;
         $post = $source_id ? get_post($source_id) : null;
+        // _source_post_id is client-submitted and otherwise unvalidated — without this check a
+        // visitor could pass an arbitrary post ID and pull a draft/private/password-protected
+        // post's title/permalink/author into the email/PDF output.
+        if ($post && ($post->post_status !== 'publish' || $post->post_password !== '')) {
+            $post = null;
+        }
 
         $out = [];
         foreach (self::ALLOWED_FIELDS as $key) {

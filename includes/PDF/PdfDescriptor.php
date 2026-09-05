@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -57,9 +57,7 @@ class PdfDescriptor
     private $sealedUploads = [];
 
     /**
-     * Whether rawHtml() was called with $trusted = true — i.e. the cell HTML was already sanitized upstream
-     * by the field's own (wider) kses pass and should not be re-narrowed by Generator.php's default
-     * value-only allowlist.
+     * Whether rawHtml() was called with $trusted = true, so Generator.php skips re-narrowing to the default allowlist.
      *
      * @var bool
      */
@@ -85,10 +83,7 @@ class PdfDescriptor
     }
 
     /**
-     * Sets the cell content to raw HTML. Every field handler's PDF output funnels through this one escape
-     * hatch, so callers must explicitly opt in to skipping sanitization by passing $trusted = true —
-     * otherwise the HTML is run through wp_kses_post() first. This makes "did this caller remember to
-     * sanitize?" visible at every call site instead of silently depending on caller discipline.
+     * Sets the cell content to raw HTML; callers must opt in via $trusted = true to skip wp_kses_post().
      *
      * @param string $html    HTML string.
      * @param bool   $trusted Pass true only when $html is already known-safe (e.g. pre-sanitized by the

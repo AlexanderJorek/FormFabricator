@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -494,7 +494,6 @@ class FormSelectList
             'remove'           => __('Remove', 'formfabricator'),
             'noFormsFound'     => __('No forms found.', 'formfabricator'),
         ];
-        ?>
         wp_localize_script(
             'fabricator-forms-admin-formselect',
             'FabricatorFormSelectPage',
@@ -506,7 +505,5 @@ class FormSelectList
             'fselData'  => array_map(fn($s) => ['id' => $s->id, 'title' => $s->title, 'items' => $s->items], $selects),
             ]
         );
-        ?>
-        <?php
     }
 }

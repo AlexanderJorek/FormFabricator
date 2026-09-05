@@ -1,0 +1,6 @@
+input[type="number"].fabricator-input { -moz-appearance: textfield !important; }
+input[type="number"].fabricator-input::-webkit-outer-spin-button,
+input[type="number"].fabricator-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}

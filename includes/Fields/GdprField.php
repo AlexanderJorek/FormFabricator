@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,49 +35,7 @@ class GdprField extends BaseField
      */
     public function getStyles(): string
     {
-        // phpcs:disable Generic.Files.LineLength -- the checkbox-checkmark background-image is an
-        // inline SVG data URI; splitting it across lines risks corrupting the encoded markup.
-        return <<<'CSS'
-.fabricator-gdpr-label {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    cursor: pointer;
-    font-size: 14px;
-    color: var(--fabricator-text);
-    line-height: 1.6;
-    user-select: none;
-}
-.fabricator-gdpr-label input[type="checkbox"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    border: 2px solid var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius-sm);
-    background: var(--fabricator-bg);
-    cursor: pointer;
-    transition: border-color .15s, background .15s;
-    margin-top: 3px;
-}
-.fabricator-gdpr-label input[type="checkbox"]:checked {
-    border-color: var(--fabricator-accent);
-    background: var(--fabricator-accent);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 10'%3E%3Cpolyline points='1,5 4.5,8.5 11,1' stroke='%23ffffff' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: 11px 9px;
-}
-.fabricator-gdpr-label input[type="checkbox"]:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--fabricator-accent) 25%, transparent);
-}
-.fabricator-gdpr-text a { color: var(--fabricator-accent); text-decoration: underline; }
-.fabricator-gdpr-text a:hover { color: var(--fabricator-accent-dark); }
-CSS;
-        // phpcs:enable Generic.Files.LineLength
+        return self::readFieldAsset('assets/css/fields/GdprField.css');
     }
 
     /**
@@ -129,11 +87,7 @@ CSS;
         $policy_text = esc_html($config['privacy_policy_text'] ?? __('Privacy policy', 'formfabricator'));
 
         if ($policy_url !== '') {
-            // This is framed as an acknowledgment of having read the notice (lawful under
-            // GDPR Art. 13 without needing consent mechanics), not a freely-given "consent" —
-            // use ConsentField instead for cases that need genuine opt-in consent (e.g.
-            // marketing use), since that field already supports a non-forced, per-form
-            // required toggle.
+            // This is a GDPR Art. 13 acknowledgment, not freely-given consent — use ConsentField for that.
             $text = sprintf(
                 // translators: %1$s: privacy policy URL, %2$s: privacy policy link text.
                 __('I have read and acknowledge the <a href="%1$s" target="_blank" rel="noopener">%2$s</a>.', 'formfabricator'),
@@ -141,11 +95,7 @@ CSS;
                 $policy_text
             );
         } else {
-            // No WP privacy page is configured and no per-field override was set —
-            // an href="" link would just reload the current page, silently
-            // rendering the checkbox non-functional. Fall back to plain text and
-            // surface the misconfiguration to admins in the log rather than
-            // shipping a broken link to visitors.
+            // No URL configured — an href="" link would silently be non-functional; fall back to plain text.
             \FabricatorForms\fabricator_log(
                 'FabricatorForms GdprField: no privacy_policy_url configured and no'
                 . ' WP privacy policy page is set — rendering acknowledgment text without a link.'
@@ -184,11 +134,7 @@ CSS;
     }
 
     /**
-     * Maps the field value to a human-readable string for email and PDF output. Embeds the acknowledged
-     * policy link text/URL and a submission timestamp (not just a bare "accepted" string) so the sealed PDF
-     * record can independently demonstrate what was acknowledged and when — GDPR Art. 7(1) requires the
-     * controller to be able to demonstrate consent/notice was given; a bare boolean can't do that if the
-     * linked privacy policy is edited later.
+     * Embeds policy text/URL and a timestamp (not a bare boolean) so GDPR Art. 7(1) notice is demonstrable.
      *
      * @param mixed $value  Submitted value.
      * @param array $config Field configuration.

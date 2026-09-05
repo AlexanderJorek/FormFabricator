@@ -1,0 +1,21 @@
+.fabricator-name-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+.fabricator-name-sub {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 130px;
+}
+.fabricator-name-sub--prefix {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: 110px;
+}
+.fabricator-name-sub--prefix .fabricator-input { width: 100%; }
+@media (max-width: 600px) {
+    .fabricator-name-group { flex-direction: column; }
+}

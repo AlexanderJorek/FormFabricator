@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,14 +35,7 @@ class NumberField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-input[type="number"].fabricator-input { -moz-appearance: textfield !important; }
-input[type="number"].fabricator-input::-webkit-outer-spin-button,
-input[type="number"].fabricator-input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-CSS;
+        return self::readFieldAsset('assets/css/fields/NumberField.css');
     }
 
     /**
@@ -136,22 +129,7 @@ CSS;
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'number-range', 'fn' => <<<'JS'
-            function (fieldEl) {
-                var inp = fieldEl.querySelector('input[type="number"]');
-                if (!inp || inp.value.trim() === '') return null;
-                var val = parseFloat(inp.value);
-                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                if (isNaN(val)) return (_i18n && _i18n.number_invalid) || 'Please enter a valid number.';
-                var min = inp.getAttribute('min');
-                var max = inp.getAttribute('max');
-                if (min !== null && min !== '' && val < parseFloat(min))
-                    return ((_i18n && _i18n.number_min) || 'Minimum value: %s').replace('%s', min);
-                if (max !== null && max !== '' && val > parseFloat(max))
-                    return ((_i18n && _i18n.number_max) || 'Maximum value: %s').replace('%s', max);
-                return null;
-            }
-            JS]];
+        return [['rule' => 'number-range', 'fn' => self::readFieldAsset('assets/js/fields/NumberField.number-range.js')]];
     }
 
     /**

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -150,6 +150,7 @@ class PDFLayoutEditor
         /* Use live settings from the request so the user doesn't have to save first */
         if (!empty($_POST['settings'])) {
             /* wp_unslash is required — WordPress's wp_magic_quotes() slashes all $_POST values */
+            // json_decode() itself doesn't sanitize — every key read from $raw below is sanitized individually before use.
             // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via the outer sanitize_textarea_field() call; WPCS loses track through the intermediate Sanitize::str() static call.
             $raw = json_decode(sanitize_textarea_field(\FabricatorForms\Utils\Sanitize::str(wp_unslash($_POST['settings'] ?? ''))), true);
             if (!is_array($raw)) {
@@ -240,11 +241,7 @@ class PDFLayoutEditor
         if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             return;
         }
-        // Registered with the generic 'read' capability because FabricatorForms uses its own
-        // userCan('edit_pdf_layout') capability model rather than a real WP capability;
-        // real enforcement happens above (addPage bails already) and again at the top
-        // of render(). Any new callback reachable from this menu item MUST re-check
-        // userCan('edit_pdf_layout') itself — do not rely on this menu registration alone.
+        // Registered with generic 'read' since real enforcement is userCan('edit_pdf_layout') above and in render() — any new callback here MUST re-check it itself.
         $hook = add_submenu_page(
             'fabricator-forms',
             __('FormFabricator PDF Layout', 'formfabricator'),
@@ -738,11 +735,7 @@ class PDFLayoutEditor
      */
     private static function save(): string
     {
-        // Defense-in-depth: both current call sites (handleSave() and render())
-        // already gate on Plugin::userCan('edit_pdf_layout') before reaching here,
-        // but this method should not rely solely on callers remembering to check —
-        // a single missed gate anywhere in the admin layer would otherwise be a
-        // full privilege-escalation/CSRF path with no second line of defense.
+        // Defense-in-depth: callers already gate on this, but don't rely solely on them remembering to check.
         if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             return __('Insufficient permissions.', 'formfabricator');
         }
@@ -803,13 +796,7 @@ class PDFLayoutEditor
     }
 
     /**
-     * Resolves an image element's src to a local media-library attachment URL. Local attachment URLs resolve
-     * immediately with no network access. External URLs are only ever fetched when $persist is true (i.e. on
-     * final save, not on every live-preview keystroke), and are fetched exactly once via
-     * media_sideload_image() — which downloads through wp_safe_remote_get() (WordPress's own SSRF guard,
-     * rejecting loopback/private/link-local targets) and validates the result is actually an image before
-     * storing it as a normal attachment. From then on the field behaves like any other local image and mPDF
-     * never makes an outbound request for it.
+     * Resolves an image element's src to a local media-library attachment URL; external URLs are fetched only when $persist is true, via media_sideload_image()'s SSRF-guarded wp_safe_remote_get().
      *
      * @param string $src     Raw src URL from the layout editor.
      * @param bool   $persist True when called from the final save handler.
@@ -858,10 +845,7 @@ class PDFLayoutEditor
         $rows = min(30, max(2, (int) ($raw['rows'] ?? 8)));
         $elements = [];
         foreach ((array) ($raw['elements'] ?? []) as $el) {
-            // $el is a per-element array decoded from client JSON — 'type'/'id'
-            // are normally strings, but nothing guarantees that; sanitize_key()
-            // has a strict string type hint and throws an uncaught TypeError
-            // on an array/object value.
+            // 'type'/'id' are normally strings but nothing guarantees that; sanitize_key()'s strict type hint throws on an array/object value.
             $el_type = $el['type'] ?? '';
             $type = sanitize_key(is_string($el_type) ? $el_type : '');
             if (!in_array($type, ['title', 'image', 'html'], true)) {
@@ -877,12 +861,7 @@ class PDFLayoutEditor
                 'h'    => max(1, min(500, (int) ($el['h'] ?? 4))),
             ];
             if ($type === 'title') {
-                // The header-builder editor is a contenteditable box that writes
-                // formatted HTML into el.content (bold/italic/color/superscript
-                // spans) — el.text is only ever a plain-text fallback. Persist
-                // content through the same inline-formatting allow-list used at
-                // PDF-render time (includes/PDF/templates/layout.php), or the admin's
-                // formatting is silently discarded on every save.
+                // el.content carries the contenteditable's formatted HTML (el.text is a plain-text fallback); use the same allow-list as PDF-render time or formatting is silently discarded on save.
                 $raw_content = $el['content'] ?? $el['text'] ?? '{form_title}';
                 $raw_html = is_string($raw_content) ? $raw_content : '{form_title}';
                 $item['content'] = wp_kses($raw_html, [
@@ -918,8 +897,7 @@ class PDFLayoutEditor
     }
 
     /**
-     * Sample submission data shared by the server-rendered PDF preview and the browser-side HTML preview, so
-     * both show identical content. Sized to run roughly 1.5–2 A4 pages at the default layout settings.
+     * Sample submission data shared by the server-rendered and browser-side PDF previews so both match.
      *
      * @return array Dummy mapped-field entries.
      */

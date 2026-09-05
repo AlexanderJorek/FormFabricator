@@ -1,0 +1,44 @@
+.fabricator-currency-wrap {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--fabricator-border-input) !important;
+    border-radius: var(--fabricator-radius);
+    overflow: hidden;
+    transition: border-color .15s, box-shadow .15s;
+}
+.fabricator-currency-wrap:focus-within {
+    border-color: var(--fabricator-accent) !important;
+    box-shadow: 0 0 0 3px
+        color-mix(in srgb, var(--fabricator-accent) 15%, transparent) !important;
+}
+.fabricator-currency-symbol {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    background: var(--fabricator-bg-subtle);
+    border-right: 1px solid var(--fabricator-border-input);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fabricator-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.fabricator-currency-wrap .fabricator-currency-input {
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    flex: 1;
+    min-width: 0;
+    -moz-appearance: textfield !important;
+}
+.fabricator-currency-wrap .fabricator-currency-input:focus,
+.fabricator-currency-wrap .fabricator-currency-input:focus-visible {
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+.fabricator-currency-input::-webkit-outer-spin-button,
+.fabricator-currency-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,15 +28,9 @@ defined('ABSPATH') || exit;
  */
 class HashSeal
 {
-    // Intentionally a public, hardcoded domain-separation string (not a secret) — it just
-    // scopes the KDF to this plugin/version so the same admin password can't be replayed
-    // against a different PBKDF2 use elsewhere. Actual entropy comes from the admin
-    // password plus the random per-key salt, not from this constant.
+    // Intentionally a public, hardcoded domain-separation string (not a secret); entropy comes from the password/salt.
     private const PEPPER     = 'fabricator_seal_kdf_v1';
-    // OWASP Password Storage Cheat Sheet (2023 revision) recommends >=600,000
-    // iterations for PBKDF2-HMAC-SHA256; 200,000 was the pre-2023 baseline and is
-    // now under-provisioned against offline brute-force of the admin-chosen
-    // password this KDF turns into the seal-signing/encryption key.
+    // OWASP (2023) recommends >=600,000 iterations for PBKDF2-HMAC-SHA256; the old 200,000 baseline is under-provisioned.
     private const KDF_ROUNDS = 600000;
     private const KDF_LEN    = 32;
     private const ENC_PREFIX = 'enc::';
@@ -233,10 +227,7 @@ class HashSeal
      * @param string $plaintext_key Plaintext key value.
      * @return void
      */
-    // How long a rotated/new plaintext key may sit waiting for the admin to open the download page before it
-    // expires. Stored as a transient (not a plain option) specifically so it self-expires even if the admin
-    // never visits the download page — a plain wp_options row would otherwise keep the plaintext key
-    // indefinitely.
+    // Stored as a transient (not a plain option) so the plaintext key self-expires even if never downloaded.
     private const PENDING_DOWNLOAD_TTL = 10 * MINUTE_IN_SECONDS;
 
     private static function setPendingDownload(string $uuid, string $plaintext_key): void
@@ -331,18 +322,16 @@ class HashSeal
      */
     public static function rotateKey(string $password, bool $compromised, bool $nonce_verified = false): array
     {
-        // Defense-in-depth: this class has no other guard of its own against
-        // being invoked from an unguarded path — don't rely solely on the
-        // caller (currently the admin key-rotation page) to gate access to
-        // seal-key rotation.
+        // Defense-in-depth: don't rely solely on the caller to gate access to seal-key rotation.
         if (!current_user_can('manage_options')) {
             throw new \RuntimeException('Insufficient permissions to rotate the seal key.');
         }
 
-        // Defense-in-depth: mirror the capability check above — don't rely solely on
-        // the caller (currently FormSettings::handleRotateKey()) to have already
-        // verified a CSRF nonce for this request.
-        if (!$nonce_verified && check_ajax_referer('fabricator_rotate_key', 'nonce', false) === false) {
+        // Two separate fail-early statements (not one compound condition) so this check can't be bypassed.
+        if (!$nonce_verified) {
+            $nonce_verified = check_ajax_referer('fabricator_rotate_key', 'nonce', false) !== false;
+        }
+        if (!$nonce_verified) {
             throw new \RuntimeException('Invalid or missing security token.');
         }
 
@@ -522,17 +511,16 @@ class HashSeal
         string $status = 'rotated-legacy',
         bool $nonce_verified = false
     ): void {
-        // Defense-in-depth: mirror rotateKey()'s own guard rather than relying
-        // solely on the caller (currently FormSettings::handleImportLegacyKey) to
-        // gate access to seal-key-history mutation.
+        // Defense-in-depth: mirror rotateKey()'s own guard rather than relying solely on the caller.
         if (!current_user_can('manage_options')) {
             throw new \RuntimeException('Insufficient permissions to import a legacy seal key.');
         }
 
-        // Defense-in-depth: mirror the capability check above — don't rely solely on
-        // the caller (currently FormSettings::handleAddLegacyKey()) to have already
-        // verified a CSRF nonce for this request.
-        if (!$nonce_verified && check_ajax_referer('fabricator_add_legacy_key', 'nonce', false) === false) {
+        // Two separate fail-early statements (not one compound condition) so this check can't be bypassed.
+        if (!$nonce_verified) {
+            $nonce_verified = check_ajax_referer('fabricator_add_legacy_key', 'nonce', false) !== false;
+        }
+        if (!$nonce_verified) {
             throw new \RuntimeException('Invalid or missing security token.');
         }
 

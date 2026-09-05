@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -86,10 +86,7 @@ class TextField extends BaseField
         if ($base !== true) {
             return $base;
         }
-        // Absolute hard-cap backstop, checked first — applies even under a "words"
-        // limit (a single "word" isn't bounded in length) or when no limit_max is
-        // configured at all. Runs before any per-value processing below so
-        // worst-case cost is bounded up front (defense-in-depth ordering).
+        // Hard-cap backstop, checked first since a "words" limit doesn't bound single-word length.
         if ($value !== null && $value !== '') {
             $hard = self::validateTextHardCap((string)$value);
             if ($hard !== true) {
@@ -124,19 +121,7 @@ class TextField extends BaseField
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'text-word-limit', 'fn' => <<<'JS'
-            function (fieldEl) {
-                var inp = fieldEl.querySelector('[data-word-limit]');
-                if (!inp || !inp.value.trim()) return null;
-                var limit = parseInt(inp.dataset.wordLimit, 10);
-                if (!limit) return null;
-                var count = inp.value.trim().split(/\s+/).filter(Boolean).length;
-                if (count <= limit) return null;
-                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                return ((_i18n && _i18n.word_limit_exceeded) || 'Please enter at most %1$d words (currently: %2$d).')
-                    .replace('%1$d', limit).replace('%2$d', count);
-            }
-            JS]];
+        return [['rule' => 'text-word-limit', 'fn' => self::readFieldAsset('assets/js/fields/TextField.text-word-limit.js')]];
     }
 
     /**

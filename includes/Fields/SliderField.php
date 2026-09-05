@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,59 +35,7 @@ class SliderField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-slider-wrap { display: flex; align-items: center; gap: 14px; }
-.fabricator-slider-custom {
-    flex: 1;
-    padding: 9px 0;
-    cursor: pointer;
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: none;
-}
-.fabricator-slider-custom:focus { outline: none; }
-.fabricator-slider-track {
-    position: relative;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--fabricator-border-input);
-}
-.fabricator-slider-fill {
-    position: absolute;
-    left: 0; top: 0;
-    height: 100%;
-    border-radius: 2px;
-    background: var(--fabricator-accent);
-    pointer-events: none;
-}
-.fabricator-slider-thumb {
-    position: absolute;
-    top: 50%;
-    width: 14px; height: 14px;
-    border-radius: 50%;
-    background: var(--fabricator-accent);
-    border: 2px solid #fff;
-    box-shadow: 0 1px 3px rgba(0,0,0,.3);
-    transform: translate(-50%, -50%);
-    transition: box-shadow .1s;
-    cursor: grab;
-}
-.fabricator-slider-thumb:active { cursor: grabbing; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
-.fabricator-slider-custom:focus .fabricator-slider-thumb,
-.fabricator-slider-thumb:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--fabricator-accent) 25%, transparent),
-        0 1px 3px rgba(0,0,0,.3);
-}
-.fabricator-slider-value {
-    font-size: 13px;
-    font-weight: 600;
-    min-width: 32px;
-    text-align: center;
-    color: var(--fabricator-text-muted);
-}
-CSS;
+        return self::readFieldAsset('assets/css/fields/SliderField.css');
     }
 
     /**
@@ -122,7 +70,7 @@ CSS;
      */
     public function getClientEmptyCheck(): array
     {
-        return ['fn' => "function(f){var i=f.querySelector('input[type=\"hidden\"]');return !i||i.value==='';}"];
+        return ['fn' => self::readFieldAsset('assets/js/fields/SliderField.emptycheck.js')];
     }
 
     /**
@@ -132,124 +80,7 @@ CSS;
      */
     public function getClientInit(): string
     {
-        return <<<'JS'
-        function (root) {
-            root.querySelectorAll('.fabricator-slider-wrap').forEach(function (wrap) {
-                var min  = parseFloat(wrap.dataset.min  || 0);
-                var max  = parseFloat(wrap.dataset.max  || 100);
-                var step = parseFloat(wrap.dataset.step || 1);
-                var isRange = wrap.classList.contains('fabricator-slider-wrap--range');
-                var track = wrap.querySelector('.fabricator-slider-track');
-                var fill  = wrap.querySelector('.fabricator-slider-fill');
-                function snap(raw) {
-                    var stepped = Math.round((raw - min) / step) * step + min;
-                    return Math.min(max, Math.max(min, parseFloat(stepped.toFixed(10))));
-                }
-                function pct(val) { return (val - min) / (max - min) * 100; }
-                function valFromX(clientX) {
-                    var rect  = track.getBoundingClientRect();
-                    var ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-                    return snap(min + ratio * (max - min));
-                }
-                if (!isRange) {
-                    var thumb  = wrap.querySelector('.fabricator-slider-thumb');
-                    var input  = wrap.querySelector('input[type="hidden"]');
-                    var disp   = wrap.querySelector('.fabricator-slider-value');
-                    var curVal = parseFloat(wrap.dataset.value || min);
-                    function setVal(v, writeInput) {
-                        curVal = v;
-                        var p = pct(v);
-                        thumb.style.left = p + '%';
-                        fill.style.width = p + '%';
-                        if (writeInput && input) input.value = v;
-                        if (disp)  disp.textContent = v;
-                        wrap.querySelector('.fabricator-slider-custom').setAttribute('aria-valuenow', v);
-                    }
-                    /* Visual-only init — hidden input stays '' until user interacts */
-                    setVal(curVal, false);
-                    function startDrag(clientX) {
-                        setVal(valFromX(clientX), true);
-                        function onMove(e) {
-                            if (e.touches) { e.preventDefault(); }
-                            setVal(valFromX(e.touches ? e.touches[0].clientX : e.clientX), true);
-                        }
-                        function onUp() {
-                            document.removeEventListener('mousemove', onMove);
-                            document.removeEventListener('mouseup', onUp);
-                            document.removeEventListener('touchmove', onMove);
-                            document.removeEventListener('touchend', onUp);
-                        }
-                        document.addEventListener('mousemove', onMove);
-                        document.addEventListener('mouseup', onUp);
-                        document.addEventListener('touchmove', onMove, { passive: false });
-                        document.addEventListener('touchend', onUp);
-                    }
-                    track.addEventListener('mousedown',  function (e) { e.preventDefault(); startDrag(e.clientX); });
-                    track.addEventListener('touchstart', function (e) { e.preventDefault(); startDrag(e.touches[0].clientX); }, { passive: false });
-                    var slider = wrap.querySelector('.fabricator-slider-custom');
-                    slider.addEventListener('keydown', function (e) {
-                        var delta = 0;
-                        if (e.key === 'ArrowRight' || e.key === 'ArrowUp')   delta =  step;
-                        if (e.key === 'ArrowLeft'  || e.key === 'ArrowDown') delta = -step;
-                        if (e.key === 'Home') { setVal(min, true); return; }
-                        if (e.key === 'End')  { setVal(max, true); return; }
-                        if (delta) { e.preventDefault(); setVal(snap(curVal + delta), true); }
-                    });
-                } else {
-                    var thumbFrom = wrap.querySelector('.fabricator-slider-thumb--from');
-                    var thumbTo   = wrap.querySelector('.fabricator-slider-thumb--to');
-                    var inputFrom = wrap.querySelector('.fabricator-slider-input-from');
-                    var inputTo   = wrap.querySelector('.fabricator-slider-input-to');
-                    var dispFrom  = wrap.querySelector('.fabricator-slider-from-display');
-                    var dispTo    = wrap.querySelector('.fabricator-slider-to-display');
-                    var from = parseFloat(wrap.dataset.from || min);
-                    var to   = parseFloat(wrap.dataset.to   || max);
-                    function setRange(writeInput) {
-                        var pFrom = pct(from), pTo = pct(to);
-                        thumbFrom.style.left = pFrom + '%';
-                        thumbTo.style.left   = pTo   + '%';
-                        fill.style.left  = pFrom + '%';
-                        fill.style.width = (pTo - pFrom) + '%';
-                        if (writeInput && inputFrom) inputFrom.value = from;
-                        if (writeInput && inputTo)   inputTo.value   = to;
-                        if (dispFrom)  dispFrom.textContent = from;
-                        if (dispTo)    dispTo.textContent   = to;
-                        thumbFrom.setAttribute('aria-valuenow', from);
-                        thumbTo.setAttribute('aria-valuenow',   to);
-                    }
-                    /* Visual-only init */
-                    setRange(false);
-                    function dragThumb(isFrom, clientX) {
-                        var v = valFromX(clientX);
-                        if (isFrom) from = Math.min(v, to   - step);
-                        else        to   = Math.max(v, from + step);
-                        setRange(true);
-                        function onMove(e) {
-                            if (e.touches) { e.preventDefault(); }
-                            var v2 = valFromX(e.touches ? e.touches[0].clientX : e.clientX);
-                            if (isFrom) from = Math.min(v2, to   - step);
-                            else        to   = Math.max(v2, from + step);
-                            setRange(true);
-                        }
-                        function onUp() {
-                            document.removeEventListener('mousemove', onMove);
-                            document.removeEventListener('mouseup', onUp);
-                            document.removeEventListener('touchmove', onMove);
-                            document.removeEventListener('touchend', onUp);
-                        }
-                        document.addEventListener('mousemove', onMove);
-                        document.addEventListener('mouseup', onUp);
-                        document.addEventListener('touchmove', onMove, { passive: false });
-                        document.addEventListener('touchend', onUp);
-                    }
-                    thumbFrom.addEventListener('mousedown',  function (e) { e.preventDefault(); dragThumb(true,  e.clientX); });
-                    thumbTo.addEventListener('mousedown',    function (e) { e.preventDefault(); dragThumb(false, e.clientX); });
-                    thumbFrom.addEventListener('touchstart', function (e) { e.preventDefault(); dragThumb(true,  e.touches[0].clientX); }, { passive: false });
-                    thumbTo.addEventListener('touchstart',   function (e) { e.preventDefault(); dragThumb(false, e.touches[0].clientX); }, { passive: false });
-                }
-            });
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/SliderField.js');
     }
 
     /**
@@ -318,7 +149,8 @@ CSS;
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce is verified once in FormProcessor::handle() before field extraction runs; value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
         $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : null;
         if (is_array($raw)) {
             return [
@@ -400,36 +232,7 @@ CSS;
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'slider-range', 'fn' => <<<'JS'
-            function (fieldEl) {
-                var wrap = fieldEl.querySelector('.fabricator-slider-wrap');
-                if (!wrap) return null;
-                var min = parseFloat(wrap.dataset.min);
-                var max = parseFloat(wrap.dataset.max);
-                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                var invalidMsg = (_i18n && _i18n.slider_invalid_value) || 'Please enter a valid value.';
-                if (wrap.classList.contains('fabricator-slider-wrap--range')) {
-                    var fromInp = fieldEl.querySelector('.fabricator-slider-input-from');
-                    var toInp   = fieldEl.querySelector('.fabricator-slider-input-to');
-                    if (!fromInp || !toInp) return null;
-                    var from = parseFloat(fromInp.value);
-                    var to   = parseFloat(toInp.value);
-                    if (isNaN(from) || isNaN(to)) return invalidMsg;
-                    if (from < min || to > max) {
-                        return ((_i18n && _i18n.slider_out_of_range) || 'Value outside the allowed range (%1$s–%2$s).')
-                            .replace('%1$s', min).replace('%2$s', max);
-                    }
-                } else {
-                    var inp = fieldEl.querySelector('input[type="hidden"]');
-                    if (!inp) return null;
-                    var val = parseFloat(inp.value);
-                    if (isNaN(val)) return invalidMsg;
-                    if (val < min) return ((_i18n && _i18n.slider_min) || 'Minimum value: %s').replace('%s', min);
-                    if (val > max) return ((_i18n && _i18n.slider_max) || 'Maximum value: %s').replace('%s', max);
-                }
-                return null;
-            }
-            JS]];
+        return [['rule' => 'slider-range', 'fn' => self::readFieldAsset('assets/js/fields/SliderField.slider-range.js')]];
     }
 
     /**

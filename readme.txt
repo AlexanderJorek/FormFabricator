@@ -4,8 +4,8 @@ Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.0.4
-License: GPLv3 or later
+Stable tag: 1.0.5
+License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
 A drag-and-drop form builder that emails submissions and/or renders them to a cryptographically sealed, tamper-evident PDF.
@@ -47,7 +47,22 @@ Google reCAPTCHA [Terms of Service](https://policies.google.com/terms) | [Privac
 **openiban.com IBAN/BIC lookup** (SEPA field)
 If a form contains a SEPA Direct Debit field, every time a site visitor finishes typing a syntactically valid IBAN into that field, their browser automatically sends that IBAN to:
 `https://openiban.com/validate/`
-to look up and auto-fill the matching BIC. This happens live on the public-facing form for every visitor who fills in the IBAN field on a form containing a SEPA field — not just in the admin editor. No other submission data is sent. openiban.com is a free lookup service built on the [MIT-licensed goiban-service](https://github.com/apilayer/goiban-service#the-mit-license-mit); it does not currently publish a separate terms-of-service page.
+to look up and auto-fill the matching BIC. This happens live on the public-facing form for every visitor who fills in the IBAN field on a form containing a SEPA field — not just in the admin editor. No other submission data is sent. openiban.com is a free lookup service built on the [MIT-licensed goiban-service](https://github.com/apilayer/goiban-service#the-mit-license-mit); it does not publish a separate terms-of-service or privacy-policy document. Its [homepage](https://openiban.com/) states its data practice directly ("No personal data is stored. No request logs are written. Everything works in memory.") and its [imprint](https://openiban.com/imprint.html) identifies the operator.
+
+== Third-Party Libraries & Credits ==
+
+This plugin bundles the following open-source libraries. Both are distributed under GPL-compatible
+licenses (MIT / SIL OFL / CC BY 4.0 for Font Awesome; Apache License 2.0 for pdf.js); full license
+text ships alongside each in the plugin package.
+
+**Font Awesome Free** (icons) — [fontawesome.com](https://fontawesome.com/), source and build tools
+at [github.com/FortAwesome/Font-Awesome](https://github.com/FortAwesome/Font-Awesome). The bundled
+CSS is the project's own minified distribution build; unminified source is published in that
+repository.
+
+**pdf.js** (PDF rendering on the verification page) — a Mozilla project,
+[github.com/mozilla/pdf.js](https://github.com/mozilla/pdf.js), vendored from the official
+`pdfjs-dist` npm package.
 
 == Installation ==
 
@@ -76,6 +91,14 @@ FormFabricator generates a cryptographic seal key used to make generated PDFs ta
 Yes — the PDF Layout Editor (under FormFabricator → PDF Layout) lets you configure the logo, colors, fonts, margins, and header/footer content used when rendering submissions to PDF.
 
 == Changelog ==
+
+= 1.0.5 =
+* Compliance: removed all remaining HEREDOC/NOWDOC syntax from field code (a WordPress.org hosting requirement); larger embedded field scripts/styles moved to proper, lintable .js/.css files.
+* Compliance: normalized the license identifier to the standard SPDX format and added a "Third-Party Libraries & Credits" section documenting the bundled Font Awesome and pdf.js libraries and their licenses.
+* Fixed: the German translation file is no longer bundled inside the plugin's own folder — it's now loaded from WordPress's standard language-pack location, matching how WordPress.org distributes plugin translations.
+* Security: added a structural safeguard ensuring form field data can never be read from a submission before its security nonce has been verified.
+* Updated the openiban.com (SEPA field) privacy disclosure with more specific sourcing for its no-logging/no-storage data practice.
+* Internal: extensive code comment cleanup for maintainability; no functional changes.
 
 = 1.0.4 =
 * Internal: renamed the plugin's internal code identifiers (PHP namespace, constants, hook/option prefixes) from Forge/FormForge to FormFabricator, completing the rename started in earlier versions. No action needed — this is naming-only and doesn't change any stored data, settings, or behavior.

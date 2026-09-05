@@ -1,0 +1,75 @@
+.fabricator-upload-zone {
+    position: relative;
+    border: 2px dashed var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
+    background: var(--fabricator-bg);
+    transition: border-color .15s, background .15s;
+    cursor: pointer;
+}
+.fabricator-upload-zone:hover,
+.fabricator-upload-zone.fabricator-upload-zone--drag {
+    border-color: var(--fabricator-accent);
+    background: var(--fabricator-accent-light);
+}
+.fabricator-upload-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%; height: 100%;
+}
+.fabricator-upload-zone-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 28px 16px;
+    pointer-events: none;
+    text-align: center;
+}
+.fabricator-upload-icon { font-size: 28px; color: var(--fabricator-text-subtle); line-height: 1; }
+.fabricator-upload-prompt { font-size: 14px; color: var(--fabricator-text-muted); }
+.fabricator-upload-link { color: var(--fabricator-accent); text-decoration: underline; }
+.fabricator-upload-error {
+    font-size: 13px;
+    color: var(--fabricator-error, #cc1818);
+    min-height: 1.2em;
+    margin-top: 4px;
+}
+.fabricator-upload-filelist {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.fabricator-upload-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px 3px 10px;
+    background: var(--fabricator-accent-light, #e8f0fe);
+    border: 1px solid var(--fabricator-accent, #2271b1);
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--fabricator-text, #1d2327);
+    max-width: 240px;
+}
+.fabricator-upload-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.fabricator-upload-chip-remove {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    font-size: 16px;
+    color: var(--fabricator-text-muted, #646970);
+}
+.fabricator-upload-chip-remove:hover { color: var(--fabricator-error, #cc1818); }

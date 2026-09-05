@@ -134,22 +134,14 @@
     function initPageBreaks(root) {
         var forms = root.querySelectorAll('.fabricator-form');
         forms.forEach(function (form) {
-            /* Guards against front.js's init() running more than once against the
-             * same form (e.g. a page builder or caching setup that includes the
-             * script twice) — without this, a second pass rebuilds a second click
-             * listener + step bar on top of the first one instead of a no-op. */
+            /* Guards against init() running twice on the same form (e.g. script included twice), which would stack a duplicate click listener + step bar. */
             if (form.dataset.fabricatorPagesInit) return;
             form.dataset.fabricatorPagesInit = '1';
 
             var pages = Array.from(form.querySelectorAll('.fabricator-form-page'));
             if (!pages.length) return;
 
-            /* A '.fabricator-page-header' field may end up rendered inside one specific
-             * page div depending on where it's placed relative to page breaks.
-             * Relocate its wrapper row to sit before the pages so it can stay
-             * visible from its own page onward regardless of which later page is
-             * active. (The field's own init reads its original page position
-             * before this runs — see PageHeaderField::getClientInit().) */
+            /* Relocate the page-header row to sit before the pages so it stays visible on later pages too (its own init already read its original page position — see PageHeaderField::getClientInit()). */
             var headerEl  = form.querySelector('.fabricator-page-header');
             var headerRow = headerEl && headerEl.closest('.fabricator-row');
             if (headerRow && pages.indexOf(headerRow.parentNode) !== -1) {
@@ -195,10 +187,7 @@
                 var shortHeight = document.body.scrollHeight;
                 var gap = tallHeight - shortHeight;
 
-                /* Insert a spacer after the form wrap so the footer stays at its
-                 * current position (bottom of tallHeight). During the scroll the
-                 * spacer shrinks in sync, so the footer descends smoothly with it
-                 * rather than snapping to the shorter page height immediately. */
+                /* Spacer holds the footer at its current position and shrinks in sync so it descends smoothly instead of snapping to the shorter page height. */
                 var spacer = document.createElement('div');
                 spacer.style.height = gap + 'px';
                 wrap.parentNode.insertBefore(spacer, wrap.nextSibling);
@@ -232,11 +221,7 @@
             }
 
             form.addEventListener('fabricator:reset', function () {
-                /* A fresh submission means none of the later pages have been
-                 * revisited yet, so the "reachable" state (furthest) must drop
-                 * back to just page 0 too — otherwise a step bar's later steps
-                 * stay clickable from the previous run even though the visitor
-                 * hasn't stepped through them again this time. */
+                /* Reset furthest to 0 too, or the step bar's later steps stay clickable from the previous run. */
                 furthest = 0;
                 showPage(0, false);
             });
@@ -279,10 +264,7 @@
 
             function getFieldValue(fieldId) {
                 var name = CSS.escape(fieldId);
-                /* CheckboxField renders its inputs as name="{id}[]" (PHP array-submission
-                 * convention) — every other field type uses the bare id. Match both, or a
-                 * condition rule referencing a checkbox field would never find its inputs
-                 * and always see an empty value. */
+                /* CheckboxField uses name="{id}[]"; every other field uses the bare id — match both or checkbox conditions always see an empty value. */
                 var all = Array.from(form.querySelectorAll('[name="' + name + '"], [name="' + name + '[]"]'));
                 if (!all.length) return '';
                 /* Treat inputs inside a hidden conditional ancestor as absent */
@@ -617,11 +599,7 @@
 
     function init(root) {
         root = root || document;
-        /* Guards the whole boot sequence against running twice against the same
-         * root (e.g. a page builder/caching setup that includes this script
-         * more than once) — field getClientInit() implementations aren't all
-         * written to be safe to re-run, so this is the single choke point that
-         * keeps them from double-binding listeners or duplicating markup. */
+        /* Guards the whole boot sequence against running twice on the same root — not all field getClientInit() implementations are safe to re-run. */
         if (root === document && window.__fabricatorFrontInited) return;
         if (root === document) window.__fabricatorFrontInited = true;
 

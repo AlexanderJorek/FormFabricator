@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -39,10 +39,7 @@ class Generator
      * @param string $form_title Human-readable form title used in the PDF header.
      * @return string|false Absolute path to the generated PDF, or false on failure.
      */
-    // Renders the PDF twice (see PASS 1 / PASS 2 below): the seal must be an HMAC of the
-    // final document content, but the seal itself also needs to be embedded IN that
-    // document — a chicken-and-egg problem solved by generating once to fix the content,
-    // computing the seal from it, then regenerating with the seal appended.
+    // Renders twice (PASS 1/2 below): the seal is an HMAC of the content but must also be embedded in it.
     public static function generate(array $mapped, int $form_id, string $form_title = ''): string|false
     {
         if (empty($mapped)) {
@@ -74,11 +71,7 @@ class Generator
                 continue;
             }
 
-            // Sanitize to a safe charset: this id only ever comes from admin-authored
-            // form config today, not $_POST, but nothing enforces that invariant at
-            // this call site — a crafted form-JSON import with a `]`/`<` in a field
-            // key could otherwise break Verificationpage's marker-parsing regex or
-            // inject markup into the invisible marker span below.
+            // A crafted form-JSON import with a `]`/`<` in a field key could break the marker-parsing regex below.
             if (!ctype_alnum(str_replace(['_', '-'], '', (string) $key))) {
                 \FabricatorForms\fabricator_log('FabricatorForms Generator: rejected suspicious field key: ' . $key);
                 continue;
@@ -93,27 +86,11 @@ class Generator
                 'trusted_rich_html' => false,
             ];
 
-            // Defense-in-depth: sanitize the field renderer's own output here, before it
-            // gets wrapped below with the invisible marker spans and <img> tags that
-            // Generator.php itself constructs — running wp_kses() after that wrapping
-            // would strip those trusted structural tags too (they're not in the
-            // value-only allowlist), which is exactly what made the markers render at
-            // full size instead of staying invisible.
-            //
-            // Fields that build PdfDescriptor::rawHtml($html, true) (currently only
-            // HtmlField) have already run their content through their own — wider —
-            // kses pass upstream (see HtmlField::kses()/pdfData()) specifically so
-            // rich markup (headings, tables, local/data: images, inline SVG) survives.
-            // Applying the narrow value-only allowlist to that content here would
-            // silently strip it back down to bare text, so such fields get the same
-            // wider allowlist their own sanitizer already enforced instead. Anything
-            // not marked trusted still gets the narrow default.
-            // Defensive: pdfData() is a soft contract (see BaseField::pdfData() docblock),
-            // not an enforced interface shape — a third-party field type registered via
-            // FieldRegistry could return an array missing one of these keys. Falling back
-            // to [] / '' here (instead of touching $pdf[...] directly) keeps one
-            // misbehaving field handler from fataling PDF generation for the whole
-            // submission (array_keys(null) is a TypeError under PHP 8).
+            // Sanitize before wrapping with marker spans/<img> below, since kses() after wrapping would strip those too.
+            // HtmlField's rawHtml(..., true) content already passed a wider kses pass upstream, so it gets that
+            // same wider allowlist here instead of the narrow default, or rich markup would get stripped to text.
+            // pdfData() is a soft contract; fall back to [] / '' rather than touching $pdf[...] directly so one
+            // misbehaving third-party field handler can't fatal the whole submission (array_keys(null) is a TypeError).
             $pdf_image_vars     = is_array($pdf['image_vars'] ?? null) ? $pdf['image_vars'] : [];
             $pdf_sealed_uploads = is_array($pdf['sealed_uploads'] ?? null) ? $pdf['sealed_uploads'] : [];
 
@@ -234,17 +211,8 @@ class Generator
                 'margin_bottom' => $margin_bottom,
                 'margin_header' => 3,
                 'margin_footer' => $footer_margin,
-                // Always embed the complete font file — never a per-render subset.
-                // PASS 1 and PASS 2 below are two independent mPDF render() calls;
-                // PASS 2 has the invisible base64 seal text appended that PASS 1
-                // doesn't. If subsetting were left on, that extra text can pull in
-                // glyphs PASS 1 never rendered, making the two passes embed
-                // byte-different font programs for the exact same font — which
-                // Verificationpage::hashFontProgramStreams() (comparing against
-                // PASS 1's hashes, captured into the seal below) would then flag
-                // as "undeclared/modified fonts" on a completely unmodified PDF.
-                // Forcing full embedding in both passes makes the font streams
-                // identical regardless of which glyphs either pass happens to use.
+                // Always embed the complete font, never a subset: PASS 2's extra seal text can pull in glyphs
+                // PASS 1 didn't render, so subsetting would make the two passes embed byte-different fonts.
                 'percentSubset' => 0,
             ];
 
@@ -370,20 +338,13 @@ class Generator
     }
 
     /**
-     * Maximum age (seconds) a generated/intermediate PDF may sit in the pdf/ or mpdf/ temp directories before
-     * the fallback sweep removes it. Both directories should normally be empty within seconds of a request
-     * finishing (the SL_*.pdf intermediate is unlinked right after use, and MailSender unlinks the final
-     * Entry_*.pdf via register_shutdown_function once it's sent) — this is only a safety net for the case
-     * where a fatal error/timeout/crash happens between creating one of those files and the code that would
-     * normally clean it up.
+     * Max age (seconds) before the fallback sweep removes a stale temp PDF, e.g. after a crash mid-request.
      *
      * @var int
      */
     private const SWEEP_MAX_AGE = 3600;
 
-    // WP-Cron callback (hourly): sweeps the pdf/ and mpdf/ temp directories for any *.pdf file older than
-    // self::SWEEP_MAX_AGE — a fallback for the rare case a request dies before its own cleanup code runs.
-    // Only matches *.pdf so mPDF's own persistent font/cache files in mpdf/ are left alone.
+    // WP-Cron callback (hourly): sweeps stale *.pdf files, leaving mPDF's own persistent cache files alone.
     public static function cronSweepTmpDirs(): void
     {
         $upload_dir = wp_upload_dir();
@@ -408,13 +369,40 @@ class Generator
                 }
             }
         }
+
+        self::sweepMailSenderTmpDirs($now);
+    }
+
+    // MailSender::materializeUploadAttachments() creates get_temp_dir() . 'fabricator_<uuid>/'
+    // per submission (may contain PII, e.g. ID-document uploads) and normally deletes it via
+    // register_shutdown_function() right after sending — but that never runs if PHP dies first
+    // (fatal error, OOM, kill). Piggybacking on this same hourly sweep, rather than leaving those
+    // directories to accumulate indefinitely, is what "no local data storage" actually requires
+    // under crash conditions too.
+    private static function sweepMailSenderTmpDirs(int $now): void
+    {
+        $sys_tmp = rtrim(get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR;
+        foreach ((glob($sys_tmp . 'fabricator_*', GLOB_ONLYDIR) ?: []) as $dir) {
+            $mtime = @filemtime($dir);
+            if ($mtime === false || ($now - $mtime) <= self::SWEEP_MAX_AGE) {
+                continue;
+            }
+            foreach ((glob(rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . '*') ?: []) as $file) {
+                if (is_file($file)) {
+                    wp_delete_file($file);
+                }
+            }
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- WP-Cron runs outside any request/admin context, so WP_Filesystem() direct-mode initialization cannot be relied on here; this is this plugin's own private temp directory, not user-facing WP_Filesystem-managed content (same rationale as MailSender's own shutdown-function cleanup).
+            if (!@rmdir($dir)) {
+                \FabricatorForms\fabricator_log("FabricatorForms Generator: sweep failed to remove stale temp dir {$dir}");
+            }
+        }
     }
 
     /* ------------------------------------------------------------------ */
 
     /**
-     * Applies the shared body-background, footer, and image-vars configuration common to both PASS 1 and PASS
-     * 2 mPDF instances, so the two passes can't silently diverge over time.
+     * Applies shared body-background, footer, and image-vars config to both PASS 1 and PASS 2 mPDF instances.
      *
      * @param Mpdf   $mpdf             The mPDF instance to configure.
      * @param string $grid_svg         Absolute path to the background grid SVG.
@@ -640,10 +628,7 @@ class Generator
     }
 
     /**
-     * Hashes every non-content compressed stream in the PDF. Content streams are excluded because they differ
-     * between PASS 1 and PASS 2 (seal embedding changes them) and are already covered by content_streams.
-     * Catches auxiliary streams (Form XObjects, ICC profiles, CMaps, etc.) that the type-specific checks do
-     * not cover; stable across both passes.
+     * Hashes every non-content compressed stream in the PDF; content streams are excluded since they change between passes.
      *
      * @param string $pdf_raw Raw PDF binary string.
      * @return array Sorted SHA-256 hashes of all non-content compressed streams.
@@ -680,8 +665,7 @@ class Generator
                 $offset = $be + 9;
                 continue;
             }
-            // Skip page content streams — those are handled by content_streams
-            // and change between PASS 1 and PASS 2 due to seal embedding.
+            // Skip page content streams; handled by content_streams and change between passes.
             if (!self::isPageContentStream($dec)) {
                 $hashes[] = hash('sha256', $dec);
             }
@@ -692,9 +676,7 @@ class Generator
     }
 
     /**
-     * Hashes every embedded font program stream found in FontDescriptor objects. Covers TrueType,
-     * CIDFontType2, and Type1 font files referenced via /FontFile, /FontFile2, or /FontFile3. Returns sorted
-     * SHA-256 hashes so the result is order-independent and matches the Verificationpage output.
+     * Hashes every embedded font program stream (TrueType, CIDFontType2, Type1), sorted for order-independence.
      *
      * @param string $pdf_raw Raw PDF binary string.
      * @return array Sorted SHA-256 hashes of decoded font program streams.
@@ -740,8 +722,7 @@ class Generator
     }
 
     /**
-     * Returns true when the decoded stream data looks like a PDF page content stream. Checks for printable
-     * leading bytes and the presence of common PDF graphics or text operators (BT, q, Q, cm, Tf, Tj, Td).
+     * Returns true when the decoded stream data looks like a PDF page content stream.
      *
      * @param string $decoded Decompressed stream data.
      * @return bool True if the stream appears to be a page content stream.

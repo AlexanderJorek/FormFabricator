@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -23,10 +23,7 @@ namespace FabricatorForms\Fields;
 
 defined('ABSPATH') || exit;
 
-// Structural field: renders a step/breadcrumb bar for multi-page forms. The number of steps and the
-// current/reachable state are resolved client-side (front.js) from the actual .fabricator-form-page count, since
-// that isn't known at render time relative to this field's position. This field only emits the container plus
-// the admin-configured display mode and optional page names.
+// Structural field: step count/current state are resolved client-side (front.js); this only emits the container.
 class PageHeaderField extends BaseField
 {
     /**
@@ -36,57 +33,7 @@ class PageHeaderField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-page-steps {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    margin: 0 0 var(--fabricator-gap);
-    flex-wrap: wrap;
-}
-.fabricator-page-step {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid var(--fabricator-border-input);
-    background: var(--fabricator-bg);
-    color: var(--fabricator-text-muted);
-    border-radius: var(--fabricator-radius);
-    padding: 6px 12px;
-    font-size: 13px;
-    font-family: var(--fabricator-font);
-    cursor: pointer;
-    transition: background .1s, border-color .1s, color .1s;
-}
-.fabricator-page-step:disabled {
-    cursor: not-allowed;
-    opacity: .5;
-}
-.fabricator-page-step.is-reachable:not(:disabled):hover {
-    border-color: var(--fabricator-accent);
-    color: var(--fabricator-accent);
-}
-.fabricator-page-step.is-active {
-    background: var(--fabricator-accent);
-    border-color: var(--fabricator-accent);
-    color: #fff;
-    font-weight: 600;
-}
-.fabricator-page-step-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, .08);
-    font-size: 11px;
-}
-.fabricator-page-step.is-active .fabricator-page-step-num {
-    background: rgba(255, 255, 255, .25);
-}
-CSS;
+        return self::readFieldAsset('assets/css/fields/PageHeaderField.css');
     }
 
     /**
@@ -157,12 +104,8 @@ CSS;
         $show_names = !empty($config['show_names']);
         $names      = [];
         if ($show_names && is_array($config['page_names'] ?? null)) {
-            // wp_strip_all_tags() is a server-side backstop, not just belt-and-braces:
-            // FormEditor::sanitizeFields() only sanitizes string-valued config keys,
-            // so this array-valued one reaches here unsanitized. array_slice caps it
-            // to a generous ceiling, consistent with BaseField's other array caps
-            // (capRawArray/TEXT_FIELD_HARD_CAP) — a form has no legitimate use for
-            // more page names than it has pages, and pages are already bounded.
+            // wp_strip_all_tags() is a real backstop here: FormEditor::sanitizeFields() only
+            // sanitizes string-valued config keys, so this array-valued one arrives unsanitized.
             $names = array_slice(
                 array_values(array_map(
                     static fn($n) => wp_strip_all_tags(trim((string)$n)),
@@ -183,82 +126,7 @@ CSS;
     // click delegation + the fabricator:page-change event dispatched by initPageBreaks()).
     public function getClientInit(): string
     {
-        return <<<'JS'
-        function (root) {
-            root.querySelectorAll('.fabricator-page-header').forEach(function (headerEl) {
-                if (headerEl.dataset.fabricatorStepsInit) return;
-                headerEl.dataset.fabricatorStepsInit = '1';
-
-                var form = headerEl.closest('.fabricator-form');
-                if (!form) return;
-
-                var pages = Array.from(form.querySelectorAll('.fabricator-form-page'));
-                var total = pages.length;
-                if (!total) return;
-
-                /* If a page break sits before this field, it renders inside a
-                 * later page div than 0. Find that div now, before front.js's
-                 * initPageBreaks() relocates this field's row to always sit
-                 * before page 0 — this must run first (and does: field inits
-                 * run before initPageBreaks()) so headerEl is still in its
-                 * original position here. Pages before that native page aren't
-                 * this bar's concern at all: they don't get a step, and the bar
-                 * stays hidden until the visitor actually reaches its own page.
-                 * That lets an admin put a small entry/splash page ahead of the
-                 * bar without it being counted as "step 1". */
-                var containingPage = headerEl.closest('.fabricator-form-page');
-                var nativePage     = containingPage ? pages.indexOf(containingPage) : 0;
-                if (nativePage === -1) nativePage = 0;
-                var stepCount = Math.max(0, total - nativePage);
-
-                var showNames = headerEl.dataset.showNames === '1';
-                var names     = [];
-                try { names = JSON.parse(headerEl.dataset.names || '[]'); } catch (e) { names = []; }
-
-                var stepsWrap = document.createElement('div');
-                stepsWrap.className = 'fabricator-page-steps';
-                for (var i = 0; i < stepCount; i++) {
-                    var btn = document.createElement('button');
-                    btn.type = 'button';
-                    btn.className = 'fabricator-page-step';
-                    btn.setAttribute('data-fabricator-goto-page', String(nativePage + i));
-
-                    var numSpan = document.createElement('span');
-                    numSpan.className = 'fabricator-page-step-num';
-                    numSpan.textContent = String(i + 1);
-                    btn.appendChild(numSpan);
-
-                    if (showNames && names[i]) {
-                        var nameSpan = document.createElement('span');
-                        nameSpan.className = 'fabricator-page-step-name';
-                        // textContent, not innerHTML — names[i] is server-sanitized
-                        // (wp_strip_all_tags) but this is the real XSS boundary,
-                        // not the PHP-side stripping.
-                        nameSpan.textContent = String(names[i]);
-                        btn.appendChild(nameSpan);
-                    }
-
-                    stepsWrap.appendChild(btn);
-                }
-                headerEl.appendChild(stepsWrap);
-
-                function update(idx, furthest) {
-                    headerEl.style.display = idx >= nativePage ? '' : 'none';
-                    Array.from(stepsWrap.children).forEach(function (btn, i) {
-                        var pageIdx = nativePage + i;
-                        btn.classList.toggle('is-active', pageIdx === idx);
-                        btn.classList.toggle('is-reachable', pageIdx <= furthest);
-                        btn.disabled = pageIdx > furthest;
-                    });
-                }
-
-                form.addEventListener('fabricator:page-change', function (e) {
-                    update(e.detail.index, e.detail.furthest);
-                });
-                update(0, 0);
-            });
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/PageHeaderField.js');
     }
 
     /**

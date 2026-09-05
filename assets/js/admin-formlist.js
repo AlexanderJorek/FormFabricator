@@ -5,10 +5,7 @@
  */
         (function() {
 
-            /* Localized strings for dynamically-generated UI text (alerts, toasts,
-               modal messages set from JS) — mirrors the wp_localize_script i18n
-               pattern used elsewhere (e.g. Assets.php's FabricatorVerifier), inlined here
-               since this script is embedded directly rather than a static asset. */
+            /* Inlined (not a static asset) since this script is embedded directly. */
             var pageData = window.FabricatorFormListPage || {};
             var ffi18n = pageData.i18n || {};
 

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -159,11 +159,15 @@ defined('ABSPATH') || exit;
  *
  * NONCE / RESOURCE-LIMIT CONVENTIONS — apply to every extractValue()/extractFromRaw() override
  * ────────────────────────────────────────────────────────────────────────────────────────────
- * Every direct $_POST/$_FILES read in extractValue()/extractFromRaw() needs:
- *   // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified
- *   // once in FormProcessor::handle() before field extraction runs.
- * immediately above the line touching the superglobal — the nonce check already
- * happened once upstream, this silences the (correct) per-line sniff warning.
+ * Every extractValue() override must call self::assertRequestNonceVerified(); as its first
+ * statement (see BaseField::assertRequestNonceVerified()) — a structural guard, not just a
+ * comment, against ever reading $_POST/$_FILES without FormProcessor::handle() having already
+ * verified the request nonce. Then, every direct $_POST/$_FILES read in extractValue()/
+ * extractFromRaw() still needs:
+ *   // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via
+ *   // assertRequestNonceVerified().
+ * immediately above the line touching the superglobal — WPCS's sniff works line-by-line and
+ * can't see the guard call above it, so this silences that otherwise-correct per-line warning.
  *
  * If your field accepts an array-valued POST field (checkboxes, repeatable groups),
  * cap the element count with array_slice() BEFORE sanitizing/validating each entry —
@@ -300,8 +304,11 @@ class ExampleField extends BaseField
     //  Return a raw CSS string (no <style> tags). Assets::enqueueFront() collects all non-empty getStyles() returns
     //  and emits them as a single wp_add_inline_style call after front.css loads, so CSS variables and the .fabricator-input base rules are already defined and available here.
     //
-    //  Use a nowdoc (<<<'CSS' ... CSS) so the content is literal — no PHP
-    //  variable expansion, no accidental escaping of $ or \.
+    //  Put the CSS in its own file at assets/css/fields/MyField.css and read it via
+    //  self::readFieldAsset('assets/css/fields/MyField.css') — this keeps the content
+    //  real, syntax-highlightable CSS instead of a PHP string. WordPress.org prohibits
+    //  HEREDOC/NOWDOC in hosted plugins (their codesniffers can't verify escaping inside
+    //  them), so don't reach for <<<'CSS' either — see BaseField::readFieldAsset().
     //
     //  Include @media blocks inside the same string when needed.
     //  Return '' (default from BaseField) when no custom CSS is required.
@@ -322,19 +329,7 @@ class ExampleField extends BaseField
      */
     private function exampleStylesComposite(): string
     {
-        return <<<'CSS'
-        .fabricator-example-group {
-            display: flex;
-            gap: 10px;
-        }
-        .fabricator-example-sub {
-            flex: 1;
-            min-width: 100px;
-        }
-        @media (max-width: 600px) {
-            .fabricator-example-group { flex-direction: column; }
-        }
-        CSS;
+        return self::readFieldAsset('assets/css/fields/ExampleField.stylesComposite.css');
     }
 
 
@@ -379,16 +374,19 @@ class ExampleField extends BaseField
      */
     private function exampleExtractParallelArrays(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce is verified once in FormProcessor::handle() before field extraction runs; 'name' is sanitized below, other keys (tmp_name/size/error) are PHP-generated, not attacker text.
+        // A real override must call self::assertRequestNonceVerified(); first, same as every
+        // extractValue() implementation in this plugin — see BaseField::assertRequestNonceVerified().
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); 'name' is sanitized below, other keys (tmp_name/size/error) are PHP-generated, not attacker text.
         $files = isset($_FILES[$field_id]) ? wp_unslash($_FILES[$field_id]) : [];
         if (is_array($files) && isset($files['name'])) {
             $files['name'] = is_array($files['name'])
                 ? map_deep($files['name'], 'sanitize_file_name')
                 : sanitize_file_name($files['name']);
         }
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         $desc = isset($_POST[$field_id . '_desc'])
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
             ? map_deep(wp_unslash($_POST[$field_id . '_desc']), 'sanitize_text_field')
             : [];
         return [
@@ -474,7 +472,7 @@ class ExampleField extends BaseField
     //    __('Privacy accepted', 'formfabricator') / __('Privacy not accepted', 'formfabricator')
     //
     //  Do NOT return raw German strings — always wrap in __('English source', 'formfabricator').
-    //  JS strings inside heredocs cannot use __() directly; add them to Assets::enqueueFront()
+    //  JS strings inside getClientInit()/getClientValidation() literals cannot use __() directly; add them to Assets::enqueueFront()
     //  under FabricatorForms.i18n and read them as:
     //    (window.FabricatorForms && window.FabricatorForms.i18n && window.FabricatorForms.i18n.MY_KEY) || 'English fallback'
     //
@@ -561,15 +559,7 @@ class ExampleField extends BaseField
      */
     private function exampleClientInitClickHandler(): string
     {
-        return <<<'JS'
-        function (root) {
-            root.querySelectorAll('.fabricator-example-widget').forEach(function (widget) {
-                widget.addEventListener('click', function () {
-                    // ... interaction logic
-                });
-            });
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/ExampleField.clientInitClickHandler.js');
     }
 
 
@@ -635,15 +625,10 @@ class ExampleField extends BaseField
      */
     private function exampleClientValidationZip(): array
     {
-        return [['rule' => 'example-zip', 'fn' => <<<'JS'
-            function (fieldEl) {
-                var inp = fieldEl.querySelector('input');
-                if (!inp || !inp.value.trim()) return null;
-                if (/^\d{5}$/.test(inp.value.trim())) return null;
-                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                return (_i18n && _i18n.example_zip_invalid) || 'Please enter a five-digit number.';
-            }
-            JS]];
+        return [[
+            'rule' => 'example-zip',
+            'fn'   => self::readFieldAsset('assets/js/fields/ExampleField.clientValidationZip.js'),
+        ]];
     }
 
 
@@ -805,7 +790,7 @@ class ExampleField extends BaseField
     /** EXAMPLE (unused) — would replace the inherited BaseField::enqueueFrontScripts(). */
     private function exampleEnqueueFrontScripts(): void
     {
-        wp_enqueue_script('my-lib', 'https://example.com/lib.js', [], FABRICATOR_FORMS_VERSION, true);
+        wp_enqueue_script('fabricator-my-lib', FABRICATOR_FORMS_URL . 'assets/js/my-lib.js', [], FABRICATOR_FORMS_VERSION, true);
     }
 
 

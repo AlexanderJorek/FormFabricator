@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,19 +24,12 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 /**
- * Caps how many requests in a bucket run at once, across all users — unlike RateLimiter's
- * per-key window counter. Each claim is its own row under a random token, via INSERT IGNORE
- * (same proven primitive as SingleUseToken). The room-check (SELECT COUNT) isn't part of the
- * same atomic statement as the insert, so a narrow race can slightly overshoot the cap under a
- * true burst — acceptable for a soft self-DoS mitigation. TTL self-heals a claim whose holder
- * died without calling release(); callers should also release on shutdown for the common path.
+ * Caps concurrent requests in a bucket across all users; a narrow race can slightly overshoot under burst.
  */
 class ConcurrencySlot
 {
     /**
-     * Attempts to claim a slot in $bucket, while fewer than $max_concurrent are currently held.
-     * Returns the claim's identifying token (pass to release()) on success, or false if the bucket
-     * is currently full.
+     * Attempts to claim a slot in $bucket, returning its token on success, or false if the bucket is full.
      *
      * @param string $bucket         Bucket name (hardcoded literal per caller, never request input).
      * @param int    $max_concurrent Maximum claims honored at once in this bucket.

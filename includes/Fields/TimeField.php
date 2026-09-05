@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,12 +35,7 @@ class TimeField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-time-wrap { display: flex; align-items: center; gap: 8px; }
-.fabricator-time-sep { font-weight: 600; color: var(--fabricator-text-muted); }
-.fabricator-time-wrap .fabricator-input { width: 72px; text-align: center; padding: 0 8px; }
-@media (max-width: 600px) { .fabricator-time-wrap { flex-wrap: wrap; } }
-CSS;
+        return self::readFieldAsset('assets/css/fields/TimeField.css');
     }
 
     /**

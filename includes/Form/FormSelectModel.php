@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -57,11 +57,9 @@ class FormSelectModel
      */
     public static function get(int $id): ?self
     {
-        // Defense-in-depth: all current call sites are already gated on
-        // Plugin::userCan('edit_forms') before reaching here, same as save()/delete().
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            return null;
-        }
+        // Unlike getAll()/save()/delete(), intentionally NOT capability-gated: the public
+        // [fabricator_form_select] shortcode (FormSelectList::shortcode()) calls this for
+        // logged-out visitors, same as FormModel::get() has no such gate either.
         foreach (self::getRaw() as $record) {
             if ((int) ($record['id'] ?? 0) === $id) {
                 return self::fromArray($record);
@@ -84,9 +82,7 @@ class FormSelectModel
      */
     public static function save(array $data, int $id = 0, bool $nonce_verified = false): int
     {
-        // Defense-in-depth: both current call sites already gate on
-        // Plugin::userCan('edit_forms') before reaching here — this model
-        // method shouldn't rely solely on callers remembering to check.
+        // Defense-in-depth: don't rely solely on callers remembering to gate on edit_forms.
         if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             return 0;
         }
@@ -222,16 +218,7 @@ class FormSelectModel
     }
 
     /**
-     * CSRF backstop for save()/delete().
-     *
-     * Both current call sites (FormSelectList.php's ajaxSave()/ajaxDelete())
-     * already perform their own, more specific nonce check ('fabricator_fsel_save'
-     * or the per-record 'fabricator_fsel_delete_{id}') before calling into this
-     * model, and pass $nonce_verified: true to acknowledge that so this method
-     * is a no-op for them — mirrors {@see FormModel::nonceVerifiedOrCheck()}.
-     * If a future (or forgotten) call site omits $nonce_verified, this falls
-     * back to checking the shared admin AJAX nonce so the request is never
-     * silently accepted without any CSRF check at all.
+     * CSRF backstop for save()/delete(); falls back to the shared admin nonce if $nonce_verified is false. Mirrors {@see FormModel::nonceVerifiedOrCheck()}.
      *
      * @param bool $nonce_verified Whether the caller already verified its own nonce.
      * @return bool True if the request may proceed.

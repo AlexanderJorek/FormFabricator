@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -26,21 +26,6 @@ add_action(
     'wp_ajax_fabricator_verify_push_lines',
     function () {
 
-        /* ---- Raise limits for heavy PDF parsing ----
-           Sized against Verificationpage::MAX_PDF_BYTES (500MB) — a form that allows several
-           large embedded images (UploadField has no fixed max_size_mb ceiling)
-           can easily produce a PDF well past the old 50MB assumption. These are
-           hard ceilings meant to stay practically unreachable; the real per-request
-           budget is the soft cap in handleUpload() (see $fabricator_parse_max_seconds),
-           which scales with both file size and actual decompressed text volume and
-           aborts long before these are hit. */
-        @ini_set('memory_limit', '3072M'); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- legitimate resource-limit raise for heavy PDF text-extraction/hash-verification; see comment above.
-        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- 256 M, needed for [\s\S]*? across large PDFs; legitimate resource-limit raise, see comment above.
-        @ini_set('pcre.backtrack_limit', '268435456');
-        if (!ini_get('safe_mode')) {
-            set_time_limit(1800); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- 30 min hard ceiling for heavy PDF verification, should never actually be reached, see soft budget below
-        }
-
         /* ---- Capability ---- */
         if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
@@ -50,17 +35,24 @@ add_action(
         /* ---- Nonce ---- */
         check_ajax_referer('fabricator_verifier_nonce', 'nonce');
 
-        /* ---- Rate limit: this handler raises memory/time limits per request, so a
-           low-privileged verifier user firing it repeatedly can still create a modest
-           self-DoS surface on shared hosting. ---- */
+        /* ---- Raise limits for heavy PDF parsing (hard ceilings; handleUpload()'s soft budget aborts first) ----
+           Only reached after the capability + nonce checks above, so an unauthorized/unverified
+           request can't force these resource-limit changes on the server. */
+        @ini_set('memory_limit', '3072M'); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- resource-limit raise for heavy PDF parsing.
+        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- resource-limit raise for heavy PDF parsing.
+        @ini_set('pcre.backtrack_limit', '268435456');
+        if (!ini_get('safe_mode')) {
+            set_time_limit(1800); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- hard ceiling, should never be reached; see soft budget below.
+        }
+
+        /* ---- Rate limit: bounds self-DoS from repeated raised-limit requests ---- */
         $rl_key = 'verify_' . get_current_user_id();
         if (\FabricatorForms\Utils\RateLimiter::increment($rl_key, 5) > 1) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rate-limited user ' . get_current_user_id() . '.');
             wp_send_json_error(['message' => 'Please wait before verifying another PDF.'], 429);
         }
 
-        /* ---- Global concurrency cap: at most 3 of this handler running at once, across
-           everyone (the per-user throttle above only spaces out one tab's own requests). ---- */
+        /* ---- Global concurrency cap: at most 3 of this handler running at once, across everyone ---- */
         $fabricator_cs_bucket = 'verify';
         $fabricator_cs_token  = \FabricatorForms\Utils\ConcurrencySlot::acquire($fabricator_cs_bucket, 3, 900);
         if ($fabricator_cs_token === false) {
@@ -91,13 +83,8 @@ add_action(
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — missing pdf_token (user ' . get_current_user_id() . ').');
             wp_send_json_error(['message' => 'Invalid input: missing token'], 400);
         }
-        // Sized against Verificationpage::MAX_PDF_BYTES — a large-but-legitimate multi-page PDF
-        // (browser-extracted text, one entry per visual line) can produce far more
-        // than the old 5000-line assumption once large embedded-image forms are
-        // allowed. This still bounds worst-case comparison cost against a crafted
-        // payload; handleUpload() reports interim "Compiling results" progress
-        // during the comparison loop so a large-but-valid submission doesn't look
-        // frozen while it works through the full data instead of being truncated.
+        // Bounds worst-case comparison cost against a crafted payload while still allowing
+        // large-but-legitimate multi-page PDFs sized up to MAX_PDF_BYTES.
         $visualLines = array_slice(
             array_values(
                 array_filter(
@@ -260,13 +247,14 @@ add_action(
             wp_die('Forbidden', '', ['response' => 403]);
         }
 
-        // Nonce passed as query-string param by verification.js
-        if (!wp_verify_nonce(sanitize_key($_GET['nonce'] ?? ''), 'fabricator_verifier_nonce')) {
+        // Nonce/token are posted in the request body by verification.js (not query-string
+        // params) so they don't end up in server logs, browser history, or a Referer header.
+        if (!wp_verify_nonce(sanitize_key($_POST['nonce'] ?? ''), 'fabricator_verifier_nonce')) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
             wp_die('Nonce verification failed', '', ['response' => 403]);
         }
 
-        $token = sanitize_key($_GET['token'] ?? '');
+        $token = sanitize_key($_POST['token'] ?? '');
         if (!$token) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — missing token (user ' . get_current_user_id() . ').');
             wp_die('Missing token', '', ['response' => 400]);
@@ -405,14 +393,8 @@ final class Verificationpage
         );
         add_action('fabricator_verifier_cleanup_files', [self::class, 'cronCleanupFiles']);
 
-        // Fallback sweep: the per-file wp_schedule_single_event() cleanups above
-        // depend on WP-Cron actually firing, which isn't guaranteed on every
-        // deployment (DISABLE_WP_CRON, no real system cron, or a low-traffic
-        // admin-only page that rarely gets the pseudo-cron triggered). Without
-        // this, a missed single-event cleanup leaves the file in verfiles/ or
-        // verimages/ forever. This recurring sweep is a safety net that simply
-        // age-based-deletes anything older than self::SWEEP_MAX_AGE, independent
-        // of whether the original single-event cleanup ever ran.
+        // Fallback sweep: age-deletes anything older than SWEEP_MAX_AGE, in case a
+        // per-file wp_schedule_single_event() cleanup never fires (WP-Cron isn't guaranteed).
         add_action('fabricator_verifier_sweep_tmp_dirs', [self::class, 'cronSweepTmpDirs']);
         if (!wp_next_scheduled('fabricator_verifier_sweep_tmp_dirs')) {
             wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_verifier_sweep_tmp_dirs');
@@ -420,10 +402,7 @@ final class Verificationpage
     }
 
     /**
-     * Lazily initializes and returns the WP_Filesystem API instance, for use by admin-request-context
-     * code paths (render()/handleUpload() and their callees) that need to chmod() files they've just
-     * written. Not used by the WP-Cron callbacks (cronSweepTmpDirs()/cronCleanupFiles()), which run
-     * without guaranteed admin-request credentials for WP_Filesystem to authenticate with.
+     * Lazily initializes and returns the WP_Filesystem API instance (admin-request contexts only).
      *
      * @return \WP_Filesystem_Base|null The filesystem instance, or null if initialization failed.
      */
@@ -440,31 +419,21 @@ final class Verificationpage
     }
 
     /**
-     * Maximum age (seconds) a file may sit in the verifier temp directories before the fallback sweep removes
-     * it, regardless of why the original single-event cleanup didn't run. Comfortably above the longest
-     * intentional single-event delay (600s) plus the up-to-30-minute verification window that can still be
-     * reading the file.
+     * Maximum age (seconds) a temp file may sit before the fallback sweep removes it.
      *
      * @var int
      */
     private const SWEEP_MAX_AGE = 3600;
 
     /**
-     * Maximum accepted PDF size for verification, in bytes. UploadField has no fixed ceiling on its own
-     * admin-configurable `max_size_mb` setting (default 10MB, but admins can raise it), and a form can carry
-     * several upload fields each allowing `multiple` files up to PHP's `max_file_uploads` ini limit — so
-     * worst case is comfortably more than one field's default. 500MB gives real headroom above a
-     * default-config worst case (e.g. 20 images @ 10MB = ~200MB raw) even before accounting for a raised
-     * max_size_mb, while still bounding worst-case memory/decompression cost via the scaled parse-time budget
-     * in handleUpload(), which grows alongside this.
+     * Maximum accepted PDF size for verification, in bytes. 500MB gives headroom above a
+     * default-config worst case (multiple upload fields, each admin-raisable past 10MB).
      *
      * @var int
      */
     public const MAX_PDF_BYTES = 500 * 1024 * 1024;
 
-    // WP-Cron callback (hourly): sweeps the verifier's temp directories for any file older than
-    // self::SWEEP_MAX_AGE, as a fallback for sites where WP-Cron doesn't reliably run the one-off cleanup
-    // events scheduled by emitImageSlot()/scheduleDeletion().
+    // WP-Cron callback (hourly): sweeps temp directories for files older than SWEEP_MAX_AGE.
     public static function cronSweepTmpDirs(): void
     {
         $upload_dir = wp_upload_dir();
@@ -492,9 +461,7 @@ final class Verificationpage
     }
 
     /**
-     * WP-Cron callback that deletes temp verifier files after a delay. Runs on the cron schedule rather than
-     * blocking a live PHP-FPM worker with a sleep() — a handful of concurrent PDF verifications previously
-     * held a worker each for up to 120s, which could exhaust the worker pool.
+     * WP-Cron callback that deletes temp verifier files after a delay (avoids blocking a PHP-FPM worker).
      *
      * @param array<int, string> $files Absolute paths to delete.
      */
@@ -561,11 +528,7 @@ final class Verificationpage
      */
     public static function render(): void
     {
-        // menu() only registers this page's submenu for capable users, so an
-        // unauthorized request is normally rejected by WP core before this
-        // callback ever runs — but this function processes file uploads to
-        // disk, so it checks again explicitly rather than depending solely on
-        // admin_menu registration semantics holding across future refactors.
+        // This handles file uploads to disk, so it re-checks explicitly rather than relying solely on admin_menu's submenu registration.
         if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
             \FabricatorForms\fabricator_log('FabricatorForms Verificationpage::render: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
             wp_die(esc_html__('Insufficient permissions.', 'formfabricator'), '', ['response' => 403]);
@@ -733,12 +696,7 @@ final class Verificationpage
                     wp_delete_file($tmpName);
                     self::scheduleDeletion($target_path);
 
-                    // Issue a short-lived transient token; JS uses the serve endpoint
-                    // instead of the direct (now HTTP-blocked) verfiles URL.
-                    // TTL must stay >= the parse-time hard ceiling (set_time_limit(1800)
-                    // in wp_ajax_fabricator_verify_push_lines) plus margin — see
-                    // scheduleDeletion()'s matching delay below, which the file's
-                    // on-disk lifetime must also outlive.
+                    // Short-lived transient token; TTL must outlive the 1800s parse hard ceiling.
                     $token = bin2hex(random_bytes(16));
                     set_transient(
                         'fabricator_pdf_' . $token,
@@ -746,16 +704,16 @@ final class Verificationpage
                         2100
                     ); // 35 minutes
 
-                    $serve_url = add_query_arg(
-                        [
+                    // nonce/token travel in the POST body (see verification.js), not as query
+                    // params — a GET URL with these as query args would land in server logs,
+                    // browser history, and any Referer header sent from the resulting page.
+                    $verification_queue[] = [
+                        'url'   => esc_url_raw(admin_url('admin-ajax.php')),
                         'action' => 'fabricator_serve_pdf',
-                        'nonce'  => wp_create_nonce('fabricator_verifier_nonce'),
-                        'token'  => $token,
-                        ],
-                        admin_url('admin-ajax.php')
-                    );
-
-                    $verification_queue[] = ['url' => esc_url_raw($serve_url), 'token' => $token, 'name' => $safe_name];
+                        'nonce' => wp_create_nonce('fabricator_verifier_nonce'),
+                        'token' => $token,
+                        'name'  => $safe_name,
+                    ];
                 }
             }
         }
@@ -770,9 +728,7 @@ final class Verificationpage
         wp_nonce_field('fabricator_verifier_upload', 'fabricator_verifier_nonce');
         $idle_style   = $is_request_post ? ' style="' . esc_attr('display:none') . '"' : '';
         $scanmore_cls = $is_request_post ? ' class="' . esc_attr('fabricator-pdf-visible') . '"' : '';
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- $idle_style/$scanmore_cls are
-        // already esc_attr()'d at assignment above; other interpolated values are esc_html()/esc_attr()'d
-        // inline.
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- already esc_attr()/esc_html()'d above and inline.
         echo '
         <div id="fabricator-pdf-idle-state"' . $idle_style . '>
             <div class="fabricator-pdf-idle-card">
@@ -850,10 +806,7 @@ final class Verificationpage
     }
 
     /**
-     * Wall-clock checkpoint used between the heavy regex passes in handleUpload(). Throws instead of
-     * continuing to consume the raised 300s time budget when a single request's parsing has already run long
-     * — caught by handleUpload()'s existing try/catch, which renders it as a friendly "Parsing timed out"
-     * notice.
+     * Wall-clock checkpoint between the heavy regex passes in handleUpload(); throws once over budget.
      *
      * @param float  $startTime  Result of microtime(true) captured at parse start.
      * @param float  $maxSeconds Maximum seconds allowed before aborting.
@@ -870,7 +823,7 @@ final class Verificationpage
             'FabricatorForms handleUpload: aborting after [' . $passLabel . '] pass — '
             . round($elapsed, 1) . 's elapsed (limit ' . $maxSeconds . 's)'
         );
-        // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- this exception message is never echoed directly; the catch block in handleUpload() only matches it via str_contains() against fixed, already-translated literals (see the match(true) block around line 3840) before echoing the mapped friendly message.
+        // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- never echoed directly; matched via str_contains() against fixed literals before echoing a mapped friendly message.
         throw new \RuntimeException('Parsing timed out after ' . $passLabel . '.');
     }
 
@@ -886,13 +839,7 @@ final class Verificationpage
         // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- values here are already
         // escaped/int-cast/hashed/regex-constrained; WPCS can't trace escaping through interpolation.
         self::$progressKey = $progressKey;
-        // Wall-clock checkpoint: this handler runs under a raised 1800s hard ceiling
-        // (see set_time_limit(1800) at the top of wp_ajax_fabricator_verify_push_lines) that
-        // should never actually be reached. The real budget is this soft cap, scaled to
-        // the uploaded file's size so a legitimately large-but-valid PDF (multiple big
-        // embedded images, up to Verificationpage::MAX_PDF_BYTES) isn't penalized by a flat ceiling
-        // sized for a much smaller file — while still aborting a pathologically slow
-        // parse well before the hard ceiling.
+        // Soft time budget, scaled to file size, aborts well before the 1800s hard ceiling.
         $fabricator_parse_start       = microtime(true);
         $fabricator_parse_file_mb     = max(1, (int) ceil(($file['size'] ?? 0) / 1048576));
         $fabricator_parse_max_seconds = min(600, 30 + ($fabricator_parse_file_mb * 2));
@@ -957,10 +904,7 @@ final class Verificationpage
 
         self::setProgress(__('Byte scan: searching for seal…', 'formfabricator'), 5);
 
-        // Incremental-update / shadow-attack guard: a legitimately generated PDF
-        // has exactly one %%EOF marker.  A second %%EOF signals that new objects
-        // were appended after the original cross-reference table — a classic
-        // technique to alter visible content while leaving the original seal intact.
+        // Incremental-update / shadow-attack guard: a legit PDF has exactly one %%EOF; a second signals objects appended after the original xref table to alter content while keeping the seal intact.
         $raw_for_guard = @file_get_contents($file['tmp_name']);
         if ($raw_for_guard === false) {
             \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected "' . $file_name . '" — file_get_contents() failed reading the uploaded temp file.');
@@ -1007,13 +951,7 @@ final class Verificationpage
             $pdf = $parser->parseFile($file['tmp_name']);
             $text = $pdf->getText();
 
-            // Re-derive the soft parse budget now that actual decompressed text volume
-            // is known. Text compresses well (a small PDF on disk can still unpack to a
-            // huge string with a form full of unbounded textareas — see BaseField's
-            // TEXT_FIELD_HARD_CAP, which bounds this per-field but not in aggregate
-            // across many fields), and it's the decompressed volume — not the on-disk
-            // file size — that drives the cost of the regex passes below. Whichever
-            // estimate is larger wins so neither dimension alone can starve the budget.
+            // Re-derive the soft parse budget from decompressed text volume, not on-disk size — a small compressed PDF can still unpack to a huge string (see BaseField::TEXT_FIELD_HARD_CAP, which bounds only per-field, not in aggregate).
             $fabricator_parse_text_mb    = strlen($text) / 1048576;
             $fabricator_parse_max_seconds = max(
                 $fabricator_parse_max_seconds,
@@ -1025,10 +963,7 @@ final class Verificationpage
             if ($seal_count === 0) {
                 throw new \RuntimeException("Seal not found in {$file_name}.");
             }
-            // Multiple seal blocks: continue using the last one so all other checks
-            // can still run, but record the violation so the panel shows it.
-            // Also flag if raw bytes contained seal markers outside compressed streams
-            // (e.g. a fake seal injected into a plain uncompressed stream object).
+            // Multiple seal blocks: keep using the last one so other checks still run, but record the violation for the panel (also flags a fake seal injected into a plain uncompressed stream).
             $multiple_seals_detected = $seal_count > 1
                 || ($raw_plain_seal_count ?? 0) > 0;
 
@@ -1398,16 +1333,9 @@ final class Verificationpage
             echo "</div>"; // fabricator-pdf-detail-section
 
             // --- Multiple seals detail section ---
-            // Each seal found here is verified against the same server-side key lookup as the
-            // primary seal — none of them are trusted based on their own embedded key_id alone.
-            // Regardless of any individual seal's HMAC validity, $multiple_seals_detected forces
-            // the overall verdict to fail (a genuine document should only ever carry one seal).
+            // Each seal is verified against the same key lookup as the primary; $multiple_seals_detected forces the verdict to fail regardless of individual HMAC validity.
             if ($multiple_seals_detected && $pdf_raw !== false) {
-                // Collect all seals:
-                // 1. From pdfparser text (decompressed page-content streams) — the real seal.
-                //    Use the pre-saved list; $matches is overwritten by later preg_match_all calls.
-                // 2. From bytes appended AFTER the last %%EOF only — injected plain-text seals.
-                //    Scanning full raw bytes causes false positives in compressed binary data.
+                // Collect all seals: the real one from pdfparser text (pre-saved list), plus any injected ones found only after the last %%EOF (full raw bytes false-positive on compressed data).
                 $all_seals_b64 = [];
                 foreach ($text_seal_b64_list as $m) {
                     if ($m !== '' && !in_array($m, $all_seals_b64, true)) {
@@ -1834,9 +1762,7 @@ final class Verificationpage
                                 $content_to_match = $uriMatch[1];
                             }
                         }
-                        // Gap D: also check /V (widget annotation display value).
-                        // /Contents may be absent on widget annotations while /V holds
-                        // the actual visible field value shown by PDF viewers.
+                        // Gap D: also check /V — widget annotations may hold value there instead of /Contents.
                         if ($content_to_match === '' && !empty($ann['raw'])) {
                             if (preg_match('/\/V\s*\(([^)]*)\)/', $ann['raw'], $vMatch)) {
                                 $content_to_match = $vMatch[1];
@@ -2005,19 +1931,15 @@ final class Verificationpage
                    . " style='background:#f4f4f4; padding:10px; border:1px solid #ddd;'>";
 
                 if (str_contains($pdf_raw, '/XObject')) {
-                    // Pre-collect SMask object numbers so they can be skipped as
-                    // standalone images (they are alpha channels, not content).
-                    // SMask association per image is detected from $fullObj at scan time.
+                    // Pre-collect SMask object numbers so they're skipped as standalone images (they're alpha channels).
                     $smask_obj_nums = [];
                     if (preg_match_all('/\/SMask\s+(\d+)\s+\d+\s+R/', $pdf_raw, $_sm)) {
                         $smask_obj_nums = array_flip($_sm[1]);
                         unset($_sm);
                     }
 
-                    // --- Ensure image output directory exists (HTTP-blocked) ---
-                    // Hoisted out of $scanXObjects: this closure recurses per embedded
-                    // image/Form-XObject, so running these idempotent filesystem checks
-                    // inside it repeated the same stat/write calls once per image.
+                    // Ensure image output directory exists (HTTP-blocked); hoisted out of the recursive
+                    // $scanXObjects closure to avoid repeating the same stat/write calls per image.
                     $upload_dir = wp_upload_dir();
                     $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
                     $ver_dir    = $safe_dir . '/verimages';
@@ -2117,24 +2039,12 @@ final class Verificationpage
                                 }
                             }
 
-                                    // Reject implausible dimensions before they're used to size any
-                                    // allocation or loop bound below — a crafted /Width, /Height in an
-                                    // otherwise-tiny image object could otherwise trigger a multi-GB
-                                    // str_repeat()/str_pad() or a CPU-burning pixel loop.
-                                    // JPEG (DCTDecode) bytes are hashed raw and never run through the
-                                    // manual PNG-predictor/indexed-palette/GD-pixel loops below, so they
-                                    // get the full memory-based cap (PdfUtils::maxSafePixels(), same
-                                    // adaptive ceiling used for uploaded/attached images elsewhere).
-                                    // Any other filter DOES go through those unvectorized per-pixel
-                                    // PHP loops, so it's held to half that budget to bound worst-case
-                                    // CPU time as well as memory.
+                                    // Reject implausible /Width, /Height before they size any allocation/loop bound —
+                                    // JPEG gets the full pixel cap (hashed raw, no per-pixel loop); other filters get half.
                             $dims_over_cap = false;
                             $safe_pixels = PdfUtils::maxSafePixels();
-                            // Require DCTDecode as the SOLE declared filter for the higher cap — a
-                            // crafted PDF could otherwise declare DCTDecode (to claim the full
-                            // allowance) while ALSO setting a PNG /Predictor or an Indexed
-                            // colorspace that routes it into the unvectorized per-pixel loops below
-                            // regardless, defeating the point of the lower cap on those paths.
+                            // Require DCTDecode as the SOLE filter for the higher cap — otherwise a crafted PDF
+                            // could claim it while still routing through the unvectorized per-pixel loops below.
                             $pixel_cap = (count($filters) === 1 && $filters[0] === 'DCTDecode')
                                 ? $safe_pixels
                                 : (int) ($safe_pixels / 2);
@@ -2159,9 +2069,7 @@ final class Verificationpage
 
                                 $decoded = $stream_data;
                                 if (in_array('FlateDecode', $filters, true)) {
-                                    // Bound both input and output size — same guard used for the
-                                    // palette/SMask/content-stream decompressions elsewhere in this
-                                    // file, against a crafted small stream that inflates to gigabytes.
+                                    // Bound both input and output size against a decompression-bomb stream.
                                     $try = (strlen($stream_data) <= 67108864) ? @gzuncompress($stream_data) : false;
                                     if ($try !== false && strlen($try) <= 67108864) {
                                         $decoded = $try;
@@ -2203,11 +2111,7 @@ final class Verificationpage
                                     }
                                 }
 
-                                // IMPORTANT:
-                                // Indexed color spaces have TWO streams:
-                                // 1) image index stream
-                                // 2) palette lookup stream (may have its own filters)
-                                // Both MUST be decoded, or colors will be wrong.
+                                // Indexed color spaces have TWO streams (image index + palette lookup); both must decode.
 
                                 // Indexed color spaces
                                 if (str_starts_with($csRaw, '[')
@@ -2235,10 +2139,7 @@ final class Verificationpage
                                             if (preg_match('/stream\s*(.*?)\s*endstream/s', $palObj[1], $palStream)) {
                                                 $lookup = ltrim($palStream[1], "\r\n");
 
-                                                // DECODE PALETTE STREAM — bounded input and output
-                                                // size, matching the guard used elsewhere in this
-                                                // file (e.g. the content-stream scan) against a
-                                                // decompression-bomb crafted palette stream.
+                                                // Decode palette stream — bounded against a decompression bomb.
                                                 if (in_array('FlateDecode', $palFilters, true)) {
                                                     $try = (strlen($lookup) <= 67108864) ? @gzuncompress($lookup) : false;
                                                     if ($try !== false && strlen($try) <= 67108864) {
@@ -2267,10 +2168,7 @@ final class Verificationpage
                                     }
                                 }
 
-                                // For JPEG (DCTDecode) the stream bytes ARE the raw JPEG data.
-                                // Colorspace is embedded in the JPEG header and irrelevant to
-                                // our hash, which is computed on the raw encoded bytes.
-                                // Treat unknown colorspace as DeviceRGB so the pipeline continues.
+                                // JPEG hash is on raw encoded bytes, so colorspace is irrelevant; treat as DeviceRGB.
                                 if ($channels <= 0 && in_array('DCTDecode', $filters, true)) {
                                     $colorspace = 'DeviceRGB';
                                     $channels   = 3;
@@ -2328,6 +2226,7 @@ final class Verificationpage
                                     echo "• Channels: " . (int)$channels . "<br>";
                                     echo "• ImageMask: " . ($isImageMask ? 'true' : 'false') . "<br>";
                                     $dec_size = $decoded !== null ? strlen($decoded) . ' bytes' : 'n/a';
+                                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $dec_size is only ever an (int) length + the literal ' bytes', or the literal 'n/a'; never derived from request/file content.
                                     echo "• Decoded size: {$dec_size}<br>";
                                     echo "</div></div>";
 
@@ -2347,9 +2246,7 @@ final class Verificationpage
                                     $colorspace = 'IndexedRGB';
                                     $baseSpace  = $m[1]; // usually DeviceRGB
                                     if ($baseSpace !== 'DeviceRGB') {
-                                        // The palette-lookup decoder below always reads 3-byte
-                                        // RGB triples; a DeviceGray/DeviceCMYK base would be
-                                        // silently misinterpreted rather than flagged.
+                                        // The palette decoder below always reads 3-byte RGB triples; flag other bases.
                                         $failureReasons[] = "Unsupported Indexed base colorspace: {$baseSpace}";
                                     }
                                 } elseif (preg_match('/\/ColorSpace\s*\/([A-Za-z0-9]+)/', $fullObj, $m)) {
@@ -2388,10 +2285,7 @@ final class Verificationpage
                                     default => 0
                                 };
 
-                                // JPEG: colorspace is embedded in the JPEG header; the PDF
-                                // XObject entry may omit or encode it in a way our regex
-                                // doesn't recognise. The hash is on raw DCT bytes so
-                                // colorspace is irrelevant — treat as DeviceRGB and continue.
+                                // JPEG hash is on raw DCT bytes, so colorspace is irrelevant; treat as DeviceRGB.
                                 if ($channels === 0 && in_array('DCTDecode', $filters, true)) {
                                     $colorspace = 'DeviceRGB';
                                     $channels   = 3;
@@ -2512,10 +2406,7 @@ final class Verificationpage
 
                                         $is_jpeg_obj = in_array('DCTDecode', $filters, true);
 
-                                        // --- Exact XObject hash (new seals) ---
-                                        // Hash raw compressed stream bytes — identical between PASS 1 and
-                                        // PASS 2.
-                                        // $stream_data is set before any decoding/predictor expansion.
+                                        // Exact XObject hash (new seals): raw compressed bytes, same across passes.
                                 if ($use_exact_hashes) {
                                     $check_hash        = hash('sha256', $stream_data);
                                     $hash_method_label = 'Exact XObject stream (sha256)';
@@ -2716,9 +2607,7 @@ final class Verificationpage
                                     }
                                 }
 
-                                // Create image file (disk cache) and build a data URI for inline display.
-                                // Images are served as data URIs so the .htaccess-protected verimages/
-                                // directory never needs to be HTTP-accessible.
+                                // Build a data URI so the .htaccess-protected verimages/ dir stays non-HTTP-accessible.
                                 $data_uri = '';
                                 if (!file_exists($imgFile)) {
                                     if ($ext === 'jpg') {
@@ -2855,9 +2744,7 @@ final class Verificationpage
                                 if (!empty($refs[1])) {
                                     foreach ($refs[1] as $ref) {
                                         $objRefNum = preg_replace('/\s0 R/', '', $ref);
-                                        // Guard against circular /XObject references (A -> B -> A),
-                                        // which would otherwise recurse indefinitely and exhaust
-                                        // the call stack / memory on a crafted PDF.
+                                        // Guard against circular /XObject references (A -> B -> A) exhausting the stack.
                                         if (isset($visited[$objRefNum])) {
                                             continue;
                                         }
@@ -3259,9 +3146,7 @@ final class Verificationpage
                     return $raw;
                 };
 
-                // Extract /Info dict — use the LAST definition of the referenced object
-                // so that incremental updates (which append overriding object definitions)
-                // are read the same way a PDF viewer would read them.
+                // Use the LAST definition of the /Info object, matching how a PDF viewer reads incremental updates.
                 $pdf_meta_found = ['title' => '', 'author' => '', 'creator' => ''];
                 if (preg_match('/\/Info\s+(\d+)\s+\d+\s+R/', $pdf_raw, $info_ref)) {
                     $obj_num      = $info_ref[1];
@@ -3329,11 +3214,8 @@ final class Verificationpage
                 $inner_html = str_replace($meta_badge_pass, $meta_badge_fail, $inner_html ?? '');
             }
 
-            // --- All-stream fingerprint check (Gap B catch-all) ---
-            // Subset model (same as content_streams): flag when a live stream has no
-            // matching sealed hash — that means an unknown stream was injected.
-            // A sealed hash absent from the live PDF is NOT flagged; stream removal
-            // doesn't inject content, and PASS 1 / PASS 2 may differ in stream count.
+            // All-stream fingerprint check (Gap B catch-all): flag a live stream with no matching sealed
+            // hash (injected content); a sealed hash missing from the live PDF is not flagged (mere removal).
             $all_stream_mismatch = false;
             if ($pdf_raw !== false) {
                 $sealed_as_index = array_flip(
@@ -3347,12 +3229,8 @@ final class Verificationpage
                 }
             }
 
-            // --- Final verdict computation ---
-            // $seal_matches comes from HashSeal::verify() using hash_equals() (constant-time)
-            // against a key resolved server-side by key_id lookup — never derived from the
-            // uploaded PDF's own seal payload, so a forged seal can't supply its own "valid" key.
-            // Structural-tamper flags are OR'd in so the document can still fail even if the
-            // seal hash alone were somehow satisfied.
+            // Final verdict: $seal_matches uses hash_equals() against a server-resolved key (never the
+            // upload's own payload); structural-tamper flags are OR'd in on top.
             $visual_modified   = $visual_mismatch_found === true;
             $contains_background_images = (bool)($contains_background_images ?? false);
             $any_pdf_issue     = $incremental_update_detected || $multiple_seals_detected
@@ -3388,6 +3266,7 @@ final class Verificationpage
                 ]
             );
 
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- ob_get_clean() capture whose contents were already escaped at each echo() above.
             echo $inner_html;
         } catch (\Throwable $e) {
             while (ob_get_level() > $outer_ob_level) {
@@ -3415,9 +3294,7 @@ final class Verificationpage
                 default
                     => $fn . ': ' . __('The document could not be processed. See server log for details.', 'formfabricator'),
             };
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $friendly_msg is built from
-            // esc_html($file_name) and hardcoded translated strings; noticeHtml() also wp_kses_post()'s its
-            // argument.
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from esc_html() + hardcoded strings; noticeHtml() also wp_kses_post()'s it.
             echo self::noticeHtml($friendly_msg, 'error');
         } finally {
             $pdf_content = ob_get_clean();
@@ -3512,9 +3389,7 @@ final class Verificationpage
 
 
     /**
-     * Scans raw PDF bytes for the FF seal marker without loading the full object graph. Reads each
-     * FlateDecode stream, decompresses it, and checks both byte alignments of the mPDF 2-byte Unicode
-     * encoding for "---BEGIN-SEAL---".
+     * Scans raw PDF bytes for the FF seal marker without loading the full object graph.
      *
      * @param string $path Absolute filesystem path to the PDF file.
      * @return bool True if the seal marker is found, false otherwise.
@@ -3532,9 +3407,7 @@ final class Verificationpage
         // Find every stream…endstream block.
         preg_match_all('/<<([^>]*)>>\s*stream\r?\n([\s\S]*?)\nendstream/m', $raw, $blocks, PREG_SET_ORDER);
 
-        // Tracks streams skipped due to the decompression-bomb guard below, so a
-        // resulting "no seal found" can be traced back to its real cause instead of
-        // silently looking like the document simply has no seal.
+        // Tracks streams skipped by the decompression-bomb guard, so "no seal found" can be traced to its cause.
         $skipped_oversized_streams = 0;
         $skipped_failed_decompress = 0;
 
@@ -3594,9 +3467,7 @@ final class Verificationpage
     }
 
     /**
-     * Determines whether a decoded stream body is a PDF page content stream. Checks for
-     * control-character-free leading bytes and the presence of standard PDF content-stream operators (BT, q,
-     * Q, cm, Tf, Tj, Td).
+     * Determines whether a decoded stream body is a PDF page content stream.
      *
      * @param string $decoded Decompressed stream bytes.
      * @return bool True if the stream looks like a page content stream.
@@ -3614,8 +3485,7 @@ final class Verificationpage
     }
 
     /**
-     * Renders the verification summary panel HTML for a single PDF. Builds a verdict banner and a check-row
-     * table from the supplied result flags, then returns the complete HTML string.
+     * Renders the verification summary panel HTML for a single PDF.
      *
      * @param array $d Associative array of verification result flags and metadata (seal_matches,
      * document_modified, uid_prefix, file_name, etc.).
@@ -3789,17 +3659,14 @@ final class Verificationpage
 
 
     /**
-     * Reconstructs the canonical HMAC payload array from raw seal data. Produces a payload whose key order
-     * and value types exactly match those used by the generator, so the HMAC can be re-verified.
+     * Reconstructs the canonical HMAC payload array from raw seal data.
      *
      * @param array $seal_data Decoded seal JSON as an associative array.
      * @return array Canonical payload ready for HMAC verification.
      */
     private static function rebuildPayload(array $seal_data): array
     {
-        // Key order must exactly match Generator::$seal_data construction order.
-        // key_id is only present in PDFs generated after UUID support was added;
-        // omitting it for older PDFs preserves the original HMAC input.
+        // Key order must exactly match Generator::$seal_data; key_id is omitted for pre-UUID PDFs to preserve the original HMAC input.
         $rebuilt = ['generated' => (string) ($seal_data['generated'] ?? '')];
         if (!empty($seal_data['key_id'])) {
             $rebuilt['key_id'] = (string) $seal_data['key_id'];
@@ -3883,9 +3750,7 @@ final class Verificationpage
     }
 
     /**
-     * Hashes every compressed (non-page-content) stream in a raw PDF. Decompresses each stream with
-     * gzuncompress/gzinflate, skips page content streams (handled separately), and returns sorted SHA-256
-     * hashes for catch-all stream-injection detection.
+     * Hashes every compressed (non-page-content) stream in a raw PDF for catch-all stream-injection detection.
      *
      * @param string $pdf_raw Raw PDF file bytes.
      * @return array Sorted array of SHA-256 hex strings.
@@ -3934,9 +3799,7 @@ final class Verificationpage
     }
 
     /**
-     * Extracts and hashes font program streams from FontDescriptor objects. Locates /FontFile, /FontFile2,
-     * and /FontFile3 references, decompresses each referenced stream, and returns a sorted list of SHA-256
-     * hashes for font-program integrity verification.
+     * Extracts and hashes font program streams from FontDescriptor objects.
      *
      * @param string $pdf_raw Raw PDF file bytes.
      * @return array Sorted array of SHA-256 hex strings.
@@ -3980,9 +3843,7 @@ final class Verificationpage
     }
 
     /**
-     * Normalizes a seal field value for comparison against PDF text. Decodes HTML entities, strips all tags,
-     * and collapses whitespace to a single space so seal values and extracted PDF text can be compared with a
-     * consistent baseline.
+     * Normalizes a seal field value for comparison against PDF text.
      *
      * @param string $value Raw field value from the seal payload.
      * @return string Normalized plain-text value.
@@ -4002,9 +3863,7 @@ final class Verificationpage
     }
 
     /**
-     * Recursively computes the differences between two associative arrays. Returns a flat list of
-     * human-readable mismatch descriptions, including the dot-notation path of each differing key and the
-     * values from each side.
+     * Recursively computes the differences between two associative arrays.
      *
      * @param array  $a    First array (seal payload).
      * @param array  $b    Second array (rebuilt payload).
@@ -4049,9 +3908,7 @@ final class Verificationpage
     }
 
     /**
-     * Builds a styled notice card HTML string for pre-flight rejections. Matches the fabricator-vpc error card
-     * visual so all server-side rejections (MIME, %%EOF, no seal, etc.) share a single consistent card
-     * design.
+     * Builds a styled notice card HTML string for pre-flight rejections.
      *
      * @param string $message Notice text (may contain safe HTML).
      * @param string $type    Card type: 'error', 'warning', 'success', or 'info'.
@@ -4085,9 +3942,7 @@ final class Verificationpage
     }
 
     /**
-     * Reverses PNG predictor filtering on an indexed-color image stream. Applies None (0), Sub (1), and Up
-     * (2) PNG row filters byte-by-byte, restoring raw palette-index bytes from a FlateDecode+Predictor
-     * stream.
+     * Reverses PNG predictor filtering (None/Sub/Up) on an indexed-color image stream, byte-by-byte.
      *
      * @param string $data  Raw (still-filtered) indexed image stream bytes.
      * @param int    $width Image width in pixels.
@@ -4140,12 +3995,10 @@ final class Verificationpage
     }
 
     /**
-     * Emits an empty placeholder div for a PDF image XObject. Registers the image file for deferred deletion
-     * via a shutdown function and outputs a data-attribute slot that JavaScript later populates with the
-     * fully rendered image card. decoded_len, allowed, file_path).
+     * Emits an empty placeholder div for a PDF image XObject; JS later fills it with the rendered card.
      *
      * @param string $uid  Unique slot identifier used as the element ID.
-     * @param array  $meta Image metadata (colorspace, width, height, img_id,
+     * @param array  $meta Image metadata (colorspace, width, height, img_id, decoded_len, allowed, file_path).
      */
     private static function emitImageSlot(string $uid, array $meta): void
     {
@@ -4160,9 +4013,7 @@ final class Verificationpage
                     if (function_exists('fastcgi_finish_request')) {
                         fastcgi_finish_request();
                     }
-                    // Give the browser time to fetch the rendered images before
-                    // they're removed, without blocking this PHP-FPM worker for
-                    // the whole delay — hand the actual unlink off to WP-Cron.
+                    // Delay removal so the browser can fetch images first; hand the unlink off to WP-Cron.
                     wp_schedule_single_event(time() + 120, 'fabricator_verifier_cleanup_files', [self::$files_to_delete]);
                 }
             );
@@ -4179,14 +4030,8 @@ final class Verificationpage
     }
 
     /**
-     * Schedules a temporary PDF file for deletion after the request ends. Registers a shutdown function
-     * (once) that waits until the same 2100s (35 minute) window as the fabricator_pdf_{token} transient set
-     * alongside this file, then retries unlink up to five times per file — the file must outlive every
-     * request that can legitimately still read it via that token (fabricator_verify_push_lines/fabricator_serve_pdf),
-     * which can run up to set_time_limit(1800) seconds after the initial upload response, plus the soft
-     * per-pass parse budget on top of that. A shorter window here previously raced those follow-up requests
-     * — keep this in sync with the transient TTL above and with set_time_limit() at the top of
-     * wp_ajax_fabricator_verify_push_lines if either is ever changed again.
+     * Schedules a temp PDF file for deletion after the same 2100s window as its serving transient's TTL.
+     * Keep this window in sync with that transient's TTL and set_time_limit() above if either changes.
      *
      * @param string $file_path Absolute path to the PDF file to delete.
      */
@@ -4211,9 +4056,7 @@ final class Verificationpage
     }
 
     /**
-     * Fills a previously emitted image slot with rendered image card HTML. Wraps the HTML in a relocatable
-     * container carrying the slot UID so the client-side image-slot JS can move it into the correct
-     * placeholder.
+     * Fills a previously emitted image slot with rendered image card HTML.
      *
      * @param string $uid  Slot identifier matching the placeholder element ID.
      * @param string $html Rendered image card HTML to inject into the slot.

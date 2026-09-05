@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,47 +35,7 @@ class RatingField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-rating-group { display: inline-flex; gap: 2px; }
-.fabricator-rating-star {
-    position: relative;
-    display: inline-block;
-    line-height: 1;
-    cursor: pointer;
-}
-.fabricator-rating-bg {
-    display: block;
-    font-size: 30px;
-    color: var(--fabricator-border);
-    user-select: none;
-    transition: color .1s;
-}
-.fabricator-rating-fill {
-    position: absolute;
-    top: 0; left: 0;
-    display: block;
-    font-size: 30px;
-    color: #f0a500;
-    pointer-events: none;
-    user-select: none;
-    white-space: nowrap;
-    clip-path: inset(0 100% 0 0);
-    transition: clip-path .1s;
-}
-.fabricator-rating-star--full .fabricator-rating-fill { clip-path: inset(0 0% 0 0); }
-.fabricator-rating-star--half .fabricator-rating-fill { clip-path: inset(0 50% 0 0); }
-.fabricator-rating-zone {
-    position: absolute;
-    top: 0;
-    height: 100%;
-    display: block;
-    cursor: pointer;
-}
-.fabricator-rating-zone input { display: none; }
-.fabricator-rating-zone-half { left: 0; width: 50%; }
-.fabricator-rating-zone-full { right: 0; width: 50%; }
-.fabricator-rating-zone-full--only { left: 0; right: 0; width: 100%; }
-CSS;
+        return self::readFieldAsset('assets/css/fields/RatingField.css');
     }
 
     /**
@@ -120,43 +80,7 @@ CSS;
      */
     public function getClientInit(): string
     {
-        return <<<'JS'
-        function (root) {
-            root.querySelectorAll('.fabricator-rating-group').forEach(function (group) {
-                var stars = Array.from(group.querySelectorAll('.fabricator-rating-star'));
-                function highlight(val) {
-                    stars.forEach(function (star) {
-                        var n    = parseInt(star.dataset.star, 10);
-                        var full = n <= Math.floor(val);
-                        var half = !full && val % 1 !== 0 && n === Math.ceil(val);
-                        star.classList.toggle('fabricator-rating-star--full', full);
-                        star.classList.toggle('fabricator-rating-star--half', half);
-                    });
-                }
-                function restoreChecked() {
-                    var checked = group.querySelector('input:checked');
-                    highlight(checked ? parseFloat(checked.value) : 0);
-                }
-                group.addEventListener('mouseover', function (e) {
-                    var zone = e.target.closest('.fabricator-rating-zone');
-                    if (!zone) return;
-                    var radio = zone.querySelector('input[type="radio"]');
-                    if (radio) highlight(parseFloat(radio.value));
-                });
-                group.addEventListener('mouseleave', restoreChecked);
-                group.querySelectorAll('.fabricator-rating-zone').forEach(function (zone) {
-                    var radio = zone.querySelector('input[type="radio"]');
-                    if (!radio) return;
-                    zone.addEventListener('click', function () {
-                        radio.checked = true;
-                        radio.dispatchEvent(new Event('change', { bubbles: true }));
-                        restoreChecked();
-                    });
-                });
-                restoreChecked();
-            });
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/RatingField.js');
     }
 
     private const ICONS = [

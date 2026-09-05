@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,10 +35,7 @@ class HtmlField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-field--html { font-size: 14px; line-height: 1.7; color: var(--fabricator-text); }
-.fabricator-field--html a { color: var(--fabricator-accent); }
-CSS;
+        return self::readFieldAsset('assets/css/fields/HtmlField.css');
     }
 
     /**
@@ -120,9 +117,7 @@ CSS;
     }
 
     /**
-     * The wp_kses() allowlist used to sanitize html_content: wp_kses_post()'s allowlist plus form-elements
-     * and inline SVG, since this field is meant to support both. Single source of truth for self::kses() and
-     * for Generator.php's PDF pass (see trustedPdfAllowedTags()) so the two never drift out of sync.
+     * wp_kses_post()'s allowlist plus form-elements and inline SVG; single source of truth with Generator.php.
      *
      * @return array wp_kses()-compatible allowed-tags array.
      */
@@ -168,12 +163,7 @@ CSS;
     }
 
     /**
-     * Public accessor for the same allowlist self::kses() enforces, used by Generator.php to widen its own
-     * defense-in-depth wp_kses() pass for cell_html built via PdfDescriptor::rawHtml($html, true) — i.e.
-     * content this field already sanitized against this exact allowlist upstream. Re-narrowing it to the
-     * generic value-only allowlist there would strip the rich markup (headings, tables, inline SVG, ...) this
-     * field deliberately supports; using an allowlist narrower than what this class itself already enforced
-     * would be pointless, and using one wider would defeat the point of tracking "trusted" at all.
+     * Public accessor for self::kses()'s allowlist, so Generator.php's PDF pass matches what already ran here.
      *
      * @return array wp_kses()-compatible allowed-tags array.
      */
@@ -191,8 +181,7 @@ CSS;
         $html = preg_replace('#<script\b[^>]*+>[\s\S]*?</script>#i', '', $html);
 
         $html = \wp_kses($html, self::allowedTags());
-        // <use href>/<use xlink:href> may only reference an in-document fragment;
-        // anything else (javascript:, data:, external URLs) is stripped.
+        // <use href> may only reference an in-document fragment; anything else is stripped.
         $html = preg_replace_callback(
             '/<use\b[^>]*>/i',
             static function ($m) {
@@ -200,10 +189,7 @@ CSS;
             },
             $html
         );
-        // <source src>/<track src> (added to the allow-list above for <audio>/
-        // <video>) legitimately need to point at remote media, unlike <use
-        // href> — but must still be restricted to http(s)/relative paths, not
-        // javascript:/data:/vbscript:/file: schemes.
+        // <source>/<track> may point at remote media, but only http(s)/relative — not javascript:/data:/file:.
         $html = preg_replace_callback(
             '/<(source|track)\b[^>]*>/i',
             static function ($m) {
@@ -286,15 +272,8 @@ CSS;
      */
     public function pdfData(array $field): array
     {
-        // $field['value'] is already sanitized via self::kses() in mapNormalized().
-        // mPDF fetches any non-local <img src>/CSS url() it encounters via its own
-        // AssetFetcher — with no host allow-list of its own — as a server-side HTTP
-        // request (vendor/mpdf/mpdf/src/AssetFetcher.php:fetchRemoteContent()). Unlike
-        // the header/logo path (which resolves only local media-library attachments),
-        // this field's content is form-builder-authored HTML with an unrestricted
-        // <img src>, so it must not be allowed to make mPDF fetch an attacker-chosen
-        // URL (SSRF against internal hosts/cloud metadata endpoints) on every PDF
-        // generation. Strip any remote resource reference before it reaches mPDF.
+        // mPDF fetches any non-local <img src>/CSS url() server-side with no host allow-list of its own —
+        // this field's HTML is form-builder-authored and unrestricted, so strip remote refs to avoid SSRF.
         $html = self::stripRemoteResourcesForPdf((string)($field['value'] ?? ''));
         $desc = $this->pdf($field)->rawHtml($html, true);
         if (empty($field['label'])) {
@@ -304,10 +283,7 @@ CSS;
     }
 
     /**
-     * Removes any <img src>/CSS url() reference mPDF would otherwise fetch as a remote resource, keeping only
-     * same-origin (site) URLs, relative paths, and data: URIs. Used only on the PDF-render path — the live
-     * on-page render (render()/self::kses()) is unaffected since a browser fetching a remote image is normal,
-     * safe behaviour with no server-side SSRF risk.
+     * Strips remote <img src>/CSS url() refs before mPDF fetches them server-side, keeping same-origin/data: only.
      *
      * @param string $html Already wp_kses()-sanitized HTML (self::kses() output).
      * @return string HTML with disallowed remote resource references stripped.

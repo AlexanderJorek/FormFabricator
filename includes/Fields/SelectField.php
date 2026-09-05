@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,78 +35,7 @@ class SelectField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-select { cursor: pointer; }
-.fabricator-select-wrap { position: relative; }
-.fabricator-select-custom {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    height: var(--fabricator-input-height);
-    padding: 0 12px;
-    border: 1px solid var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius);
-    background: var(--fabricator-bg);
-    color: var(--fabricator-text);
-    font-size: var(--fabricator-font-size);
-    font-family: var(--fabricator-font);
-    cursor: pointer;
-    user-select: none;
-    outline: none;
-    transition: border-color .15s, box-shadow .15s;
-}
-.fabricator-select-custom:focus,
-.fabricator-select-custom[aria-expanded="true"] {
-    border-color: var(--fabricator-accent);
-    box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--fabricator-accent) 15%, transparent);
-}
-.fabricator-select-display {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.fabricator-select-display--placeholder { color: var(--fabricator-text-muted); }
-.fabricator-select-arrow {
-    font-size: 24px;
-    color: var(--fabricator-text-muted);
-    transition: transform .15s;
-    flex-shrink: 0;
-}
-.fabricator-select-custom[aria-expanded="true"] .fabricator-select-arrow {
-    transform: rotate(180deg);
-}
-.fabricator-select-panel {
-    display: none;
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
-    background: var(--fabricator-bg);
-    border: 1px solid var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius);
-    box-shadow: 0 4px 12px rgba(0,0,0,.1);
-    z-index: 999;
-    max-height: 260px;
-    overflow-y: auto;
-}
-.fabricator-select-custom[aria-expanded="true"] .fabricator-select-panel { display: block; }
-.fabricator-select-option {
-    padding: 9px 12px;
-    cursor: pointer;
-    font-size: var(--fabricator-font-size);
-    color: var(--fabricator-text);
-    border-bottom: 1px solid var(--fabricator-border);
-    transition: background .1s;
-}
-.fabricator-select-option:last-child { border-bottom: none; }
-.fabricator-select-option:hover,
-.fabricator-select-option--focused { background: var(--fabricator-accent-light); }
-.fabricator-select-option--selected { font-weight: 600; color: var(--fabricator-accent); }
-.fabricator-select-option--placeholder { color: var(--fabricator-text-muted); }
-CSS;
+        return self::readFieldAsset('assets/css/fields/SelectField.css');
     }
 
     /**
@@ -141,101 +70,7 @@ CSS;
      */
     public function getClientInit(): string
     {
-        return <<<'JS'
-        function (root) {
-            root.querySelectorAll('select.fabricator-select').forEach(function (native) {
-                if (native.dataset.fabricatorSelectInit) return;
-                native.dataset.fabricatorSelectInit = '1';
-                native.classList.add('fabricator-select-native');
-                var wrap = document.createElement('div');
-                wrap.className = 'fabricator-select-wrap';
-                native.parentNode.insertBefore(wrap, native);
-                wrap.appendChild(native);
-                var custom = document.createElement('div');
-                custom.className = 'fabricator-select-custom';
-                custom.tabIndex  = 0;
-                custom.setAttribute('role', 'combobox');
-                custom.setAttribute('aria-expanded', 'false');
-                custom.setAttribute('aria-haspopup', 'listbox');
-                var display = document.createElement('span');
-                display.className = 'fabricator-select-display';
-                var arrow = document.createElement('span');
-                arrow.className   = 'fabricator-select-arrow';
-                arrow.textContent = '▾';
-                arrow.setAttribute('aria-hidden', 'true');
-                var panel = document.createElement('div');
-                panel.className = 'fabricator-select-panel';
-                panel.setAttribute('role', 'listbox');
-                custom.appendChild(display); custom.appendChild(arrow); custom.appendChild(panel);
-                wrap.appendChild(custom);
-                function buildOptions() {
-                    panel.innerHTML = '';
-                    Array.from(native.options).forEach(function (opt) {
-                        var item = document.createElement('div');
-                        item.className = 'fabricator-select-option';
-                        item.textContent = opt.text;
-                        item.dataset.value = opt.value;
-                        item.setAttribute('role', 'option');
-                        if (!opt.value) item.classList.add('fabricator-select-option--placeholder');
-                        if (opt.selected) item.classList.add('fabricator-select-option--selected');
-                        item.addEventListener('click', function (e) {
-                            e.stopPropagation();
-                            native.value = opt.value;
-                            native.dispatchEvent(new Event('change', { bubbles: true }));
-                            close();
-                        });
-                        panel.appendChild(item);
-                    });
-                    syncDisplay();
-                }
-                function syncDisplay() {
-                    var sel = native.options[native.selectedIndex];
-                    panel.querySelectorAll('.fabricator-select-option').forEach(function (el) {
-                        el.classList.toggle('fabricator-select-option--selected', el.dataset.value === native.value);
-                    });
-                    if (sel && sel.value) {
-                        display.textContent = sel.text;
-                        display.classList.remove('fabricator-select-display--placeholder');
-                    } else {
-                        display.textContent = sel ? sel.text : '';
-                        display.classList.add('fabricator-select-display--placeholder');
-                    }
-                    var otherInput = wrap.nextElementSibling;
-                    if (otherInput && otherInput.classList.contains('fabricator-other-input')) {
-                        otherInput.style.display = native.value === '__other__' ? '' : 'none';
-                    }
-                }
-                function open() {
-                    custom.setAttribute('aria-expanded', 'true');
-                    document.querySelectorAll('.fabricator-select-custom[aria-expanded="true"]').forEach(function (o) {
-                        if (o !== custom) o.setAttribute('aria-expanded', 'false');
-                    });
-                }
-                function close() { custom.setAttribute('aria-expanded', 'false'); }
-                custom.addEventListener('click', function () {
-                    custom.getAttribute('aria-expanded') === 'true' ? close() : open();
-                });
-                custom.addEventListener('keydown', function (e) {
-                    var isOpen = custom.getAttribute('aria-expanded') === 'true';
-                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isOpen ? close() : open(); }
-                    else if (e.key === 'Escape') { close(); }
-                    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        var dir = e.key === 'ArrowDown' ? 1 : -1;
-                        var idx = native.selectedIndex + dir;
-                        if (idx >= 0 && idx < native.options.length) {
-                            native.selectedIndex = idx;
-                            native.dispatchEvent(new Event('change', { bubbles: true }));
-                            syncDisplay();
-                        }
-                    }
-                });
-                document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) close(); });
-                native.addEventListener('change', syncDisplay);
-                buildOptions();
-            });
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/SelectField.js');
     }
 
     /**
@@ -378,7 +213,8 @@ CSS;
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         $selected = isset($_POST[$field_id]) ? sanitize_text_field(wp_unslash($_POST[$field_id])) : '';
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
         if ($selected === '__other__' && isset($_POST[$field_id . '_other'])) {

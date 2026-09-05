@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -31,6 +31,20 @@ use FabricatorForms\Fields\FieldRegistry;
  */
 class FormProcessor
 {
+    // Set only by handle() once wp_verify_nonce() succeeds; a structural guard against field extraction without a verified nonce.
+    private static bool $nonceVerified = false;
+
+    /**
+     * Whether the current request's nonce has been verified by handle(). Read by
+     * BaseField::assertRequestNonceVerified() before any field extracts $_POST/$_FILES data.
+     *
+     * @return bool
+     */
+    public static function nonceVerified(): bool
+    {
+        return self::$nonceVerified;
+    }
+
     /**
      * AJAX handler for the fabricator_forms_submit action.
      *
@@ -47,11 +61,10 @@ class FormProcessor
         if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_submit_' . $form_id)) {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
         }
+        self::$nonceVerified = true;
 
-        /* ---- Replay-protection token ----
-           Not keyed on $nonce: an anonymous visitor's WP nonce is identical for every visitor
-           within the same ~12h tick, which would let one submitter's claim lock out everyone
-           else. This token is fresh per render instead — see FormRenderer::render(). */
+        /* ---- Replay-protection token ---- */
+        // Not keyed on $nonce (shared across visitors per ~12h tick); fresh per render instead — see FormRenderer::render().
         $submission_token = sanitize_text_field(wp_unslash($_POST['fabricator_submission_token'] ?? ''));
         if ($submission_token === '') {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
@@ -87,10 +100,8 @@ class FormProcessor
             wp_send_json_success(['message' => $hp_msg]);
         }
 
-        /* ---- Pass 1: extract all values (no validation yet) ----
-           Two passes are required because conditional-visibility rules (Pass 2) can
-           reference any other field's value, including ones defined later in the form —
-           so every value must be extracted and flattened before any field can be validated. */
+        /* ---- Pass 1: extract all values (no validation yet) ---- */
+        // Two passes: Pass 2's conditional-visibility rules can reference any other field's value, including later ones.
         $raw = [];
 
         foreach ($form->fields as $field_cfg) {
@@ -111,10 +122,7 @@ class FormProcessor
                 // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each leaf value is sanitized per-field below via extractFromRaw()/extractFromRawWithOther() before use.
                 $group_post = isset($_POST[$field_id]) && is_array($_POST[$field_id]) ? wp_unslash($_POST[$field_id]) : [];
                 $sanitized  = [];
-                // Cap the number of repeatable-group copies processed per field —
-                // otherwise a POST with an arbitrarily large number of copy
-                // indices multiplies work by count(children) per copy with no
-                // ceiling, a cheap amplification vector.
+                // Cap repeatable-group copies processed per field to prevent an unbounded amplification vector.
                 $max_group_copies = 100;
                 $processed_copies  = 0;
 
@@ -172,10 +180,7 @@ class FormProcessor
         }
 
         /* ---- Build flat value map for condition evaluation ---- */
-        /* Track which field IDs are group containers so the loop can tell
-           a group's [copy_idx => [child_id => val]] structure apart from a
-           top-level field that legitimately returns an array (checkbox, slider
-           ranged mode, expanded address/name, post-data, etc.). */
+        // Track which field IDs are group containers, to distinguish a group's copy structure from a field that legitimately returns an array.
         $group_ids = [];
         foreach ($form->fields as $fc) {
             $h = FieldRegistry::get($fc['type'] ?? '');
@@ -245,9 +250,7 @@ class FormProcessor
                         }
 
                         $val  = $copy_data[$child_id] ?? '';
-                        // Qualify the error key with group+copy index only when the group repeats
-                        // (multiple copies) — otherwise a single copy just uses the bare child_id,
-                        // since front.js's error-display lookup expects that shorter key by default
+                        // Bare child_id when only one copy exists — front.js's error-display lookup expects that shorter key.
                         $ekey = count($group_raw) > 1
                             ? $field_id . '[' . $copy_idx . '][' . $child_id . ']'
                             : $child_id;
@@ -288,10 +291,8 @@ class FormProcessor
             unset($mapped[$hid]);
         }
 
-        /* ---- Claim the replay-protection token ----
-           Placed right before the side-effecting action, not at the top: earlier validation can
-           legitimately fail and retry without touching the claim table. claim() is atomic, so
-           concurrent requests with the same token can never both win. */
+        /* ---- Claim the replay-protection token ---- */
+        // Placed right before the side-effecting action so earlier validation failures can retry without touching the claim table.
         if (!\FabricatorForms\Utils\SingleUseToken::claim($claim_key, 2 * DAY_IN_SECONDS)) {
             wp_send_json_error(['message' => __('This submission has already been received.', 'formfabricator')], 409);
         }
@@ -305,8 +306,7 @@ class FormProcessor
     }
 
     /**
-     * Checks and increments a per-IP, per-form submission counter using a short-lived transient, to
-     * slow down scripted replay/abuse of the public submission endpoint.
+     * Checks and increments a per-IP, per-form submission counter to slow down scripted abuse.
      *
      * @param int $form_id The form being submitted.
      * @return int|null Seconds until the caller's window resets, or null when the caller is within the
@@ -314,14 +314,9 @@ class FormProcessor
      */
     private static function rateLimitRetryAfter(int $form_id): ?int
     {
-        // ClientIp::resolve() uses REMOTE_ADDR by default (unspoofable) and only trusts
-        // X-Forwarded-For when REMOTE_ADDR is explicitly allowlisted via the
-        // FABRICATOR_TRUSTED_PROXIES constant — see includes/Utils/ClientIp.php
         $ip = \FabricatorForms\Utils\ClientIp::resolve();
         if ($ip === '') {
-            // Unknown client: fail closed rather than pooling every such
-            // request into one shared rate-limit bucket. No real window to
-            // report, so just cap the suggested wait at the window length.
+            // Unknown client: fail closed rather than pooling requests into one shared rate-limit bucket.
             \FabricatorForms\fabricator_log(
                 'FabricatorForms rateLimitRetryAfter: fail-closed — ClientIp::resolve() '
                 . 'returned empty for form ' . $form_id . '. REMOTE_ADDR='
@@ -335,9 +330,7 @@ class FormProcessor
         if ($count <= 10) {
             return null;
         }
-        // The increment above may itself have just reset the window (if it had expired),
-        // in which case secondsUntilReset() correctly reflects that new window rather
-        // than a stale one — it re-reads the row increment() just wrote.
+        // secondsUntilReset() re-reads the row increment() just wrote, so a just-reset window is reflected correctly.
         return max(1, \FabricatorForms\Utils\RateLimiter::secondsUntilReset($key));
     }
 
@@ -361,11 +354,7 @@ class FormProcessor
 
             $group_hidden = self::isHiddenByConditions($field_cfg, $flat);
 
-            /* Determine copy count to replicate GroupField::mapNormalized key suffixing.
-               Only real group-container fields use the [copy_idx => [child_id => val]]
-               shape — a plain Radio/Select field with "Other" selected also has an
-               array-shaped raw value (['value' => ..., '__other_text__' => ...]),
-               which must never be misread as repeatable-group copies. */
+            // Only real group-container fields use the copy-indexed shape; a Radio/Select "Other" value is also array-shaped but isn't copies.
             $field_handler = FieldRegistry::get($field_cfg['type'] ?? '');
             $is_group      = $field_handler && $field_handler->isGroupContainer();
             $copies        = ($is_group && is_array($raw[$field_id] ?? null)) ? $raw[$field_id] : [];
@@ -450,11 +439,7 @@ class FormProcessor
         $op    = $rule['operator'] ?? 'equals';
         $rv    = strtolower((string)($rule['value'] ?? ''));
         $val   = $flat[$fid] ?? '';
-        // Fields with an "Other" free-text option (Checkbox/Select) attach the
-        // typed text under this internal key alongside the actual selection(s)
-        // — it must never be treated as a selectable option value here, or a
-        // user's free-typed text could accidentally satisfy/break an
-        // equals/contains condition rule aimed at the real options.
+        // Strip the "Other" free-text key so it can't accidentally satisfy an equals/contains condition rule.
         if (is_array($val)) {
             unset($val['__other_text__']);
         }
@@ -475,9 +460,7 @@ class FormProcessor
             'not_empty'    => $isArr ? !empty($val) : $str !== '',
             'greater'      => is_numeric($str) && is_numeric($rv) && (float)$str > (float)$rv,
             'less'         => is_numeric($str) && is_numeric($rv) && (float)$str < (float)$rv,
-            // Fail safe on an unrecognized operator: don't match, so a malformed/unknown
-            // rule can't silently hide a field (action='hide') or hide-by-omission
-            // (action='show') — it behaves as if the rule weren't satisfied.
+            // Fail safe on an unrecognized operator: treat as unsatisfied rather than silently hiding/showing.
             default        => false,
         };
     }

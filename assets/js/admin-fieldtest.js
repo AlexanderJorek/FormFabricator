@@ -940,9 +940,7 @@ window.fabricatorCollapseSections(document.getElementById('fabricator-php-tests'
 
         run('input nested inside a hidden conditional ancestor counts as absent', function () {
             var wrap = document.createElement('div');
-            /* Inner wrapper's own condition always evaluates false (gate field never
-               equals "impossible"), so initConditions genuinely computes it as hidden —
-               not a hardcoded inline style that init would immediately overwrite. */
+            /* Condition genuinely computes to hidden here — not a hardcoded inline style init would overwrite. */
             var innerCond = JSON.stringify({
                 action: 'show', match: 'all',
                 rules: [{ field_id: 'gate', operator: 'equals', value: 'impossible' }]

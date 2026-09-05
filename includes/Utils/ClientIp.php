@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -30,10 +30,7 @@ defined('ABSPATH') || exit;
 class ClientIp
 {
     /**
-     * Returns the IP address to key rate limiting on. By default this is REMOTE_ADDR — the only value that
-     * can't be spoofed by the client. X-Forwarded-For is only consulted when REMOTE_ADDR is in the site's
-     * FABRICATOR_TRUSTED_PROXIES allowlist (a comma-separated constant defined in wp-config.php), since otherwise
-     * any client could fabricator that header to dodge the limit or to frame another visitor's IP.
+     * Returns the IP to key rate limiting on; X-Forwarded-For is only trusted from an allowlisted proxy.
      *
      * @return string Client IP address, or '' if unavailable.
      */
@@ -54,13 +51,7 @@ class ClientIp
             return $remote;
         }
 
-        // Trusting the left-most entry outright assumes the proxy chain always
-        // *overwrites* X-Forwarded-For rather than appending to whatever the
-        // client already sent — if it appends, a client can still prepend
-        // arbitrary IPs and have the left-most one trusted. Walk from the
-        // right instead: skip any entry that is itself a known trusted proxy
-        // (a multi-hop chain of our own proxies) and take the first one that
-        // isn't — that's the actual, unspoofable client-facing hop.
+        // Walk from the right, skipping our own trusted proxies, instead of trusting a spoofable left-most entry.
         $parts = array_map('trim', explode(',', $forwarded));
         for ($i = count($parts) - 1; $i >= 0; $i--) {
             if (!filter_var($parts[$i], FILTER_VALIDATE_IP)) {

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -40,10 +40,7 @@ class UploadField extends BaseField
         'zip','tar','gz','7z',
     ];
 
-    // Second line of defense: real MIME type (via finfo) is checked against this list too,
-    // so a blocked file can't slip through by using an allowed extension with mismatched content.
-    // image/svg+xml is explicitly denied even though it reports as "image/*" — SVG is XML and can
-    // carry <script>/XXE payloads that mPDF's SVG renderer would parse when embedding the file.
+    // Second line of defense (real MIME via finfo); image/svg+xml is denied since mPDF would parse its XML/script payloads.
     private const BLOCKED_MIME_TYPES = [
         'text/html', 'application/x-httpd-php', 'application/x-php', 'text/x-php',
         'application/x-sh', 'application/x-msdownload', 'application/x-executable',
@@ -53,11 +50,7 @@ class UploadField extends BaseField
         'application/zip', 'application/x-tar', 'application/gzip', 'application/x-7z-compressed',
     ];
 
-    // Hard ceiling on the admin-configurable max_size_mb, independent of whatever
-    // value the admin leaves configured. mapNormalized() calls file_get_contents()
-    // on the full upload and base64-encodes it in memory, so memory cost scales
-    // directly with whatever byte limit is actually enforced here — mirrors
-    // BaseField's TEXT_FIELD_HARD_CAP/OTHER_TEXT_HARD_CAP backstop pattern.
+    // Hard ceiling on max_size_mb: mapNormalized() base64-encodes the full upload in memory, so this bounds memory cost.
     private const MAX_SIZE_MB_HARD_CAP = 100;
 
     private const TYPE_GROUPS = [
@@ -74,83 +67,7 @@ class UploadField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-upload-zone {
-    position: relative;
-    border: 2px dashed var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius);
-    background: var(--fabricator-bg);
-    transition: border-color .15s, background .15s;
-    cursor: pointer;
-}
-.fabricator-upload-zone:hover,
-.fabricator-upload-zone.fabricator-upload-zone--drag {
-    border-color: var(--fabricator-accent);
-    background: var(--fabricator-accent-light);
-}
-.fabricator-upload-input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-    width: 100%; height: 100%;
-}
-.fabricator-upload-zone-body {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 28px 16px;
-    pointer-events: none;
-    text-align: center;
-}
-.fabricator-upload-icon { font-size: 28px; color: var(--fabricator-text-subtle); line-height: 1; }
-.fabricator-upload-prompt { font-size: 14px; color: var(--fabricator-text-muted); }
-.fabricator-upload-link { color: var(--fabricator-accent); text-decoration: underline; }
-.fabricator-upload-error {
-    font-size: 13px;
-    color: var(--fabricator-error, #cc1818);
-    min-height: 1.2em;
-    margin-top: 4px;
-}
-.fabricator-upload-filelist {
-    list-style: none;
-    margin: 6px 0 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-.fabricator-upload-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 8px 3px 10px;
-    background: var(--fabricator-accent-light, #e8f0fe);
-    border: 1px solid var(--fabricator-accent, #2271b1);
-    border-radius: 20px;
-    font-size: 12px;
-    color: var(--fabricator-text, #1d2327);
-    max-width: 240px;
-}
-.fabricator-upload-chip-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.fabricator-upload-chip-remove {
-    flex-shrink: 0;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0 2px;
-    line-height: 1;
-    font-size: 16px;
-    color: var(--fabricator-text-muted, #646970);
-}
-.fabricator-upload-chip-remove:hover { color: var(--fabricator-error, #cc1818); }
-CSS;
+        return self::readFieldAsset('assets/css/fields/UploadField.css');
     }
 
     /**
@@ -185,188 +102,7 @@ CSS;
      */
     public function getClientInit(): string
     {
-        return <<<'JS'
-        function (root) {
-            root.querySelectorAll('.fabricator-upload-zone').forEach(function (zone) {
-                var input    = zone.querySelector('.fabricator-upload-input');
-                var errEl    = zone.parentNode
-                    ? zone.parentNode.querySelector('.fabricator-upload-error') : null;
-                var listEl   = zone.parentNode
-                    ? zone.parentNode.querySelector('.fabricator-upload-filelist') : null;
-                var multiple = zone.dataset.multiple === '1';
-                var maxFiles = parseInt(zone.dataset.maxFiles || '0', 10);
-
-                function showError(msg) {
-                    if (!errEl) return;
-                    errEl.textContent = msg;
-                    errEl.style.color = '';
-                }
-                function showNotice(msg) {
-                    if (!errEl) return;
-                    errEl.textContent = msg;
-                    errEl.style.color = 'var(--fabricator-warning, #996600)';
-                }
-                function clearError() {
-                    if (!errEl) return;
-                    errEl.textContent = '';
-                    errEl.style.color = '';
-                }
-                function publishCount(n) {
-                    zone.dataset.fabricatorFileCount = String(n);
-                }
-                function renderChips(files) {
-                    if (!listEl) return;
-                    listEl.innerHTML = '';
-                    clearError();
-                    if (!files || !files.length) { publishCount(0); return; }
-                    publishCount(files.length);
-                    Array.from(files).forEach(function (file, idx) {
-                        var li   = document.createElement('li');
-                        li.className = 'fabricator-upload-chip';
-                        var nm  = document.createElement('span');
-                        nm.className   = 'fabricator-upload-chip-name';
-                        nm.textContent = file.name;
-                        nm.title       = file.name;
-                        var btn = document.createElement('button');
-                        btn.type      = 'button';
-                        btn.className = 'fabricator-upload-chip-remove';
-                        var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                        btn.setAttribute(
-                            'aria-label', ((_i18n && _i18n.upload_remove_prefix) || 'Remove: ') + file.name
-                        );
-                        btn.textContent = '×';
-                        btn.addEventListener('click', function () {
-                            try {
-                                var dt = new DataTransfer();
-                                Array.from(input.files).forEach(function (f, i) {
-                                    if (i !== idx) dt.items.add(f);
-                                });
-                                input.files = dt.files;
-                                renderChips(input.files);
-                            } catch (e) { /* DataTransfer not supported */ }
-                        });
-                        li.appendChild(nm);
-                        li.appendChild(btn);
-                        listEl.appendChild(li);
-                    });
-                }
-                function filterAllowed(fileList) {
-                    var accept = (input ? input.accept : '') || '';
-                    if (!accept) return Array.from(fileList);
-                    var parts = accept.split(',').map(function (s) {
-                        return s.trim().toLowerCase();
-                    });
-                    return Array.from(fileList).filter(function (f) {
-                        var ext  = '.' + f.name.split('.').pop().toLowerCase();
-                        var mime = (f.type || '').toLowerCase();
-                        return parts.some(function (p) {
-                            if (p.charAt(0) === '.') return p === ext;
-                            if (p.slice(-2) === '/*') {
-                                return mime.indexOf(p.slice(0, -1)) === 0;
-                            }
-                            return p === mime;
-                        });
-                    });
-                }
-                function checkLimit(files) {
-                    if (maxFiles > 0 && files.length > maxFiles) {
-                        var _i18nL = window.FabricatorForms && window.FabricatorForms.i18n;
-                        showError(
-                            (_i18nL && _i18nL.upload_too_many)
-                                ? _i18nL.upload_too_many.replace('%d', maxFiles)
-                                : 'Too many files. Maximum ' + maxFiles + ' allowed.'
-                        );
-                        return false;
-                    }
-                    return true;
-                }
-                function applyFiles(fileList) {
-                    var all     = Array.from(fileList);
-                    var allowed = filterAllowed(fileList);
-                    if (!multiple && allowed.length > 1) {
-                        allowed = [allowed[0]];
-                    }
-                    if (!allowed.length) {
-                        var _i18nA = window.FabricatorForms && window.FabricatorForms.i18n;
-                        showError((_i18nA && _i18nA.upload_no_types) || 'No allowed file types in selection.');
-                        return;
-                    }
-                    if (!checkLimit(allowed)) return;
-                    try {
-                        var dt = new DataTransfer();
-                        allowed.forEach(function (f) { dt.items.add(f); });
-                        input.files = dt.files;
-                        renderChips(input.files);
-                        var skipped = all.length - allowed.length;
-                        if (skipped > 0) {
-                            var _i18nS = window.FabricatorForms && window.FabricatorForms.i18n;
-                            var _skippedMsg = skipped === 1
-                                ? ((_i18nS && _i18nS.upload_skipped_one) || '1 file was skipped due to file type.')
-                                : ((_i18nS && _i18nS.upload_skipped_many) || '%d files were skipped due to file type.').replace('%d', skipped);
-                            showNotice(_skippedMsg);
-                        }
-                    } catch (e) { /* DataTransfer not supported */ }
-                }
-                publishCount(0);
-                if (input) {
-                    input.addEventListener('change', function () {
-                        applyFiles(this.files);
-                    });
-                    var form = input.closest('form');
-                    if (form) {
-                        form.addEventListener('reset', function () {
-                            renderChips(null);
-                        });
-                        if (!form.dataset.fabricatorOverflowBound) {
-                            form.dataset.fabricatorOverflowBound = '1';
-                            form.addEventListener('fabricator:upload-overflow', function (ev) {
-                                var firstField = null;
-                                form.querySelectorAll('.fabricator-upload-zone').forEach(
-                                    function (z) {
-                                        var zi = z.querySelector('.fabricator-upload-input');
-                                        var ze = z.parentNode
-                                            ? z.parentNode.querySelector(
-                                                '.fabricator-upload-error'
-                                            ) : null;
-                                        if (!ze || !zi || !zi.files || !zi.files.length) {
-                                            return;
-                                        }
-                                        var _i18nO = window.FabricatorForms && window.FabricatorForms.i18n;
-                                        ze.textContent = (_i18nO && _i18nO.upload_overflow)
-                                            ? _i18nO.upload_overflow.replace('%1$d', ev.detail.total).replace('%2$d', ev.detail.max)
-                                            : 'Too many files total (' + ev.detail.total + '). Max. ' + ev.detail.max + ' per submission.';
-                                        if (!firstField) {
-                                            firstField = z.closest('.fabricator-field') || z;
-                                        }
-                                    }
-                                );
-                                if (firstField) {
-                                    var top = firstField.getBoundingClientRect().top
-                                        + window.pageYOffset - 80;
-                                    window.scrollTo(0, Math.max(0, top));
-                                    firstField.setAttribute('tabindex', '-1');
-                                    firstField.focus({ preventScroll: true });
-                                }
-                            });
-                        }
-                    }
-                }
-                zone.addEventListener('dragover', function (e) {
-                    e.preventDefault();
-                    zone.classList.add('fabricator-upload-zone--drag');
-                });
-                zone.addEventListener('dragleave', function () {
-                    zone.classList.remove('fabricator-upload-zone--drag');
-                });
-                zone.addEventListener('drop', function (e) {
-                    e.preventDefault();
-                    zone.classList.remove('fabricator-upload-zone--drag');
-                    if (!input || !e.dataTransfer.files.length) return;
-                    applyFiles(e.dataTransfer.files);
-                });
-            });
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/UploadField.js');
     }
 
     /**
@@ -418,9 +154,7 @@ CSS;
     }
 
     /**
-     * Returns the effective max file size in MB, clamping the admin-configured max_size_mb against
-     * self::MAX_SIZE_MB_HARD_CAP so the value used to compute the actual byte limit can never exceed the hard
-     * ceiling, regardless of what is stored in the field config.
+     * Returns the effective max file size in MB, clamped against self::MAX_SIZE_MB_HARD_CAP.
      *
      * @param array $config Field configuration.
      */
@@ -485,7 +219,8 @@ CSS;
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce is verified once in FormProcessor::handle() before field extraction runs; 'name' is sanitized below, other keys (tmp_name/size/error) are PHP-generated, not attacker text.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); 'name' is sanitized below, other keys (tmp_name/size/error) are PHP-generated, not attacker text.
         $file = isset($_FILES[$field_id]) ? wp_unslash($_FILES[$field_id]) : null;
         if (!is_array($file) || !isset($file['name'])) {
             return $file;
@@ -539,12 +274,7 @@ CSS;
             $tmp_names = is_array($file['tmp_name'] ?? null) ? $file['tmp_name'] : [$file['tmp_name'] ?? ''];
             $sizes     = is_array($file['size'] ?? null) ? $file['size'] : [$file['size'] ?? 0];
 
-            // Server-side backstop for the file-count limit — render()'s plain (non-`[]`)
-            // input name and front.js's checkLimit() only constrain the browser's file
-            // picker; a direct POST can send array-keyed file parts under this field's
-            // name regardless of those client-side constraints, so a "single file" field
-            // must still be re-checked here. Multiple mode falls back to the same
-            // max_file_uploads ceiling used for the client-side hint in render().
+            // Server-side backstop: a direct POST can send array-keyed files regardless of client-side limits.
             $max_files = empty($config['multiple']) ? 1 : max(1, (int)(ini_get('max_file_uploads') ?: 20));
             if (count($names) > $max_files) {
                 return empty($config['multiple'])
@@ -573,10 +303,7 @@ CSS;
                     // translators: %s: rejected file extension.
                     return sprintf(__('File type ".%s" is not allowed for security reasons.', 'formfabricator'), esc_html($ext));
                 }
-                // Fail closed: an empty $allowed_exts means no type group (and no
-                // custom extension) is configured for this field, so nothing should
-                // be accepted — not "no restriction". Only skip the check for
-                // legacy/malformed configs is never correct here.
+                // Fail closed: an empty $allowed_exts means nothing is configured, so nothing should be accepted.
                 if (!in_array($ext, $allowed_exts, true)) {
                     // translators: %s: rejected file extension.
                     return sprintf(__('File type ".%s" is not permitted for this field.', 'formfabricator'), esc_html($ext));
@@ -590,10 +317,7 @@ CSS;
                     );
                 }
                 $tmp = $tmp_names[$i] ?? '';
-                // MIME check only runs when the tmp file actually exists (real HTTP upload).
-                // Non-readable paths (e.g. unit-test stubs) skip MIME verification — the
-                // extension block above already ran. In production, is_uploaded_file() must
-                // pass; a readable file that fails it is rejected to prevent path-traversal.
+                // MIME check only runs for a real HTTP upload; unit-test stubs skip it since the tmp path isn't readable.
                 if ($tmp && is_readable($tmp)) {
                     if (!is_uploaded_file($tmp)) {
                         return __('File upload could not be verified.', 'formfabricator');

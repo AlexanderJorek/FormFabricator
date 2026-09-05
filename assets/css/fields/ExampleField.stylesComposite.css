@@ -1,0 +1,11 @@
+.fabricator-example-group {
+    display: flex;
+    gap: 10px;
+}
+.fabricator-example-sub {
+    flex: 1;
+    min-width: 100px;
+}
+@media (max-width: 600px) {
+    .fabricator-example-group { flex-direction: column; }
+}

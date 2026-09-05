@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,31 +35,7 @@ class DateField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-date-wrap { display: flex; align-items: center; gap: 8px; }
-.fabricator-date-text { flex: 1; }
-.fabricator-date-cal-btn {
-    flex-shrink: 0;
-    height: var(--fabricator-input-height);
-    padding: 0 12px;
-    background: var(--fabricator-bg-muted);
-    border: 1px solid var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius);
-    cursor: pointer;
-    color: var(--fabricator-text-muted);
-    font-size: 14px;
-    transition: background .1s;
-}
-.fabricator-date-cal-btn:hover { background: var(--fabricator-border); }
-.fabricator-date-wrap { position: relative; }
-.fabricator-date-picker-hidden {
-    position: absolute;
-    visibility: hidden;
-    pointer-events: none;
-    width: 0; height: 0;
-    overflow: hidden;
-}
-CSS;
+        return self::readFieldAsset('assets/css/fields/DateField.css');
     }
 
     /**
@@ -94,36 +70,7 @@ CSS;
      */
     public function getClientInit(): string
     {
-        return <<<'JS'
-        function (root) {
-            root.querySelectorAll('.fabricator-date-cal-btn').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var wrap   = this.closest('.fabricator-date-wrap');
-                    var picker = wrap && wrap.querySelector('.fabricator-date-picker-hidden');
-                    if (!picker) return;
-                    picker.showPicker ? picker.showPicker() : picker.click();
-                });
-            });
-            root.querySelectorAll('.fabricator-date-picker-hidden').forEach(function (picker) {
-                picker.addEventListener('change', function () {
-                    var wrap = this.closest('.fabricator-date-wrap');
-                    var text = wrap && wrap.querySelector('.fabricator-date-text');
-                    if (!text || !this.value) return;
-                    var parts = this.value.split('-');
-                    if (parts.length === 3) {
-                        text.value = parts[2] + '.' + parts[1] + '.' + parts[0];
-                    }
-                });
-            });
-            root.querySelectorAll('.fabricator-date-text[data-prefill-today="true"]').forEach(function (inp) {
-                if (inp.value) return;
-                var now = new Date();
-                var d   = String(now.getDate()).padStart(2, '0');
-                var m   = String(now.getMonth() + 1).padStart(2, '0');
-                inp.value = d + '.' + m + '.' + now.getFullYear();
-            });
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/DateField.js');
     }
 
     /**
@@ -133,24 +80,37 @@ CSS;
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'date-format', 'fn' => <<<'JS'
-            function (fieldEl) {
-                var inp = fieldEl.querySelector('.fabricator-date-text');
-                if (!inp || !inp.value.trim()) return null;
-                var v = inp.value.trim();
-                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                if (!/^\d{2}\.\d{2}\.\d{4}$/.test(v))
-                    return (_i18n && _i18n.date_invalid_format) || 'Please enter a date in DD.MM.YYYY format.';
-                var p  = v.split('.');
-                var d  = parseInt(p[0], 10);
-                var m  = parseInt(p[1], 10);
-                var y  = parseInt(p[2], 10);
-                var dt = new Date(y, m - 1, d);
-                if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d)
-                    return (_i18n && _i18n.date_invalid_date) || 'Please enter a valid date.';
-                return null;
-            }
-            JS]];
+        return [['rule' => 'date-format', 'fn' => 'function (fieldEl) {'
+            . "\n" .
+            '    var inp = fieldEl.querySelector(\'.fabricator-date-text\');'
+            . "\n" .
+            '    if (!inp || !inp.value.trim()) return null;'
+            . "\n" .
+            '    var v = inp.value.trim();'
+            . "\n" .
+            '    var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;'
+            . "\n" .
+            '    if (!/^\\d{2}\\.\\d{2}\\.\\d{4}$/.test(v))'
+            . "\n" .
+            '        return (_i18n && _i18n.date_invalid_format) || \'Please enter a date in DD.MM.YYYY format.\';'
+            . "\n" .
+            '    var p  = v.split(\'.\');'
+            . "\n" .
+            '    var d  = parseInt(p[0], 10);'
+            . "\n" .
+            '    var m  = parseInt(p[1], 10);'
+            . "\n" .
+            '    var y  = parseInt(p[2], 10);'
+            . "\n" .
+            '    var dt = new Date(y, m - 1, d);'
+            . "\n" .
+            '    if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d)'
+            . "\n" .
+            '        return (_i18n && _i18n.date_invalid_date) || \'Please enter a valid date.\';'
+            . "\n" .
+            '    return null;'
+            . "\n" .
+            '}']];
     }
 
     /**
@@ -173,10 +133,7 @@ CSS;
             . ' class="fabricator-input fabricator-date-text"'
             . ' placeholder="' . esc_attr__('DD.MM.YYYY', 'formfabricator') . '"'
             . ' maxlength="10"'
-            // Not every DateField instance represents a birthdate (appointment date,
-            // deadline, etc.) — "bday" would signal browsers to auto-suggest/auto-fill
-            // the visitor's real birthdate into an unrelated field. No per-field config
-            // exists to distinguish the two cases, so disable autofill outright.
+            // Not always a birthdate; "bday" would wrongly signal browsers to autofill one here.
             . ' autocomplete="off"'
             . ' value="' . esc_attr((string)($value ?? '')) . '"'
             . $prefill . $req . '>';

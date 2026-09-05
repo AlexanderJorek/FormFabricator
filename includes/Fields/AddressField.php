@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -50,16 +50,7 @@ class AddressField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-address-group { display: flex; flex-direction: column; gap: 10px; }
-.fabricator-address-row { display: flex; gap: 10px; }
-.fabricator-address-zip { width: 90px; flex-shrink: 0; }
-.fabricator-address-city { flex: 1; }
-@media (max-width: 600px) {
-    .fabricator-address-row { flex-direction: column; }
-    .fabricator-address-zip { width: 100%; }
-}
-CSS;
+        return self::readFieldAsset('assets/css/fields/AddressField.css');
     }
 
     /**
@@ -174,7 +165,8 @@ CSS;
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce is verified once in FormProcessor::handle() before field extraction runs; value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
         $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : '';
         if (is_array($raw)) {
             return $raw;

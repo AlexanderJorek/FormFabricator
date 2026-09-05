@@ -14,18 +14,14 @@
        matches what the actual mPDF template (layout.php) renders. */
     var fieldLayoutMode = DATA.fieldLayoutMode;
 
-    /* Same sample content (text + images) as the server-rendered PDF
-       preview (PDFLayoutEditor::dummyFields/dummySignaturePng/dummyUploadPng)
-       so the browser preview matches the real PDF exactly. */
+    /* Same sample content as the server-rendered PDF preview so the browser preview matches it exactly. */
     var dummyTextFields = DATA.dummyText;
     var dummySignatureSrc = 'data:image/png;base64,'
         + DATA.dummySignature;
     var dummyUploadSrc = 'data:image/png;base64,'
         + DATA.dummyUpload;
 
-    /* Same msgid as includes/PDF/Generator.php's footerHtml() so the "Page X
-       of Y" text in this live preview matches the real generated PDF instead
-       of a hardcoded-German duplicate. %1$s/%2$s are substituted per-page below. */
+    /* Same msgid as Generator.php's footerHtml() so this preview matches the real PDF, not a hardcoded duplicate. */
         
     var pageOfTpl = I18N.pageOfPage;
 
@@ -152,9 +148,7 @@
         stageInner.style.width  = available + 'px';
         stageInner.style.height = '';   /* let flex column size naturally to zoomed papers */
 
-        /* zoom (unlike transform:scale) affects layout flow: the paper's rendered
-           size becomes 992*scale × 1402*scale, so flex gap and page stacking work
-           without manual height calculation or overflow clipping hacks. */
+        /* zoom (unlike transform:scale) affects layout flow, so flex gap and page stacking work without manual height hacks. */
         papers.forEach(function(p) {
             p.style.width = paperW + 'px';
             p.style.zoom  = String(scale);
@@ -204,11 +198,8 @@
             }
 
             if(slug==='signatures'){
-                /* Mirror Generator.php: image rendered via layout['image'] at
-                   max-width:100%;max-height:300px inside a field-block.
-                   Signature suppresses the text label; upload shows filename. */
-                /* width="300" height="80" = natural PNG dimensions; explicit attrs
-                   ensure sandbox measurement is correct before async decode. */
+                /* Mirrors Generator.php's layout['image'] rendering. */
+                /* width/height = natural PNG dimensions; explicit attrs keep sandbox measurement correct before async decode. */
                 var imgStyle = 'max-width:100%;max-height:300px;border:1px solid #ccc;padding:4px;display:block;';
                 /* Signature */
                 out+='<div style="margin-bottom:14px;">';
@@ -228,9 +219,7 @@
             }
 
             if(slug==='metadata'){
-                /* Labels mirror pdf-templates/layout.php's real metadata block (same
-                   msgids) so this live preview matches what the generated PDF shows
-                   instead of a hardcoded-German duplicate. */
+                /* Labels mirror layout.php's real metadata block so this preview matches the generated PDF. */
                 out+='<div style="margin:12px 0;padding:8px 10px;background:#f9f9f9;border:1px solid #e0e0e0;border-radius:4px;font-size:'+pt(8)+';color:#555;">';
                 out+='<strong>' + I18N.metadata + '</strong><br>';
                 out+=I18N.created + ' '+new Date().toLocaleString()+'<br>';
@@ -1157,13 +1146,7 @@
             order.forEach(function(slug){
                 if(hidden.indexOf(slug)!==-1) return;
                 if(slug==='header'){
-                    /*
-                     * Render header at builder canvas scale (HB_COLS*HB_CELL px wide) then
-                     * CSS-scale it to fill the paper's content area (992px minus margins).
-                     * The paper is always at its 992px design width; the viewport scaling is
-                     * handled separately by scaleA4(), so image aspect ratios always match
-                     * the builder canvas exactly.
-                     */
+                    /* Render header at builder canvas scale then CSS-scale to the paper's content area, keeping image aspect ratios matched to the builder canvas. */
                     var canvasW   = HB_COLS * HB_CELL;
                     var marginPx  = parseFloat(mm(s.margin_left)) + parseFloat(mm(s.margin_right));
                     /* Paper is always at its 992px design width (JS forces this on mobile via

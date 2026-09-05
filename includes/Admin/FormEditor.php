@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -200,8 +200,8 @@ class FormEditor
            Assets::enqueueAdmin() under the 'fabricator-forms-builder' handle — that
            enqueue always runs before this render() callback (admin_enqueue_scripts
            fires before the admin_menu page-render callback), so localizing the
-           already-registered handle here is safe; wp_localize_script() only
-           stores the data, the inline <script> is printed later at footer time. */
+           already-registered handle here is safe; wp_localize_script() only stores the
+           data, WordPress prints it as part of the enqueued script output later. */
         \wp_localize_script('fabricator-forms-builder', 'FabricatorBuilderI18n', self::builderI18n());
         \wp_localize_script(
             'fabricator-forms-editor-lock',
@@ -467,22 +467,7 @@ class FormEditor
             . '</div>'
             . '</div>';
 
-        $page = '<!DOCTYPE html><html lang="' . esc_attr(str_replace('_', '-', get_locale())) . '"><head>'
-            . '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            . '<title>' . esc_html__('Preview', 'formfabricator') . '</title>'
-            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- standalone preview HTML document returned via wp_send_json_success(), not rendered through the WP page pipeline (no wp_head/wp_footer to enqueue into); Font Awesome is this plugin's own vendored local asset (FABRICATOR_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css'), not an external/offloaded resource.
-            . '<link rel="stylesheet" href="'
-            . \esc_url(FABRICATOR_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css')
-            . '">'
-            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- standalone preview HTML document returned via wp_send_json_success(), not rendered through the WP page pipeline (no wp_head/wp_footer to enqueue into); $css_url is this plugin's own local asset (FABRICATOR_FORMS_URL . 'assets/css/front.css'), not an external/offloaded resource.
-            . '<link rel="stylesheet" href="' . \esc_url($css_url) . '">'
-            // Inline <style>/<script> below (not just the src-based tags already flagged above) are
-            // likewise part of this standalone preview document, not a normal WP-rendered admin page —
-            // there is no wp_head()/wp_footer() call anywhere in this synthetic HTML string for
-            // wp_add_inline_style()/wp_add_inline_script() to attach to.
-            . '<style>' . implode("\n", $field_css) . '</style>'
-            . '<style>'
-            . 'body{font-family:system-ui,sans-serif;background:#f6f7f7;'
+        $base_css = 'body{font-family:system-ui,sans-serif;background:#f6f7f7;'
             . 'margin:0;padding:40px 24px;display:flex;gap:20px;'
             . 'justify-content:center;align-items:flex-start;}'
             . '#fabricator-preview-content{flex:1;max-width:760px;min-width:0;}'
@@ -492,18 +477,48 @@ class FormEditor
             . 'body{background:#1a1a1a;}'
             . '.fabricator-form-wrap{box-shadow:0 2px 16px rgba(0,0,0,.5);}'
             . '}'
-            . $toolbar_css
-            . '</style>'
+            . $toolbar_css;
+
+        // Fresh, isolated WP_Styles/WP_Scripts instances scoped to only this preview's assets, since the global registries can't be reused without dragging in the whole builder page.
+        $preview_styles = new \WP_Styles();
+        $preview_styles->add(
+            'fabricator-preview-fontawesome',
+            FABRICATOR_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css',
+            [],
+            FABRICATOR_FORMS_VERSION
+        );
+        $preview_styles->add('fabricator-preview-front', $css_url, [], FABRICATOR_FORMS_VERSION);
+        $preview_styles->add_inline_style('fabricator-preview-front', implode("\n", $field_css) . "\n" . $base_css);
+        ob_start();
+        $preview_styles->do_items(['fabricator-preview-fontawesome', 'fabricator-preview-front']);
+        $styles_markup = ob_get_clean();
+
+        $preview_scripts = new \WP_Scripts();
+        $preview_scripts->add(
+            'fabricator-preview-front',
+            FABRICATOR_FORMS_URL . 'assets/js/front.js',
+            [],
+            FABRICATOR_FORMS_VERSION
+        );
+        $preview_scripts->add(
+            'fabricator-preview-toolbar',
+            FABRICATOR_FORMS_URL . 'assets/js/admin-preview-toolbar.js',
+            ['fabricator-preview-front'],
+            FABRICATOR_FORMS_VERSION
+        );
+        $preview_scripts->add_inline_script('fabricator-preview-front', $globals, 'before');
+        ob_start();
+        $preview_scripts->do_items(['fabricator-preview-front', 'fabricator-preview-toolbar']);
+        $scripts_markup = ob_get_clean();
+
+        $page = '<!DOCTYPE html><html lang="' . esc_attr(str_replace('_', '-', get_locale())) . '"><head>'
+            . '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<title>' . esc_html__('Preview', 'formfabricator') . '</title>'
+            . $styles_markup
             . '</head><body>'
             . '<div id="fabricator-preview-content">' . $html . '</div>'
             . $toolbar_html
-            // Same rationale as the <style> block above — inline data, no wp_head()/wp_footer() to
-            // attach wp_add_inline_script() to in this synthetic document.
-            . '<script>' . $globals . '</script>'
-            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- standalone preview HTML document returned via wp_send_json_success(), not rendered through the WP page pipeline (no wp_head/wp_footer to enqueue into); both are this plugin's own local assets, not external/offloaded resources.
-            . '<script src="' . \esc_url(FABRICATOR_FORMS_URL . 'assets/js/front.js') . '"></script>'
-            // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- see comment above.
-            . '<script src="' . \esc_url(FABRICATOR_FORMS_URL . 'assets/js/admin-preview-toolbar.js') . '"></script>'
+            . $scripts_markup
             . '</body></html>';
 
         \wp_send_json_success(['html' => $page]);
@@ -655,15 +670,7 @@ class FormEditor
     }
 
     /**
-     * Recursively sanitizes a nested array-valued field config entry. sanitizeFields() used to copy any
-     * array-typed field value through verbatim (only the well-known 'options' key got dedicated handling
-     * afterward). Since sanitizeFields() is the sanitization boundary for untrusted pasted import strings
-     * (see FormList.php::ajaxImport()), any OTHER array-valued key let an attacker-crafted import smuggle raw
-     * HTML/script strings straight into stored field config, bypassing the whole
-     * sanitizeConfigValue()/wp_kses_post() pipeline (CWE-79). No current field type stores config under a
-     * second array key, but this generic loop must not silently trust one if a field type adds one later —
-     * so every array is now walked and its string leaves are sanitized the same way an unrecognized scalar
-     * config value is above. Depth is capped to bound recursion against a deeply nested payload (CWE-674).
+     * Recursively sanitizes a nested array-valued field config entry (depth-capped against CWE-674).
      *
      * @param array $value Raw nested array value.
      * @param int   $depth Current recursion depth (internal use).
@@ -776,11 +783,7 @@ class FormEditor
     }
 
     /**
-     * Sanitizes an HTML email body for admin-authored notification templates. Uses targeted regex instead of
-     * wp_kses because wp_kses passes all style attributes through safecss_filter_attr, which drops valid
-     * email CSS properties (overflow, border-radius, display:inline-block, etc.). Only genuinely dangerous
-     * constructs are removed: script elements, inline event-handler attributes, and javascript:/vbscript:
-     * URIs.
+     * Sanitizes an HTML email body. Uses targeted regex instead of wp_kses since wp_kses strips valid email CSS.
      *
      * @param string $html Raw HTML body from the notification editor.
      * @return string Sanitized HTML.
@@ -850,13 +853,7 @@ class FormEditor
             $html = $after;
         }
 
-        // The js-uris/css-js-uris passes above match the raw attribute string.
-        // A payload can dodge that by HTML-entity-encoding the "javascript:"
-        // keyword (a browser/mail client decodes entities before evaluating a
-        // URI) or by splitting it with a CSS comment (url(java/**/script:...),
-        // which CSS strips before the URL is evaluated). Decode + strip
-        // comments in a working copy of each href/src/action/style value and
-        // drop the whole value if the decoded form is still dangerous.
+        // Guards against entity-encoded or CSS-comment-split "javascript:" evading the passes above.
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- callback is a static closure defined inline, not attacker-controlled/dynamic dispatch.
         $html = preg_replace_callback(
             '/\b(href|src|action|style)\s*=\s*(?:(["\'])((?:(?!\2).)*)\2|([^\s>]+))/is',
@@ -868,10 +865,7 @@ class FormEditor
                 $decoded = html_entity_decode($val, ENT_QUOTES | ENT_HTML5, 'UTF-8');
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- hardcoded literal pattern/replacement stripping CSS comments from the decoded attribute value, not attacker-influenced pattern selection; no /e modifier.
                 $decoded = preg_replace('#/\*.*?\*/#s', '', $decoded);
-                // Browsers strip ASCII tab/CR/LF from a URL before parsing its
-                // scheme, so "jav\tascript:" still executes as javascript: even
-                // though the keyword itself isn't contiguous — strip these
-                // before the keyword check, not just via \s* around the colon.
+                // Browsers strip ASCII tab/CR/LF before parsing a URL scheme, so "jav\tascript:" still executes — strip these before the keyword check.
                 $decoded = str_replace(["\t", "\n", "\r"], '', (string) $decoded);
                 if (preg_match('/javascript\s*:|vbscript\s*:/i', $decoded)) {
                     \FabricatorForms\fabricator_log(
@@ -885,10 +879,7 @@ class FormEditor
             $html
         ) ?? $html;
 
-        // If the body is a full HTML document and the user appended content
-        // after </html> (e.g. {all_fields} tacked on at the end), that content
-        // ends up outside the document structure and breaks email clients.
-        // Move any such orphaned content to just before </body> instead.
+        // Content appended after </html> (e.g. {all_fields} tacked on) breaks email clients; move it to just before </body> instead.
         $close_pos = strripos($html, '</html>');
         if ($close_pos !== false) {
             $orphan = trim(substr($html, $close_pos + 7));
@@ -908,28 +899,7 @@ class FormEditor
             }
         }
 
-        // ── Layer 2: wp_kses() allow-list, defense-in-depth on top of the
-        // regex passes above — NOT a replacement for them; it runs on their
-        // already-cleaned output. The regex passes above are a targeted
-        // deny-list (strip only what's known dangerous); a parser-based
-        // allow-list catches HTML-parsing quirks the regexes don't anticipate
-        // (malformed/overlapping tags, mutation XSS, etc. — CWE-79) that a
-        // regex operating on the raw token stream can't see.
-        //
-        // The rich-text ("Visuell") notification editor
-        // (assets/js/admin-builder.js, spRichTextEditor()/sanitizeRichDoc())
-        // deliberately saves a *complete* HTML document — <!DOCTYPE html>
-        // <html><head><style>...</style></head><body>...</body></html>, not a
-        // fragment — so the design-mode iframe keeps its own <html>/<head>/
-        // <body> wrapper (a plain contenteditable div would strip it and is
-        // an extension target). The allow-list below therefore has to permit
-        // that wrapper too: if <style> were stripped as a *tag* while its
-        // text content survived (wp_kses removes disallowed tags but leaves
-        // their inner text alone), the CSS ruleset from <head> would spill
-        // out as visible plaintext at the top of the rendered email — a
-        // content-corruption bug, not just a style loss. The DOCTYPE is
-        // preserved explicitly since wp_kses doesn't recognize it as a tag
-        // and would silently drop it.
+        // Layer 2: wp_kses() allow-list, defense-in-depth on top of the regex passes above; DOCTYPE is preserved explicitly since wp_kses doesn't recognize it as a tag.
         $doctype = '';
         if (preg_match('/^\s*<!DOCTYPE[^>]*>/i', $html, $dm)) {
             $doctype = $dm[0];
@@ -1029,9 +999,7 @@ class FormEditor
             'noscript' => [],
         ];
 
-        // Email layouts commonly need CSS properties that WP core's default
-        // safecss_filter_attr() allow-list doesn't cover; add them rather
-        // than letting safecss_filter_attr silently drop the declaration.
+        // Add email-safe CSS properties safecss_filter_attr() would otherwise silently drop.
         $allow_email_css = static function (array $attrs): array {
             return array_unique(
                 array_merge(
@@ -1056,12 +1024,7 @@ class FormEditor
 
         $html = $doctype . $html;
 
-        // Force rel="noopener noreferrer" on any target="_blank" link. Without
-        // it, the linked page gets window.opener access to this document
-        // (reverse tabnabbing) and the browser sends a Referer header leaking
-        // this admin page's URL — both avoidable via `rel`. The email body is
-        // authored by trusted edit_forms-capability admins, not attacker
-        // input, so this is defense-in-depth rather than an XSS fix.
+        // Force rel="noopener noreferrer" on target="_blank" links (reverse-tabnabbing defense-in-depth).
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- callback is a static closure defined inline, not attacker-controlled/dynamic dispatch.
         $html = preg_replace_callback(
             '/<a\b([^>]*\btarget=["\']_blank["\'][^>]*)>/i',
@@ -1080,9 +1043,7 @@ class FormEditor
             $html
         ) ?? $html;
 
-        // Lengths only, no content — log unconditionally when something was
-        // actually stripped so production keeps an audit trail; the "nothing
-        // stripped" case is debug-only noise, not a security-relevant event.
+        // Log lengths only (no content) when something was stripped, as a production audit trail.
         if ($html !== $before) {
             \FabricatorForms\fabricator_log(
                 'FabricatorForms sanitizeEmailBody: input length '
@@ -1126,12 +1087,7 @@ class FormEditor
     }
 
     /**
-     * Builds the localized string catalog consumed by assets/js/admin-builder.js
-     * (the drag-and-drop builder UI). Mirrors the pattern used for
-     * FabricatorForms.i18n (Assets::enqueueFront()) and hbi18n
-     * (PDFLayoutEditor.php) — a single object of English-source strings that
-     * the JS falls back to its own English literal for if this ever fails to
-     * load (see the `_i18n.key || 'English fallback'` pattern in the JS).
+     * Builds the localized string catalog consumed by assets/js/admin-builder.js.
      *
      * @return array{i18n: array<string, string>, countryNames: array<string, string>, phoneCodes: array<string, string>}
      */

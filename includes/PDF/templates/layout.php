@@ -17,7 +17,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -33,13 +33,7 @@ $fabricator_raw          = (array) get_option('fabricator_forms_pdf_layout', [])
 $fabricator_o             = array_merge($fabricator_defaults, $fabricator_raw);
 $fabricator_field_layout = get_option('fabricator_forms_field_layout', 'block');
 
-// Defense-in-depth: validate these are actually hex color values before they get
-// interpolated into a <style> block / inline CSS `style="..."` attribute below.
-// esc_attr() alone only protects the HTML-attribute context (quotes/entities) — it
-// does not block CSS-syntax characters like `;`, `(`, `)`, so a value that reached
-// here as anything other than a well-formed color (e.g. a stale/foreign option
-// value bypassing PDFLayoutEditor::save()'s own sanitize_hex_color() call) could
-// otherwise break out of the intended CSS property value.
+// Validate these are hex colors before interpolating into CSS; esc_attr() alone doesn't block `;`/`(`/`)`.
 $fabricator_hex_color_re = '/^#[0-9a-fA-F]{3,8}$/';
 $fabricator_accent = preg_match($fabricator_hex_color_re, (string) $fabricator_o['accent_color'])
     ? $fabricator_o['accent_color'] : $fabricator_defaults['accent_color'];
@@ -57,11 +51,7 @@ $fabricator_font      = match ($fabricator_o['font_family']) {
     default          => 'dejavusans',
 };
 
-// Fail closed, not open: if the stored logo_url doesn't resolve to a local
-// media-library attachment (stale/deleted attachment, or an option value
-// written by anything other than PDFLayoutEditor::save()'s sideload-on-save
-// path), never fall back to fetching the raw URL — mPDF has no SSRF guard of
-// its own and would fetch an external URL directly.
+// Fail closed: never fall back to fetching the raw logo_url directly, since mPDF has no SSRF guard of its own.
 $fabricator_logo_post_id = !empty($fabricator_o['logo_url']) ? attachment_url_to_postid($fabricator_o['logo_url']) : 0;
 $fabricator_logo_path    = $fabricator_logo_post_id ? (get_attached_file($fabricator_logo_post_id) ?: '') : '';
 
@@ -69,17 +59,8 @@ $fabricator_section_hidden = is_array($fabricator_o['section_hidden']) ? $fabric
 
 $fabricator_margin_top_mm = (int) ($fabricator_o['margin_top'] ?? 15);
 
-// Shared inline-formatting allowlist for admin-configured rich text (header
-// "title" builder element content, and footer text) rendered into mPDF HTML.
-// Both are run through wp_kses() with this allowlist before use so a
-// careless/compromised admin-settings write can't inject arbitrary HTML/script
-// via these option values.
-//
-// Defined via defined()-guarded define() rather than top-level `const`: this
-// file is `include`d (not `include_once`) by Generator::generate(), which can
-// run more than once per PHP process (e.g. multiple submissions handled in one
-// request/CLI run) — a plain top-level `const` would fatal with "cannot
-// redeclare constant" on the second inclusion.
+// Shared kses allowlist for admin-configured rich text; uses defined()-guarded define() since this file
+// is include()d (not include_once) and can run more than once per process, which would redeclare a const.
 if (!defined('FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS')) {
     define(
         'FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS',
@@ -99,14 +80,7 @@ if (!defined('FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS')) {
     );
 }
 
-// Defense-in-depth allowlist applied by Generator.php to each field's raw
-// cell_html, before it wraps that value with the invisible marker spans and
-// <img> tags that make up the rest of $cell_html — applying this allowlist any
-// later would strip those trusted structural tags too. Field renderers are
-// expected to already escape their own output (see the class docblock at the
-// top of this file), but this narrow allowlist guards against any renderer
-// that forgets, while still allowing the simple formatting (e.g. multi-line
-// values using <br>) some renderers rely on.
+// Defense-in-depth allowlist applied to each field's raw cell_html before Generator.php wraps it with marker spans.
 if (!defined('FABRICATOR_PDF_ALLOWED_VALUE_TAGS')) {
     define(
         'FABRICATOR_PDF_ALLOWED_VALUE_TAGS',
@@ -190,13 +164,7 @@ return [
                       . 'width:' . $el_w_mm . 'mm;height:' . $el_h_mm . 'mm;overflow:hidden;">';
 
                 if ($type === 'image' && !empty($el['src'])) {
-                    // Fail closed, not open: PDFLayoutEditor::save() only ever persists a
-                    // 'src' that already resolved to a local media-library attachment (via
-                    // resolveImageSrc()/media_sideload_image()'s SSRF-safe fetch). If this
-                    // value doesn't resolve to a real local file — a stale/deleted
-                    // attachment, or a header_layout option written by any other path —
-                    // never fall back to the raw value, since mPDF has no SSRF guard of
-                    // its own and would fetch an external URL directly.
+                    // Fail closed: never fall back to the raw src value, since mPDF has no SSRF guard of its own.
                     $post_id  = attachment_url_to_postid($el['src']);
                     $img_path = $post_id ? (get_attached_file($post_id) ?: '') : '';
                     if ($img_path !== '') {
@@ -204,9 +172,7 @@ return [
                     }
                 } elseif ($type === 'title') {
                     $fs = max(6, (int) ($el['size'] ?? 18));
-                    // Defense-in-depth: validate hex color format before it lands in an
-                    // inline `style="..."` CSS property value — esc_attr() alone only
-                    // protects the HTML-attribute context, not CSS syntax.
+                    // Validate hex color format before it lands in a CSS property value; esc_attr() alone isn't enough.
                     $raw_color = (string) ($el['color'] ?? '#1d2327');
                     $color     = esc_attr(
                         preg_match($fabricator_hex_color_re, $raw_color) ? $raw_color : '#1d2327'

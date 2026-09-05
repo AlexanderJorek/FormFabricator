@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -50,29 +50,7 @@ class NameField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-name-group {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: flex-start;
-}
-.fabricator-name-sub {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-width: 130px;
-}
-.fabricator-name-sub--prefix {
-    flex: 0 0 auto;
-    min-width: 0;
-    width: 110px;
-}
-.fabricator-name-sub--prefix .fabricator-input { width: 100%; }
-@media (max-width: 600px) {
-    .fabricator-name-group { flex-direction: column; }
-}
-CSS;
+        return self::readFieldAsset('assets/css/fields/NameField.css');
     }
 
     /**
@@ -110,9 +88,7 @@ CSS;
     }
 
     /**
-     * Returns the fixed salutation/prefix option list. Rendered as <select> options in render() and used by
-     * validate() as the server-side allowlist for the submitted prefix sub-value — can't be a class const
-     * because it contains __() translation calls, which aren't compile-time constant expressions.
+     * Fixed salutation/prefix list; not a class const because it contains non-compile-time __() calls.
      *
      * @return array<int, string>
      */
@@ -205,7 +181,8 @@ CSS;
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce is verified once in FormProcessor::handle() before field extraction runs; value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
         $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : '';
         if (is_array($raw)) {
             return $raw;
@@ -244,10 +221,8 @@ CSS;
                 continue;
             }
             if (!empty($sf['is_select'])) {
-                // select always has a value; "—" is a valid no-preference answer,
-                // so required is intentionally not enforced here — but a direct
-                // POST can still submit an arbitrary string outside the <select>'s
-                // option list, so allowlist whatever was submitted.
+                // Not required-enforced ("—" is a valid answer), but a direct POST could submit
+                // an arbitrary string outside the <select> options, so allowlist it here.
                 $submitted = trim((string)(is_array($value) ? ($value[$k] ?? '') : ''));
                 if ($submitted !== '' && !in_array($submitted, self::prefixOptions(), true)) {
                     $errors[] = $config[$k . '_label'] ?? self::subfieldLabel($sf['label']);

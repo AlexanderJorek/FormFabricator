@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,55 +35,7 @@ class RadioField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-radio-group {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.fabricator-radio-group--horizontal {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 16px;
-}
-.fabricator-radio-label {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    cursor: pointer;
-    font-size: 14px;
-    color: var(--fabricator-text);
-    line-height: 1.4;
-    user-select: none;
-}
-.fabricator-radio-label input[type="radio"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    border: 2px solid var(--fabricator-border-input);
-    border-radius: 50%;
-    background: var(--fabricator-bg);
-    cursor: pointer;
-    transition: border-color .15s, background .15s, box-shadow .15s;
-    position: relative;
-}
-.fabricator-radio-label input[type="radio"]:checked {
-    border-color: var(--fabricator-accent);
-    background: var(--fabricator-accent);
-    box-shadow: inset 0 0 0 3px var(--fabricator-bg);
-}
-.fabricator-radio-label input[type="radio"]:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--fabricator-accent) 25%, transparent);
-}
-.fabricator-radio-label:hover input[type="radio"]:not(:checked) {
-    border-color: var(--fabricator-accent);
-}
-.fabricator-other-input { margin-top: 4px; }
-CSS;
+        return self::readFieldAsset('assets/css/fields/RadioField.css');
     }
 
     /**
@@ -118,18 +70,7 @@ CSS;
      */
     public function getClientInit(): string
     {
-        return <<<'JS'
-        function (root) {
-            root.querySelectorAll('input[value="__other__"]').forEach(function (inp) {
-                inp.addEventListener('change', function () {
-                    var wrap  = this.closest('.fabricator-radio-group, .fabricator-checkbox-group');
-                    var other = wrap && wrap.querySelector('.fabricator-other-input');
-                    if (!other) return;
-                    other.style.display = this.checked ? '' : 'none';
-                });
-            });
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/RadioField.js');
     }
 
     /**
@@ -213,7 +154,8 @@ CSS;
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         $selected = isset($_POST[$field_id]) ? sanitize_text_field(wp_unslash($_POST[$field_id])) : '';
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
         if ($selected === '__other__' && isset($_POST[$field_id . '_other'])) {

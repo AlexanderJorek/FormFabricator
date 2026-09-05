@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -43,69 +43,7 @@ class SignatureField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-signature-wrap {
-    border: 1px solid var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius);
-    overflow: hidden;
-    background: #ffffff;
-}
-.fabricator-signature-wrap:has(.fabricator-signature-canvas:focus) {
-    border-color: var(--fabricator-accent);
-    box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--fabricator-accent) 15%, transparent);
-}
-.fabricator-signature-canvas {
-    display: block;
-    width: 100%;
-    cursor: crosshair;
-    touch-action: none;
-    background: #ffffff !important;
-    color-scheme: light;
-    forced-color-adjust: none;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-}
-.fabricator-signature-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 10px;
-    background: var(--fabricator-bg-subtle);
-    border-top: 1px solid var(--fabricator-border);
-}
-.fabricator-signature-clear {
-    -webkit-appearance: none;
-    appearance: none;
-    background: transparent !important;
-    border: 1px solid var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius-sm);
-    padding: 5px 6px;
-    cursor: pointer;
-    color: var(--fabricator-text-muted);
-    line-height: 1;
-    transition: border-color .1s;
-}
-.fabricator-signature-clear:hover,
-.fabricator-signature-clear:active,
-.fabricator-signature-clear:focus {
-    background: transparent !important;
-    outline: none !important;
-    box-shadow: none !important;
-}
-.fabricator-signature-clear:hover {
-    border-color: var(--fabricator-text-muted);
-    color: var(--fabricator-text);
-}
-.fabricator-signature-clear svg {
-    display: block;
-    width: 14px; height: 14px;
-    fill: currentColor;
-    overflow: visible;
-}
-.fabricator-signature-hint { font-size: 12px; color: var(--fabricator-text-subtle); }
-CSS;
+        return self::readFieldAsset('assets/css/fields/SignatureField.css');
     }
 
     /**
@@ -140,105 +78,7 @@ CSS;
      */
     public function getClientInit(): string
     {
-        return <<<'JS'
-        function (root) {
-            function initSignature(wrap) {
-                if (wrap._fabricatorCanvasInited) return;
-                wrap._fabricatorCanvasInited = true;
-                var canvas   = wrap.querySelector('.fabricator-signature-canvas');
-                var input    = wrap.querySelector('input[type="hidden"]');
-                var clearBtn = wrap.querySelector('.fabricator-signature-clear');
-                if (!canvas || !input) return;
-                var ctx     = canvas.getContext('2d');
-                var stroke  = parseFloat(wrap.dataset.stroke || '2');
-                var fmt     = wrap.dataset.format || 'png';
-                var drawing  = false;
-                var leftArea = false;
-                var lastW = 0;
-                function resize() {
-                    var rect  = canvas.getBoundingClientRect();
-                    var ratio = window.devicePixelRatio || 1;
-                    var cssW  = rect.width  || canvas.offsetWidth;
-                    var fallH = parseFloat(canvas.getAttribute('height') || '160');
-                    var cssH  = rect.height || canvas.offsetHeight || fallH;
-                    if (!cssW || !cssH) { return; } // still hidden — ResizeObserver will retry
-                    var snap  = lastW ? canvas.toDataURL() : null;
-                    lastW = cssW;
-                    canvas.width  = Math.round(cssW * ratio);
-                    canvas.height = Math.round(cssH * ratio);
-                    ctx.scale(ratio, ratio);
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, cssW, cssH);
-                    ctx.strokeStyle = '#1d2327';
-                    ctx.lineWidth   = stroke;
-                    ctx.lineCap     = 'round';
-                    ctx.lineJoin    = 'round';
-                    if (snap && snap !== 'data:,') {
-                        var img = new Image();
-                        img.onload = function () { ctx.drawImage(img, 0, 0, cssW, cssH); };
-                        img.src = snap;
-                    }
-                }
-                function pos(e) {
-                    var rect = canvas.getBoundingClientRect();
-                    var src  = e.touches ? e.touches[0] : e;
-                    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
-                }
-                function start(e) {
-                    e.preventDefault();
-                    drawing = true;
-                    var p = pos(e);
-                    ctx.beginPath();
-                    ctx.moveTo(p.x, p.y);
-                }
-                function move(e) {
-                    if (!drawing) return;
-                    e.preventDefault();
-                    var p = pos(e);
-                    if (leftArea) {
-                        ctx.beginPath(); ctx.moveTo(p.x, p.y); leftArea = false;
-                    } else {
-                        ctx.lineTo(p.x, p.y); ctx.stroke();
-                    }
-                }
-                function end() {
-                    if (!drawing) return;
-                    drawing = false;
-                    input.value = canvas.toDataURL(fmt === 'jpeg' ? 'image/jpeg' : 'image/png');
-                }
-                canvas.addEventListener('mousedown',  start, { passive: false });
-                canvas.addEventListener('mousemove',  move,  { passive: false });
-                canvas.addEventListener('mouseleave', function () { leftArea = true; });
-                document.addEventListener('mouseup',  end);
-                canvas.addEventListener('touchstart', start, { passive: false });
-                canvas.addEventListener('touchmove',  move,  { passive: false });
-                canvas.addEventListener('touchend',   end);
-                if (clearBtn) {
-                    clearBtn.addEventListener('click', function () {
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        input.value = '';
-                    });
-                }
-                var ownerForm = canvas.closest('form');
-                if (ownerForm) {
-                    ownerForm.addEventListener('reset', function () {
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        input.value = '';
-                    });
-                }
-                resize();
-                window.addEventListener('resize', resize);
-                if (typeof ResizeObserver !== 'undefined') {
-                    new ResizeObserver(function (entries) {
-                        if (entries[0].contentRect.width > 0) { resize(); }
-                    }).observe(canvas);
-                }
-            }
-            (root || document).querySelectorAll('.fabricator-signature-wrap').forEach(initSignature);
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/SignatureField.js');
     }
 
     /**
@@ -286,7 +126,8 @@ CSS;
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         return isset($_POST[$field_id]) ? sanitize_text_field(wp_unslash($_POST[$field_id])) : null;
     }
 
@@ -380,7 +221,10 @@ CSS;
      */
     public function pdfData(array $field): array
     {
-        $desc = $this->pdf($field);
+        // pdf() seeds cellHtml from $field['value'] (the "[Signature present – see
+        // attachment]" mail-summary text) — clear it so the PDF cell shows only the
+        // image below, per this method's contract (see docblock above).
+        $desc = $this->pdf($field)->text('');
 
         foreach ($field['materialized_files'] ?? [] as $file) {
             $mime   = $file['mime'] ?? '';

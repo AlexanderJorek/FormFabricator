@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,10 +28,27 @@ defined('ABSPATH') || exit;
  */
 abstract class BaseField
 {
+    // In-memory cache so a field asset file (JS/CSS) is only ever read from disk once per
+    // request, even though multiple fields/requests call getStyles()/getClientInit() etc.
+    private static array $assetCache = [];
+
+    // Reads a field's own JS/CSS asset file (e.g. assets/js/fields/upload.js), relative to the
+    // plugin root — used by getStyles()/getClientInit()/etc. instead of embedding JS/CSS as PHP
+    // string literals, so the content is a real, syntax-highlightable, lintable .js/.css file
+    // (WordPress.org prohibits HEREDOC/NOWDOC, which was the alternative — see CLAUDE.md).
+    protected static function readFieldAsset(string $relativePath): string
+    {
+        if (!isset(self::$assetCache[$relativePath])) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site (see any field's getStyles()/getClientInit()), never request input.
+            $path = \FABRICATOR_FORMS_PATH . $relativePath;
+            $contents = is_readable($path) ? file_get_contents($path) : false;
+            self::$assetCache[$relativePath] = $contents !== false ? rtrim($contents, "\r\n") : '';
+        }
+        return self::$assetCache[$relativePath];
+    }
+
     /**
-     * Caps an array-valued raw POST value before sanitizing, so a submitted
-     * $field_id[...] array can't force unbounded sanitize calls. Must run
-     * BEFORE any map_deep()/recursive-sanitize pass, not after.
+     * Caps an array-valued raw POST value before sanitizing. Must run BEFORE any recursive-sanitize pass.
      *
      * @return mixed Original scalar, or array truncated to $max_keys entries.
      */
@@ -43,14 +60,10 @@ abstract class BaseField
         return array_slice($raw, 0, $max_keys, true);
     }
 
-    // Hard ceiling for the "Other" free-text value, always >= the admin-configured
-    // other_max_length so capOtherText()'s truncation can never pre-empt
-    // validateOtherText()'s "too long" error.
+    // Always >= other_max_length so truncation never pre-empts the "too long" error.
     private const OTHER_TEXT_HARD_CAP = 5000;
 
-    // Shared cap for the "___other___" free-text companion value (Select/Radio/
-    // Checkbox), so the limit can't drift between those fields' extractValue()/
-    // extractFromRaw() implementations.
+    // Shared cap so the limit can't drift between fields' implementations.
     protected static function capOtherText(mixed $raw): string
     {
         return mb_substr(sanitize_text_field(wp_unslash($raw)), 0, self::OTHER_TEXT_HARD_CAP);
@@ -99,13 +112,10 @@ abstract class BaseField
         return $configured > 0 ? min($configured, self::OTHER_TEXT_HARD_CAP) : $configured;
     }
 
-    // Hard ceiling for Text/Textarea content, applied even when limit_max is
-    // unset. Bounds worst-case PDF generation/verification cost (see
-    // Verificationpage.php), independent of the configured limit.
+    // Hard ceiling for Text/Textarea content; bounds worst-case PDF generation cost.
     private const TEXT_FIELD_HARD_CAP = 100000;
 
-    // Clamps limit_max to TEXT_FIELD_HARD_CAP, substituting the hard cap when
-    // unset, so the render() hint and validate() backstop can't disagree.
+    // Clamps limit_max so the render() hint and validate() backstop can't disagree.
     protected static function clampTextMax(int $configured): int
     {
         return $configured > 0 ? min($configured, self::TEXT_FIELD_HARD_CAP) : self::TEXT_FIELD_HARD_CAP;
@@ -123,9 +133,7 @@ abstract class BaseField
         return true;
     }
 
-    // Cheap prefix sanity check for a signature-canvas data URI, shared by
-    // SignatureField/SepaField. Not the security boundary — both fields still
-    // verify real PNG/JPEG magic bytes via materializeSignature().
+    // Cheap prefix check only; real magic-byte verification is in materializeSignature().
     protected static function isSignatureDataUri(string $value, string $expected_format = ''): bool
     {
         if ($expected_format !== '') {
@@ -142,24 +150,10 @@ abstract class BaseField
      */
     protected static function otherTextClientRule(): array
     {
-        return ['rule' => 'other-text-word-limit', 'fn' => <<<'JS'
-            function (fieldEl) {
-                var inp = fieldEl.querySelector('.fabricator-other-input[data-word-limit]');
-                if (!inp || !inp.value.trim()) return null;
-                var limit = parseInt(inp.dataset.wordLimit, 10);
-                if (!limit) return null;
-                var count = inp.value.trim().split(/\s+/).filter(Boolean).length;
-                if (count <= limit) return null;
-                var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                return ((_i18n && _i18n.other_word_limit_exceeded) || 'Please enter at most %1$d words for "Other" (currently: %2$d).')
-                    .replace('%1$d', limit).replace('%2$d', count);
-            }
-            JS];
+        return ['rule' => 'other-text-word-limit', 'fn' => self::readFieldAsset('assets/js/fields/BaseField.otherTextClientRule.js')];
     }
 
-    // Field type slug. IMPORTANT: FieldRegistry::registerDefaults() instantiates
-    // every subclass just to read this at bootstrap, so field constructors
-    // (including any added to BaseField) must stay free of side effects.
+    // Field type slug. Constructors must stay side-effect free (registerDefaults() instantiates all).
     abstract public function getType(): string;
 
     /**
@@ -187,10 +181,7 @@ abstract class BaseField
     }
 
     /**
-     * Whether this field acts as a page-break marker in multi-page forms.
-     *
-     * FormRenderer uses this to emit page-navigation HTML and page <div> wrappers
-     * instead of calling render(). Only PageBreakField returns true.
+     * Whether this field acts as a page-break marker (only PageBreakField returns true).
      *
      * @return bool
      */
@@ -212,10 +203,7 @@ abstract class BaseField
     }
 
     /**
-     * Whether this field is a group container whose children are rendered inline.
-     *
-     * FormRenderer uses this to call openTag()/closeTag() and recurse into children
-     * instead of calling render(). Only GroupField returns true.
+     * Whether this field is a group container whose children render inline (only GroupField returns true).
      *
      * @return bool
      */
@@ -248,10 +236,7 @@ abstract class BaseField
     }
 
     /**
-     * Whether this field requires multipart/form-data encoding on the form element.
-     *
-     * FormRenderer checks all fields and sets enctype="multipart/form-data" when any
-     * returns true. Only UploadField returns true.
+     * Whether this field requires multipart/form-data encoding (only UploadField returns true).
      *
      * @return bool
      */
@@ -261,10 +246,7 @@ abstract class BaseField
     }
 
     /**
-     * Enqueues any front-end scripts required by this field type.
-     *
-     * Called once per unique field type present in the form, before rendering.
-     * Override to call wp_enqueue_script() for third-party libraries (e.g. reCAPTCHA).
+     * Enqueues any front-end scripts required by this field type; override for third-party libraries.
      *
      * @return void
      */
@@ -274,9 +256,7 @@ abstract class BaseField
 
     /**
      * Whether this field's entry is included in the {all_fields} email summary block.
-     *
-     * MailSender skips entries where this returns false. Override in layout-only
-     * fields (HtmlField, PageBreakField) that carry no user-submitted value.
+     * Override to false for layout-only fields with no user-submitted value.
      *
      * @return bool
      */
@@ -330,11 +310,7 @@ abstract class BaseField
     abstract public function render(array $config, string $field_id, mixed $value = null): string;
 
     /**
-     * The extractValue() counterpart for a field inside a repeatable Group.
-     * FormProcessor slices the raw per-copy value out of $_POST and passes it
-     * here as $raw instead of it being read directly from $_POST[$field_id].
-     * Mirror whatever sanitizing extractValue() does so behavior matches
-     * whether the field is used standalone or inside a Group.
+     * extractValue() counterpart for a field inside a repeatable Group. Mirror extractValue()'s sanitizing.
      *
      * @param mixed $raw Raw value already sliced out of the group copy array.
      */
@@ -347,11 +323,7 @@ abstract class BaseField
     }
 
     /**
-     * extractFromRaw() variant for Checkbox/Radio/Select's "Other" option,
-     * whose typed text arrives as a *sibling* POST key (e.g. 'choice_other')
-     * that extractFromRaw() alone can't reach. Default ignores $other_raw and
-     * delegates to extractFromRaw(); override only if extractValue() also
-     * attaches a '__other_text__' key.
+     * extractFromRaw() variant for Checkbox/Radio/Select's "Other" option, arriving as a sibling POST key.
      *
      * @param mixed $other_raw The "{child_id}_other" sibling value, if any.
      */
@@ -360,12 +332,20 @@ abstract class BaseField
         return $this->extractFromRaw($raw);
     }
 
-    // Extracts the submitted value from $_POST/$_FILES, called by
-    // FormProcessor before validate(). Override for fields whose value shape
-    // differs (array POST keys, textarea, $_FILES, composite keys).
+    // Guards against extractValue() reading $_POST/$_FILES without a verified nonce; throws loudly
+    // instead of silently accepting unauthenticated input if a future override forgets to check.
+    final protected static function assertRequestNonceVerified(): void
+    {
+        if (!\FabricatorForms\Form\FormProcessor::nonceVerified()) {
+            throw new \RuntimeException('Field value extraction attempted without a verified request nonce.');
+        }
+    }
+
+    // Extracts the submitted value from $_POST/$_FILES; override for a different value shape.
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified(), which reads FormProcessor's own record of its wp_verify_nonce() result for this request.
         return isset($_POST[$field_id]) ? sanitize_text_field(wp_unslash($_POST[$field_id])) : '';
     }
 
@@ -497,9 +477,7 @@ abstract class BaseField
         return $this->baseGeneralEntries();
     }
 
-    // Config keys always rendered as plain text, never raw/rich HTML. Keep
-    // deliberately small — anything not listed here keeps the wp_kses_post()
-    // default below (rich-text keys like consent_text, html_content, etc.).
+    // Config keys always rendered as plain text; anything else keeps the wp_kses_post() default below.
     private const PLAIN_TEXT_CONFIG_KEYS = ['label', 'placeholder', 'description'];
 
     // Sanitizes a single string config value; override for a different
@@ -522,9 +500,7 @@ abstract class BaseField
         return [];
     }
 
-    // What the Generator needs to render this field in the PDF. Default shows
-    // the escaped value as a labeled row; override for raw HTML, file
-    // attachments, or the media section. Use $this->pdf($field) to build.
+    // What the Generator needs to render this field in the PDF; override for raw HTML/attachments.
     public function pdfData(array $field): array
     {
         return $this->pdf($field)->build();
@@ -544,10 +520,7 @@ abstract class BaseField
     }
 
     /**
-     * Maps the field's submitted value to one or more normalized output entries. Returns array<string, array>
-     * keyed by output key → normalized entry. Default wraps map() in a single entry keyed by $field_id.
-     * Override for multi-entry fields (SEPA) or fields that materialize files. $context carries: ['files' =>
-     * $_FILES subset, 'raw_values' => raw POST values]
+     * Maps the field's submitted value to normalized output entries; override for multi-entry fields (SEPA).
      *
      * @param string $field_id Field identifier.
      * @param string $label    Field label.

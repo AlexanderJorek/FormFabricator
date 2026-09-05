@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -87,11 +87,7 @@ class FormModel
      */
     public static function save(array $data, int $form_id = 0, bool $nonce_verified = false, string $expected_snapshot = ''): int|\WP_Error
     {
-        // Defense-in-depth: every current admin call site already gates on
-        // Plugin::userCan('edit_forms') before reaching here, but this model
-        // method should not rely solely on callers remembering to check —
-        // a single missed gate anywhere in the admin layer would otherwise be
-        // a full privilege-escalation/CSRF path with no second line of defense.
+        // Defense-in-depth: don't rely solely on callers remembering to gate on edit_forms.
         if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             return new \WP_Error('forbidden', __('Insufficient permissions.', 'formfabricator'));
         }
@@ -189,10 +185,7 @@ class FormModel
     }
 
     /**
-     * Returns all fabricator_form posts as model instances. Gated on view_forms (the least-privilege FormFabricator
-     * capability for read access) rather than edit_forms — every current call site (FormList.php's and
-     * FormSelectList.php's admin listing pages) is already an admin screen gated on view_forms before it ever
-     * reaches this method, so this mirrors that without narrowing legitimate access.
+     * Returns all fabricator_form posts as model instances. Gated on view_forms.
      *
      * @return self[]
      */
@@ -211,8 +204,7 @@ class FormModel
             ]
         );
 
-        /* Prime the meta cache for all posts in one query so subsequent
-           get_post_meta() calls inside decodeMeta() hit the object cache only. */
+        /* Prime the meta cache so subsequent get_post_meta() calls in decodeMeta() hit the object cache only. */
         update_meta_cache('post', wp_list_pluck($posts, 'ID'));
 
         $models = [];
@@ -249,12 +241,7 @@ class FormModel
     }
 
     /**
-     * CSRF backstop for save()/duplicate()/delete(). Every current admin call site (FormEditor.php,
-     * FormList.php) already performs its own, more specific nonce check — a per-form action like
-     * 'fabricator_forms_delete_{id}', or the shared 'fabricator_forms_admin_nonce' for save/import — before calling
-     * into this model, and passes $nonce_verified: true to acknowledge that so this method is a no-op for
-     * them. If a future (or forgotten) call site omits $nonce_verified, this falls back to checking the
-     * shared admin AJAX nonce so the request is never silently accepted without any CSRF check at all.
+     * CSRF backstop for save()/duplicate()/delete(); falls back to the shared admin nonce if $nonce_verified is false.
      *
      * @param bool $nonce_verified Whether the caller already verified its own nonce.
      * @return bool True if the request may proceed.

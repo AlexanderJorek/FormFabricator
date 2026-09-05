@@ -11,7 +11,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,7 +24,7 @@ namespace FabricatorForms\Admin;
 
 defined('ABSPATH') || exit;
 
-// phpcs:disable WordPress.PHP.DevelopmentFunctions.error_log_var_export -- this entire file only loads when WP_DEBUG is true (see Plugin::load()); var_export() is the intended human-readable diff output for this dev-only test harness, never shipped active in production.
+// phpcs:disable WordPress.PHP.DevelopmentFunctions.error_log_var_export -- WP_DEBUG-only dev test harness; var_export() is the intended output.
 
 /**
  * Runs PHP and JS field tests on a WP_DEBUG-only admin submenu page.
@@ -1352,9 +1352,7 @@ class FieldTestPage
             'creditor_id'=>'DE98ZZZ09999999999','mandate_ref'=>'MANDAT-001',
         ]);
 
-        // A minimal but well-formed data: URI — validate() only checks the prefix,
-        // not that it decodes to a real image, so this is enough to satisfy the
-        // "signature present" check without needing an actual PNG payload.
+        // validate() only checks the data-URI prefix, not real image content.
         $dummySig  = 'data:image/png;base64,iVBORw0KGgo=';
         $validData = ['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'Max Mustermann','sig'=>$dummySig];
 
@@ -1450,9 +1448,7 @@ class FieldTestPage
     // ── JS test helpers ──────────────────────────────────────────────────────
 
     /**
-     * Generates the same window.FabricatorValidators / FabricatorEmptyChecks / FabricatorFieldInits /
-     * FabricatorSkipValidation globals that Assets::enqueueFront() emits, so the JS test
-     * harness has the real field implementations available on the admin test page.
+     * Generates the same JS validator/init globals as Assets::enqueueFront() for the test page.
      */
     private static function generateFrontGlobals(): string
     {
@@ -1537,8 +1533,6 @@ class FieldTestPage
 
     /**
      * Runs every PHP test suite, then outputs the tabbed PHP/JS results page.
-     * The JS panel embeds the same field-handler validators/inits used on the
-     * live front end (see generateFrontGlobals()) and runs its own suite client-side.
      *
      * @return void
      */

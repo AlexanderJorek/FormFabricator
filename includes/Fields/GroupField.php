@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,75 +35,7 @@ class GroupField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-field-group { margin: 8px 0 var(--fabricator-gap); }
-.fabricator-group-header {
-    padding: 10px 14px;
-    border-left: 3px solid var(--fabricator-accent);
-    background: var(--fabricator-accent-light);
-    border-radius: 0 var(--fabricator-radius) var(--fabricator-radius) 0;
-    margin-bottom: 14px;
-}
-.fabricator-group-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--fabricator-text);
-    line-height: 1.3;
-    margin: 0 0 2px;
-}
-.fabricator-group-desc {
-    font-size: 13px;
-    color: var(--fabricator-text-muted);
-    line-height: 1.5;
-    margin: 0;
-}
-.fabricator-group-copies { display: flex; flex-direction: column; gap: 12px; }
-.fabricator-group-copy {
-    border: 1px solid var(--fabricator-border);
-    border-radius: var(--fabricator-radius);
-    padding: 16px 16px 4px;
-}
-.fabricator-group-copy-hdr {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-}
-.fabricator-group-copy-num {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--fabricator-text-subtle);
-    text-transform: uppercase;
-    letter-spacing: .06em;
-}
-.fabricator-group-copy-remove {
-    background: none;
-    border: 1px solid var(--fabricator-error);
-    color: var(--fabricator-error);
-    border-radius: var(--fabricator-radius-sm);
-    padding: 3px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: background .1s;
-}
-.fabricator-group-copy-remove:hover { background: var(--fabricator-error-bg); }
-.fabricator-group-add-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 10px;
-    padding: 7px 16px;
-    background: var(--fabricator-bg);
-    border: 1px dashed var(--fabricator-accent);
-    color: var(--fabricator-accent);
-    border-radius: var(--fabricator-radius);
-    font-size: 13px;
-    font-family: var(--fabricator-font);
-    cursor: pointer;
-    transition: background .1s;
-}
-.fabricator-group-add-btn:hover { background: var(--fabricator-accent-light); }
-CSS;
+        return self::readFieldAsset('assets/css/fields/GroupField.css');
     }
 
     /**
@@ -140,9 +72,7 @@ CSS;
         }
 
         $children   = $config['children'] ?? [];
-        // Defense-in-depth cap, mirroring FormProcessor's group-copy limit —
-        // this method is the one that actually multiplies work by
-        // count(children) per copy.
+        // Defense-in-depth cap; this method multiplies work by count(children) per copy.
         if (count($value) > 100) {
             $value = array_slice($value, 0, 100, true);
         }

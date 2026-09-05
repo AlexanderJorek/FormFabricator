@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -38,7 +38,7 @@ class SepaField extends BaseField
         /* Validators must always run so that BIC/Kontoinhaber/Sig can show
            their own error messages. The sepa-required validator handles all
            required-field checks, including IBAN. */
-        return ['fn' => 'function(){return false;}'];
+        return ['fn' => self::readFieldAsset('assets/js/fields/SepaField.emptycheck.js')];
     }
 
     /**
@@ -51,71 +51,15 @@ class SepaField extends BaseField
         return [
             [
                 'rule' => 'iban',
-                'fn'   => <<<'JS'
-                function (fieldEl) {
-                    var inp = fieldEl.querySelector('.fabricator-sepa-iban');
-                    if (!inp) return null;
-                    var raw = inp.value.replace(/[^A-Za-z0-9]/g, '');
-                    if (!raw) return null;
-                    var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-                    if (inp._fabricatorIbanInvalid) return (_i18n && _i18n.sepa_iban_invalid)    || 'Invalid IBAN (check digit incorrect).';
-                    if (!inp._fabricatorIbanValid)  return (_i18n && _i18n.sepa_iban_incomplete) || 'Please enter a complete and valid IBAN.';
-                    return null;
-                }
-                JS,
+                'fn'   => self::readFieldAsset('assets/js/fields/SepaField.iban.js'),
             ],
             [
                 'rule' => 'sepa-bic',
-                'fn'   => <<<'JS'
-                function (fieldEl) {
-                    var bic = fieldEl.querySelector('.fabricator-sepa-bic');
-                    if (!bic || !bic.value.trim()) return null;
-                    var bicErr = bic.parentNode.querySelector('.fabricator-field-error');
-                    if (/^[A-Za-z]{6}[A-Za-z0-9]{2}([A-Za-z0-9]{3})?$/.test(bic.value.trim())) return null;
-                    var _i18nB = window.FabricatorForms && window.FabricatorForms.i18n;
-                    if (bicErr && !bicErr.textContent) bicErr.textContent = (_i18nB && _i18nB.sepa_bic_invalid) || 'Please enter a valid BIC.';
-                    return '​';
-                }
-                JS,
+                'fn'   => self::readFieldAsset('assets/js/fields/SepaField.sepa-bic.js'),
             ],
             [
                 'rule' => 'sepa-required',
-                'fn'   => <<<'JS'
-                function (fieldEl) {
-                    if (fieldEl.dataset.required !== 'true') return null;
-                    var missing = false;
-                    var iban = fieldEl.querySelector('.fabricator-sepa-iban');
-                    var ibanErr = iban ? iban.parentNode.querySelector('.fabricator-field-error') : null;
-                    if (iban && !iban.value.replace(/[^A-Za-z0-9]/g, '')) {
-                        var _i18nR = window.FabricatorForms && window.FabricatorForms.i18n;
-                        if (ibanErr && !ibanErr.textContent) ibanErr.textContent = (_i18nR && _i18nR.sepa_iban_required) || 'IBAN is required.';
-                        missing = true;
-                    }
-                    var bic = fieldEl.querySelector('.fabricator-sepa-bic');
-                    var bicErr = bic ? bic.parentNode.querySelector('.fabricator-field-error') : null;
-                    if (bic && !bic.value.trim()) {
-                        var _i18nBr = window.FabricatorForms && window.FabricatorForms.i18n;
-                        if (bicErr && !bicErr.textContent) bicErr.textContent = (_i18nBr && _i18nBr.sepa_bic_required) || 'BIC is required.';
-                        missing = true;
-                    }
-                    var holder = fieldEl.querySelector('.fabricator-sepa-holder');
-                    var holderErr = holder ? holder.parentNode.querySelector('.fabricator-field-error') : null;
-                    if (holder && !holder.value.trim()) {
-                        var _i18nH = window.FabricatorForms && window.FabricatorForms.i18n;
-                        if (holderErr && !holderErr.textContent)
-                            holderErr.textContent = (_i18nH && _i18nH.sepa_holder_required) || 'Account holder is required.';
-                        missing = true;
-                    }
-                    var sig = fieldEl.querySelector('.fabricator-sepa-sig-data');
-                    var sigErr = fieldEl.querySelector('.fabricator-sepa-sig-error');
-                    if (sig && !sig.value) {
-                        var _i18nSig = window.FabricatorForms && window.FabricatorForms.i18n;
-                        if (sigErr && !sigErr.textContent) sigErr.textContent = (_i18nSig && _i18nSig.sepa_sig_required) || 'Please sign.';
-                        missing = true;
-                    }
-                    return missing ? '​' : null;
-                }
-                JS,
+                'fn'   => self::readFieldAsset('assets/js/fields/SepaField.sepa-required.js'),
             ],
         ];
     }
@@ -127,41 +71,7 @@ class SepaField extends BaseField
      */
     public function getStyles(): string
     {
-        return <<<'CSS'
-.fabricator-field--sepa {
-    border: 1px solid var(--fabricator-border);
-    border-radius: var(--fabricator-radius);
-    padding: 24px;
-    margin-bottom: 24px;
-    background: var(--fabricator-bg);
-}
-.fabricator-sepa-title { font-size: 16px; font-weight: 700; margin: 0 0 14px; color: var(--fabricator-text); }
-.fabricator-sepa-text { font-size: 14px; line-height: 1.65; color: var(--fabricator-text); margin-bottom: 10px; }
-.fabricator-sepa-note { font-size: 12px; color: var(--fabricator-text-muted); margin-bottom: 20px; line-height: 1.55; }
-.fabricator-sepa-lookup-notice { font-size: 11px; color: var(--fabricator-text-muted); margin: 4px 0 0; line-height: 1.4; }
-.fabricator-sepa-creditor {
-    background: var(--fabricator-bg-subtle);
-    border: 1px solid var(--fabricator-border);
-    padding: 10px 14px;
-    border-radius: var(--fabricator-radius-sm);
-    font-size: 13px;
-    color: var(--fabricator-text-muted);
-    margin-bottom: 20px;
-    line-height: 1.6;
-}
-.fabricator-sepa-creditor p { margin: 1px 0; }
-.fabricator-field-inner { margin-bottom: 14px; }
-.fabricator-sepa-signatures { display: flex; flex-direction: column; gap: 20px; margin-top: 20px; }
-.fabricator-sepa-dual-sig { flex-direction: row; flex-wrap: wrap; gap: 16px; }
-.fabricator-sepa-dual-sig .fabricator-sepa-sig-block { flex: 1; min-width: 240px; }
-.fabricator-sepa-sig-block { display: flex; flex-direction: column; gap: 0; }
-.fabricator-sepa-sig-label { font-size: 13px; font-weight: 600; margin: 0 !important; color: var(--fabricator-text); }
-.fabricator-sepa-iban { font-family: monospace; letter-spacing: 1px; font-size: 15px; }
-@media (max-width: 600px) {
-    .fabricator-sepa-dual-sig { flex-direction: column; }
-    .fabricator-field--sepa { padding: 16px; }
-}
-CSS;
+        return self::readFieldAsset('assets/css/fields/SepaField.css');
     }
 
     /**
@@ -196,266 +106,7 @@ CSS;
      */
     public function getClientInit(): string
     {
-        return <<<'JS'
-        function (root) {
-            var IBAN_LEN = {
-                AD:24,AE:23,AL:28,AT:20,AZ:28,BA:20,BE:16,BG:22,BH:22,BI:27,BR:29,BY:28,
-                CH:21,CR:22,CY:28,CZ:24,DE:22,DJ:27,DK:18,DO:28,EE:20,EG:29,ES:24,FI:18,
-                FK:18,FO:18,FR:27,GB:22,GE:22,GI:23,GL:18,GR:27,GT:28,HR:21,HU:28,IE:22,
-                IL:23,IQ:23,IS:26,IT:27,JO:30,KW:30,KZ:20,LB:28,LC:32,LI:21,LT:20,LU:20,
-                LV:21,LY:25,MC:27,MD:24,ME:22,MK:19,MN:20,MR:27,MT:31,MU:30,NI:28,NL:18,
-                NO:15,OM:23,PK:24,PL:28,PS:29,PT:25,QA:29,RO:24,RS:22,RU:33,SA:24,SC:31,
-                SD:18,SE:24,SI:19,SK:24,SM:27,SO:23,ST:25,SV:28,TL:23,TN:24,TR:26,UA:29,
-                VA:22,VG:24,XK:20,YE:30
-            };
-            function ibanTemplate(cc) {
-                var len = IBAN_LEN[cc];
-                if (!len) return cc + '__ …';
-                var raw = cc + new Array(len - 1).join('_');
-                var out = '', pos = 0;
-                while (pos < raw.length) {
-                    if (pos > 0) out += ' ';
-                    out += raw.substring(pos, pos + 4);
-                    pos += 4;
-                }
-                return out;
-            }
-            root.querySelectorAll('.fabricator-sepa-iban').forEach(function (input) {
-                if (input._fabricatorIbanInited) return;
-                input._fabricatorIbanInited = true;
-                var filterMode  = input.dataset.countryFilter || 'off';
-                var filterList  = input.dataset.countryList
-                    ? input.dataset.countryList.toUpperCase().split(',') : [];
-                var defaultCc   = (input.dataset.placeholderCountry || 'DE').toUpperCase();
-                var errorEl     = input.parentNode.querySelector('.fabricator-field-error');
-                var lastValidCc = IBAN_LEN[defaultCc] ? defaultCc : 'DE';
-                input.placeholder = ibanTemplate(lastValidCc);
-                function countryAllowed(cc) {
-                    if (filterMode === 'off' || !filterList.length) return true;
-                    var inList = filterList.indexOf(cc) !== -1;
-                    if (filterMode === 'allow')    return inList;
-                    if (filterMode === 'disallow') return !inList;
-                    return true;
-                }
-                var noticeEl = input.parentNode.querySelector('.fabricator-field-hint');
-                function showError(msg)       { if (errorEl)  errorEl.textContent  = msg; }
-                function showIbanNotice(msg)  { if (noticeEl) noticeEl.textContent = msg; }
-                function getBicInput() {
-                    var field = input.closest('.fabricator-field--sepa');
-                    return field ? field.querySelector('.fabricator-sepa-bic') : null;
-                }
-                // Mirrors PHP SepaField::ibanChecksumValid() — moves country+check-digits to the
-                // end, converts letters to numbers (A=10..Z=35), then requires mod 97 == 1. Runs
-                // client-side regardless of live_iban_lookup so the field can validate locally
-                // when the (opt-in, GDPR-gated) openiban.com lookup is disabled.
-                function ibanChecksumValid(iban) {
-                    var rearranged = iban.substring(4) + iban.substring(0, 4);
-                    var numeric = '';
-                    for (var i = 0; i < rearranged.length; i++) {
-                        var ch = rearranged.charAt(i);
-                        numeric += /[A-Z]/.test(ch) ? String(ch.charCodeAt(0) - 55) : ch;
-                    }
-                    var remainder = 0;
-                    for (var pos = 0; pos < numeric.length; pos += 7) {
-                        remainder = Number(String(remainder) + numeric.substring(pos, pos + 7)) % 97;
-                    }
-                    return remainder === 1;
-                }
-                var bicManuallyEntered = false;
-                function lookupBic(iban) {
-                    if (bicManuallyEntered) return;
-                    if (input.dataset.liveLookup === '0') return;
-                    var bicInput = getBicInput();
-                    if (!bicInput) return;
-                    var ajaxUrl = (window.FabricatorForms && window.FabricatorForms.ajaxUrl) || '';
-                    if (!ajaxUrl) return;
-                    bicInput.value    = '';
-                    bicInput.disabled = true;
-                    var dots = 0;
-                    var dotTimer = setInterval(function () {
-                        dots = (dots + 1) % 4;
-                        var _i18nLu = window.FabricatorForms && window.FabricatorForms.i18n;
-                        bicInput.placeholder = ((_i18nLu && _i18nLu.sepa_looking_up) || 'Looking up') + '.'.repeat(dots);
-                    }, 400);
-                    var body = new FormData();
-                    body.append('action', 'fabricator_iban_bic');
-                    body.append('iban', iban);
-                    body.append('nonce', (window.FabricatorForms && window.FabricatorForms.ibanBicNonce) || '');
-                    fetch(ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
-                        .then(function (r) { return r.json(); })
-                        .then(function (res) {
-                            clearInterval(dotTimer);
-                            bicInput.disabled    = false;
-                            bicInput.placeholder = 'XXXXXXXXXXX';
-                            var d = res.data || {};
-                            if (!d.valid) {
-                                input._fabricatorIbanValid   = false;
-                                input._fabricatorIbanInvalid = true;
-                                var _i18nIi = window.FabricatorForms && window.FabricatorForms.i18n;
-                                showError((_i18nIi && _i18nIi.sepa_iban_invalid) || 'Invalid IBAN (check digit incorrect).');
-                            } else {
-                                input._fabricatorIbanValid   = true;
-                                input._fabricatorIbanInvalid = false;
-                                showError('');
-                                if (d.bic && !bicManuallyEntered) {
-                                    bicInput.value = d.bic;
-                                } else if (!d.bankCodeFound) {
-                                    var _i18nUv = window.FabricatorForms && window.FabricatorForms.i18n;
-                                    showIbanNotice((_i18nUv && _i18nUv.sepa_iban_unvalidated) || 'Could not be validated.');
-                                }
-                            }
-                        })
-                        .catch(function () {
-                            clearInterval(dotTimer);
-                            bicInput.disabled    = false;
-                            bicInput.placeholder = 'XXXXXXXXXXX';
-                        });
-                }
-                var bicEl = getBicInput();
-                if (bicEl) {
-                    bicEl.addEventListener('input', function () { bicManuallyEntered = !!this.value; });
-                }
-                function getRaw() { return input.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase(); }
-                input.addEventListener('input', function () {
-                    input._fabricatorIbanValid   = false;
-                    input._fabricatorIbanInvalid = false;
-                    var raw = getRaw();
-                    var cc  = raw.substring(0, 2);
-                    if (cc.length === 2 && IBAN_LEN[cc]) {
-                        if (countryAllowed(cc)) { lastValidCc = cc; showError(''); showIbanNotice(''); }
-                        else { var _i18nCb = window.FabricatorForms && window.FabricatorForms.i18n; showError((_i18nCb && _i18nCb.sepa_country_blocked) || 'This country is not allowed.'); }
-                    } else { showError(''); showIbanNotice(''); }
-                    this.placeholder = ibanTemplate(lastValidCc);
-                    var maxLen = IBAN_LEN[cc] || 34;
-                    raw = raw.substring(0, maxLen);
-                    var out = '', pos = 0;
-                    while (pos < raw.length) {
-                        if (pos > 0) out += ' ';
-                        out += raw.substring(pos, pos + 4);
-                        pos += 4;
-                    }
-                    this.value = out;
-                    if (cc.length === 2 && IBAN_LEN[cc] && raw.length === IBAN_LEN[cc] && countryAllowed(cc)) {
-                        if (ibanChecksumValid(raw)) {
-                            input._fabricatorIbanValid   = true;
-                            input._fabricatorIbanInvalid = false;
-                            showError('');
-                        } else {
-                            input._fabricatorIbanValid   = false;
-                            input._fabricatorIbanInvalid = true;
-                            var _i18nCk = window.FabricatorForms && window.FabricatorForms.i18n;
-                            showError((_i18nCk && _i18nCk.sepa_iban_invalid) || 'Invalid IBAN (check digit incorrect).');
-                        }
-                        lookupBic(raw);
-                    }
-                });
-                input.addEventListener('keydown', function (e) {
-                    if (e.key === 'Backspace') {
-                        var pos = this.selectionStart;
-                        if (pos > 0 && this.value[pos - 1] === ' ') {
-                            this.value = this.value.slice(0, pos - 1) + this.value.slice(pos);
-                            this.setSelectionRange(pos - 1, pos - 1);
-                            e.preventDefault();
-                        }
-                    }
-                });
-            });
-            root.querySelectorAll('.fabricator-sepa-bic').forEach(function (input) {
-                if (input._fabricatorBicInited) return;
-                input._fabricatorBicInited = true;
-                input.addEventListener('input', function () {
-                    this.value = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
-                });
-            });
-            /* Signature canvas init — self-contained so SepaField has no dependency
-               on SignatureField being registered. Sets data-fabricator-file-count so
-               front.js can include SEPA signatures in the total file count. */
-            var sepaSigSel = '.fabricator-sepa-mandate .fabricator-signature-wrap';
-            root.querySelectorAll(sepaSigSel).forEach(function (wrap) {
-                if (wrap._fabricatorCanvasInited) return;
-                wrap._fabricatorCanvasInited = true;
-                var canvas   = wrap.querySelector('.fabricator-signature-canvas');
-                var input    = wrap.querySelector('input[type="hidden"]');
-                var clearBtn = wrap.querySelector('.fabricator-signature-clear');
-                if (!canvas || !input) return;
-                var ctx    = canvas.getContext('2d');
-                var stroke = parseFloat(wrap.dataset.stroke || '2');
-                var fmt    = wrap.dataset.format || 'png';
-                var drawing = false;
-                function resize() {
-                    var rect  = canvas.getBoundingClientRect();
-                    var ratio = window.devicePixelRatio || 1;
-                    var cssW  = rect.width  || canvas.offsetWidth;
-                    var fallH = parseFloat(canvas.getAttribute('height') || '160');
-                    var cssH  = rect.height || canvas.offsetHeight || fallH;
-                    if (!cssW || !cssH) return;
-                    canvas.width  = Math.round(cssW * ratio);
-                    canvas.height = Math.round(cssH * ratio);
-                    ctx.scale(ratio, ratio);
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, cssW, cssH);
-                    ctx.strokeStyle = '#1d2327';
-                    ctx.lineWidth   = stroke;
-                    ctx.lineCap     = 'round';
-                    ctx.lineJoin    = 'round';
-                }
-                function pos(e) {
-                    var rect = canvas.getBoundingClientRect();
-                    var src  = e.touches ? e.touches[0] : e;
-                    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
-                }
-                function start(e) {
-                    e.preventDefault();
-                    drawing = true;
-                    var p = pos(e);
-                    ctx.beginPath();
-                    ctx.moveTo(p.x, p.y);
-                }
-                function move(e) {
-                    if (!drawing) return;
-                    e.preventDefault();
-                    var p = pos(e);
-                    ctx.lineTo(p.x, p.y);
-                    ctx.stroke();
-                }
-                function end() {
-                    if (!drawing) return;
-                    drawing = false;
-                    var mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
-                    input.value = canvas.toDataURL(mime);
-                }
-                canvas.addEventListener('mousedown',  start, { passive: false });
-                canvas.addEventListener('mousemove',  move,  { passive: false });
-                document.addEventListener('mouseup',  end);
-                canvas.addEventListener('touchstart', start, { passive: false });
-                canvas.addEventListener('touchmove',  move,  { passive: false });
-                canvas.addEventListener('touchend',   end);
-                if (clearBtn) {
-                    clearBtn.addEventListener('click', function () {
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        input.value = '';
-                        wrap.dataset.fabricatorFileCount = '0';
-                    });
-                }
-                var ownerForm = canvas.closest('form');
-                if (ownerForm) {
-                    ownerForm.addEventListener('reset', function () {
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        input.value = '';
-                    });
-                }
-                resize();
-                window.addEventListener('resize', resize);
-                if (typeof ResizeObserver !== 'undefined') {
-                    new ResizeObserver(function (entries) {
-                        if (entries[0].contentRect.width > 0) resize();
-                    }).observe(canvas);
-                }
-            });
-        }
-        JS;
+        return self::readFieldAsset('assets/js/fields/SepaField.js');
     }
 
     /**
@@ -512,10 +163,7 @@ CSS;
             $html .= ' <span class="fabricator-required" aria-hidden="true">*</span>';
         }
         $html .= '</label>';
-        // live_iban_lookup defaults to false (opt-in, GDPR). When enabled, the BIC
-        // lookup AJAX call (which relays the visitor's IBAN to the third-party
-        // openiban.com service pre-submission) runs client-side; otherwise the
-        // account holder enters the BIC manually.
+        // live_iban_lookup defaults to false (opt-in, GDPR) since enabling it relays the IBAN to openiban.com pre-submission.
         $live_lookup = isset($config['live_iban_lookup']) && !empty($config['live_iban_lookup']);
         $html .= '<input type="text" id="' . esc_attr($field_id) . '-iban"'
             . ' name="' . esc_attr($field_id) . '[iban]"'
@@ -528,10 +176,7 @@ CSS;
             . ' value="' . $iban_val . '">';
         $html .= '<div class="fabricator-field-hint"></div>';
         if ($live_lookup) {
-            // GDPR Art. 13 transparency: live_iban_lookup sends the IBAN to the
-            // third-party openiban.com service as soon as it's fully typed, before
-            // submission — disclose this to the visitor, not just the admin
-            // configuring the field.
+            // GDPR Art. 13 transparency: disclose the live IBAN lookup to the visitor, not just the admin.
             $html .= '<p class="fabricator-sepa-lookup-notice">'
                 . esc_html__(
                     'Your IBAN is sent to a third-party service (openiban.com) to look up the BIC.',
@@ -633,13 +278,14 @@ CSS;
     }
 
     /**
-     * Returns the composite SEPA array: IBAN, BIC, Kontoinhaber, and signature. The signature canvas posts to a separate key ($field_id . '-sig') because the main composite array is name-indexed as $field_id[iban], $field_id[bic], etc.
+     * Returns the composite SEPA array (IBAN, BIC, Kontoinhaber, signature); signature posts under a separate '-sig' key.
      *
      * @param string $field_id The field element ID.
      */
     public function extractValue(string $field_id): mixed
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         $raw = isset($_POST[$field_id])
             // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce is verified once in FormProcessor::handle() before field extraction runs; value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
             ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field')
@@ -679,7 +325,7 @@ CSS;
     ];
 
     /**
-     * Verifies the ISO 7064 mod-97 checksum of a cleaned (no-space, uppercase) IBAN. Moves the country+check-digits to the end, converts letters to numbers (A=10..Z=35), then requires the result mod 97 == 1.
+     * Verifies the ISO 7064 mod-97 checksum of a cleaned (no-space, uppercase) IBAN.
      *
      * @param string $iban Cleaned IBAN string.
      * @return bool True when the check digits are valid.
@@ -710,10 +356,7 @@ CSS;
      */
     public function validate(mixed $value, array $config): bool|string
     {
-        // The signature size cap must apply regardless of whether the field is
-        // required, mirroring SignatureField::validate() — extractValue() has no
-        // upper bound of its own, so a crafted oversized data URI could otherwise
-        // inflate memory/CPU use even on an optional SEPA field.
+        // Signature size cap applies even when the field is optional, since extractValue() has no bound of its own.
         if (is_array($value) && strlen((string)($value['sig'] ?? '')) > 2 * 1024 * 1024) {
             return __('Signature data is too large.', 'formfabricator');
         }

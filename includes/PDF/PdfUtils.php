@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.4
+ * @version   1.0.5
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -29,30 +29,21 @@ defined('ABSPATH') || exit;
 class PdfUtils
 {
     /**
-     * Absolute pixel-count ceiling regardless of available memory — keeps a host with memory_limit = -1
-     * (unlimited) from being asked to decode a multi-gigapixel image. Comfortably above any real
-     * camera/scanner output (a 100 MP medium-format scan is still 2x under this).
+     * Absolute pixel-count ceiling regardless of memory_limit, guarding an unlimited (-1) host.
      *
      * @var int
      */
     private const HARD_PIXEL_CEILING = 200_000_000;
 
     /**
-     * Floor for the adaptive cap — never refuse to even attempt a modest ~1 MP image (e.g. a phone-camera
-     * signature photo) even under a very constrained memory_limit.
+     * Floor for the adaptive cap, so a modest ~1 MP image is never refused even under a constrained memory_limit.
      *
      * @var int
      */
     private const MIN_SAFE_PIXELS = 1_000_000;
 
     /**
-     * Returns a safe pixel-count ceiling for image decoding, sized to the PHP memory_limit actually available
-     * to this request. A single fixed constant is either too small to allow legitimate high-resolution
-     * scans/uploads on a generously-provisioned host, or — if raised to accommodate those — too large to
-     * guard against a decompression-bomb image on a constrained one. Scaling the cap to what the process can
-     * actually afford solves both: a decoded truecolor bitmap costs ~4 bytes/pixel in GD, plus roughly
-     * another 1.5x for working buffers during resample/copy operations, so at most half of the configured
-     * memory_limit is reserved for that allocation.
+     * Returns a safe pixel-count ceiling scaled to the actual memory_limit, reserving half of it for decoding.
      *
      * @return int Maximum total pixel count (width * height) considered safe to decode.
      */
@@ -90,13 +81,7 @@ class PdfUtils
     }
 
     /**
-     * Cheaply checks an image's pixel dimensions from its header — without fully decoding it — against
-     * the adaptive safe-pixel cap. This is the primary defense against decompression bombs:
-     * getimagesizefromstring() reads only the format header (a few dozen bytes for JPEG/PNG/GIF/WEBP/BMP), so
-     * a crafted file that would decode to a huge bitmap is rejected before GD ever allocates memory for it.
-     * Returns true (safe to attempt decode) when the header can't be parsed — the post-decode check in
-     * thumbnailHash()/attachImage() is the backstop for formats getimagesizefromstring() doesn't understand
-     * but GD does.
+     * Cheaply checks an image's header dimensions against the safe-pixel cap before GD ever decodes it.
      *
      * @param string $binary Raw binary image data.
      * @return bool True if the image's declared dimensions are within the safe cap (or unknown), false
@@ -112,10 +97,7 @@ class PdfUtils
     }
 
     /**
-     * Computes a perceptual thumbnail hash of an image for stable cross-pass comparison. Downscales the image
-     * to an 8×8 pixel grid and hashes the quantised RGB values, producing a hash that is stable across PDF
-     * rendering passes. Returns null when the GD extension is unavailable, the image cannot be decoded, or
-     * its pixel dimensions exceed the safe-decode cap.
+     * Computes a perceptual thumbnail hash (8x8 quantised RGB grid) stable across PDF rendering passes.
      *
      * @param string $binary Raw binary image data.
      * @return string|null SHA-256 hash of the thumbnail pixels, or null on failure.

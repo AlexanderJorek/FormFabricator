@@ -1,0 +1,39 @@
+.fabricator-rating-group { display: inline-flex; gap: 2px; }
+.fabricator-rating-star {
+    position: relative;
+    display: inline-block;
+    line-height: 1;
+    cursor: pointer;
+}
+.fabricator-rating-bg {
+    display: block;
+    font-size: 30px;
+    color: var(--fabricator-border);
+    user-select: none;
+    transition: color .1s;
+}
+.fabricator-rating-fill {
+    position: absolute;
+    top: 0; left: 0;
+    display: block;
+    font-size: 30px;
+    color: #f0a500;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path .1s;
+}
+.fabricator-rating-star--full .fabricator-rating-fill { clip-path: inset(0 0% 0 0); }
+.fabricator-rating-star--half .fabricator-rating-fill { clip-path: inset(0 50% 0 0); }
+.fabricator-rating-zone {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    display: block;
+    cursor: pointer;
+}
+.fabricator-rating-zone input { display: none; }
+.fabricator-rating-zone-half { left: 0; width: 50%; }
+.fabricator-rating-zone-full { right: 0; width: 50%; }
+.fabricator-rating-zone-full--only { left: 0; right: 0; width: 100%; }
