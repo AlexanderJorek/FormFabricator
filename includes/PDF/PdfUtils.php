@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -45,11 +45,13 @@ class PdfUtils
     /**
      * Returns a safe pixel-count ceiling scaled to the actual memory_limit, reserving half of it for decoding.
      *
+     * Per-decode guard, distinct from Utils\MemoryBudget's host-wide concurrent-job accounting; both are needed.
+     *
      * @return int Maximum total pixel count (width * height) considered safe to decode.
      */
     public static function maxSafePixels(): int
     {
-        $limit = self::phpMemoryLimitBytes();
+        $limit = \FabricatorForms\Utils\MemoryBudget::phpMemoryLimitBytes();
         if ($limit <= 0) {
             return self::HARD_PIXEL_CEILING;
         }
@@ -57,27 +59,6 @@ class PdfUtils
         $bytes_per_pixel = 4 * 1.5;
         $cap             = (int) ($budget / $bytes_per_pixel);
         return max(self::MIN_SAFE_PIXELS, min($cap, self::HARD_PIXEL_CEILING));
-    }
-
-    /**
-     * Parses PHP's memory_limit ini setting into a byte count.
-     *
-     * @return int Byte count, or -1 when unlimited/unset.
-     */
-    public static function phpMemoryLimitBytes(): int
-    {
-        $val = trim((string) ini_get('memory_limit'));
-        if ($val === '' || $val === '-1') {
-            return -1;
-        }
-        $unit = strtolower(substr($val, -1));
-        $num  = (int) $val;
-        return match ($unit) {
-            'g'     => $num * 1024 * 1024 * 1024,
-            'm'     => $num * 1024 * 1024,
-            'k'     => $num * 1024,
-            default => (int) $val,
-        };
     }
 
     /**
@@ -138,9 +119,7 @@ class PdfUtils
             imagesy($gd)
         );
         $pixels = '';
-        // Masking off the low 3 bits (& ~7) coarsens each channel to 32 levels, so tiny
-        // pixel-value jitter from GD re-encoding the same image between the seal's two
-        // render passes doesn't flip the hash — only a real visual change should
+        // Masking the low 3 bits coarsens channels so GD re-encoding jitter between the seal's two passes doesn't flip the hash.
         for ($ty = 0; $ty < 8; $ty++) {
             for ($tx = 0; $tx < 8; $tx++) {
                 $c       = imagecolorat($thumb, $tx, $ty);

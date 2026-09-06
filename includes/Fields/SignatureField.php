@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -141,9 +141,7 @@ class SignatureField extends BaseField
         return false;
     }
 
-    // The only input in a signature field is type="hidden" (canvas.toDataURL() written
-    // to it on stroke-end); front.js's generic empty-check only looks at non-hidden
-    // inputs, so without this override a signed field is always reported as empty.
+    // front.js's generic empty-check ignores type="hidden" inputs, which is all this field has.
     public function getClientEmptyCheck(): array
     {
         return ['fn' => "function(f){var i=f.querySelector('input[type=\"hidden\"]');return !i||i.value==='';}"];
@@ -163,7 +161,7 @@ class SignatureField extends BaseField
             if (empty($value) || !self::isSignatureDataUri((string)$value, $format)) {
                 $label = $config['label'] ?? __('Signature', 'formfabricator');
                 // translators: %s: field label.
-                return sprintf(__('%s is a required field.', 'formfabricator'), esc_html($label));
+                return sprintf(__('%s is a required field.', 'formfabricator'), $label);
             }
         }
         // A real canvas signature is a few KB; cap well above that so a
@@ -221,9 +219,7 @@ class SignatureField extends BaseField
      */
     public function pdfData(array $field): array
     {
-        // pdf() seeds cellHtml from $field['value'] (the "[Signature present – see
-        // attachment]" mail-summary text) — clear it so the PDF cell shows only the
-        // image below, per this method's contract (see docblock above).
+        // Clear the mail-summary text pdf() seeds from $field['value']; only the image below should show.
         $desc = $this->pdf($field)->text('');
 
         foreach ($field['materialized_files'] ?? [] as $file) {

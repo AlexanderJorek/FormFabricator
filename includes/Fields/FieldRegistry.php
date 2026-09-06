@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -252,10 +252,18 @@ class FieldRegistry
     public static function mapSubmission(
         array $fields,
         array $raw_values,
-        array $files = []
+        array $files = [],
+        array $skip_ids = []
     ): array {
         $mapped  = [];
-        $context = ['files' => $files, 'raw_values' => $raw_values];
+        /* $skip_ids are fields hidden by conditional logic. They MUST be skipped here rather than
+           unset from the result afterwards: a hidden field never runs validate(), so an upload in
+           one would previously have been read into memory and base64-encoded by
+           UploadField::mapNormalized() with no extension, MIME or max_size_mb check having run at
+           all, and SignatureField/SepaField's 2MB data-URI caps never executing — the work was
+           done, and its result was only then thrown away. */
+        $skip    = array_flip($skip_ids);
+        $context = ['files' => $files, 'raw_values' => $raw_values, 'skip_ids' => $skip];
 
         foreach ($fields as $field_cfg) {
             $field_id   = $field_cfg['id']   ?? '';
@@ -263,6 +271,9 @@ class FieldRegistry
             $label      = $field_cfg['label'] ?? $field_id;
 
             if (!$field_id || !$field_type) {
+                continue;
+            }
+            if (isset($skip[$field_id])) {
                 continue;
             }
 

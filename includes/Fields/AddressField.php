@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -71,6 +71,21 @@ class AddressField extends BaseField
         ['key' => 'zip',     'optional' => true, 'label' => 'Postal code'],
         ['key' => 'country', 'optional' => true, 'label' => 'Country'],
     ];
+
+    /**
+     * Each sub-field's "{key}_label" config value is rendered via esc_html(), never as raw
+     * HTML — without this, wp_kses_post()'s entity-encoding at save time plus esc_html() at
+     * render time double-encodes any "&" in an admin-typed sub-label.
+     *
+     * @return string[]
+     */
+    protected function plainTextConfigKeys(): array
+    {
+        return array_merge(
+            parent::plainTextConfigKeys(),
+            array_map(static fn($sf) => $sf['key'] . '_label', self::SUBFIELDS)
+        );
+    }
 
     /**
      * Translated default label for a sub-field, keyed by its literal SUBFIELDS label.
@@ -169,7 +184,9 @@ class AddressField extends BaseField
         // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
         $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : '';
         if (is_array($raw)) {
-            return $raw;
+            // Flatten nested leaves: a direct POST can send name[first][0]=x, which
+            // map_deep() preserves and map() would stringify to the literal "Array".
+            return self::scalarSubfieldMap($raw);
         }
         return (string) $raw;
     }
@@ -188,7 +205,7 @@ class AddressField extends BaseField
             if (!empty($config['required']) && $scalar === '') {
                 $label = $config['label'] ?? __('Address', 'formfabricator');
                 // translators: %s: field label.
-                return sprintf(__('%s: Required field.', 'formfabricator'), esc_html($label));
+                return sprintf(__('%s: Required field.', 'formfabricator'), $label);
             }
             if ($scalar !== '') {
                 $hard = self::validateTextHardCap($scalar);

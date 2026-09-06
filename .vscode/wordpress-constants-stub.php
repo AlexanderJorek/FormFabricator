@@ -4,6 +4,14 @@
  * Editor-only stub for WordPress core time constants; never loaded at runtime.
  */
 
+// Defensive guard only — this file is excluded from the shipped build (build.ps1) and nothing
+// in the plugin ever includes it; ABSPATH is never actually defined when this runs in the editor.
+// The guard exists purely so this stub can never redefine a real WordPress constant if it were
+// ever accidentally loaded in an actual request.
+if (defined('ABSPATH')) {
+    return;
+}
+
 define('MINUTE_IN_SECONDS', 60);
 define('HOUR_IN_SECONDS', 60 * 60);
 define('DAY_IN_SECONDS', 60 * 60 * 24);

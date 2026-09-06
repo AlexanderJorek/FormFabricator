@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -83,6 +83,10 @@ class NumberField extends BaseField
         if (($config['step'] ?? '') !== '') {
             $extra['step'] = $config['step'];
         }
+        $validation = $config['validation'] ?? '';
+        if (in_array($validation, ['integer', 'positive', 'positive_int'], true)) {
+            $extra['data-validation'] = $validation;
+        }
         $attrs = $this->inputAttrs($config, $field_id, 'number', $extra);
         return $this->wrap($field_id, $config, '<input' . $attrs . '>');
     }
@@ -118,6 +122,25 @@ class NumberField extends BaseField
         if (($config['max'] ?? '') !== '' && $num > (float)$config['max']) {
             // translators: %s: maximum allowed value.
             return sprintf(__('Maximum value: %s', 'formfabricator'), $config['max']);
+        }
+        // Builder-configured "Validation rule" (Validation section).
+        $is_int = $num === floor($num);
+        switch ($config['validation'] ?? '') {
+            case 'integer':
+                if (!$is_int) {
+                    return __('Please enter a whole number.', 'formfabricator');
+                }
+                break;
+            case 'positive':
+                if ($num <= 0) {
+                    return __('Please enter a positive number.', 'formfabricator');
+                }
+                break;
+            case 'positive_int':
+                if (!$is_int || $num <= 0) {
+                    return __('Please enter a positive whole number.', 'formfabricator');
+                }
+                break;
         }
         return true;
     }

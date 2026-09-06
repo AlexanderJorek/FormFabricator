@@ -342,6 +342,12 @@
             if (form.dataset.fabricatorFormsInit) return;
             form.dataset.fabricatorFormsInit = '1';
 
+            /* Rendered disabled (see FormRenderer.php) so a JS-disabled/blocked visitor can't
+               trigger a native POST with an empty nonce field — enabled here now that the
+               submit handler below is actually attached. */
+            var initialSubmitBtn = form.querySelector('.fabricator-submit-btn');
+            if (initialSubmitBtn) initialSubmitBtn.disabled = false;
+
             var isSubmitting = false;
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
@@ -611,10 +617,58 @@
         initCaptchaGates(root);
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { init(document); });
-    } else {
+    /* Forms that enter the DOM after boot — an AJAX-loaded page-builder section, a lightbox or
+       popup form, an FSE block rendered on demand. Assets::ensureFrontAssets() exists precisely
+       because those placements are supported, and since the submit button now ships disabled
+       (see FormRenderer::render(), which does that so a JS-less visitor can't fire a native POST
+       with an empty nonce), a form that never gets initialized would have a permanently dead
+       button rather than a merely un-enhanced one.
+
+       Each late form is initialized against its OWN wrapper, never against document: several
+       field getClientInit() implementations (DateField, RadioField, RatingField, SliderField)
+       carry no re-entry guard, so re-running them over already-initialized nodes would
+       double-bind listeners. Scoping to the new wrapper means they only ever see new nodes. */
+    function initLateForm(form) {
+        if (!form || form.dataset.fabricatorFormsInit) return;
+        var scope = (form.closest && form.closest('.fabricator-form-wrap')) || form.parentElement;
+        if (scope) init(scope);
+    }
+
+    function observeLateForms() {
+        if (typeof MutationObserver !== 'function' || !document.body) return;
+        new MutationObserver(function (records) {
+            records.forEach(function (record) {
+                Array.prototype.forEach.call(record.addedNodes, function (node) {
+                    if (!node || node.nodeType !== 1) return;
+                    if (node.classList && node.classList.contains('fabricator-form')) {
+                        initLateForm(node);
+                    } else if (node.querySelectorAll) {
+                        Array.prototype.forEach.call(
+                            node.querySelectorAll('.fabricator-form'),
+                            initLateForm
+                        );
+                    }
+                });
+            });
+        }).observe(document.body, { childList: true, subtree: true });
+    }
+
+    /* Explicit escape hatch for integrations that insert forms in ways a MutationObserver on
+       document.body can't see (e.g. inside a shadow root): FabricatorForms.initForms(container). */
+    window.FabricatorForms = window.FabricatorForms || {};
+    window.FabricatorForms.initForms = function (container) {
+        init(container || document);
+    };
+
+    function boot() {
         init(document);
+        observeLateForms();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
     }
 
     /* Resets stale submitted/message state after a bfcache restore; named so tests can call it directly. */

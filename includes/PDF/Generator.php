@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -86,11 +86,8 @@ class Generator
                 'trusted_rich_html' => false,
             ];
 
-            // Sanitize before wrapping with marker spans/<img> below, since kses() after wrapping would strip those too.
-            // HtmlField's rawHtml(..., true) content already passed a wider kses pass upstream, so it gets that
-            // same wider allowlist here instead of the narrow default, or rich markup would get stripped to text.
-            // pdfData() is a soft contract; fall back to [] / '' rather than touching $pdf[...] directly so one
-            // misbehaving third-party field handler can't fatal the whole submission (array_keys(null) is a TypeError).
+            // Sanitize before wrapping with marker spans/<img> below — kses() after wrapping would strip those too.
+            // pdfData() is a soft contract; fall back to [] / '' so a misbehaving field handler can't fatal (array_keys(null) is a TypeError).
             $pdf_image_vars     = is_array($pdf['image_vars'] ?? null) ? $pdf['image_vars'] : [];
             $pdf_sealed_uploads = is_array($pdf['sealed_uploads'] ?? null) ? $pdf['sealed_uploads'] : [];
 
@@ -140,30 +137,24 @@ class Generator
         /* ---- mPDF setup ---- */
         try {
             $prev_backtrack = (int)ini_get('pcre.backtrack_limit');
-            // Legitimate resource-limit raise required for mPDF's regex-heavy HTML parsing
-            // on large forms; restored in the finally block below.
-            // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- see comment above
+            // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- needed for mPDF's regex-heavy parsing on large forms; restored in finally below.
             ini_set('pcre.backtrack_limit', (string)max($prev_backtrack, 16 * 1024 * 1024));
 
             $upload_dir = wp_upload_dir();
             $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
 
             if (!get_transient('fabricator_pdf_dirs_ready')) {
-                // A restrictive umask makes mkdir()/file_put_contents() create the
-                // dir/file at 0750/0640 from the moment they exist, instead of at
-                // the OS default (often 0755/0644) and only tightened by chmod()
-                // afterward — closing the brief window where a local unprivileged
-                // user could read submission PDFs before the chmod() call below runs.
+                // Restrictive umask closes the window between dir/file creation and the chmod() below.
                 $prev_umask = umask(0027);
                 try {
                     foreach (['', '/pdf', '/embed', '/mpdf'] as $sub) {
                         $dir = $safe_dir . $sub;
                         if (!is_dir($dir)) {
                             wp_mkdir_p($dir);
-                            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- this directory setup can run on a front-end form-submission AJAX request (no WP admin context), where WP_Filesystem() may fall back to prompting for FTP/SSH credentials it cannot obtain; the umask(0027) set above already tightens the effective permissions from creation, this chmod is defense-in-depth on plugin-owned secure-storage dirs, not user-facing content.
+                            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- runs on front-end AJAX with no WP_Filesystem credentials; defense-in-depth on plugin-owned dirs.
                             chmod($dir, 0750);
                             file_put_contents($dir . '/index.php', '<?php // Silence is golden ?>');
-                            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- same front-end/no-credentials-prompt rationale as above; plugin-owned index.php silence file.
+                            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- same rationale as above.
                             chmod($dir . '/index.php', 0640);
                         }
                     }
@@ -173,8 +164,15 @@ class Generator
                             $htaccess,
                             "Options -Indexes\n<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n"
                         );
-                        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- same front-end/no-credentials-prompt rationale as above; plugin-owned .htaccess lockdown file.
+                        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- same rationale as above.
                         chmod($htaccess, 0640);
+                    }
+                    // .htaccess only blocks Apache/LiteSpeed; this is the IIS-equivalent deny rule.
+                    $web_config = $safe_dir . '/web.config';
+                    if (!file_exists($web_config)) {
+                        file_put_contents($web_config, \FabricatorForms\Utils\SecureDir::WEB_CONFIG);
+                        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- same rationale as above.
+                        chmod($web_config, 0640);
                     }
                 } finally {
                     umask($prev_umask);
@@ -211,8 +209,7 @@ class Generator
                 'margin_bottom' => $margin_bottom,
                 'margin_header' => 3,
                 'margin_footer' => $footer_margin,
-                // Always embed the complete font, never a subset: PASS 2's extra seal text can pull in glyphs
-                // PASS 1 didn't render, so subsetting would make the two passes embed byte-different fonts.
+                // Never subset: PASS 2's extra seal text would pull in glyphs PASS 1 didn't render, making fonts differ.
                 'percentSubset' => 0,
             ];
 
@@ -253,8 +250,7 @@ class Generator
                 \FabricatorForms\fabricator_log('FabricatorForms Generator: failed to delete temp PDF: ' . $sl_path);
             }
 
-            // All seal inputs come from PASS 1 — compute it now so the seal div
-            // can be appended to $html and written in a single writeHtmlChunked call.
+            // All seal inputs come from PASS 1; compute now so the seal div can join a single writeHtmlChunked call.
             $pdf_meta = [
                 'title'   => self::normalizeFieldValue($title),
                 'author'  => self::normalizeFieldValue((string) get_bloginfo('name')),
@@ -305,7 +301,8 @@ class Generator
 
             self::writeHtmlChunked($mpdf, $html);
 
-            $final_path = $pdf_dir . "/Entry_{$form_name_clean}_{$date_time}.pdf";
+            // Random filename: the old guessable naming could be served directly on servers that ignore .htaccess.
+            $final_path = $pdf_dir . '/Entry_' . bin2hex(random_bytes(16)) . '.pdf';
             $mpdf->Output($final_path, \Mpdf\Output\Destination::FILE);
 
             return $final_path;
@@ -313,25 +310,14 @@ class Generator
             \FabricatorForms\fabricator_log('FabricatorForms Generator error: ' . $e->getMessage());
             return false;
         } catch (\Throwable $e) {
-            // Broader safety net alongside the MpdfException catch above: this method's
-            // signature promises string|false, but code inside the try block can also
-            // throw \RuntimeException (HashSeal::generate()'s master-key/JSON-encode
-            // failures) which MpdfException alone wouldn't catch. Left uncaught, that
-            // exception propagates through MailSender::onSubmission() and
-            // FormProcessor's do_action('fabricator_forms_submission', ...) — neither of
-            // which wrap this call in a try/catch — turning a PDF/key-config problem
-            // into an uncaught-exception fatal on the visitor's form submission, and a
-            // stack-trace disclosure (CWE-209) on any site with WP_DEBUG_DISPLAY on.
+            // Catches \RuntimeException from HashSeal::generate() too, since neither caller wraps this in try/catch;
+            // uncaught it would fatal the visitor's submission and disclose a stack trace (CWE-209) under WP_DEBUG_DISPLAY.
             \FabricatorForms\fabricator_log('FabricatorForms Generator error: ' . $e->getMessage());
             return false;
         } finally {
-            // Any exit path (including a \Throwable not caught above, e.g. from
-            // HashSeal::generate()/wp_json_encode failure) must restore this
-            // process-wide ini setting, or it stays elevated for the rest of
-            // the PHP-FPM worker's lifetime.
+            // Must restore on every exit path or the setting stays elevated for the rest of the PHP-FPM worker's life.
             if (isset($prev_backtrack)) {
-                // Restoring the process-wide ini setting raised above; must run regardless of exit path.
-                // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- see comment above
+                // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the setting raised above, must run regardless of exit path.
                 ini_set('pcre.backtrack_limit', (string)$prev_backtrack);
             }
         }
@@ -373,12 +359,7 @@ class Generator
         self::sweepMailSenderTmpDirs($now);
     }
 
-    // MailSender::materializeUploadAttachments() creates get_temp_dir() . 'fabricator_<uuid>/'
-    // per submission (may contain PII, e.g. ID-document uploads) and normally deletes it via
-    // register_shutdown_function() right after sending — but that never runs if PHP dies first
-    // (fatal error, OOM, kill). Piggybacking on this same hourly sweep, rather than leaving those
-    // directories to accumulate indefinitely, is what "no local data storage" actually requires
-    // under crash conditions too.
+    // Backstop for MailSender's shutdown-function cleanup, which never runs if PHP dies first (fatal/OOM/kill).
     private static function sweepMailSenderTmpDirs(int $now): void
     {
         $sys_tmp = rtrim(get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR;
@@ -392,7 +373,7 @@ class Generator
                     wp_delete_file($file);
                 }
             }
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- WP-Cron runs outside any request/admin context, so WP_Filesystem() direct-mode initialization cannot be relied on here; this is this plugin's own private temp directory, not user-facing WP_Filesystem-managed content (same rationale as MailSender's own shutdown-function cleanup).
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- WP-Cron has no WP_Filesystem context; plugin-owned private temp dir.
             if (!@rmdir($dir)) {
                 \FabricatorForms\fabricator_log("FabricatorForms Generator: sweep failed to remove stale temp dir {$dir}");
             }
@@ -446,10 +427,7 @@ class Generator
                 . $pageno . '</div>';
         }
 
-        // $user_text already passed through wp_kses(FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS) in
-        // layout.php's footer() closure — it is safe HTML, not plain text. Re-escaping
-        // it here would turn already-permitted tags (<strong>, <em>, <span>, ...) into
-        // visible literal text, silently defeating that allowlist.
+        // $user_text is already kses()'d safe HTML from layout.php's footer(); re-escaping would defeat that allowlist.
         $safe_text = str_replace(["\r\n", "\r"], "\n", $user_text);
         $safe_text = str_replace("\n", '<br>', $safe_text);
         return '<table style="width:100%;border-collapse:collapse;' . $border . 'font-size:8pt;">'

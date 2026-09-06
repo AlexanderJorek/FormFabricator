@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -33,11 +33,13 @@ class FormRenderer
     /**
      * Handles the [fabricator_form] shortcode and returns the rendered form HTML.
      *
-     * @param array $atts Shortcode attributes (expects 'id' key).
+     * @param array|string $atts Shortcode attributes (expects 'id' key).
      * @return string Rendered form HTML or empty string.
      */
-    public static function shortcode(array $atts): string
+    public static function shortcode($atts): string
     {
+        // Not `array $atts`: shortcode_parse_atts() returns '' (not []) for a bare [fabricator_form].
+        $atts    = is_array($atts) ? $atts : [];
         $form_id = (int)($atts['id'] ?? 0);
         if (!$form_id) {
             return '';
@@ -84,6 +86,9 @@ class FormRenderer
         $submit_working = $form->settings['submit_working'] ?? __('Sending…', 'formfabricator');
         $success_msg    = $form->settings['success_message'] ?? __('Thank you!', 'formfabricator');
 
+        // Backstop for Assets::enqueueFront(), which misses widgets/page-builders/FSE embeds; idempotent.
+        \FabricatorForms\Utils\Assets::ensureFrontAssets();
+
         /* Resolve one handler per unique field type; let each field enqueue its own scripts. */
         $seen_handlers = [];
         foreach ($form->fields as $f) {
@@ -95,6 +100,11 @@ class FormRenderer
                     $h->enqueueFrontScripts();
                 }
             }
+        }
+
+        // Only emit the IBAN-lookup nonce for forms that actually use live lookup (checks group children too).
+        if (self::hasLiveIbanLookup($form->fields)) {
+            \FabricatorForms\Utils\Assets::markSepaLiveLookup();
         }
         $has_upload = self::anyFieldHandler($seen_handlers, static fn($h) => $h->needsMultipartEncoding());
         $has_pages  = self::anyFieldHandler($seen_handlers, static fn($h) => $h->isPageBreak());
@@ -126,17 +136,47 @@ class FormRenderer
                 <?php echo self::renderFields($form->fields); ?>
 
                 <div class="fabricator-form-footer">
-                    <button type="submit" class="fabricator-submit-btn"
+                    <?php // The form only ever submits via JS (which fetches a fresh nonce/token right before
+                    // submit); disabled by default so a JS-disabled/blocked visitor can't trigger a native
+                    // POST with an empty nonce field and get a raw JSON error instead of the form's own UI.
+                    // front.js removes this once it has attached its submit handler. ?>
+                    <button type="submit" class="fabricator-submit-btn" disabled
                             data-working="<?php echo esc_attr($submit_working); ?>"
                             data-success="<?php echo esc_attr($success_msg); ?>">
                         <span class="fabricator-submit-label"><?php echo esc_html($submit_label); ?></span>
                         <span class="fabricator-submit-spinner" aria-hidden="true" style="display:none;"></span>
                     </button>
+                    <noscript>
+                        <p class="fabricator-noscript-notice">
+                            <?php echo esc_html__('This form requires JavaScript to be enabled in your browser in order to submit.', 'formfabricator'); ?>
+                        </p>
+                    </noscript>
                 </div>
             </form>
         </div>
         <?php
         return ob_get_clean();
+    }
+
+    /**
+     * True when any field (or group child) is a SEPA field with live IBAN lookup enabled.
+     *
+     * @param array $fields Field config arrays, possibly containing group containers.
+     */
+    private static function hasLiveIbanLookup(array $fields): bool
+    {
+        foreach ($fields as $f) {
+            if (!is_array($f)) {
+                continue;
+            }
+            if (($f['type'] ?? '') === 'sepa' && !empty($f['live_iban_lookup'])) {
+                return true;
+            }
+            if (!empty($f['children']) && is_array($f['children']) && self::hasLiveIbanLookup($f['children'])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

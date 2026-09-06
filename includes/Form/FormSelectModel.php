@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -57,9 +57,7 @@ class FormSelectModel
      */
     public static function get(int $id): ?self
     {
-        // Unlike getAll()/save()/delete(), intentionally NOT capability-gated: the public
-        // [fabricator_form_select] shortcode (FormSelectList::shortcode()) calls this for
-        // logged-out visitors, same as FormModel::get() has no such gate either.
+        // Intentionally NOT capability-gated: the public shortcode calls this for logged-out visitors.
         foreach (self::getRaw() as $record) {
             if ((int) ($record['id'] ?? 0) === $id) {
                 return self::fromArray($record);
@@ -90,7 +88,7 @@ class FormSelectModel
             return 0;
         }
         $all   = self::getRaw();
-        $title = sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($data['title'] ?? null));
+        $title = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($data['title'] ?? null));
         if ($title === '') {
             $title = __('Form Selection', 'formfabricator');
         }
@@ -103,8 +101,8 @@ class FormSelectModel
             }
             $items[] = [
                 'form_id'     => $form_id,
-                'label'       => sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($item['label'] ?? null)),
-                'description' => sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($item['description'] ?? null)),
+                'label'       => sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($item['label'] ?? null)),
+                'description' => sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($item['description'] ?? null)),
                 'favorite'    => !empty($item['favorite']),
             ];
         }

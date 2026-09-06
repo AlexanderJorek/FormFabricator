@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -102,6 +102,11 @@ class GroupField extends BaseField
                 /* For repeating groups (multiple copies) suffix key and label
                    so each copy's entry has a unique key in $mapped. */
                 $map_key   = $copy_count > 1 ? $child_id . '_copy_' . $copy_idx : $child_id;
+                /* A child hidden by its own conditional logic never ran validate(), so skip it
+                   before its handler materializes anything (see FieldRegistry::mapSubmission()). */
+                if (isset($context['skip_ids'][$map_key]) || isset($context['skip_ids'][$child_id])) {
+                    continue;
+                }
                 $map_label = $copy_count > 1 ? $child_label . ' (' . $copy_idx . ')' : $child_label;
 
                 $entries = $handler->mapNormalized(
@@ -151,7 +156,7 @@ class GroupField extends BaseField
     }
 
     /**
-     * Returns true â€” group fields DO have a settings panel in the builder
+     * Returns true — group fields DO have a settings panel in the builder
      * (used to configure the child field list and repeat behavior).
      *
      * @return bool

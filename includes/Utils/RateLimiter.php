@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -42,9 +42,8 @@ class RateLimiter
         $now        = time();
         $new_expiry = $now + $window_seconds;
 
-        // Single atomic upsert under one row lock; read back via SELECT rather than LAST_INSERT_ID() since
-        // that relies on both statements landing on the same MySQL session, which broke behind a connection pooler.
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic upsert cannot be expressed via the Options/Transients API without losing the single-statement atomicity this rate limiter depends on (see class docblock); this option is never autoloaded/cached via get_option().
+        // Read back via SELECT rather than LAST_INSERT_ID(), which broke behind a connection pooler.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic upsert can't be expressed via Options/Transients API without losing atomicity; never cached.
         $wpdb->query(
             $wpdb->prepare(
                 "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
@@ -67,8 +66,7 @@ class RateLimiter
         // The direct query bypasses WP's cache invalidation, so the object cache must be told to drop its stale copy.
         wp_cache_delete($opt, 'options');
 
-        // Same direct-query rationale as the upsert above: a private counter row this class owns exclusively.
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see comment above
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- same direct-query rationale as the upsert above: a private counter row this class owns.
         $raw = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $opt));
         if ($raw === null || !str_contains((string) $raw, '|')) {
             // Fail toward "treat as first submission" rather than crash on a malformed read.
@@ -89,8 +87,7 @@ class RateLimiter
         global $wpdb;
 
         $opt = 'fabricator_rl_' . $key;
-        // Same direct-query rationale as increment() above: a private counter row this class owns exclusively.
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see comment above
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- same rationale as increment() above: a private counter row this class owns.
         $raw = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $opt));
         if ($raw === null || !str_contains((string) $raw, '|')) {
             return 0;
@@ -106,7 +103,7 @@ class RateLimiter
         global $wpdb;
 
         $now = time();
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk sweep of this class's own private fabricator_rl_* option rows (never read via get_option()/cached); WP-Cron cleanup, not request-path caching concern.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk sweep of own private rows; WP-Cron cleanup, not request-path.
         $wpdb->query(
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->options}

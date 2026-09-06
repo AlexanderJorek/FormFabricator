@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -314,27 +314,26 @@ class FormSelectList
      */
     public static function ajaxSave(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
-        check_ajax_referer('fabricator_fsel_save', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::require('edit_forms', 'fabricator_fsel_save', 'nonce');
 
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         $id        = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via the outer sanitize_text_field() call; WPCS loses track through the intermediate Sanitize::str() static call.
-        $title     = sanitize_text_field(\FabricatorForms\Utils\Sanitize::str(wp_unslash($_POST['title'] ?? '')));
-        $items_raw = json_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_textarea_field(wp_unslash($_POST['items'] ?? '[]'))), true);
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+        $title     = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['title'] ?? '')));
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+        $items_raw = json_decode(sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['items'] ?? '[]'))), true);
         if (!is_array($items_raw)) {
-            wp_send_json_error(['message' => 'Invalid data.']);
+            wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')]);
         }
         if (count($items_raw) > 200) {
-            wp_send_json_error(['message' => 'Too many items.']);
+            wp_send_json_error(['message' => __('Too many items.', 'formfabricator')]);
             return;
         }
 
         $new_id = FormSelectModel::save(['title' => $title, 'items' => $items_raw], $id, true);
         $fsel   = FormSelectModel::get($new_id);
         if (!$fsel) {
-            wp_send_json_error(['message' => 'Save failed.'], 500);
+            wp_send_json_error(['message' => __('Save failed.', 'formfabricator')], 500);
             return;
         }
 
@@ -359,9 +358,7 @@ class FormSelectList
      */
     public static function ajaxDelete(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
         $id = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
         check_ajax_referer('fabricator_fsel_delete_' . $id, 'nonce');
 
@@ -376,12 +373,15 @@ class FormSelectList
     /**
      * Renders the fabricator_form_select shortcode output.
      *
-     * @param array $atts Shortcode attributes.
+     * @param array|string $atts Shortcode attributes; empty string when none are supplied.
      * @return string Rendered HTML output.
      */
-    public static function shortcode(array $atts): string
+    public static function shortcode($atts): string
     {
-        $atts = shortcode_atts(['id' => 0], $atts);
+        /* Deliberately NOT `array $atts` — see FormRenderer::shortcode(): a bare
+           [fabricator_form_select] hands the callback an empty string, and an array type
+           declaration would turn that into a page-fataling TypeError. */
+        $atts = shortcode_atts(['id' => 0], is_array($atts) ? $atts : []);
         $id   = (int) $atts['id'];
         if ($id <= 0) {
             return '';
@@ -391,6 +391,11 @@ class FormSelectList
         if (!$fsel || empty($fsel->items)) {
             return '';
         }
+
+        /* Same reason as FormRenderer::render(): Assets::enqueueFront()'s post_content check
+           misses widgets, page builders, FSE templates and theme-side do_shortcode(). Idempotent. */
+        \FabricatorForms\Utils\Assets::ensureFormSelectAssets();
+        \FabricatorForms\Utils\Assets::ensureFrontAssets();
 
         // Server picks the initially-shown form (falls back to index 0 if none marked
         // favorite); the front-end script then reads data-fav to preselect the same item

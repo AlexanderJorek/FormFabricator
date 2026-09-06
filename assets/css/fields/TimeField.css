@@ -1,4 +1,1 @@
-.fabricator-time-wrap { display: flex; align-items: center; gap: 8px; }
-.fabricator-time-sep { font-weight: 600; color: var(--fabricator-text-muted); }
-.fabricator-time-wrap .fabricator-input { width: 72px; text-align: center; padding: 0 8px; }
-@media (max-width: 600px) { .fabricator-time-wrap { flex-wrap: wrap; } }
+.fabricator-time-12h-hint { margin-left: 8px; font-size: 12px; color: var(--fabricator-text-muted); }

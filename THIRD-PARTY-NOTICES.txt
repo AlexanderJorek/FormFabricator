@@ -25,13 +25,14 @@ FormFabricator also bundles the following JavaScript library under `vendor/pdfjs
 package, not a PHP one), used by the PDF Verification tool to read uploaded
 PDFs client-side before upload:
 
-| Library              | Version | License      | Purpose                        |
-|----------------------|---------|--------------|---------------------------------|
-| Mozilla PDF.js        | 3.11.174 | Apache-2.0  | Client-side PDF text extraction |
+| Library              | Version    | License     | Purpose                        |
+|----------------------|------------|-------------|---------------------------------|
+| Mozilla PDF.js        | 6.2.108   | Apache-2.0  | Client-side PDF text extraction |
 
-PDF.js's license notice is embedded in the file headers of
-`vendor/pdfjs/pdf.js` and `vendor/pdfjs/pdf.worker.js`, with the full
-Apache-2.0 text in `vendor/pdfjs/LICENSE`. Apache-2.0 is GPL-compatible
+The exact build and provenance are recorded in `vendor/pdfjs/VERSION`
+(pdfjs-dist 6.2.108, "legacy" build). PDF.js's license notice is embedded in the
+file headers of `vendor/pdfjs/pdf.mjs` and `vendor/pdfjs/pdf.worker.mjs`, with the
+full Apache-2.0 text in `vendor/pdfjs/LICENSE`. Apache-2.0 is GPL-compatible
 (one-way, per the FSF's license-compatibility list) and requires no
 relicensing to bundle here.
 

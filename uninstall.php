@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,116 +24,193 @@ defined('WP_UNINSTALL_PLUGIN') || exit;
 
 // WARNING: permanently removes all plugin data, including PDF seal keys. No recovery.
 
-// Belt-and-braces: uninstall can run without a preceding deactivate (e.g. WP-CLI force delete).
-wp_clear_scheduled_hook('fabricator_verifier_sweep_tmp_dirs');
-wp_clear_scheduled_hook('fabricator_generator_sweep_tmp_dirs');
-
-/* Remove all stored forms (CPT posts + meta) */
-$fabricator_forms = get_posts(
-    [
-    'post_type'      => 'fabricator_form',
-    'posts_per_page' => -1,
-    'post_status'    => 'any',
-    'fields'         => 'ids',
-    ]
-);
-foreach ($fabricator_forms as $fabricator_form_id) {
-    wp_delete_post($fabricator_form_id, true);
-}
-
-/* Remove all plugin options — including seal keys and encryption state */
-$fabricator_options = [
-    'fabricator_forms_from_email',
-    'fabricator_forms_from_name',
-    'fabricator_forms_recaptcha_site_key',
-    'fabricator_forms_recaptcha_secret_key',
-    'fabricator_forms_hover_color',
-    'fabricator_forms_accent_color',
-    'fabricator_forms_admin_accent',
-    'fabricator_forms_border_color',
-    'fabricator_forms_pdf_settings',
-    'fabricator_forms_pdf_layout',
-    'fabricator_forms_field_layout',
-    'fabricator_forms_version',
-    'fabricator_form_selects',
-    // Seal key data — deleted on uninstall, NOT on reset.
-    'fabricator_forms_seal_key',
-    'fabricator_forms_seal_key_history',
-    'fabricator_forms_seal_key_pending_download',
-    'fabricator_forms_seal_encryption',
-    'fabricator_forms_seal_setup_done',
-    'fabricator_forms_access',
-];
-foreach ($fabricator_options as $fabricator_option) {
-    delete_option($fabricator_option);
-}
-
-/* Remove rate-limiter bucket rows — dynamically named (fabricator_rl_<hash>), so not in $fabricator_options above. */
-global $wpdb;
-// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk delete of dynamically-named rows, no delete_option() equivalent
-$wpdb->query(
-    $wpdb->prepare(
-        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
-        $wpdb->esc_like('fabricator_rl_') . '%'
-    )
-);
-wp_cache_delete('alloptions', 'options');
-
-/* Remove single-use submission-claim rows (fabricator_su_*), same reason as rate-limiter rows above. */
-// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see fabricator_rl_ cleanup comment above
-$wpdb->query(
-    $wpdb->prepare(
-        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
-        $wpdb->esc_like('fabricator_su_') . '%'
-    )
-);
-wp_cache_delete('alloptions', 'options');
-
-/* Remove concurrency-slot rows (fabricator_cs_*), same reason as rate-limiter rows above. */
-// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see fabricator_rl_ cleanup comment above
-$wpdb->query(
-    $wpdb->prepare(
-        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
-        $wpdb->esc_like('fabricator_cs_') . '%'
-    )
-);
-wp_cache_delete('alloptions', 'options');
-
-/* Remove upload directory */
-$fabricator_upload_dir = wp_upload_dir();
-$fabricator_plugin_dir = $fabricator_upload_dir['basedir'] . '/fabricator-secure-pdf';
-if (is_dir($fabricator_plugin_dir)) {
-    // Runs from an admin-triggered deletion (or privileged WP-CLI), so WP_Filesystem() is safe here.
-    global $wp_filesystem;
-    if (!function_exists('WP_Filesystem')) {
-        require_once ABSPATH . 'wp-admin/includes/file.php';
+/**
+ * Removes every trace of the plugin from the CURRENT blog; must be called inside switch_to_blog() per site on multisite.
+ *
+ * @return void
+ */
+function fabricator_uninstall_current_site()
+{
+    // Belt-and-braces: uninstall can run without a preceding deactivate (e.g. WP-CLI force delete).
+    /* Must stay in sync with Plugin::CRON_HOOKS + Plugin::ONE_OFF_CRON_HOOKS. Hand-listed rather than
+       referenced: uninstall.php runs standalone, so the plugin's classes are never loaded here. */
+    $fabricator_cron_hooks = [
+        'fabricator_generator_sweep_tmp_dirs',
+        'fabricator_rl_sweep_expired',
+        'fabricator_su_sweep_expired',
+        'fabricator_cs_sweep_expired',
+        'fabricator_verifier_sweep_tmp_dirs',
+        'fabricator_verifier_cleanup_files',
+    ];
+    foreach ($fabricator_cron_hooks as $fabricator_cron_hook) {
+        wp_clear_scheduled_hook($fabricator_cron_hook);
     }
-    $fabricator_fs_ready = WP_Filesystem() && $wp_filesystem instanceof \WP_Filesystem_Base;
 
-    if (!$fabricator_fs_ready) {
-        // WP_Filesystem() can still fail on servers needing FTP/SSH creds; log and skip rather than fatal on ->rmdir().
-        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see comment above
-        error_log('FormFabricator uninstall: WP_Filesystem unavailable, skipping removal of ' . $fabricator_plugin_dir);
-    } else {
-        $fabricator_it    = new RecursiveDirectoryIterator($fabricator_plugin_dir, FilesystemIterator::SKIP_DOTS);
-        $fabricator_files = new RecursiveIteratorIterator($fabricator_it, RecursiveIteratorIterator::CHILD_FIRST);
-        foreach ($fabricator_files as $fabricator_file) {
-            $fabricator_path = $fabricator_file->getRealPath();
-            if ($fabricator_file->isDir()) {
-                $fabricator_ok = $wp_filesystem->rmdir($fabricator_path);
-            } else {
-                wp_delete_file($fabricator_path);
-                $fabricator_ok = !file_exists($fabricator_path);
+        /* Remove all stored forms (CPT posts + meta) */
+    $fabricator_forms = get_posts(
+        [
+        'post_type'      => 'fabricator_form',
+        'posts_per_page' => -1,
+        'post_status'    => 'any',
+        'fields'         => 'ids',
+        ]
+    );
+    foreach ($fabricator_forms as $fabricator_form_id) {
+        wp_delete_post($fabricator_form_id, true);
+    }
+
+    /* Remove all plugin options — including seal keys and encryption state */
+    $fabricator_options = [
+        'fabricator_forms_from_email',
+        'fabricator_forms_from_name',
+        'fabricator_forms_recaptcha_site_key',
+        'fabricator_forms_recaptcha_secret_key',
+        'fabricator_forms_hover_color',
+        'fabricator_forms_accent_color',
+        'fabricator_forms_admin_accent',
+        'fabricator_forms_border_color',
+        'fabricator_forms_pdf_settings',
+        'fabricator_forms_pdf_layout',
+        'fabricator_forms_field_layout',
+        'fabricator_form_selects',
+        // Seal key data — deleted on uninstall, NOT on reset.
+        'fabricator_forms_seal_key',
+        'fabricator_forms_seal_key_history',
+        'fabricator_forms_seal_encryption',
+        'fabricator_forms_seal_setup_done',
+        'fabricator_forms_access',
+    ];
+    foreach ($fabricator_options as $fabricator_option) {
+        delete_option($fabricator_option);
+    }
+
+    // Transients, not options: fabricator_forms_seal_key_pending_download holds a PLAINTEXT seal key that delete_option() never touched.
+    $fabricator_transients = [
+        'fabricator_forms_seal_key_pending_download',
+        'fabricator_host_memory_bytes',
+        'fabricator_pdf_dirs_ready',
+        'fabricator_pdf_template_fingerprints',
+    ];
+    foreach ($fabricator_transients as $fabricator_transient) {
+        delete_transient($fabricator_transient);
+    }
+
+    /* Remove rate-limiter bucket rows — dynamically named (fabricator_rl_<hash>), so not in $fabricator_options above. */
+    global $wpdb;
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk delete of dynamically-named rows, no delete_option() equivalent
+    $wpdb->query(
+        $wpdb->prepare(
+            "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+            $wpdb->esc_like('fabricator_rl_') . '%'
+        )
+    );
+    wp_cache_delete('alloptions', 'options');
+
+    /* Remove single-use submission-claim rows (fabricator_su_*), same reason as rate-limiter rows above. */
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see fabricator_rl_ cleanup comment above
+    $wpdb->query(
+        $wpdb->prepare(
+            "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+            $wpdb->esc_like('fabricator_su_') . '%'
+        )
+    );
+    wp_cache_delete('alloptions', 'options');
+
+    /* Remove concurrency-slot rows (fabricator_cs_*), same reason as rate-limiter rows above. */
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see fabricator_rl_ cleanup comment above
+    $wpdb->query(
+        $wpdb->prepare(
+            "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+            $wpdb->esc_like('fabricator_cs_') . '%'
+        )
+    );
+    wp_cache_delete('alloptions', 'options');
+
+    /* Remove the advisory admin edit-locks (fabricator_lock_<screen>, written by Utils/AdminLock.php).
+       Plain options with no expiry, so nothing else would ever clear them. */
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see fabricator_rl_ cleanup comment above
+    $wpdb->query(
+        $wpdb->prepare(
+            "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+            $wpdb->esc_like('fabricator_lock_') . '%'
+        )
+    );
+    wp_cache_delete('alloptions', 'options');
+
+    // Dynamically-named transients (verifier path tokens, progress rows, plaintext master key) — no delete_transient() equivalent for a prefix, so DELETE both the value and _transient_timeout_ rows directly.
+    foreach (['fabricator_pdf_', 'fabricator_vp_', 'fabricator_setup_master_key_'] as $fabricator_prefix) {
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see fabricator_rl_ cleanup comment above
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+                '_transient_' . $wpdb->esc_like($fabricator_prefix) . '%',
+                '_transient_timeout_' . $wpdb->esc_like($fabricator_prefix) . '%'
+            )
+        );
+    }
+
+    // Targeted invalidation, not wp_cache_flush(): flushing the whole object cache would evict every other plugin's entries too.
+    wp_cache_delete('alloptions', 'options');
+    wp_cache_delete('notoptions', 'options');
+
+    /* Remove upload directory */
+    $fabricator_upload_dir = wp_upload_dir();
+    $fabricator_plugin_dir = $fabricator_upload_dir['basedir'] . '/fabricator-secure-pdf';
+    if (is_dir($fabricator_plugin_dir)) {
+        // Runs from an admin-triggered deletion (or privileged WP-CLI), so WP_Filesystem() is safe here.
+        global $wp_filesystem;
+        if (!function_exists('WP_Filesystem')) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+        }
+        $fabricator_fs_ready = WP_Filesystem() && $wp_filesystem instanceof \WP_Filesystem_Base;
+
+        if (!$fabricator_fs_ready) {
+            // WP_Filesystem() can still fail on servers needing FTP/SSH creds; log and skip rather than fatal on ->rmdir().
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see comment above
+            error_log('FormFabricator uninstall: WP_Filesystem unavailable, skipping removal of ' . $fabricator_plugin_dir);
+        } else {
+            $fabricator_it    = new RecursiveDirectoryIterator($fabricator_plugin_dir, FilesystemIterator::SKIP_DOTS);
+            $fabricator_files = new RecursiveIteratorIterator($fabricator_it, RecursiveIteratorIterator::CHILD_FIRST);
+            foreach ($fabricator_files as $fabricator_file) {
+                $fabricator_path = $fabricator_file->getRealPath();
+                if ($fabricator_file->isDir()) {
+                    $fabricator_ok = $wp_filesystem->rmdir($fabricator_path);
+                } else {
+                    wp_delete_file($fabricator_path);
+                    $fabricator_ok = !file_exists($fabricator_path);
+                }
+                if (!$fabricator_ok) {
+                    // Standalone script, no plugin logging available — use debug logging.
+                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see comment above
+                    error_log('FormFabricator uninstall: failed to remove ' . $fabricator_path);
+                }
             }
-            if (!$fabricator_ok) {
-                // Standalone script, no plugin logging available — use debug logging.
-                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see comment above
-                error_log('FormFabricator uninstall: failed to remove ' . $fabricator_path);
+            if (!$wp_filesystem->rmdir($fabricator_plugin_dir)) {
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see justification above.
+                error_log('FormFabricator uninstall: failed to remove directory ' . $fabricator_plugin_dir);
             }
         }
-        if (!$wp_filesystem->rmdir($fabricator_plugin_dir)) {
-            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see justification above.
-            error_log('FormFabricator uninstall: failed to remove directory ' . $fabricator_plugin_dir);
-        }
     }
+}
+
+// Run it once per site on a network; get_sites() is batched so a large network doesn't load every blog object at once.
+if (is_multisite()) {
+    $fabricator_offset = 0;
+    do {
+        $fabricator_site_ids = get_sites(
+            [
+            'fields' => 'ids',
+            'number' => 200,
+            'offset' => $fabricator_offset,
+            ]
+        );
+        foreach ($fabricator_site_ids as $fabricator_site_id) {
+            switch_to_blog((int) $fabricator_site_id);
+            fabricator_uninstall_current_site();
+            restore_current_blog();
+        }
+        $fabricator_offset += 200;
+    } while (count($fabricator_site_ids) === 200);
+} else {
+    fabricator_uninstall_current_site();
 }

@@ -1,9 +1,9 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: FormFabricator 1.0.0\n"
+"Project-Id-Version: FormFabricator 1.0.6\n"
 "Report-Msgid-Bugs-To: https://github.com/AlexanderJorek/FormFabricator/issues\n"
 "POT-Creation-Date: 2026-08-01T00:00:00+00:00\n"
-"PO-Revision-Date: 2026-08-01T00:00:00+00:00\n"
+"PO-Revision-Date: 2026-09-06 14:00+0000\n"
 "Last-Translator: Alexander Jorek <Alexander-Jorek@gmx.de>\n"
 "Language-Team: German\n"
 "Language: de_DE\n"
@@ -12,8 +12,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Generator: FormFabricator i18n tooling\n"
-
-
 
 #. Plugin Name of the plugin
 #: forge-forms.php
@@ -46,26 +44,6 @@ msgstr ""
 msgid "Composer autoloader not found. Run <code>composer install</code> in the plugin directory."
 msgstr "Composer-Autoloader nicht gefunden. Führen Sie <code>composer install</code> im Plugin-Verzeichnis aus."
 
-#: includes/Admin/FieldTestPage.php:269
-#: includes/Admin/FieldTestPage.php:300
-#: includes/Admin/FieldTestPage.php:370
-#: includes/Admin/FieldTestPage.php:373
-#: includes/Admin/FieldTestPage.php:441
-#: includes/Admin/FieldTestPage.php:497
-#: includes/Admin/FieldTestPage.php:564
-#: includes/Admin/FieldTestPage.php:609
-#: includes/Admin/FieldTestPage.php:642
-#: includes/Admin/FieldTestPage.php:680
-#: includes/Admin/FieldTestPage.php:721
-#: includes/Admin/FieldTestPage.php:762
-#: includes/Admin/FieldTestPage.php:806
-#: includes/Admin/FieldTestPage.php:838
-#: includes/Admin/FieldTestPage.php:884
-#: includes/Admin/FieldTestPage.php:916
-#: includes/Admin/FieldTestPage.php:1174
-#: includes/Admin/FieldTestPage.php:1175
-#: includes/Admin/FieldTestPage.php:1195
-#: includes/Admin/FieldTestPage.php:1270
 #: includes/Fields/AddressField.php:233
 #: includes/Fields/AddressField.php:255
 #: includes/Fields/BaseField.php:298
@@ -91,43 +69,26 @@ msgstr "Composer-Autoloader nicht gefunden. Führen Sie <code>composer install</
 #: includes/Fields/UploadField.php:572
 #: includes/Fields/UploadField.php:599
 #: includes/Fields/UploadField.php:671
-#: includes/Fields/_ExampleField.php:434
 msgid "[No entry]"
 msgstr "[Kein Eintrag]"
 
-#: includes/Admin/FieldTestPage.php:678
-#: includes/Admin/FieldTestPage.php:761
 #: includes/Fields/CheckboxField.php:350
 #: includes/Fields/RadioField.php:300
 #: includes/Fields/SelectField.php:312
 msgid "[Other]"
 msgstr "[Sonstiges]"
 
-#: includes/Admin/FieldTestPage.php:952
 #: includes/Fields/ConsentField.php:115
 msgid "I agree."
 msgstr "Ich stimme zu."
 
-#: includes/Admin/FieldTestPage.php:957
 #: includes/Fields/ConsentField.php:154
 msgid "Yes"
 msgstr "Ja"
 
-#: includes/Admin/FieldTestPage.php:958
-#: includes/Admin/FieldTestPage.php:959
 #: includes/Fields/ConsentField.php:154
 msgid "No"
 msgstr "Nein"
-
-#: includes/Admin/FieldTestPage.php:997
-#: includes/Fields/GdprField.php:174
-msgid "Privacy accepted"
-msgstr "Datenschutz akzeptiert"
-
-#: includes/Admin/FieldTestPage.php:998
-#: includes/Fields/GdprField.php:174
-msgid "Privacy not accepted"
-msgstr "Datenschutz nicht akzeptiert"
 
 #: includes/Admin/FormEditor.php:73
 msgid "FormFabricator Editor"
@@ -905,24 +866,12 @@ msgstr "Die Anfrage konnte den Server nicht erreichen. Bitte prüfen Sie Ihre Ve
 #. translators: %s: "rotiert" as an em element
 #: includes/Admin/FormSettings.php:599
 #, php-format
-msgid "Derives a new key via PBKDF2. PDFs sealed with the previous key remain verifiable and are marked as %s."
-msgstr "Leitet über PBKDF2 einen neuen Schlüssel ab. Mit dem vorherigen Schlüssel gesiegelte PDFs bleiben prüfbar und werden als %s markiert."
+msgid "Generates a new random key. PDFs sealed with the previous key remain verifiable and are marked as %s."
+msgstr "Erzeugt einen neuen Zufallsschlüssel. Mit dem vorherigen Schlüssel gesiegelte PDFs bleiben prüfbar und werden als %s markiert."
 
 #: includes/Admin/FormSettings.php:600
 msgid "rotated"
 msgstr "rotiert"
-
-#: includes/Admin/FormSettings.php:607
-msgid "New key password"
-msgstr "Neues Schlüssel-Passwort"
-
-#: includes/Admin/FormSettings.php:613
-msgid "Min. 12 characters…"
-msgstr "Min. 12 Zeichen…"
-
-#: includes/Admin/FormSettings.php:621
-msgid "Confirm password"
-msgstr "Passwort bestätigen"
 
 #: includes/Admin/FormSettings.php:632
 msgid "compromised"
@@ -1108,8 +1057,8 @@ msgid "Add"
 msgstr "Hinzufügen"
 
 #: includes/Admin/FormSettings.php:920
-msgid "Administrators always have full access. User settings override the role setting."
-msgstr "Administratoren haben immer vollen Zugang. Benutzereinstellungen überschreiben die Rolleneinstellung."
+msgid "Administrators always have full access. User exceptions grant access in addition to the role; they cannot revoke access the role already allows."
+msgstr "Administratoren haben immer vollen Zugang. Benutzerausnahmen gewähren Zugang zusätzlich zur Rolle; sie können Zugang, den die Rolle bereits erlaubt, nicht entziehen."
 
 #: includes/Admin/FormSettings.php:923
 #: includes/Utils/Assets.php:340
@@ -1131,10 +1080,6 @@ msgstr "Keine Benutzerausnahmen konfiguriert."
 #: includes/Admin/FormSettings.php:950
 msgid "Add user…"
 msgstr "Benutzer hinzufügen…"
-
-#: includes/Admin/FormSettings.php:2294
-msgid "Passwords do not match."
-msgstr "Passwörter stimmen nicht überein."
 
 #: includes/Admin/FormSettings.php:2307
 msgid "Key rotated successfully."
@@ -1795,10 +1740,6 @@ msgstr "Inhaltsstreams werden geprüft…"
 msgid "Checking fonts…"
 msgstr "Schriften werden geprüft…"
 
-#: includes/Admin/Verificationpage.php:3629
-msgid "The document contains multiple seal blocks — possibly tampered."
-msgstr "Das Dokument enthält mehrere Siegelblöcke — möglicherweise manipuliert."
-
 #: includes/Admin/Verificationpage.php:3631
 msgid "No FormFabricator seal found. Please only upload original documents."
 msgstr "Kein FormFabricator-Siegel gefunden. Bitte nur Originaldokumente hochladen."
@@ -2048,19 +1989,16 @@ msgstr "Apartment, Etage, c/o ..."
 #: includes/Fields/AddressField.php:308
 #: includes/Fields/NameField.php:295
 #: includes/Fields/SliderField.php:467
-#: includes/Fields/_ExampleField.php:747
 msgid "Mode"
 msgstr "Modus"
 
 #: includes/Fields/AddressField.php:309
 #: includes/Fields/NameField.php:296
-#: includes/Fields/_ExampleField.php:748
 msgid "Simple"
 msgstr "Einzeln"
 
 #: includes/Fields/AddressField.php:310
 #: includes/Fields/NameField.php:297
-#: includes/Fields/_ExampleField.php:749
 msgid "Extended"
 msgstr "Erweitert"
 
@@ -2125,10 +2063,6 @@ msgstr "Dies lädt nach Aktivierung ein Skript von Google (reCAPTCHA)."
 #: includes/Fields/CaptchaField.php:127
 msgid "Please confirm the CAPTCHA."
 msgstr "Bitte bestätigen Sie das CAPTCHA."
-
-#: includes/Fields/CaptchaField.php:122
-msgid "CAPTCHA verification failed."
-msgstr "CAPTCHA-Überprüfung fehlgeschlagen."
 
 #: includes/Fields/CaptchaField.php:142
 msgid "[CAPTCHA confirmed]"
@@ -2369,17 +2303,14 @@ msgid "Email filter"
 msgstr "E-Mail-Filter"
 
 #: includes/Fields/EmailField.php:216
-#: includes/Fields/_ExampleField.php:764
 msgid "Off"
 msgstr "Aus"
 
 #: includes/Fields/EmailField.php:216
-#: includes/Fields/_ExampleField.php:764
 msgid "Allowed"
 msgstr "Erlaubt"
 
 #: includes/Fields/EmailField.php:216
-#: includes/Fields/_ExampleField.php:764
 msgid "Blocked"
 msgstr "Gesperrt"
 
@@ -2415,16 +2346,6 @@ msgstr "DSGVO-Checkbox"
 #: includes/Fields/GdprField.php:188
 msgid "Privacy policy"
 msgstr "Datenschutzerklärung"
-
-#. translators: %1$s: privacy policy URL, %2$s: privacy policy link text.
-#: includes/Fields/GdprField.php:132
-#, php-format
-msgid "I have read the <a href=\"%1$s\" target=\"_blank\" rel=\"noopener\">%2$s</a> and accept it."
-msgstr "Ich habe die <a href=\"%1$s\" target=\"_blank\" rel=\"noopener\">%2$s</a> gelesen und akzeptiere diese."
-
-#: includes/Fields/GdprField.php:159
-msgid "Please accept the privacy policy."
-msgstr "Bitte akzeptieren Sie die Datenschutzerklärung."
 
 #: includes/Fields/GdprField.php:204
 msgid "Privacy URL"
@@ -3335,10 +3256,6 @@ msgstr "Audio (mp3, ogg, wav, m4a, flac)"
 msgid "Video (mp4, mov, avi, wmv, mkv)"
 msgstr "Video (mp4, mov, avi, wmv, mkv)"
 
-#: includes/Fields/UploadField.php:789
-msgid "Archives (zip, tar, gz, 7z)"
-msgstr "Archive (zip, tar, gz, 7z)"
-
 #: includes/Fields/UploadField.php:795
 msgid "Additional types"
 msgstr "Zusätzliche Typen"
@@ -3359,34 +3276,6 @@ msgstr "Bitte geben Sie eine gültige URL ein (z.B. https://beispiel.de)."
 #: includes/Fields/WebsiteField.php:132
 msgid "Validate URL format"
 msgstr "URL-Format prüfen"
-
-#: includes/Fields/_ExampleField.php:151
-msgid "Example field"
-msgstr "Beispielfeld"
-
-#: includes/Fields/_ExampleField.php:357
-msgid "Please enter a five-digit number."
-msgstr "Bitte geben Sie eine fünfstellige Zahl ein."
-
-#: includes/Fields/_ExampleField.php:755
-msgid "Character limit"
-msgstr "Zeichenlimit"
-
-#: includes/Fields/_ExampleField.php:756
-msgid "Empty = no limit"
-msgstr "Leer = kein Limit"
-
-#: includes/Fields/_ExampleField.php:762
-msgid "Filter type"
-msgstr "Filtertyp"
-
-#: includes/Fields/_ExampleField.php:785
-msgid "Pattern"
-msgstr "Muster"
-
-#: includes/Fields/_ExampleField.php:786
-msgid "One per line"
-msgstr "Eines pro Zeile"
 
 #: includes/Form/FormProcessor.php:48
 msgid "Security check failed."
@@ -3439,8 +3328,8 @@ msgid "SEPA Direct Debit (OpenIBAN)"
 msgstr "SEPA-Lastschrift (OpenIBAN)"
 
 #: includes/Plugin.php:303
-msgid "If you enter an IBAN in a form, it will be transmitted to the OpenIBAN service (openiban.com) for validation and to determine the corresponding BIC. Only the IBAN you entered and the connection data required for technical transmission will be processed. This processing is carried out for the purpose of verifying the bank account information. For more information on data processing, please refer to OpenIBAN's Privacy Policy."
-msgstr "Sofern Sie in einem Formular eine IBAN eingeben, wird diese zur Validierung und zur Ermittlung der zugehörigen BIC an den Dienst OpenIBAN (openiban.com) übermittelt. Es werden ausschließlich die eingegebene IBAN und die zur technischen Übermittlung erforderlichen Verbindungsdaten verarbeitet. Die Verarbeitung erfolgt zum Zweck der Überprüfung der Bankverbindung. Weitere Informationen zur Datenverarbeitung finden Sie in der Datenschutzerklärung von OpenIBAN."
+msgid "If a form on this site uses a SEPA Direct Debit field with live IBAN lookup enabled, the IBAN you type is sent to our server, which then queries the OpenIBAN service (openiban.com) to validate it and determine the corresponding BIC. The request to OpenIBAN is made by our server, not by your browser, so your IP address is not disclosed to OpenIBAN. Only the IBAN itself is transmitted. This processing is carried out for the purpose of verifying the bank account information. Where live lookup is not enabled, no IBAN data leaves this site before you submit the form. For more information on data processing, please refer to OpenIBAN's Privacy Policy."
+msgstr "Wenn ein Formular auf dieser Website ein SEPA-Lastschriftmandat-Feld mit aktivierter Live-IBAN-Abfrage verwendet, wird die von Ihnen eingegebene IBAN an unseren Server gesendet, der anschließend den Dienst OpenIBAN (openiban.com) abfragt, um sie zu validieren und die zugehörige BIC zu ermitteln. Die Anfrage an OpenIBAN erfolgt durch unseren Server, nicht durch Ihren Browser, sodass Ihre IP-Adresse OpenIBAN nicht offengelegt wird. Übertragen wird ausschließlich die IBAN selbst. Diese Verarbeitung erfolgt zum Zweck der Überprüfung der Bankverbindung. Ist die Live-Abfrage nicht aktiviert, verlassen keine IBAN-Daten diese Website, bevor Sie das Formular absenden. Weitere Informationen zur Datenverarbeitung finden Sie in der Datenschutzerklärung von OpenIBAN."
 
 #: includes/Plugin.php:312
 msgid "Google reCAPTCHA"
@@ -3664,6 +3553,10 @@ msgstr "oder"
 msgid "External URL"
 msgstr "Externe URL"
 
+#: includes/Admin/PDFLayoutEditor.php:1151
+msgid "Better to add the image to this site's media library first — an external URL is downloaded into the library on save anyway, and a slow or unreachable host will delay that save."
+msgstr "Das Bild sollte besser zuerst in die Mediathek dieser Website hochgeladen werden — eine externe URL wird beim Speichern ohnehin in die Mediathek heruntergeladen, und ein langsamer oder nicht erreichbarer Host verzögert dieses Speichern."
+
 #: includes/Fields/CaptchaField.php:174
 msgid "This field sends the visitor's CAPTCHA response and IP address to Google (reCAPTCHA) for verification on every submission. Reflect this third-party data transfer in your site's privacy policy."
 msgstr "Dieses Feld sendet bei jeder Übermittlung die CAPTCHA-Antwort und die IP-Adresse des Besuchers zur Überprüfung an Google (reCAPTCHA). Diese Datenübermittlung an Dritte sollte in Ihrer Datenschutzerklärung berücksichtigt werden."
@@ -3679,30 +3572,6 @@ msgstr "BIC automatisch per Live-IBAN-Abfrage ausfüllen"
 #: includes/Fields/UploadField.php:542
 msgid "File type \".%s\" is not permitted for this field."
 msgstr "Dateityp \".%s\" ist für dieses Feld nicht zulässig."
-
-#: includes/PDF/HashSeal.php:301
-msgid "At least 12 characters required."
-msgstr "Mindestens 12 Zeichen erforderlich."
-
-#: includes/PDF/HashSeal.php:304
-msgid "At least one uppercase letter required."
-msgstr "Mindestens ein Großbuchstabe erforderlich."
-
-#: includes/PDF/HashSeal.php:307
-msgid "At least one lowercase letter required."
-msgstr "Mindestens ein Kleinbuchstabe erforderlich."
-
-#: includes/PDF/HashSeal.php:310
-msgid "At least one digit required."
-msgstr "Mindestens eine Ziffer erforderlich."
-
-#: includes/PDF/HashSeal.php:313
-msgid "At least one special character required."
-msgstr "Mindestens ein Sonderzeichen erforderlich."
-
-#: includes/Fields/GdprField.php:137
-msgid "I have read and acknowledge the <a href=\"%1$s\" target=\"_blank\" rel=\"noopener\">%2$s</a>."
-msgstr "Ich habe die <a href=\"%1$s\" target=\"_blank\" rel=\"noopener\">%2$s</a> gelesen und zur Kenntnis genommen."
 
 #: includes/Fields/GdprField.php:154
 msgid "I have read and acknowledge the %s."
@@ -4437,3 +4306,314 @@ msgstr "Die Vorschau konnte nicht erstellt werden — eines der Felder enthält 
 msgid "Could not save this form — one of the fields may contain content the editor could not process (check any HTML blocks for malformed markup). Please review the fields and try again."
 msgstr "Dieses Formular konnte nicht gespeichert werden — eines der Felder enthält möglicherweise Inhalte, die der Editor nicht verarbeiten konnte (prüfen Sie HTML-Blöcke auf fehlerhaftes Markup). Bitte überprüfen Sie die Felder und versuchen Sie es erneut."
 
+#: includes/Admin/Verificationpage.php
+msgid "PASS"
+msgstr "BESTANDEN"
+
+#: includes/Admin/Verificationpage.php
+msgid "Base64:"
+msgstr "Base64:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Image metadata:"
+msgstr "Bild-Metadaten:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Filters:"
+msgstr "Filter:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Width x Height:"
+msgstr "Breite x Hoehe:"
+
+#: includes/Admin/Verificationpage.php
+msgid "BitsPerComponent:"
+msgstr "BitsPerComponent:"
+
+#: includes/Admin/Verificationpage.php
+msgid "ColorSpace:"
+msgstr "Farbraum:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Channels:"
+msgstr "Kanaele:"
+
+#: includes/Admin/Verificationpage.php
+msgid "ImageMask:"
+msgstr "ImageMask:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Decoded size:"
+msgstr "Dekodierte Groesse:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Suspect found:"
+msgstr "Fundstelle:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Suspect is determined as usual."
+msgstr "Fundstelle ist unveraendert."
+
+#: includes/Admin/Verificationpage.php
+msgid "Visual mismatch detected"
+msgstr "Visuelle Abweichung erkannt"
+
+#: includes/Admin/Verificationpage.php
+msgid "Why flagged:"
+msgstr "Grund der Markierung:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Hash method:"
+msgstr "Hash-Methode:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Computed hash:"
+msgstr "Berechneter Hash:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Allowed hashes in seal"
+msgstr "Zulaessige Hashes im Siegel"
+
+#: includes/Admin/Verificationpage.php
+msgid "[Image could not be rendered]"
+msgstr "[Bild konnte nicht gerendert werden]"
+
+#: includes/Admin/Verificationpage.php
+msgid "Image ID:"
+msgstr "Bild-ID:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Colorspace:"
+msgstr "Farbraum:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Decoded length:"
+msgstr "Dekodierte Laenge:"
+
+#: includes/Admin/Verificationpage.php
+msgid "[XObject Scan] No XObjects found."
+msgstr "[XObject-Scan] Keine XObjects gefunden."
+
+#: includes/Fields/CheckboxField.php
+msgid "\"Other\" text limit"
+msgstr "\"Sonstiges\"-Textlimit"
+
+#: includes/Form/FormModel.php
+msgid "%s (Copy)"
+msgstr "%s (Kopie)"
+
+#: includes/Admin/Verificationpage.php
+msgid "Annotation List"
+msgstr "Anmerkungsliste"
+
+#: includes/Admin/Verificationpage.php
+msgid "FAIL"
+msgstr "FEHLGESCHLAGEN"
+
+#: includes/Admin/Verificationpage.php
+msgid "Matched to seal"
+msgstr "Mit Siegel abgeglichen"
+
+#: includes/Admin/Verificationpage.php
+msgid "No annotations found in PDF."
+msgstr "Keine Anmerkungen im PDF gefunden."
+
+#: includes/Fields/UploadField.php
+msgid "Only one file may be uploaded for this field."
+msgstr "Fuer dieses Feld darf nur eine Datei hochgeladen werden."
+
+#: includes/Admin/Verificationpage.php
+msgid "PDF content"
+msgstr "PDF-Inhalt"
+
+#: includes/Admin/Verificationpage.php
+msgid "PDF parsing took too long and was stopped for safety. Please try a smaller or simpler PDF."
+msgstr "Die PDF-Analyse hat zu lange gedauert und wurde aus Sicherheitsgruenden abgebrochen. Bitte versuchen Sie es mit einem kleineren oder einfacheren PDF."
+
+#: includes/Admin/Verificationpage.php
+msgid "Page Count"
+msgstr "Seitenzahl"
+
+#: includes/Admin/PDFLayoutEditor.php
+msgid "Security check failed. Please reload and try again."
+msgstr "Sicherheitspruefung fehlgeschlagen. Bitte laden Sie die Seite neu und versuchen Sie es erneut."
+
+#: includes/Admin/Verificationpage.php
+msgid "Server busy verifying other PDFs right now."
+msgstr "Der Server prueft derzeit andere PDFs."
+
+#: includes/Fields/SepaField.php
+msgid "Signature is a required field."
+msgstr "Unterschrift ist ein Pflichtfeld."
+
+#: includes/Form/FormProcessor.php
+msgid "The server is busy processing other submissions. Please try again in a moment."
+msgstr "Der Server verarbeitet gerade andere Einsendungen. Bitte versuchen Sie es gleich erneut."
+
+#: includes/Admin/Verificationpage.php
+msgid "This PDF needs about %1$d MB to verify, more than this site's %2$d MB budget. Raise it with FABRICATOR_MEMORY_BUDGET_MB in wp-config.php."
+msgstr "Dieses PDF benoetigt zur Pruefung etwa %1$d MB und damit mehr als das Budget dieser Website von %2$d MB. Erhoehen Sie es mit FABRICATOR_MEMORY_BUDGET_MB in wp-config.php."
+
+#: includes/Admin/FormEditor.php
+msgid "This form is currently locked for editing by %s."
+msgstr "Dieses Formular wird derzeit von %s bearbeitet."
+
+#: includes/Fields/UploadField.php
+msgid "Too many files uploaded (maximum: %d)."
+msgstr "Zu viele Dateien hochgeladen (Maximum: %d)."
+
+#: includes/Admin/Verificationpage.php
+msgid "File is not a valid PDF"
+msgstr "Die Datei ist kein gueltiges PDF"
+
+#: includes/Admin/Verificationpage.php
+msgid "Forbidden"
+msgstr "Nicht erlaubt"
+
+#: includes/Admin/Verificationpage.php
+msgid "Invalid PDF path"
+msgstr "Ungueltiger PDF-Pfad"
+
+#: includes/Admin/FormSettings.php
+msgid "Invalid data"
+msgstr "Ungueltige Daten"
+
+#: includes/Admin/FormList.php
+msgid "Invalid data."
+msgstr "Ungueltige Daten."
+
+#: includes/Admin/FormEditor.php
+msgid "Invalid form data"
+msgstr "Ungueltige Formulardaten"
+
+#: includes/Admin/FormEditor.php
+msgid "Invalid form_id"
+msgstr "Ungueltige form_id"
+
+#: includes/Admin/Verificationpage.php
+msgid "Invalid input: missing token"
+msgstr "Ungueltige Eingabe: Token fehlt"
+
+#: includes/Admin/Verificationpage.php
+msgid "Invalid path"
+msgstr "Ungueltiger Pfad"
+
+#: includes/Admin/Verificationpage.php
+msgid "Missing token"
+msgstr "Token fehlt"
+
+#: includes/Admin/Verificationpage.php
+msgid "Nonce verification failed"
+msgstr "Nonce-Pruefung fehlgeschlagen"
+
+#: includes/Admin/FormList.php
+msgid "Nonce verification failed."
+msgstr "Nonce-Pruefung fehlgeschlagen."
+
+#: includes/Admin/Verificationpage.php
+msgid "Not a PDF"
+msgstr "Kein PDF"
+
+#: includes/Admin/Verificationpage.php
+msgid "Output sanitization failed. See server log for details."
+msgstr "Die Bereinigung der Ausgabe ist fehlgeschlagen. Details finden Sie im Server-Log."
+
+#: includes/Admin/Verificationpage.php
+msgid "PDF not found or token expired"
+msgstr "PDF nicht gefunden oder Token abgelaufen"
+
+#: includes/Admin/Verificationpage.php
+msgid "PDF processing produced no output. Check the PHP error log."
+msgstr "Die PDF-Verarbeitung hat keine Ausgabe erzeugt. Pruefen Sie das PHP-Fehlerprotokoll."
+
+#: includes/Admin/PDFLayoutEditor.php
+msgid "Please wait before requesting another preview."
+msgstr "Bitte warten Sie, bevor Sie eine weitere Vorschau anfordern."
+
+#: includes/Admin/Verificationpage.php
+msgid "Please wait before verifying another PDF."
+msgstr "Bitte warten Sie, bevor Sie ein weiteres PDF pruefen."
+
+#: includes/Admin/FormSelectList.php
+msgid "Save failed."
+msgstr "Speichern fehlgeschlagen."
+
+#: includes/Admin/Verificationpage.php
+msgid "Security check failed"
+msgstr "Sicherheitspruefung fehlgeschlagen"
+
+#: includes/Admin/FormSelectList.php
+msgid "Too many items."
+msgstr "Zu viele Eintraege."
+
+#: includes/Admin/PDFLayoutEditor.php:647
+#: includes/Admin/PDFLayoutEditor.php:984
+msgid "Attachment"
+msgstr "Anhang"
+
+#: includes/Admin/PDFLayoutEditor.php:930
+msgid "Sample text for the PDF preview. This paragraph demonstrates how longer free-text entries wrap in the finished document and how much room they take up. It contains several sentences so the preview covers a realistic amount of text, of the kind real form submissions produce."
+msgstr "Beispieltext für die PDF-Vorschau. Dieser Absatz demonstriert, wie längere Freitext-Eingaben im fertigen Dokument umbrechen und wie viel Platz sie einnehmen. Er enthält mehrere Sätze, damit sich die Vorschau über eine realistische Textmenge erstreckt, wie sie auch bei echten Formular-Einsendungen vorkommt."
+
+#: includes/Admin/PDFLayoutEditor.php:935
+msgid "Here follows another sample paragraph with additional notes, so that the preview spans several pages and layout settings such as margins, font size and section order can be judged realistically."
+msgstr "Hier folgt ein weiterer Beispielabsatz mit zusätzlichen Anmerkungen, damit die Vorschau insgesamt mehrere Seiten umfasst und Layout-Einstellungen wie Ränder, Schriftgröße und Abschnittsreihenfolge realistisch beurteilt werden können."
+
+#: includes/Admin/PDFLayoutEditor.php:942
+msgid "Jane"
+msgstr "Erika"
+
+#: includes/Admin/PDFLayoutEditor.php:943
+msgid "Doe"
+msgstr "Mustermann"
+
+#: includes/Admin/PDFLayoutEditor.php:953
+msgid "123 Example Street, 10115 Springfield"
+msgstr "Musterstraße 12, 10115 Berlin"
+
+#: includes/Admin/PDFLayoutEditor.php:955
+msgid "Date of birth"
+msgstr "Geburtsdatum"
+
+#: includes/Admin/PDFLayoutEditor.php:959
+msgid "Membership application"
+msgstr "Mitgliedsantrag"
+
+#: includes/Admin/PDFLayoutEditor.php:963
+msgid "Membership type"
+msgstr "Mitgliedschaftsart"
+
+#: includes/Admin/PDFLayoutEditor.php:964
+msgid "Supporting member"
+msgstr "Fördermitglied"
+
+#: includes/Admin/PDFLayoutEditor.php:969
+msgid "Additional notes"
+msgstr "Zusätzliche Anmerkungen"
+
+#: includes/Admin/PDFLayoutEditor.php:975
+msgid "[Sample signature]"
+msgstr "[Beispielunterschrift]"
+
+#: includes/Fields/NumberField.php:131
+#: includes/Utils/Assets.php:185
+msgid "Please enter a whole number."
+msgstr "Bitte eine ganze Zahl eingeben."
+
+#: includes/Fields/NumberField.php:136
+#: includes/Utils/Assets.php:186
+msgid "Please enter a positive number."
+msgstr "Bitte eine positive Zahl eingeben."
+
+#: includes/Fields/NumberField.php:141
+#: includes/Utils/Assets.php:187
+msgid "Please enter a positive whole number."
+msgstr "Bitte eine positive ganze Zahl eingeben."
+
+#: includes/Fields/TimeField.php:117
+msgid "Please enter a valid time."
+msgstr "Bitte eine gültige Uhrzeit eingeben."
+
+#: includes/Form/FormRenderer.php:151
+msgid "This form requires JavaScript to be enabled in your browser in order to submit."
+msgstr "Zum Absenden dieses Formulars muss JavaScript in Ihrem Browser aktiviert sein."

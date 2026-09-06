@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -25,7 +25,6 @@ use FabricatorForms\Fields\FieldRegistry;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\Admin\FormSettings;
 use FabricatorForms\PDF\Generator;
-use FabricatorForms\PDF\PdfUtils;
 
 defined('ABSPATH') || exit;
 
@@ -110,6 +109,7 @@ class MailSender
         }
 
         /* ---- Generate PDF once ---- */
+        // No memory reservation/limit raise here: FormProcessor::handle() already holds both for this request.
         $pdf_path = Generator::generate($mapped, $form_id, $form->title);
 
         /* ---- Materialize uploads for mail attachment (split by type) ---- */
@@ -119,20 +119,6 @@ class MailSender
             \FabricatorForms\fabricator_log(
                 "FabricatorForms MailSender: PDF generation failed for form {$form_id}"
             );
-        }
-
-        /* Raise the memory ceiling for large multi-file mail assembly; restored right after, below. */
-        $has_attachable_content = ($pdf_path !== false && $pdf_path !== '')
-            || !empty($uploads['images'])
-            || !empty($uploads['others']);
-        $raised_memory_limit = null;
-        if ($has_attachable_content) {
-            $current_limit = PdfUtils::phpMemoryLimitBytes();
-            if ($current_limit !== -1 && $current_limit < 3072 * 1024 * 1024) {
-                $raised_memory_limit = ini_get('memory_limit');
-                // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- legitimate resource-limit raise, mirrors Verificationpage.php's pattern; restored below once the mail loop finishes.
-                @ini_set('memory_limit', '3072M');
-            }
         }
 
         $global_from_email = get_option('fabricator_forms_from_email')
@@ -151,7 +137,7 @@ class MailSender
 
             $to = ($notif['recipient_mode'] ?? 'single') === 'routing'
                 ? self::resolveRoutedRecipient($notif, $mapped, $form)
-                : self::resolveRecipient(\FabricatorForms\Utils\Sanitize::str($notif['to'] ?? null), $mapped, $form);
+                : self::resolveRecipient(\FabricatorForms\Utils\Cast::stringOrDefault($notif['to'] ?? null), $mapped, $form);
             if (empty($to)) {
                 // Don't log $notif['to'] verbatim — in routing mode it's derived from a
                 // submitted field value and could itself be personal data.
@@ -166,26 +152,31 @@ class MailSender
                 || FormSettings::shouldAttachPdf($form_id, $notif['slug'] ?? '');
             $should_attach_uploads = !empty($notif['attach_uploads']);
 
+            // as_html=false: the subject is a header, not markup.
             $subject = self::replacePlaceholders(
-                \FabricatorForms\Utils\Sanitize::str($notif['subject'] ?? null, __('New Submission', 'formfabricator')),
+                \FabricatorForms\Utils\Cast::stringOrDefault($notif['subject'] ?? null, __('New Submission', 'formfabricator')),
                 $mapped,
-                $form
+                $form,
+                false
             );
             $body    = self::buildEmailBody(
-                \FabricatorForms\Utils\Sanitize::str($notif['body'] ?? null),
+                \FabricatorForms\Utils\Cast::stringOrDefault($notif['body'] ?? null),
                 $mapped,
                 $form
             );
 
+            // as_html=false: address and display-name sinks, not markup.
             $notif_email = self::replacePlaceholders(
-                \FabricatorForms\Utils\Sanitize::str($notif['from_email'] ?? null),
+                \FabricatorForms\Utils\Cast::stringOrDefault($notif['from_email'] ?? null),
                 $mapped,
-                $form
+                $form,
+                false
             );
             $notif_name  = self::replacePlaceholders(
-                \FabricatorForms\Utils\Sanitize::str($notif['from_name'] ?? null),
+                \FabricatorForms\Utils\Cast::stringOrDefault($notif['from_name'] ?? null),
                 $mapped,
-                $form
+                $form,
+                false
             );
             $from_email = ('' !== $notif_email && is_email($notif_email))
                 ? $notif_email
@@ -203,12 +194,24 @@ class MailSender
             ];
 
             $reply_to = self::resolveRecipient(
-                \FabricatorForms\Utils\Sanitize::str($notif['reply_to'] ?? null),
+                \FabricatorForms\Utils\Cast::stringOrDefault($notif['reply_to'] ?? null),
                 $mapped,
                 $form
             );
             if ($reply_to) {
                 $headers[] = 'Reply-To: ' . str_replace(["\r", "\n"], '', $reply_to);
+            }
+
+            // Cc/Bcc were persisted but never emitted as headers; each entry validates like To.
+            foreach (['cc' => 'Cc', 'bcc' => 'Bcc'] as $notif_key => $header_name) {
+                $resolved = self::resolveRecipientList(
+                    \FabricatorForms\Utils\Cast::stringOrDefault($notif[$notif_key] ?? null),
+                    $mapped,
+                    $form
+                );
+                if ($resolved !== []) {
+                    $headers[] = $header_name . ': ' . implode(', ', $resolved);
+                }
             }
 
             $attachments = [];
@@ -256,10 +259,6 @@ class MailSender
             );
         }
 
-        if ($raised_memory_limit !== null) {
-            // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the limit raised above, not a new global change.
-            @ini_set('memory_limit', $raised_memory_limit);
-        }
 
         /* ---- Clean up PDF and upload temp dir after all emails sent ---- */
         register_shutdown_function(
@@ -360,9 +359,36 @@ class MailSender
         array $mapped,
         FormModel $form
     ): string {
-        $to = self::replacePlaceholders($to, $mapped, $form);
+        // as_html=false: a recipient address, not markup. See replacePlaceholders().
+        $to = self::replacePlaceholders($to, $mapped, $form, false);
         $to = sanitize_email(trim($to));
         return is_email($to) ? $to : '';
+    }
+
+    /**
+     * Resolves a multi-address field (Cc/Bcc) into a list of validated addresses.
+     *
+     * @param string    $raw    Raw semicolon/comma-separated field value.
+     * @param array     $mapped Mapped submission data.
+     * @param FormModel $form   The form model instance.
+     * @return string[] Validated addresses; empty when none resolve.
+     */
+    private static function resolveRecipientList(
+        string $raw,
+        array $mapped,
+        FormModel $form
+    ): array {
+        if (trim($raw) === '') {
+            return [];
+        }
+        $out = [];
+        foreach (preg_split('/[;,]+/', $raw) ?: [] as $candidate) {
+            $address = self::resolveRecipient(trim($candidate), $mapped, $form);
+            if ($address !== '' && !in_array($address, $out, true)) {
+                $out[] = $address;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -384,7 +410,8 @@ class MailSender
             $email    = self::replacePlaceholders(
                 (string) ($rule['email'] ?? ''),
                 $mapped,
-                $form
+                $form,
+                false
             );
             $email = sanitize_email(trim($email));
             if ($field_id === '' || !is_email($email)) {
@@ -408,7 +435,8 @@ class MailSender
         $fallback = self::replacePlaceholders(
             (string) ($notif['routing_fallback'] ?? ''),
             $mapped,
-            $form
+            $form,
+            false
         );
         $fallback = sanitize_email(trim($fallback));
         return is_email($fallback) ? $fallback : '';
@@ -491,7 +519,8 @@ class MailSender
     private static function replacePlaceholders(
         string $text,
         array $mapped,
-        FormModel $form
+        FormModel $form,
+        bool $as_html = true
     ): string {
         // Build the full token map then substitute via one strtr() pass, so a submitted value containing
         // literal "{token}" text can't get expanded by a later sequential str_replace() re-scan.
@@ -511,18 +540,26 @@ class MailSender
             $handler = FieldRegistry::get($entry['type'] ?? '');
 
             /* Per-field placeholder token. */
-            $raw_val = $entry['value'] ?? '';
-            // rawEmailHtml() fields already passed through wp_kses(), so inject as-is.
-            $safe_val = ($handler && $handler->rawEmailHtml())
-                ? (is_array($raw_val) ? implode('', $raw_val) : (string)$raw_val)
-                : nl2br(esc_html(is_array($raw_val) ? implode(', ', $raw_val) : (string)$raw_val));
-            $safe_lbl = esc_html((string)($entry['label'] ?? ''));
-            if ($safe_lbl !== '') {
-                $token = $inline
-                    ? '<strong>' . $safe_lbl . ':</strong> ' . $safe_val . '<br>'
-                    : '<strong>' . $safe_lbl . '</strong><br>' . $safe_val . '<br><br>';
+            $raw_val   = $entry['value'] ?? '';
+            $plain_val = is_array($raw_val) ? implode(', ', $raw_val) : (string) $raw_val;
+
+            // Both forms are always computed: {all_fields} below needs the matching pair for this context.
+            if ($as_html) {
+                // rawEmailHtml() fields already passed through wp_kses(), so inject as-is.
+                $safe_val = ($handler && $handler->rawEmailHtml())
+                    ? (is_array($raw_val) ? implode('', $raw_val) : (string)$raw_val)
+                    : nl2br(esc_html($plain_val));
+                $safe_lbl = esc_html((string)($entry['label'] ?? ''));
+                $token    = $safe_lbl !== ''
+                    ? ($inline
+                        ? '<strong>' . $safe_lbl . ':</strong> ' . $safe_val . '<br>'
+                        : '<strong>' . $safe_lbl . '</strong><br>' . $safe_val . '<br><br>')
+                    : $safe_val;
             } else {
-                $token = $safe_val;
+                // Plain-text sink (address/subject/From name): HTML markup here survived sanitize_email()/is_email() and got mailed to a garbage address.
+                $safe_val = $plain_val;
+                $safe_lbl = (string) ($entry['label'] ?? '');
+                $token    = $plain_val;
             }
             $token_key = '{' . $key . '}';
             if (!in_array($token_key, $reserved_tokens, true) && !isset($tokens[$token_key])) {
@@ -551,9 +588,14 @@ class MailSender
                 }
                 $label = $entry['label'] ?? '';
                 if ($label !== '') {
-                    $all .= $inline
-                        ? '<strong>' . $safe_lbl . ':</strong> ' . $safe_val . '<br>'
-                        : '<strong>' . $safe_lbl . '</strong><br>' . $safe_val . '<br><br>';
+                    if ($as_html) {
+                        $all .= $inline
+                            ? '<strong>' . $safe_lbl . ':</strong> ' . $safe_val . '<br>'
+                            : '<strong>' . $safe_lbl . '</strong><br>' . $safe_val . '<br><br>';
+                    } else {
+                        // Plain-text {all_fields} (e.g. in a subject line): no markup at all.
+                        $all .= $safe_lbl . ': ' . $safe_val . "\n";
+                    }
                 } elseif ($handler && $handler->rawEmailHtml()) {
                     // Unlabeled HTML blocks still appear (e.g. banners), unlike other unlabeled fields.
                     $all .= $safe_val;

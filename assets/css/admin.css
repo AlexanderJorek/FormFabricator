@@ -2357,12 +2357,6 @@
     resize: vertical;
 }
 
-/* type=text inputs rendered as password fields */
-.fabricator-fake-password {
-    -webkit-text-security: disc;
-    font-family: monospace;
-}
-
 .fabricator-reset-header {
     display: flex;
     align-items: flex-start;
@@ -4380,41 +4374,6 @@
 .fabricator-key-badge--legacy {
     background: #1a56db;
     color: #fff;
-}
-
-.fabricator-key-strength-bar {
-    display: flex;
-    gap: 4px;
-    margin-top: 6px;
-}
-.fabricator-key-strength-bar span {
-    flex: 1;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--fabricator-border-light);
-    transition: background .2s;
-}
-
-.fabricator-key-bar-1 { background: var(--fabricator-danger-dark) !important; }
-.fabricator-key-bar-2 { background: #d97706 !important; }
-.fabricator-key-bar-3 { background: #d97706 !important; }
-.fabricator-key-bar-4 { background: #15803d !important; }
-.fabricator-key-bar-5 { background: #15803d !important; }
-
-.fabricator-key-pw-errors {
-    margin: 4px 0 0;
-    padding: 0;
-    list-style: none;
-}
-.fabricator-key-pw-errors li {
-    font-size: 11px;
-    color: var(--fabricator-danger-dark);
-    padding: 1px 0;
-}
-.fabricator-key-pw-errors li::before {
-    content: '\f00d  ';
-    font-family: 'Font Awesome 6 Free';
-    font-weight: 900;
 }
 
 .fabricator-key-compromised-hint {

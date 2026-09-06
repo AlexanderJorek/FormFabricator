@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -207,6 +207,12 @@ class HtmlField extends BaseField
             },
             $html
         );
+        // Renames a colliding name="fabricator_hp_field" so it can't trip the anti-bot honeypot.
+        $html = preg_replace(
+            '/(\sname\s*=\s*)(["\'])fabricator_hp_field\2/i',
+            '$1$2fabricator_hp_field_renamed$2',
+            $html
+        );
         return $html;
     }
 
@@ -300,10 +306,14 @@ class HtmlField extends BaseField
             if (stripos($url, 'data:') === 0) {
                 return true;
             }
-            // Relative/local paths (no scheme, no leading //) resolve on this
-            // server's filesystem via mPDF's local-path handling, not a remote fetch.
+            // Scheme-less: only relative paths with no ../ traversal or absolute-path escape allowed.
             if (!preg_match('#^([a-z][a-z0-9+.\-]*:)?//#i', $url) && !preg_match('#^[a-z][a-z0-9+.\-]*:#i', $url)) {
-                return true;
+                $decoded_path = rawurldecode($url);
+                $is_absolute  = str_starts_with($decoded_path, '/')
+                    || str_starts_with($decoded_path, chr(92))
+                    || preg_match('#^[A-Za-z]:[\\\\/]#', $decoded_path) === 1;
+                $has_traversal = preg_match('#(^|[\\\\/])\.\.([\\\\/]|$)#', $decoded_path) === 1;
+                return !$is_absolute && !$has_traversal;
             }
             $host = wp_parse_url($url, PHP_URL_HOST);
             return $host !== null && $home_host !== '' && strcasecmp($host, $home_host) === 0;

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -95,7 +95,13 @@ class FormProcessor
         }
 
         /* ---- Honeypot check (before any expensive work) ---- */
+        // Logged because an autofilling browser/password manager can silently drop a real visitor's submission here.
         if (!empty($_POST['fabricator_hp_field'])) {
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms FormProcessor: honeypot triggered for form ' . $form_id
+                . ' — submission discarded. If a real visitor reports a lost submission, an'
+                . ' autofilling browser/password manager filling the hidden field is the likely cause.'
+            );
             $hp_msg = $form->settings['success_message'] ?? __('Thank you for your submission!', 'formfabricator');
             wp_send_json_success(['message' => $hp_msg]);
         }
@@ -256,8 +262,11 @@ class FormProcessor
                             : $child_id;
 
                         if (!empty($child_cfg['required']) && $val === '') {
+                            // Not esc_html()'d — matches BaseField::validate(), whose error message
+                            // this mirrors: front.js only ever shows it via .textContent, so
+                            // escaping here would double-encode it into visible literal entities.
                             // translators: %s: field label.
-                            $errors[$ekey] = sprintf(__('%s is a required field.', 'formfabricator'), esc_html($child_cfg['label'] ?? $child_id));
+                            $errors[$ekey] = sprintf(__('%s is a required field.', 'formfabricator'), $child_cfg['label'] ?? $child_id);
                         } else {
                             $child_cfg['field_id'] = $child_id;
                             $result = $ch->validate($val, $child_cfg);
@@ -282,14 +291,47 @@ class FormProcessor
             wp_send_json_error(['message' => __('Please correct the highlighted fields.', 'formfabricator'), 'errors' => $errors], 422);
         }
 
+        /* ---- Reserve memory against the shared host budget ----
+           Sized to this submission's real upload payload, and placed before the token claim below
+           so a rejected visitor can retry with the same token instead of being locked out. */
+        $mem_estimate = \FabricatorForms\Utils\MemoryBudget::estimateBytes(self::uploadPayloadBytes());
+        $mem_token    = \FabricatorForms\Utils\MemoryBudget::reserve($mem_estimate, 300);
+        if ($mem_token === false) {
+            \FabricatorForms\fabricator_log(
+                sprintf(
+                    'FabricatorForms FormProcessor: memory budget unavailable for form %d '
+                    . '(needed %dMB, budget %dMB, %dMB already reserved). If this host has headroom, '
+                    . 'raise it with FABRICATOR_MEMORY_BUDGET_MB in wp-config.php.',
+                    $form_id,
+                    (int) round($mem_estimate / 1048576),
+                    (int) round(\FabricatorForms\Utils\MemoryBudget::budgetBytes() / 1048576),
+                    (int) round(\FabricatorForms\Utils\MemoryBudget::reservedBytes() / 1048576)
+                )
+            );
+            wp_send_json_error(
+                [
+                    'message'     => __('The server is busy processing other submissions. Please try again in a moment.', 'formfabricator'),
+                    'retry_after' => 15,
+                ],
+                429
+            );
+        }
+
+        // Held for the rest of the request; released on shutdown so a fatal mid-render can't leak
+        // the reservation (the row's own TTL is the backstop if even shutdown doesn't run).
+        $mem_restore = \FabricatorForms\Utils\MemoryBudget::raiseTo($mem_estimate);
+        register_shutdown_function(
+            static function () use ($mem_token, $mem_restore): void {
+                \FabricatorForms\Utils\MemoryBudget::releaseReservation($mem_token);
+                \FabricatorForms\Utils\MemoryBudget::restore($mem_restore);
+            }
+        );
+
         /* ---- Map to human-readable for PDF/email ---- */
         /* $flat is already built; use it to remove hidden field entries. */
         $hidden_ids = self::collectHiddenIds($form->fields, $flat, $raw);
-        $mapped     = FieldRegistry::mapSubmission($form->fields, $raw, $_FILES);
-
-        foreach ($hidden_ids as $hid) {
-            unset($mapped[$hid]);
-        }
+        // Passed IN rather than unset after: a hidden upload was otherwise read/base64-encoded before validate() ever ran.
+        $mapped     = FieldRegistry::mapSubmission($form->fields, $raw, $_FILES, $hidden_ids);
 
         /* ---- Claim the replay-protection token ---- */
         // Placed right before the side-effecting action so earlier validation failures can retry without touching the claim table.
@@ -301,8 +343,36 @@ class FormProcessor
         do_action('fabricator_forms_submission', $form_id, $mapped, $form);
 
         /* ---- Respond ---- */
-        $success_msg = esc_html($form->settings['success_message'] ?? __('Thank you for your submission!', 'formfabricator'));
+        // Not esc_html()'d: front.js inserts this via .textContent only, and double-escaping showed literal HTML entities.
+        $success_msg = $form->settings['success_message'] ?? __('Thank you for your submission!', 'formfabricator');
         wp_send_json_success(['message' => $success_msg]);
+    }
+
+    /**
+     * Total bytes of uploaded files in this request, used to size the memory reservation.
+     *
+     * Uses PHP's own $_FILES['size'] (can't be understated by a crafted client); signature/SEPA
+     * data URIs are excluded since post_max_size, not this reservation, already bounds those.
+     *
+     * @return int Sum of uploaded file sizes in bytes.
+     */
+    private static function uploadPayloadBytes(): int
+    {
+        $total = 0;
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- reached only after wp_verify_nonce() succeeded at the top of handle(); reads PHP-generated size metadata, not user text.
+        foreach ($_FILES as $file) {
+            if (!is_array($file) || !isset($file['size'])) {
+                continue;
+            }
+            if (is_array($file['size'])) {
+                foreach ($file['size'] as $size) {
+                    $total += max(0, (int) $size);
+                }
+                continue;
+            }
+            $total += max(0, (int) $file['size']);
+        }
+        return $total;
     }
 
     /**
@@ -320,7 +390,7 @@ class FormProcessor
             \FabricatorForms\fabricator_log(
                 'FabricatorForms rateLimitRetryAfter: fail-closed — ClientIp::resolve() '
                 . 'returned empty for form ' . $form_id . '. REMOTE_ADDR='
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- diagnostic log line only (WP_DEBUG-gated via fabricator_log()), never echoed/stored; not a security-relevant use of this value.
+                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- diagnostic log only (WP_DEBUG-gated), never echoed/stored.
                 . (isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '(unset)')
             );
             return 5 * MINUTE_IN_SECONDS;
@@ -444,8 +514,10 @@ class FormProcessor
             unset($val['__other_text__']);
         }
         $isArr = is_array($val);
-        $str   = $isArr ? strtolower(implode(',', $val)) : strtolower((string)$val);
-        $lower = $isArr ? array_map('strtolower', $val) : [];
+        // Coerces to strings first: a crafted nested-array POST (e.g. checkboxfield[0][0]=x) would otherwise TypeError strtolower().
+        $scalars = $isArr ? array_map(static fn($v) => is_scalar($v) ? (string)$v : '', $val) : [];
+        $str     = $isArr ? strtolower(implode(',', $scalars)) : strtolower((string)$val);
+        $lower   = $isArr ? array_map('strtolower', $scalars) : [];
 
         return match ($op) {
             'equals'       => $isArr ? in_array($rv, $lower, strict: true) : $str === $rv,

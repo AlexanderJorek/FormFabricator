@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -121,10 +121,7 @@ class PDFLayoutEditor
      */
     public static function ajaxUnlock(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
-        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::require('edit_pdf_layout', 'fabricator_forms_admin_nonce', 'nonce');
         \FabricatorForms\Utils\AdminLock::release('pdf_layout', get_current_user_id());
         wp_send_json_success();
     }
@@ -136,23 +133,21 @@ class PDFLayoutEditor
      */
     public static function ajaxPreview(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
-        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::require('edit_pdf_layout', 'fabricator_forms_admin_nonce', 'nonce');
 
         /* ---- Rate limit: PDF generation is expensive; throttle per-user preview requests. ---- */
         $rl_key = 'pdf_layout_preview_' . get_current_user_id();
         if (\FabricatorForms\Utils\RateLimiter::increment($rl_key, 5) > 5) {
-            wp_send_json_error(['message' => 'Please wait before requesting another preview.'], 429);
+            wp_send_json_error(['message' => __('Please wait before requesting another preview.', 'formfabricator')], 429);
         }
 
         /* Use live settings from the request so the user doesn't have to save first */
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         if (!empty($_POST['settings'])) {
             /* wp_unslash is required — WordPress's wp_magic_quotes() slashes all $_POST values */
             // json_decode() itself doesn't sanitize — every key read from $raw below is sanitized individually before use.
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via the outer sanitize_textarea_field() call; WPCS loses track through the intermediate Sanitize::str() static call.
-            $raw = json_decode(sanitize_textarea_field(\FabricatorForms\Utils\Sanitize::str(wp_unslash($_POST['settings'] ?? ''))), true);
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+            $raw = json_decode(sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['settings'] ?? ''))), true);
             if (!is_array($raw)) {
                 \FabricatorForms\fabricator_log('ajaxPreview: settings JSON decode failed — ' . json_last_error_msg());
             }
@@ -160,14 +155,14 @@ class PDFLayoutEditor
                 $defs = self::defaults();
                 $sanitized_hl = self::sanitizeHeaderLayout((array) ($raw['header_layout'] ?? []), false);
                 $preview_opts = [
-                    'logo_url'        => esc_url_raw(\FabricatorForms\Utils\Sanitize::str($raw['logo_url'] ?? '')),
+                    'logo_url'        => esc_url_raw(\FabricatorForms\Utils\Cast::stringOrDefault($raw['logo_url'] ?? '')),
                     'logo_width'      => min(400, max(40, (int) ($raw['logo_width']     ?? 180))),
-                    'accent_color'    => sanitize_hex_color(\FabricatorForms\Utils\Sanitize::str($raw['accent_color']    ?? '')) ?: $defs['accent_color'],
-                    'separator_color' => sanitize_hex_color(\FabricatorForms\Utils\Sanitize::str($raw['separator_color'] ?? '')) ?: $defs['separator_color'],
-                    'font_family'     => sanitize_key(\FabricatorForms\Utils\Sanitize::str($raw['font_family'] ?? '', 'dejavusans')),
+                    'accent_color'    => sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault($raw['accent_color']    ?? '')) ?: $defs['accent_color'],
+                    'separator_color' => sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault($raw['separator_color'] ?? '')) ?: $defs['separator_color'],
+                    'font_family'     => sanitize_key(\FabricatorForms\Utils\Cast::stringOrDefault($raw['font_family'] ?? '', 'dejavusans')),
                     'font_size_body'  => min(20, max(6, (int) ($raw['font_size_body'] ?? 11))),
                     'title_size'      => min(36, max(10, (int) ($raw['title_size']     ?? 14))),
-                    'footer_text'     => sanitize_textarea_field(\FabricatorForms\Utils\Sanitize::str($raw['footer_text'] ?? '')),
+                    'footer_text'     => sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault($raw['footer_text'] ?? '')),
                     'margin_top'      => min(50, max(0, (int) ($raw['margin_top']    ?? 15))),
                     'margin_bottom'   => min(50, max(0, (int) ($raw['margin_bottom'] ?? 15))),
                     'margin_left'     => min(50, max(0, (int) ($raw['margin_left']   ?? 15))),
@@ -633,6 +628,10 @@ class PDFLayoutEditor
             'created'            => __('Created:', 'formfabricator'),
             'errorSaving'        => __('Error saving.', 'formfabricator'),
             'externalUrl'        => __('External URL', 'formfabricator'),
+            'externalUrlHint'    => __(
+                'Better to add the image to this site\'s media library first — an external URL is downloaded into the library on save anyway, and a slow or unreachable host will delay that save.',
+                'formfabricator'
+            ),
             'formLabel'          => __('Form:', 'formfabricator'),
             'generating'         => __('Generating…', 'formfabricator'),
             'imageUrl'           => __('Image URL:', 'formfabricator'),
@@ -643,6 +642,9 @@ class PDFLayoutEditor
                 'formfabricator'
             ),
             'metadata'           => __('Metadata', 'formfabricator'),
+            // Sample-submission labels for the live preview; mirror dummyFields()'s equivalents.
+            'sampleSignature'    => __('Signature', 'formfabricator'),
+            'sampleAttachment'   => __('Attachment', 'formfabricator'),
             'networkError'       => __('Network error', 'formfabricator'),
             'saving'             => __('Saving…', 'formfabricator'),
             'selectImage'        => __('Select image', 'formfabricator'),
@@ -685,9 +687,7 @@ class PDFLayoutEditor
                 'toEdit'            => __('to edit', 'formfabricator'),
                 'deleteElement'     => __('Delete element', 'formfabricator'),
                 'orEnterUrl'        => __('or enter a URL …', 'formfabricator'),
-                // Canvas element-type badges (hbMakeNode()) — reuse the same msgids as
-                // the toolbar's "Title"/"Image" buttons above; 'elHtml' is a new, plain
-                // "HTML" label distinct from the 'htmlCode' textarea field label.
+                // Canvas element-type badges (hbMakeNode()) — 'elHtml' is distinct from the 'htmlCode' textarea field label.
                 'elTitle'           => __('Title', 'formfabricator'),
                 'elImage'           => __('Image', 'formfabricator'),
                 'elHtml'            => __('HTML', 'formfabricator'),
@@ -702,10 +702,7 @@ class PDFLayoutEditor
      */
     public static function handleSave(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
-        check_ajax_referer('fabricator_pdf_layout', 'fabricator_pdf_layout_nonce');
+        \FabricatorForms\Utils\AjaxGuard::require('edit_pdf_layout', 'fabricator_pdf_layout', 'fabricator_pdf_layout_nonce');
         $error = self::save();
         if ($error !== '') {
             wp_send_json_error(['message' => $error], 409);
@@ -818,7 +815,26 @@ class PDFLayoutEditor
         require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/image.php';
 
-        $attachment_id = media_sideload_image($src, 0, null, 'id');
+        /* Lightest viable sideload: the PDF renderer only ever reads the ORIGINAL file
+           (layout.php resolves attachment_url_to_postid() -> get_attached_file()), so the
+           thumbnail/medium/large/scaled derivatives WordPress would normally generate are pure
+           cost here — several image decodes and re-encodes plus extra files on disk, per image,
+           during a synchronous admin save. Suppressing them for the duration of this one call
+           keeps the attachment (and its media-library entry) while skipping all of that. */
+        $suppress_sizes = static function (): array {
+            return [];
+        };
+        add_filter('intermediate_image_sizes_advanced', $suppress_sizes, PHP_INT_MAX);
+        add_filter('big_image_size_threshold', '__return_false', PHP_INT_MAX);
+        try {
+            $attachment_id = media_sideload_image($src, 0, null, 'id');
+        } finally {
+            // finally: a sideload throwing must not leave these filters attached for the rest
+            // of the request, where they'd silently break unrelated media uploads.
+            remove_filter('intermediate_image_sizes_advanced', $suppress_sizes, PHP_INT_MAX);
+            remove_filter('big_image_size_threshold', '__return_false', PHP_INT_MAX);
+        }
+
         if (is_wp_error($attachment_id)) {
             \FabricatorForms\fabricator_log(
                 'FabricatorForms PDFLayoutEditor: failed to sideload header image '
@@ -842,13 +858,23 @@ class PDFLayoutEditor
      */
     private static function sanitizeHeaderLayout(array $raw, bool $persist = false): array
     {
+        /* ACCEPTED RISK (reviewed, deliberate — do not "fix" without asking):
+           the element list is intentionally uncapped, so a save posting N image elements with N
+           distinct external URLs issues N media_sideload_image() fetches. Reaching that state
+           requires the edit_pdf_layout capability and a hand-crafted request; the realistic
+           misuse is someone pasting a lot of URLs, which the picker's hint steers away from, and
+           resolveImageSrc() keeps each fetch as cheap as possible. Judged not worth a cap that
+           would reject or silently truncate a legitimate (if unusual) header layout. */
         $rows = min(30, max(2, (int) ($raw['rows'] ?? 8)));
         $elements = [];
         foreach ((array) ($raw['elements'] ?? []) as $el) {
             // 'type'/'id' are normally strings but nothing guarantees that; sanitize_key()'s strict type hint throws on an array/object value.
             $el_type = $el['type'] ?? '';
             $type = sanitize_key(is_string($el_type) ? $el_type : '');
-            if (!in_array($type, ['title', 'image', 'html'], true)) {
+            /* 'html' is deliberately absent: the header builder offers only Title and Image, and
+               layout.php's header renderer handles only those two — an 'html' element was
+               accepted and stored here but then silently never drawn in the PDF. */
+            if (!in_array($type, ['title', 'image'], true)) {
                 continue;
             }
             $el_id = $el['id'] ?? 'e1';
@@ -880,16 +906,14 @@ class PDFLayoutEditor
                 $item['size']  = min(72, max(6, (int) ($el['size'] ?? 18)));
                 $item['bold']  = !empty($el['bold']);
                 $item['align'] = in_array($el['align'] ?? '', ['left', 'center', 'right'], true) ? $el['align'] : 'left';
-                $item['color'] = sanitize_hex_color(\FabricatorForms\Utils\Sanitize::str($el['color'] ?? '')) ?: '#1d2327';
+                $item['color'] = sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault($el['color'] ?? '')) ?: '#1d2327';
             } elseif ($type === 'image') {
-                $src = self::resolveImageSrc(esc_url_raw(\FabricatorForms\Utils\Sanitize::str($el['src'] ?? '')), $persist);
+                $src = self::resolveImageSrc(esc_url_raw(\FabricatorForms\Utils\Cast::stringOrDefault($el['src'] ?? '')), $persist);
                 if ($src === '') {
                     continue;
                 }
                 $item['src'] = $src;
                 $item['fit'] = in_array($el['fit'] ?? '', ['contain', 'cover', 'fill'], true) ? $el['fit'] : 'contain';
-            } elseif ($type === 'html') {
-                $item['html'] = wp_kses_post(\FabricatorForms\Utils\Sanitize::str($el['html'] ?? ''));
             }
             $elements[] = $item;
         }
@@ -903,61 +927,64 @@ class PDFLayoutEditor
      */
     public static function dummyFields(): array
     {
-        $nachricht = 'Beispieltext für die PDF-Vorschau. Dieser Absatz '
-            . 'demonstriert, wie längere Freitext-Eingaben im fertigen '
-            . 'Dokument umbrechen und wie viel Platz sie einnehmen. Er '
-            . 'enthält mehrere Sätze, damit sich die Vorschau über eine '
-            . 'realistische Textmenge erstreckt, wie sie auch bei echten '
-            . 'Formular-Einsendungen vorkommt.';
-        $anmerkungen = 'Hier folgt ein weiterer Beispielabsatz mit '
-            . 'zusätzlichen Anmerkungen, damit die Vorschau insgesamt '
-            . 'mehrere Seiten umfasst und Layout-Einstellungen wie Ränder, '
-            . 'Schriftgröße und Abschnittsreihenfolge realistisch '
-            . 'beurteilt werden können.';
+        $message = __(
+            // phpcs:ignore Generic.Files.LineLength -- single string literal so WordPress i18n tooling extracts it correctly.
+            'Sample text for the PDF preview. This paragraph demonstrates how longer free-text entries wrap in the finished document and how much room they take up. It contains several sentences so the preview covers a realistic amount of text, of the kind real form submissions produce.',
+            'formfabricator'
+        );
+        $notes = __(
+            // phpcs:ignore Generic.Files.LineLength -- single string literal so WordPress i18n tooling extracts it correctly.
+            'Here follows another sample paragraph with additional notes, so that the preview spans several pages and layout settings such as margins, font size and section order can be judged realistically.',
+            'formfabricator'
+        );
 
         return [
-            ['type' => 'text', 'label' => 'Vorname', 'value' => 'Max'],
-            ['type' => 'text', 'label' => 'Nachname', 'value' => 'Mustermann'],
+            ['type' => 'text', 'label' => __('First name', 'formfabricator'), 'value' => __('Jane', 'formfabricator')],
+            ['type' => 'text', 'label' => __('Last name', 'formfabricator'), 'value' => __('Doe', 'formfabricator')],
             [
                 'type'  => 'email',
-                'label' => 'E-Mail',
-                'value' => 'max.mustermann@example.de',
+                'label' => __('Email', 'formfabricator'),
+                'value' => 'jane.doe@example.com',
             ],
-            ['type' => 'text', 'label' => 'Telefon', 'value' => '+49 151 23456789'],
+            ['type' => 'text', 'label' => __('Phone', 'formfabricator'), 'value' => '+1 555 0123456'],
             [
                 'type'  => 'text',
-                'label' => 'Anschrift',
-                'value' => 'Musterstraße 12, 10115 Berlin',
+                'label' => __('Address', 'formfabricator'),
+                'value' => __('123 Example Street, 10115 Springfield', 'formfabricator'),
             ],
-            ['type' => 'text', 'label' => 'Geburtsdatum', 'value' => '14.03.1990'],
-            ['type' => 'text', 'label' => 'Anliegen', 'value' => 'Mitgliedsantrag'],
+            ['type' => 'text', 'label' => __('Date of birth', 'formfabricator'), 'value' => '14.03.1990'],
             [
                 'type'  => 'text',
-                'label' => 'Mitgliedschaftsart',
-                'value' => 'Fördermitglied',
+                'label' => __('Subject', 'formfabricator'),
+                'value' => __('Membership application', 'formfabricator'),
             ],
-            ['type' => 'textarea', 'label' => 'Nachricht', 'value' => $nachricht],
+            [
+                'type'  => 'text',
+                'label' => __('Membership type', 'formfabricator'),
+                'value' => __('Supporting member', 'formfabricator'),
+            ],
+            ['type' => 'textarea', 'label' => __('Message', 'formfabricator'), 'value' => $message],
             [
                 'type'  => 'textarea',
-                'label' => 'Zusätzliche Anmerkungen',
-                'value' => $anmerkungen,
+                'label' => __('Additional notes', 'formfabricator'),
+                'value' => $notes,
             ],
             [
                 'type'  => 'signature',
-                'label' => 'Unterschrift',
-                'value' => '[Beispielunterschrift]',
+                'label' => __('Signature', 'formfabricator'),
+                'value' => __('[Sample signature]', 'formfabricator'),
                 'materialized_files' => [[
-                    'name'   => 'unterschrift.png',
+                    'name'   => 'signature.png',
                     'mime'   => 'image/png',
                     'base64' => self::dummySignaturePng(),
                 ]],
             ],
             [
                 'type'  => 'upload',
-                'label' => 'Anhang',
-                'value' => 'beispiel-dokument.png',
+                'label' => __('Attachment', 'formfabricator'),
+                'value' => 'sample-document.png',
                 'materialized_files' => [[
-                    'name'   => 'beispiel-dokument.png',
+                    'name'   => 'sample-document.png',
                     'mime'   => 'image/png',
                     'base64' => self::dummyUploadPng(),
                 ]],

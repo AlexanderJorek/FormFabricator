@@ -5,19 +5,9 @@ function (fieldEl) {
     var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))
         return (_i18n && _i18n.email_invalid) || 'Please enter a valid email address.';
-    var mode = inp.dataset.filterMode || '';
-    if (!mode) return null;
-    var list = JSON.parse(inp.dataset.filterPatterns || '[]');
-    var matched = list.some(function (pat) {
-        var re = new RegExp(
-            '^' + pat.toLowerCase()
-                .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-                .replace(/\*/g, '.*') + '$'
-        );
-        return re.test(v);
-    });
-    var blockedMsg = (_i18n && _i18n.email_not_allowed) || 'This email address is not allowed.';
-    if (mode === 'allow' && !matched) return blockedMsg;
-    if (mode === 'block' &&  matched) return blockedMsg;
+    // Allow/block pattern matching is intentionally NOT replicated here — the admin-configured
+    // pattern list can encode internal/partner/competitor domain names and must not be exposed
+    // to the client (see EmailField::render()). validate() server-side is the sole, authoritative
+    // enforcement of filter_mode/filter_patterns; a filtered address is only caught on submit.
     return null;
 }

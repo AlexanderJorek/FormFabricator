@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -80,37 +80,7 @@ class DateField extends BaseField
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'date-format', 'fn' => 'function (fieldEl) {'
-            . "\n" .
-            '    var inp = fieldEl.querySelector(\'.fabricator-date-text\');'
-            . "\n" .
-            '    if (!inp || !inp.value.trim()) return null;'
-            . "\n" .
-            '    var v = inp.value.trim();'
-            . "\n" .
-            '    var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;'
-            . "\n" .
-            '    if (!/^\\d{2}\\.\\d{2}\\.\\d{4}$/.test(v))'
-            . "\n" .
-            '        return (_i18n && _i18n.date_invalid_format) || \'Please enter a date in DD.MM.YYYY format.\';'
-            . "\n" .
-            '    var p  = v.split(\'.\');'
-            . "\n" .
-            '    var d  = parseInt(p[0], 10);'
-            . "\n" .
-            '    var m  = parseInt(p[1], 10);'
-            . "\n" .
-            '    var y  = parseInt(p[2], 10);'
-            . "\n" .
-            '    var dt = new Date(y, m - 1, d);'
-            . "\n" .
-            '    if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d)'
-            . "\n" .
-            '        return (_i18n && _i18n.date_invalid_date) || \'Please enter a valid date.\';'
-            . "\n" .
-            '    return null;'
-            . "\n" .
-            '}']];
+        return [['rule' => 'date-format', 'fn' => self::readFieldAsset('assets/js/fields/DateField.date-format.js')]];
     }
 
     /**
@@ -172,7 +142,7 @@ class DateField extends BaseField
             if (!empty($config['required'])) {
                 $label = $config['label'] ?? __('Date', 'formfabricator');
                 // translators: %s: field label.
-                return sprintf(__('%s: Required field.', 'formfabricator'), esc_html($label));
+                return sprintf(__('%s: Required field.', 'formfabricator'), $label);
             }
             return true;
         }

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -136,7 +136,56 @@ class CaptchaField extends BaseField
         if (empty($data['success'])) {
             return __('Please confirm the CAPTCHA.', 'formfabricator');
         }
+        // Prevents a token minted on another site sharing the same reCAPTCHA site key from verifying here.
+        $allowed_hosts = self::allowedCaptchaHosts();
+        $reported_host = strtolower(trim((string) ($data['hostname'] ?? '')));
+        if (!empty($allowed_hosts) && !in_array($reported_host, $allowed_hosts, true)) {
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms CaptchaField: reCAPTCHA hostname mismatch — allowed "'
+                . implode(', ', $allowed_hosts) . '", got "' . $reported_host . '". If this site is '
+                . 'reachable on a hostname not listed, add it via the fabricator_recaptcha_allowed_hosts filter.'
+            );
+            return __('Please confirm the CAPTCHA.', 'formfabricator');
+        }
         return true;
+    }
+
+    /**
+     * Hostnames a reCAPTCHA token may legitimately have been minted on (apex + www by default).
+     *
+     * @return string[] Lowercased hostnames; empty disables the check entirely.
+     */
+    private static function allowedCaptchaHosts(): array
+    {
+        $home = strtolower((string) wp_parse_url(home_url(), PHP_URL_HOST));
+        $hosts = [];
+        if ($home !== '') {
+            $hosts[] = $home;
+            $hosts[] = str_starts_with($home, 'www.') ? substr($home, 4) : 'www.' . $home;
+        }
+
+        /**
+         * Filters the hostnames accepted in a reCAPTCHA siteverify response; empty disables the check.
+         *
+         * @param string[] $hosts Default: the home_url() host plus its apex/www counterpart.
+         */
+        // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- already lowercase/underscored.
+        $filtered = apply_filters('fabricator_recaptcha_allowed_hosts', $hosts);
+
+        if (!is_array($filtered)) {
+            return $hosts;
+        }
+        $out = [];
+        foreach ($filtered as $host) {
+            if (!is_string($host)) {
+                continue;
+            }
+            $host = strtolower(trim($host));
+            if ($host !== '') {
+                $out[] = $host;
+            }
+        }
+        return array_values(array_unique($out));
     }
 
     /**

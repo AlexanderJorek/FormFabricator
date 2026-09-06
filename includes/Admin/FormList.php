@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -216,9 +216,14 @@ class FormList
                         $edit_url  = admin_url('admin.php?page=fabricator-forms-editor&form_id=' . $form->id);
                         $shortcode = '[fabricator_form id="' . $form->id . '"]';
                         $count     = count($form->fields);
-                        $del_nonce = wp_create_nonce('fabricator_forms_delete_' . $form->id);
-                        $dup_nonce = wp_create_nonce('fabricator_forms_duplicate_' . $form->id);
-                        $exp_nonce = wp_create_nonce('fabricator_forms_export_' . $form->id);
+                        /* Minted only for users who can actually perform the action. Each handler
+                           re-checks its own capability, so this is defence in depth rather than
+                           the control itself — but handing a view-only user an export nonce is
+                           what made the capability mismatch above reachable in the first place. */
+                        $can_edit  = \FabricatorForms\Plugin::userCan('edit_forms');
+                        $del_nonce = $can_edit ? wp_create_nonce('fabricator_forms_delete_' . $form->id) : '';
+                        $dup_nonce = $can_edit ? wp_create_nonce('fabricator_forms_duplicate_' . $form->id) : '';
+                        $exp_nonce = $can_edit ? wp_create_nonce('fabricator_forms_export_' . $form->id) : '';
                         ?>
                         <div class="fabricator-form-row" data-title="<?php echo esc_attr(strtolower($form->title)); ?>">
                             <label class="fabricator-row-check-wrap">
@@ -336,12 +341,10 @@ class FormList
     {
         // wp_send_json_error() terminates the request via wp_die(), so execution
         // never falls through past a failed check below (no explicit return needed).
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
         $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
         if (!$form_id || !check_ajax_referer('fabricator_forms_delete_' . $form_id, 'nonce', false)) {
-            wp_send_json_error(['message' => 'Nonce verification failed.'], 403);
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
         FormModel::delete($form_id, true);
         wp_send_json_success(['message' => __('Form deleted.', 'formfabricator')]);
@@ -427,12 +430,10 @@ class FormList
      */
     public static function ajaxDuplicate(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
         $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
         if (!$form_id || !check_ajax_referer('fabricator_forms_duplicate_' . $form_id, 'nonce', false)) {
-            wp_send_json_error(['message' => 'Nonce verification failed.'], 403);
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
         $result = FormModel::duplicate($form_id, true);
         if (is_wp_error($result)) {
@@ -452,13 +453,11 @@ class FormList
      */
     public static function ajaxBulkDelete(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
-        $ids    = json_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_text_field(wp_unslash($_POST['ids'] ?? '[]')), '[]'), true);
-        $nonces = json_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_text_field(wp_unslash($_POST['nonces'] ?? '[]')), '[]'), true);
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        $ids    = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['ids'] ?? '[]'), '[]')), true);
+        $nonces = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['nonces'] ?? '[]'), '[]')), true);
         if (!is_array($ids) || !is_array($nonces)) {
-            wp_send_json_error(['message' => 'Invalid data.'], 400);
+            wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')], 400);
         }
         $ids     = array_slice((array)$ids, 0, 200, true);
         $nonces  = array_slice((array)$nonces, 0, 200, true);
@@ -487,13 +486,11 @@ class FormList
      */
     public static function ajaxBulkDuplicate(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
-        $ids    = json_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_text_field(wp_unslash($_POST['ids'] ?? '[]')), '[]'), true);
-        $nonces = json_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_text_field(wp_unslash($_POST['nonces'] ?? '[]')), '[]'), true);
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        $ids    = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['ids'] ?? '[]'), '[]')), true);
+        $nonces = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['nonces'] ?? '[]'), '[]')), true);
         if (!is_array($ids) || !is_array($nonces)) {
-            wp_send_json_error(['message' => 'Invalid data.'], 400);
+            wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')], 400);
         }
         $ids     = array_slice((array)$ids, 0, 200, true);
         $nonces  = array_slice((array)$nonces, 0, 200, true);
@@ -522,13 +519,16 @@ class FormList
      */
     public static function ajaxExport(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('view_forms')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
+        /* edit_forms, not view_forms: the export payload carries the full form definition
+           including every notification's to/cc/bcc/from_email/reply_to, routing rules and body —
+           configuration the editor screen already reserves for edit_forms, and which contains
+           third parties' email addresses. Gating export at the lower capability let a view-only
+           user read data the UI never shows them. */
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
         $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
         $nonce   = sanitize_key($_POST['nonce'] ?? '');
         if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_export_' . $form_id)) {
-            wp_send_json_error(['message' => 'Nonce verification failed.'], 403);
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
         $form = FormModel::get($form_id);
         if (!$form) {
@@ -555,12 +555,10 @@ class FormList
      */
     public static function ajaxImport(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
         $nonce = sanitize_key($_POST['nonce'] ?? '');
         if (!wp_verify_nonce($nonce, 'fabricator_forms_import')) {
-            wp_send_json_error(['message' => 'Nonce verification failed.'], 403);
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
         $raw = sanitize_text_field(wp_unslash($_POST['string'] ?? ''));
         if ($raw === '') {
@@ -635,8 +633,14 @@ class FormList
             $defaults = $instance->getDefaultConfig();
             $compact  = [];
             foreach ($field as $k => $v) {
-                // Always keep structural keys; drop others matching the type's default to shrink the export.
-                if ($k === 'type' || $k === 'id' || $k === 'col') {
+                /* Always keep structural keys; drop others matching the type's default to shrink
+                   the export. 'cols' — the column-span key FormRenderer actually reads — was
+                   spelled 'col' here, so the branch never fired; it only survived export by
+                   falling through to the default-comparison arm, which happens to keep it
+                   because no getDefaultConfig() declares 'cols'. Both spellings are listed so a
+                   type that later does declare a default can't silently strip the layout.
+                   'children' is structural too: a group's children must never be dropped. */
+                if ($k === 'type' || $k === 'id' || $k === 'cols' || $k === 'col' || $k === 'children') {
                     $compact[$k] = $v;
                 } elseif (!array_key_exists($k, $defaults) || $defaults[$k] !== $v) {
                     $compact[$k] = $v;

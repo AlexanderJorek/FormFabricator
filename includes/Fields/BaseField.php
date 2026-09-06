@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -32,10 +32,7 @@ abstract class BaseField
     // request, even though multiple fields/requests call getStyles()/getClientInit() etc.
     private static array $assetCache = [];
 
-    // Reads a field's own JS/CSS asset file (e.g. assets/js/fields/upload.js), relative to the
-    // plugin root — used by getStyles()/getClientInit()/etc. instead of embedding JS/CSS as PHP
-    // string literals, so the content is a real, syntax-highlightable, lintable .js/.css file
-    // (WordPress.org prohibits HEREDOC/NOWDOC, which was the alternative — see CLAUDE.md).
+    // Reads a field's own JS/CSS asset file instead of embedding it as a PHP string (WordPress.org prohibits HEREDOC/NOWDOC — see CLAUDE.md).
     protected static function readFieldAsset(string $relativePath): string
     {
         if (!isset(self::$assetCache[$relativePath])) {
@@ -58,6 +55,24 @@ abstract class BaseField
             return $raw;
         }
         return array_slice($raw, 0, $max_keys, true);
+    }
+
+    /**
+     * Drops non-scalar leaves so a nested POST (e.g. name[first][0]=x) can't stringify to "Array".
+     *
+     * @param mixed $raw Sanitized value straight out of map_deep()/capRawArray().
+     * @return array<string,string> Subfield map with string leaves only.
+     */
+    protected static function scalarSubfieldMap(mixed $raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+        $out = [];
+        foreach ($raw as $key => $value) {
+            $out[$key] = is_scalar($value) ? (string) $value : '';
+        }
+        return $out;
     }
 
     // Always >= other_max_length so truncation never pre-empts the "too long" error.
@@ -364,7 +379,7 @@ abstract class BaseField
         if (!empty($config['required']) && $this->isEmpty($value)) {
             $label = $config['label'] ?? __('Field', 'formfabricator');
             // translators: %s: field label.
-            return sprintf(__('%s is a required field.', 'formfabricator'), esc_html($label));
+            return sprintf(__('%s is a required field.', 'formfabricator'), $label);
         }
         return true;
     }
@@ -438,11 +453,14 @@ abstract class BaseField
     public function getDefaultConfig(): array
     {
         return [
-            'label'       => '',
-            'required'    => false,
-            'hide_label'  => false,
-            'placeholder' => '',
-            'description' => '',
+            'label'           => '',
+            'required'        => false,
+            'hide_label'      => false,
+            'placeholder'     => '',
+            'description'     => '',
+            'autocomplete_on' => true,
+            'autocomplete'    => '',
+            'custom_class'    => '',
         ];
     }
 
@@ -477,14 +495,32 @@ abstract class BaseField
         return $this->baseGeneralEntries();
     }
 
-    // Config keys always rendered as plain text; anything else keeps the wp_kses_post() default below.
-    private const PLAIN_TEXT_CONFIG_KEYS = ['label', 'placeholder', 'description'];
+    // Config keys always rendered as plain text; anything else keeps the wp_kses_post() default
+    // below. Override plainTextConfigKeys() (not this constant) in a subclass to add its own
+    // field-specific label-like keys — every renderer builds output with esc_html(), so any
+    // key that isn't in this list gets wp_kses_post()'d at save time (entity-encoding "&" etc.)
+    // and then esc_html()'d again at render time, visibly double-encoding it.
+    private const PLAIN_TEXT_CONFIG_KEYS = [
+        'label', 'placeholder', 'description', 'custom_class', 'autocomplete', 'validation',
+    ];
 
-    // Sanitizes a single string config value; override for a different
-    // allowlist (e.g. HtmlField).
+    /**
+     * Returns the config keys this field treats as plain text (sanitize_text_field(), no HTML
+     * allowed) rather than the wp_kses_post() default. Override to add field-specific label-like
+     * keys that are always rendered via esc_html(), never as raw HTML.
+     *
+     * @return string[]
+     */
+    protected function plainTextConfigKeys(): array
+    {
+        return self::PLAIN_TEXT_CONFIG_KEYS;
+    }
+
+    // Sanitizes a single string config value; override plainTextConfigKeys() to extend the
+    // plain-text allowlist, or override this method entirely for different rules (e.g. HtmlField).
     public function sanitizeConfigValue(string $key, string $value): string
     {
-        if (in_array($key, self::PLAIN_TEXT_CONFIG_KEYS, true)) {
+        if (in_array($key, $this->plainTextConfigKeys(), true)) {
             return \sanitize_text_field($value);
         }
         return \wp_kses_post($value);
@@ -623,8 +659,13 @@ abstract class BaseField
         $client_rules  = $this->getClientValidation();
         $validate_attr = !empty($client_rules) ? ' data-validate="' . esc_attr(wp_json_encode(array_column($client_rules, 'rule'))) . '"' : '';
 
+        // Builder-configured "CSS class(es)" (Appearance section) — admin-supplied, sanitize_text_field()'d
+        // at save time; esc_attr() below is what actually makes embedding it here safe.
+        $custom_class = trim((string)($config['custom_class'] ?? ''));
+        $custom_class_attr = $custom_class !== '' ? ' ' . esc_attr($custom_class) : '';
+
         return '<div class="fabricator-field fabricator-field--' . esc_attr($config['type'] ?? 'text')
-            . $req_class . ' ' . esc_attr($extra_class) . '" data-field-id="' . esc_attr($field_id) . '"'
+            . $req_class . ' ' . esc_attr($extra_class) . $custom_class_attr . '" data-field-id="' . esc_attr($field_id) . '"'
             . $validate_attr . '>'
             . $label_html
             . $desc_html
@@ -658,6 +699,18 @@ abstract class BaseField
         if (!empty($config['required'])) {
             $attrs['required'] = 'required';
             $attrs['aria-required'] = 'true';
+        }
+
+        // Builder-configured "Browser autocomplete" section. A field's own $extra may already
+        // suggest a sensible default (e.g. PhoneField passes 'tel') — an explicit admin choice
+        // here takes priority over that default, and turning autofill off entirely wins over both.
+        if (array_key_exists('autocomplete_on', $config) && $config['autocomplete_on'] === false) {
+            $attrs['autocomplete'] = 'off';
+        } else {
+            $autocomplete_val = trim((string)($config['autocomplete'] ?? ''));
+            if ($autocomplete_val !== '') {
+                $attrs['autocomplete'] = $autocomplete_val;
+            }
         }
 
         $html = '';

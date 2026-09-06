@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -46,6 +46,10 @@ class FormModel
     {
         $post = get_post($form_id);
         if (!$post || $post->post_type !== 'fabricator_form') {
+            return null;
+        }
+        // Match getAll()'s 'publish' filter so a draft/trashed form isn't reachable via direct lookup.
+        if ($post->post_status !== 'publish') {
             return null;
         }
 
@@ -105,7 +109,7 @@ class FormModel
             }
         }
 
-        $title = sanitize_text_field(\FabricatorForms\Utils\Sanitize::str($data['title'] ?? null, 'Untitled Form'));
+        $title = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($data['title'] ?? null, 'Untitled Form'));
 
         $post_data = [
             'post_title'  => $title,
@@ -114,6 +118,10 @@ class FormModel
         ];
 
         if ($form_id > 0) {
+            $existing = get_post($form_id);
+            if (!$existing || $existing->post_type !== 'fabricator_form') {
+                return new \WP_Error('not_found', __('Form not found.', 'formfabricator'));
+            }
             $post_data['ID'] = $form_id;
             $result = wp_update_post($post_data, true);
         } else {
@@ -181,6 +189,9 @@ class FormModel
         if (!self::nonceVerifiedOrCheck($nonce_verified)) {
             return false;
         }
+        if (get_post_type($form_id) !== 'fabricator_form') {
+            return false;
+        }
         return (bool)wp_delete_post($form_id, true);
     }
 
@@ -218,6 +229,34 @@ class FormModel
             $models[]         = $m;
         }
         return $models;
+    }
+
+    /**
+     * Drops a deleted form's "<form_id>|<slug>" entries from fabricator_forms_pdf_settings.
+     *
+     * @param int $post_id The WordPress post ID being deleted.
+     * @return void
+     */
+    public static function removeFormPdfSettings(int $post_id): void
+    {
+        if (get_post_type($post_id) !== 'fabricator_form') {
+            return;
+        }
+        $saved = get_option('fabricator_forms_pdf_settings', []);
+        if (!is_array($saved) || empty($saved)) {
+            return;
+        }
+        $prefix  = $post_id . '|';
+        $changed = false;
+        foreach (array_keys($saved) as $key) {
+            if (strncmp((string) $key, $prefix, strlen($prefix)) === 0) {
+                unset($saved[$key]);
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            update_option('fabricator_forms_pdf_settings', $saved, false);
+        }
     }
 
     /**

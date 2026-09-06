@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -26,19 +26,20 @@ add_action(
     'wp_ajax_fabricator_verify_push_lines',
     function () {
 
-        /* ---- Capability ---- */
-        if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
-            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
-            wp_send_json_error(['message' => 'Forbidden'], 403);
-        }
+        /* ---- Capability + Nonce ---- */
+        \FabricatorForms\Utils\AjaxGuard::require(
+            'use_verifier',
+            'fabricator_verifier_nonce',
+            'nonce',
+            __('Forbidden', 'formfabricator'),
+            'FabricatorForms fabricator_verify_push_lines: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.'
+        );
 
-        /* ---- Nonce ---- */
-        check_ajax_referer('fabricator_verifier_nonce', 'nonce');
-
-        /* ---- Raise limits for heavy PDF parsing (hard ceilings; handleUpload()'s soft budget aborts first) ----
+        /* ---- Raise non-memory limits for heavy PDF parsing (hard ceilings; handleUpload()'s soft budget aborts first) ----
            Only reached after the capability + nonce checks above, so an unauthorized/unverified
-           request can't force these resource-limit changes on the server. */
-        @ini_set('memory_limit', '3072M'); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- resource-limit raise for heavy PDF parsing.
+           request can't force these resource-limit changes on the server. The memory raise is
+           deliberately NOT here — it happens only once a concurrency slot is actually held (see
+           below), so a request that's about to be turned away never raises its ceiling at all. */
         // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- resource-limit raise for heavy PDF parsing.
         @ini_set('pcre.backtrack_limit', '268435456');
         if (!ini_get('safe_mode')) {
@@ -49,39 +50,25 @@ add_action(
         $rl_key = 'verify_' . get_current_user_id();
         if (\FabricatorForms\Utils\RateLimiter::increment($rl_key, 5) > 1) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rate-limited user ' . get_current_user_id() . '.');
-            wp_send_json_error(['message' => 'Please wait before verifying another PDF.'], 429);
+            wp_send_json_error(['message' => __('Please wait before verifying another PDF.', 'formfabricator')], 429);
         }
 
-        /* ---- Global concurrency cap: at most 3 of this handler running at once, across everyone ---- */
-        $fabricator_cs_bucket = 'verify';
-        $fabricator_cs_token  = \FabricatorForms\Utils\ConcurrencySlot::acquire($fabricator_cs_bucket, 3, 900);
-        if ($fabricator_cs_token === false) {
-            \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — concurrency cap reached.');
-            wp_send_json_error(
-                [
-                'message'     => 'Server busy verifying other PDFs right now.',
-                'code'        => 'busy',
-                'retry_after' => 8,
-                ],
-                429
-            );
-        }
-        // Releases the slot on script end (covers wp_die() too); TTL is the rare-case backstop.
-        register_shutdown_function(
-            static function () use ($fabricator_cs_bucket, $fabricator_cs_token) {
-                \FabricatorForms\Utils\ConcurrencySlot::release($fabricator_cs_bucket, $fabricator_cs_token);
-            }
-        );
+        /* Memory is reserved further down, once the PDF's actual size is known — the reservation
+           is sized from the file, so it can't be taken before the token resolves to one. Nothing
+           expensive happens in between. */
 
         /* ---- Input ---- */
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         $pdf_token   = sanitize_key($_POST['pdf_token'] ?? '');
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         $visualLines = isset($_POST['visualLines'])
-        ? json_decode(\FabricatorForms\Utils\Sanitize::str(sanitize_textarea_field(wp_unslash($_POST['visualLines'])), '[]'), true)
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+        ? json_decode(sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['visualLines']), '[]')), true)
         : [];
 
         if (!$pdf_token) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — missing pdf_token (user ' . get_current_user_id() . ').');
-            wp_send_json_error(['message' => 'Invalid input: missing token'], 400);
+            wp_send_json_error(['message' => __('Invalid input: missing token', 'formfabricator')], 400);
         }
         // Bounds worst-case comparison cost against a crafted payload while still allowing
         // large-but-legitimate multi-page PDFs sized up to MAX_PDF_BYTES.
@@ -105,11 +92,11 @@ add_action(
         $pdf_transient = get_transient('fabricator_pdf_' . $pdf_token);
         if (!is_array($pdf_transient) || !isset($pdf_transient['path']) || !is_string($pdf_transient['path'])) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — token not found or expired (user ' . get_current_user_id() . ').');
-            wp_send_json_error(['message' => 'PDF not found or token expired'], 404);
+            wp_send_json_error(['message' => __('PDF not found or token expired', 'formfabricator')], 404);
         }
         if ((int)($pdf_transient['uid'] ?? -1) !== get_current_user_id()) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — token owned by a different user than ' . get_current_user_id() . '.');
-            wp_send_json_error(['message' => 'Forbidden'], 403);
+            wp_send_json_error(['message' => __('Forbidden', 'formfabricator')], 403);
         }
         $target_path = $pdf_transient['path'];
 
@@ -125,7 +112,7 @@ add_action(
             || strpos($real_target_path, $real_verfiles_dir . DIRECTORY_SEPARATOR) !== 0
         ) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — path-traversal guard failed for token-resolved path.');
-            wp_send_json_error(['message' => 'Invalid PDF path'], 400);
+            wp_send_json_error(['message' => __('Invalid PDF path', 'formfabricator')], 400);
         }
 
         /* ---- MIME re-validation on the server-side path ---- */
@@ -133,7 +120,7 @@ add_action(
         $detected_mime = $finfo->file($real_target_path);
         if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — stored file MIME re-check failed, detected "' . $detected_mime . '".');
-            wp_send_json_error(['message' => 'File is not a valid PDF'], 400);
+            wp_send_json_error(['message' => __('File is not a valid PDF', 'formfabricator')], 400);
         }
 
         $file_size = filesize($real_target_path);
@@ -154,6 +141,51 @@ add_action(
                 400
             );
         }
+
+        /* ---- Reserve memory now that the PDF's real size is known ----
+           Shares one budget with public form submissions (see MemoryBudget::BUCKET): there is one
+           host with one pool of RAM, so a large verification here and a large submission there
+           must compete rather than each staying inside a private limit while together exhausting
+           the machine. Sized from the file, so verifying a 200KB PDF reserves almost nothing and
+           several can run at once, while a 400MB one may hold the whole budget on its own. */
+        $fabricator_mem_estimate = \FabricatorForms\Utils\MemoryBudget::estimateBytes($file_size);
+        $fabricator_mem_budget   = \FabricatorForms\Utils\MemoryBudget::budgetBytes();
+        $fabricator_mem_token    = \FabricatorForms\Utils\MemoryBudget::reserve($fabricator_mem_estimate, 900);
+        if ($fabricator_mem_token === false) {
+            $fabricator_needed_mb = (int) round($fabricator_mem_estimate / 1048576);
+            $fabricator_budget_mb = (int) round($fabricator_mem_budget / 1048576);
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms fabricator_verify_push_lines: rejected — memory budget unavailable (needed '
+                . $fabricator_needed_mb . 'MB, budget ' . $fabricator_budget_mb . 'MB, '
+                . (int) round(\FabricatorForms\Utils\MemoryBudget::reservedBytes() / 1048576) . 'MB already reserved).'
+            );
+            /* A job larger than the entire budget will never succeed no matter how long the user
+               waits, so say that instead of inviting a pointless retry. */
+            $fabricator_never_fits = $fabricator_mem_estimate > $fabricator_mem_budget;
+            wp_send_json_error(
+                [
+                'message'     => $fabricator_never_fits
+                    ? sprintf(
+                        /* translators: %1$d: memory this PDF needs in MB, %2$d: the host's configured budget in MB. */
+                        __('This PDF needs about %1$d MB to verify, more than this site\'s %2$d MB budget. Raise it with FABRICATOR_MEMORY_BUDGET_MB in wp-config.php.', 'formfabricator'),
+                        $fabricator_needed_mb,
+                        $fabricator_budget_mb
+                    )
+                    : __('Server busy verifying other PDFs right now.', 'formfabricator'),
+                'code'        => $fabricator_never_fits ? 'too_large' : 'busy',
+                'retry_after' => $fabricator_never_fits ? 0 : 8,
+                ],
+                429
+            );
+        }
+        // Released on script end (covers wp_die() too); the row's TTL is the rare-case backstop.
+        register_shutdown_function(
+            static function () use ($fabricator_mem_token): void {
+                \FabricatorForms\Utils\MemoryBudget::releaseReservation($fabricator_mem_token);
+            }
+        );
+        // Not restored: this handler always ends the request via wp_send_json_*().
+        \FabricatorForms\Utils\MemoryBudget::raiseTo($fabricator_mem_estimate);
 
         $file = [
         'name'     => preg_replace('/^[0-9a-f]{16}-/i', '', basename($real_target_path)),
@@ -178,7 +210,7 @@ add_action(
                 'FabricatorForms fabricator_verify_push_lines: raw_html is empty after handleUpload — ob level was '
                 . ob_get_level()
             );
-            wp_send_json_error(['message' => 'PDF processing produced no output. Check the PHP error log.'], 500);
+            wp_send_json_error(['message' => __('PDF processing produced no output. Check the PHP error log.', 'formfabricator')], 500);
             return;
         }
 
@@ -187,7 +219,7 @@ add_action(
             $safe_html = fabricator_sanitize_verifier_html($raw_html);
         } catch (\Throwable $san_err) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: fabricator_sanitize_verifier_html threw: ' . $san_err->getMessage());
-            wp_send_json_error(['message' => 'Output sanitization failed. See server log for details.'], 500);
+            wp_send_json_error(['message' => __('Output sanitization failed. See server log for details.', 'formfabricator')], 500);
             return;
         }
 
@@ -228,7 +260,7 @@ add_action(
         $data = $key ? get_transient('fabricator_vp_' . $key) : false;
         if ($data && (int)($data['uid'] ?? -1) !== get_current_user_id()) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_progress: rejected — progress token owned by a different user than ' . get_current_user_id() . '.');
-            wp_send_json_error(['message' => 'Forbidden'], 403);
+            wp_send_json_error(['message' => __('Forbidden', 'formfabricator')], 403);
         }
         if (is_array($data)) {
             unset($data['uid']);
@@ -244,31 +276,31 @@ add_action(
 
         if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
-            wp_die('Forbidden', '', ['response' => 403]);
+            wp_die(esc_html__('Forbidden', 'formfabricator'), '', ['response' => 403]);
         }
 
         // Nonce/token are posted in the request body by verification.js (not query-string
         // params) so they don't end up in server logs, browser history, or a Referer header.
         if (!wp_verify_nonce(sanitize_key($_POST['nonce'] ?? ''), 'fabricator_verifier_nonce')) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
-            wp_die('Nonce verification failed', '', ['response' => 403]);
+            wp_die(esc_html__('Nonce verification failed', 'formfabricator'), '', ['response' => 403]);
         }
 
         $token = sanitize_key($_POST['token'] ?? '');
         if (!$token) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — missing token (user ' . get_current_user_id() . ').');
-            wp_die('Missing token', '', ['response' => 400]);
+            wp_die(esc_html__('Missing token', 'formfabricator'), '', ['response' => 400]);
         }
 
         $pdf_transient = get_transient('fabricator_pdf_' . $token);
         $path = is_array($pdf_transient) ? ($pdf_transient['path'] ?? null) : null;
         if (!$path || !is_string($path) || !file_exists($path)) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — token not found, expired, or target file missing.');
-            wp_die('PDF not found or token expired', '', ['response' => 404]);
+            wp_die(esc_html__('PDF not found or token expired', 'formfabricator'), '', ['response' => 404]);
         }
         if ((int)($pdf_transient['uid'] ?? -1) !== get_current_user_id()) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — token owned by a different user than ' . get_current_user_id() . '.');
-            wp_die('Forbidden', '', ['response' => 403]);
+            wp_die(esc_html__('Forbidden', 'formfabricator'), '', ['response' => 403]);
         }
 
         // Extra path-safety check
@@ -277,14 +309,14 @@ add_action(
         $real_path    = realpath($path);
         if (!$safe_dir || !$real_path || strpos($real_path, $safe_dir . DIRECTORY_SEPARATOR) !== 0) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — path-traversal guard failed for token-resolved path.');
-            wp_die('Invalid path', '', ['response' => 403]);
+            wp_die(esc_html__('Invalid path', 'formfabricator'), '', ['response' => 403]);
         }
 
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $detected_mime = $finfo->file($real_path);
         if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
             \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — stored file MIME re-check failed, detected "' . $detected_mime . '".');
-            wp_die('Not a PDF', '', ['response' => 400]);
+            wp_die(esc_html__('Not a PDF', 'formfabricator'), '', ['response' => 400]);
         }
 
         header('Content-Type: application/pdf');
@@ -339,16 +371,29 @@ function fabricator_sanitize_verifier_html(string $html): string
         'canvas' => ['class' => true, 'id' => true, 'style' => true, 'data-*' => true],
     ];
 
-    // wp_kses uses regex internally and catastrophically fails on multi-MB strings
-    // (e.g. base64-encoded image data URIs). Extract data URIs before sanitizing
-    // and restore them afterwards — they are PHP-generated, not user-supplied.
+    /* wp_kses's internal regex catastrophically fails on multi-MB strings (base64 data URIs), so
+       they are lifted out, kses runs, and they are spliced back. That means these values are the
+       one part of the output kses never inspects — so the invariant they rely on is enforced here
+       rather than left implicit: every producer in handleUpload() builds them as
+       'data:image/<png|jpeg>;base64,' . base64_encode(...), so anything that is not exactly that
+       shape is not ours and is dropped instead of restored. Without this, a future producer
+       emitting an attacker-influenced data: URI would inherit a silent sanitizer bypass. */
     $data_uris = [];
     $html = preg_replace_callback(
         '/\bsrc=(["\'])data:[^"\']+\1/i',
         static function (array $m) use (&$data_uris): string {
+            $quote = $m[1];
+            $value = substr($m[0], strlen('src=') + 1, -1);
+            if (!preg_match('#^data:image/(?:png|jpeg);base64,[A-Za-z0-9+/=]*$#', $value)) {
+                \FabricatorForms\fabricator_log(
+                    'FabricatorForms fabricator_sanitize_verifier_html: dropped a data: URI that'
+                    . ' did not match the expected base64 image shape.'
+                );
+                return 'src=' . $quote . $quote;
+            }
             $key = '__FABRICATOR_DATA_URI_' . count($data_uris) . '__';
             $data_uris[$key] = $m[0];
-            return 'src=' . $m[1] . $key . $m[1];
+            return 'src=' . $quote . $key . $quote;
         },
         $html
     );
@@ -393,12 +438,12 @@ final class Verificationpage
         );
         add_action('fabricator_verifier_cleanup_files', [self::class, 'cronCleanupFiles']);
 
-        // Fallback sweep: age-deletes anything older than SWEEP_MAX_AGE, in case a
-        // per-file wp_schedule_single_event() cleanup never fires (WP-Cron isn't guaranteed).
+        /* Fallback sweep: age-deletes anything older than SWEEP_MAX_AGE, in case a per-file
+           wp_schedule_single_event() cleanup never fires (WP-Cron isn't guaranteed). Only the
+           callback is attached here — the event itself is scheduled by Plugin::scheduleSweeps()
+           on activation, so no request pays for a wp_next_scheduled() lookup just to find the
+           event already there. */
         add_action('fabricator_verifier_sweep_tmp_dirs', [self::class, 'cronSweepTmpDirs']);
-        if (!wp_next_scheduled('fabricator_verifier_sweep_tmp_dirs')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_verifier_sweep_tmp_dirs');
-        }
     }
 
     /**
@@ -433,6 +478,7 @@ final class Verificationpage
      */
     public const MAX_PDF_BYTES = 500 * 1024 * 1024;
 
+
     // WP-Cron callback (hourly): sweeps temp directories for files older than SWEEP_MAX_AGE.
     public static function cronSweepTmpDirs(): void
     {
@@ -461,16 +507,49 @@ final class Verificationpage
     }
 
     /**
+     * Converts an absolute path inside the plugin's upload dir to a relative one, for storing in wp_options.
+     *
+     * @param string $absolute Absolute path inside the plugin upload directory.
+     * @return string Relative path, or '' when the path is outside that directory.
+     */
+    private static function relativeTempPath(string $absolute): string
+    {
+        $base = wp_upload_dir()['basedir'] . '/fabricator-secure-pdf';
+        $norm = str_replace(chr(92), '/', $absolute);
+        $base = rtrim(str_replace(chr(92), '/', $base), '/') . '/';
+        if (strncmp($norm, $base, strlen($base)) !== 0) {
+            return '';
+        }
+        return substr($norm, strlen($base));
+    }
+
+    /**
      * WP-Cron callback that deletes temp verifier files after a delay (avoids blocking a PHP-FPM worker).
      *
      * @param array<int, string> $files Absolute paths to delete.
      */
     public static function cronCleanupFiles(array $files): void
     {
-        foreach ($files as $file) {
-            if (!is_string($file) || $file === '') {
+        /* Entries are paths RELATIVE to the plugin's own upload directory, e.g.
+           "verfiles/ab12….pdf". Absolute paths used to be serialized into the WP-Cron array in
+           wp_options, where they sat for up to 2100 seconds disclosing the server's filesystem
+           layout (and the names of uploaded documents) to anything that can read options.
+           Resolving them here also means this callback can only ever delete inside that one
+           directory, however the scheduled argument was produced. */
+        $safe_dir = realpath(wp_upload_dir()['basedir'] . '/fabricator-secure-pdf');
+        if ($safe_dir === false) {
+            return;
+        }
+        foreach ($files as $relative) {
+            if (!is_string($relative) || $relative === '') {
                 continue;
             }
+            // Reject traversal outright rather than relying on realpath() alone (the file may
+            // already be gone, in which case realpath() returns false and tells us nothing).
+            if (str_contains($relative, '..') || preg_match('#^([A-Za-z]:)?[\\\\/]#', $relative)) {
+                continue;
+            }
+            $file = $safe_dir . DIRECTORY_SEPARATOR . ltrim(str_replace('\\', '/', $relative), '/');
             clearstatcache(true, $file);
             for ($i = 0; $i < 5; $i++) {
                 if (!file_exists($file)) {
@@ -545,7 +624,7 @@ final class Verificationpage
                 || !check_admin_referer('fabricator_verifier_upload', 'fabricator_verifier_nonce')
             ) {
                 \FabricatorForms\fabricator_log('FabricatorForms Verificationpage::render: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
-                wp_die('Security check failed', 'Error', ['response' => 403]);
+                wp_die(esc_html__('Security check failed', 'formfabricator'), 'Error', ['response' => 403]);
             }
         }
         // Collected during the upload loop below, then localized once (not echoed per-file as
@@ -582,6 +661,14 @@ final class Verificationpage
                 );
                 if ($wp_filesystem) {
                     $wp_filesystem->chmod($htaccess, 0640);
+                }
+            }
+            // .htaccess only blocks Apache/LiteSpeed; this is the IIS-equivalent deny rule.
+            $web_config = $safe_dir . '/web.config';
+            if (!file_exists($web_config)) {
+                file_put_contents($web_config, \FabricatorForms\Utils\SecureDir::WEB_CONFIG);
+                if ($wp_filesystem) {
+                    $wp_filesystem->chmod($web_config, 0640);
                 }
             }
 
@@ -689,8 +776,19 @@ final class Verificationpage
                 $storage_name = bin2hex(random_bytes(8)) . '-' . $safe_name;
                 $target_path  = $verfiles_dir . '/' . $storage_name;
 
-                // is_uploaded_file() + copy() + delete reproduces move_uploaded_file()'s
-                // validate-then-move behavior without calling the forbidden function itself.
+                /* ACCEPTED RISK (reviewed, deliberate — discuss before changing):
+                   this does NOT go through wp_handle_upload(), so it bypasses the upload_mimes /
+                   wp_handle_upload_prefilter filters that site owners and security plugins hook.
+                   That is a real trade-off, taken knowingly: these files are deliberately NOT
+                   media-library items — they are short-lived scratch copies in a private,
+                   HTTP-denied directory with a random filename prefix, deleted within 2100s, and
+                   routing them through the media API would place them under the library's own
+                   naming and lifecycle. The validation ahead of this point is also stricter than
+                   the API's default (explicit size cap, wp_check_filetype_and_ext() pinned to
+                   application/pdf, an independent finfo MIME re-check, sanitize_file_name() and
+                   an extension re-check). Revisit if these files ever need to be user-visible.
+                   is_uploaded_file() + copy() + delete reproduces move_uploaded_file()'s
+                   validate-then-move behavior without calling the forbidden function itself. */
                 $moved = is_uploaded_file($tmpName) && copy($tmpName, $target_path);
                 if ($moved) {
                     wp_delete_file($tmpName);
@@ -704,9 +802,7 @@ final class Verificationpage
                         2100
                     ); // 35 minutes
 
-                    // nonce/token travel in the POST body (see verification.js), not as query
-                    // params — a GET URL with these as query args would land in server logs,
-                    // browser history, and any Referer header sent from the resulting page.
+                    // nonce/token travel in the POST body (see verification.js) so they never land in server logs, history, or a Referer header.
                     $verification_queue[] = [
                         'url'   => esc_url_raw(admin_url('admin-ajax.php')),
                         'action' => 'fabricator_serve_pdf',
@@ -836,8 +932,18 @@ final class Verificationpage
      */
     public static function handleUpload(array $file, array $visualLines = [], string $progressKey = ''): void
     {
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- values here are already
-        // escaped/int-cast/hashed/regex-constrained; WPCS can't trace escaping through interpolation.
+        /* On the EscapeOutput suppressions below.
+           This method builds its output by interpolating variables that were escaped, int-cast,
+           hashed or regex-constrained at the point of assignment (e.g. $colorspace is bounded to
+           [A-Za-z0-9]+ by its own regex, $check_hash/$img_id are sha256 hex, the JSON panes are
+           esc_html()'d into their variables first). WPCS cannot follow escaping across an
+           assignment, so it flags every such interpolation.
+           These used to sit under ONE phpcs:disable spanning 2,560 lines — the whole method —
+           which meant the single most important WordPress security sniff had no coverage over the
+           code closest to attacker-supplied bytes, and any genuinely unescaped output added later
+           would have been invisible. They are now scoped to the individual output blocks that
+           need them (~430 lines total), leaving the sniff live over the rest of the method.
+           Anything echoed outside those blocks must be escaped normally. */
         self::$progressKey = $progressKey;
         // Soft time budget, scaled to file size, aborts well before the 1800s hard ceiling.
         $fabricator_parse_start       = microtime(true);
@@ -853,6 +959,7 @@ final class Verificationpage
             $msg = sprintf(__('Upload failed for %s.', 'formfabricator'), esc_html($file_name));
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
             // its $message argument internally.
+            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
             echo self::noticeHtml($msg, 'error');
             return;
         }
@@ -866,6 +973,7 @@ final class Verificationpage
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
             // its $message argument internally.
             echo self::noticeHtml($msg, 'error');
+            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
             return;
         }
 
@@ -899,6 +1007,14 @@ final class Verificationpage
                 $wp_filesystem->chmod($htaccess, 0640);
             }
         }
+        // .htaccess only blocks Apache/LiteSpeed; this is the IIS-equivalent deny rule.
+        $web_config = $safe_dir . '/web.config';
+        if (!file_exists($web_config)) {
+            file_put_contents($web_config, \FabricatorForms\Utils\SecureDir::WEB_CONFIG);
+            if ($wp_filesystem) {
+                $wp_filesystem->chmod($web_config, 0640);
+            }
+        }
 
         // $visualLines is already available as a parameter — no disk round-trip needed.
 
@@ -912,21 +1028,18 @@ final class Verificationpage
             $msg = sprintf(__('Could not read PDF file: %s.', 'formfabricator'), esc_html($file_name));
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
             // its $message argument internally.
+            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
             echo self::noticeHtml($msg, 'error');
             return;
         }
         $eof_count                    = substr_count($raw_for_guard, '%%EOF');
         $incremental_update_detected  = $eof_count > 1;
         $incremental_update_eof_count = $eof_count;
-        // Count seal markers in uncompressed (plain-text) parts of the raw bytes.
-        // FlateDecode streams are handled by the pdfparser pass; this catches fakes
-        // injected into uncompressed streams or appended raw text.
+        // Catches seal-marker fakes injected into uncompressed streams or appended raw text; FlateDecode streams are handled by the pdfparser pass instead.
         $raw_plain_seal_count         = substr_count($raw_for_guard, '---BEGIN-SEAL---');
         unset($raw_for_guard);
 
-        // Raw-byte preflight: scan compressed streams for the seal marker without
-        // loading the full PDF object graph. Avoids calling pdfparser (and its
-        // memory overhead) entirely for PDFs that have no fabricator seal.
+        // Raw-byte preflight avoids calling pdfparser (and its memory overhead) entirely for PDFs with no fabricator seal.
         if (!self::rawPdfHasSeal($file['tmp_name'])) {
             // rawPdfHasSeal() itself logs details (skipped/oversized streams) when
             // relevant — this just records that this file was rejected at this gate.
@@ -936,6 +1049,7 @@ final class Verificationpage
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
             // its $message argument internally.
             echo self::noticeHtml($msg, 'error');
+            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
             return;
         }
 
@@ -951,7 +1065,7 @@ final class Verificationpage
             $pdf = $parser->parseFile($file['tmp_name']);
             $text = $pdf->getText();
 
-            // Re-derive the soft parse budget from decompressed text volume, not on-disk size — a small compressed PDF can still unpack to a huge string (see BaseField::TEXT_FIELD_HARD_CAP, which bounds only per-field, not in aggregate).
+            // Budget on decompressed text volume, not on-disk size — a small compressed PDF can still unpack to a huge string.
             $fabricator_parse_text_mb    = strlen($text) / 1048576;
             $fabricator_parse_max_seconds = max(
                 $fabricator_parse_max_seconds,
@@ -1049,6 +1163,7 @@ final class Verificationpage
             if ($incremental_update_detected) {
                 $struct_section_id = 'fabricator-pdf-content-structure-' . $uid_prefix;
                 $struct_sec_attr = esc_attr($uid_prefix);
+                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                 echo "<div class='fabricator-pdf-detail-section'"
                    . " id='fabricator-pdf-section-structure-{$struct_sec_attr}'>";
                 echo "<div class='fabricator-pdf-detail-hdr'>";
@@ -1117,6 +1232,7 @@ final class Verificationpage
                     . " style='color:#721c24;margin-bottom:4px;'>" . esc_html__('Differences', 'formfabricator') . "</div>";
                 echo "<pre class='fabricator-pdf-json-pre'"
                     . " style='border-color:#f5c6cb;color:#721c24;margin:0;'>{$json_diff}</pre>";
+                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                 echo "</div>";
             }
             echo "</div></div>";
@@ -1166,7 +1282,7 @@ final class Verificationpage
             echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                . " data-target='" . esc_attr($all_visual_id) . "'>" . esc_html__('Field Content', 'formfabricator') . "</button>";
             echo "<span id='fabricator-pdf-badge-fields-" . esc_attr($uid_prefix)
-               . "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
+               . "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
             echo "</div>";
             echo "<div id='" . esc_attr($all_visual_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
             echo "<div class='fabricator-pdf-cmp-list'>";
@@ -1281,6 +1397,7 @@ final class Verificationpage
                         $pill_text  = $matches_visual ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
                         $display_label = $label !== '' ? esc_html($label) : 'Field #' . (int) $payload_index;
 
+                        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                         echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
                         echo "<div class='fabricator-pdf-cmp-header'>"
                            . "<span class='fabricator-pdf-cmp-label'>{$display_label}</span>"
@@ -1313,6 +1430,7 @@ final class Verificationpage
                             if (!empty($diff_parts)) {
                                 echo "<div class='fabricator-pdf-diff-row'>"
                                 . implode(' &nbsp;|&nbsp; ', $diff_parts) . "</div>";
+                        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                             }
                         }
 
@@ -1414,6 +1532,7 @@ final class Verificationpage
                     $pill_txt = $is_ok ? esc_html__('AUTHENTIC', 'formfabricator') : esc_html__('FORGED / INVALID', 'formfabricator');
 
                     $seal_row_style = 'flex-direction:column;align-items:flex-start;gap:6px;padding:10px 14px';
+                    // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                     echo "<div class='fabricator-pdf-hash-row {$row_cls}' style='{$seal_row_style}'>";
                     echo "<div style='display:flex;align-items:center;gap:8px;width:100%'>";
                     echo "<strong style='flex:1'>Seal #" . (int)$seal_num . "</strong>";
@@ -1425,7 +1544,7 @@ final class Verificationpage
                         ? esc_html(substr($sb64, 0, 60)) . '…' . esc_html(substr($sb64, -30))
                         : esc_html($sb64);
                     echo "<div style='font-size:10px;color:#787c82;font-family:monospace;word-break:break-all'>";
-                    echo "Base64: {$b64_preview}";
+                    echo esc_html__('Base64:', 'formfabricator') . ' ' . $b64_preview;
                     echo "</div>";
 
                     if ($parse_err !== '') {
@@ -1484,7 +1603,8 @@ final class Verificationpage
                . " data-target='" . esc_attr($fold_id) . "'>"
                . esc_html__('Annotations', 'formfabricator') . "</button>";
             $annot_badge_id = 'fabricator-pdf-badge-annots-' . esc_attr($uid_prefix);
-            echo "<span id='{$annot_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
+            echo "<span id='{$annot_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
+                    // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
             echo "</div>";
             echo "<div id='" . esc_attr($fold_id) . "'"
                . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
@@ -1577,6 +1697,7 @@ final class Verificationpage
                             // translators: %d: number of text chunks the field's content was split into.
                             $chunk_count_label = sprintf(_n('%d chunk', '%d chunks', count($current_chunks), 'formfabricator'), count($current_chunks));
 
+                            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                             echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
                             echo "<div class='fabricator-pdf-cmp-header'>"
                                . "<span class='fabricator-pdf-cmp-label'>{$disp_label}</span>"
@@ -1592,6 +1713,7 @@ final class Verificationpage
                                . "<div class='fabricator-pdf-cmp-col__value'>{$seal_v}</div></div>";
                             echo "<div class='fabricator-pdf-cmp-col'><div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF chunk', 'formfabricator') . "</div>"
                                . "<div class='fabricator-pdf-cmp-col__value'>{$pdf_v}</div></div>";
+                            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                             echo "</div></div>\n"; // fabricator-pdf-cmp-body + fabricator-pdf-cmp-row
 
                             $processed_fields[] = $payload_index;
@@ -1637,7 +1759,9 @@ final class Verificationpage
                 $msg = sprintf(__('Could not read PDF content for %s.', 'formfabricator'), esc_html($file_name));
                 // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml()
                 // wp_kses_post()'s its $message argument internally.
+                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                 echo self::noticeHtml($msg, 'error');
+                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
             } else {
                 $annotations = [];
 
@@ -1734,10 +1858,12 @@ final class Verificationpage
                 $all_annots_id = sanitize_html_class($uid_prefix . '-all-annots');
                 echo "<div class='fabricator-pdf-subsection'>";
                 $annot_btn_target = esc_attr($all_annots_id);
+                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                 echo "<button type='button' class='fabricator-pdf-subtoggle fabricator-pdf-toggle'"
                    . " data-target='{$annot_btn_target}'>"
                    . "<span class='fabricator-pdf-subtoggle__icon'>&#9656;</span> " . esc_html__('Annotation List', 'formfabricator')
                    . "</button>";
+                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                 echo "<div id='" . esc_attr($all_annots_id) . "'"
                    . " class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
                 echo "<div class='fabricator-pdf-cmp-list'>";
@@ -1835,11 +1961,13 @@ final class Verificationpage
                         });
 
                         $ann_label = 'Annot #' . ($i + 1) . ' — ' . esc_html($ann['type']);
+                        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                         echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
                         echo "<div class='fabricator-pdf-cmp-header'>"
                            . "<span class='fabricator-pdf-cmp-label'>{$ann_label}</span>"
                            . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>{$pill_text}</span>"
                            . "</div>";
+                        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                         echo "<div class='fabricator-pdf-cmp-body'>";
                         echo "<div class='fabricator-pdf-cmp-col'>"
                            . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF content', 'formfabricator') . "</div>"
@@ -1880,6 +2008,7 @@ final class Verificationpage
 
                 $page_box_id    = 'fabricator-pdf-content-pgcount-' . $uid_prefix;
                 $pgcount_sec_id = 'fabricator-pdf-section-pgcount-' . esc_attr($uid_prefix);
+                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                 echo "<div class='fabricator-pdf-detail-section' id='{$pgcount_sec_id}'>";
                 echo "<div class='fabricator-pdf-detail-hdr'>";
                 echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
@@ -1924,7 +2053,8 @@ final class Verificationpage
                 echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($image_section_id) . "'>Image Hashes</button>";
                 $img_badge_id = 'fabricator-pdf-badge-images-' . esc_attr($uid_prefix);
-                echo "<span id='{$img_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
+                echo "<span id='{$img_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
+                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                 echo "</div>";
                 echo "<div id='" . esc_attr($image_section_id) . "'"
                    . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'"
@@ -1970,14 +2100,29 @@ final class Verificationpage
                             $wp_filesystem->chmod($htaccess, 0640);
                         }
                     }
+                    // .htaccess only blocks Apache/LiteSpeed; this is the IIS-equivalent deny rule.
+                    $web_config = $safe_dir . '/web.config';
+                    if (!file_exists($web_config)) {
+                        file_put_contents($web_config, \FabricatorForms\Utils\SecureDir::WEB_CONFIG);
+                        if ($wp_filesystem) {
+                            $wp_filesystem->chmod($web_config, 0640);
+                        }
+                    }
 
                     $scanXObjects = function ($pdf_raw, $parentName = null, array $visited = [])
- use (&$scanXObjects, $allowed_hashes, $rebuilt_payload, $smask_obj_nums, $exact_image_hashes, $use_exact_hashes, $safe_dir, $ver_dir) {
+ use (&$scanXObjects, $allowed_hashes, $rebuilt_payload, $smask_obj_nums, $exact_image_hashes, $use_exact_hashes, $safe_dir, $ver_dir, $fabricator_parse_start, $fabricator_parse_max_seconds) {
                         $offset = 0;
                         $found  = false;
 
                         while (($pos = strpos($pdf_raw, '/XObject', $offset)) !== false) {
                             $found = true;
+                            /* Per-XObject checkpoint: this is the most expensive region of the whole
+                               parse (GD decode, imagecreatetruecolor() at the PDF's own dimensions,
+                               per-pixel loops, PNG predictor reversal) and it runs after the last
+                               of the earlier pass-level checkpoints, so a PDF carrying many
+                               individually-under-cap images would otherwise only be bounded by the
+                               1800s hard ceiling. */
+                            self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'image XObject scan');
 
                             $obj_start_line = strrpos(substr($pdf_raw, 0, $pos), "\n") ?: 0;
                             $obj_start      = $obj_start_line + 1;
@@ -2218,16 +2363,18 @@ final class Verificationpage
                                     echo "</ul>";
 
                                     echo "<div style='font-size:11px; color:#333;'>";
-                                    echo "<b>Image metadata:</b><br>";
-                                    echo "• Filters: " . esc_html(implode(', ', $filters)) . "<br>";
-                                    echo "• Width × Height: " . (int)$width . " × " . (int)$height . "<br>";
-                                    echo "• BitsPerComponent: " . (int)$bpc . "<br>";
-                                    echo "• ColorSpace: " . esc_html($colorspace) . "<br>";
-                                    echo "• Channels: " . (int)$channels . "<br>";
-                                    echo "• ImageMask: " . ($isImageMask ? 'true' : 'false') . "<br>";
+                                    echo '<b>' . esc_html__('Image metadata:', 'formfabricator') . '</b><br>';
+                                    echo '• ' . esc_html__('Filters:', 'formfabricator') . ' ' . esc_html(implode(', ', $filters)) . "<br>";
+                                    echo '• ' . esc_html__('Width x Height:', 'formfabricator') . ' ' . (int)$width . " × " . (int)$height . "<br>";
+                                    echo '• ' . esc_html__('BitsPerComponent:', 'formfabricator') . ' ' . (int)$bpc . "<br>";
+                                    echo '• ' . esc_html__('ColorSpace:', 'formfabricator') . ' ' . esc_html($colorspace) . "<br>";
+                                    echo '• ' . esc_html__('Channels:', 'formfabricator') . ' ' . (int)$channels . "<br>";
+                                    echo '• ' . esc_html__('ImageMask:', 'formfabricator') . ' ' . ($isImageMask ? 'true' : 'false') . "<br>";
                                     $dec_size = $decoded !== null ? strlen($decoded) . ' bytes' : 'n/a';
                                     // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $dec_size is only ever an (int) length + the literal ' bytes', or the literal 'n/a'; never derived from request/file content.
-                                    echo "• Decoded size: {$dec_size}<br>";
+                                    // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
+                                    echo '• ' . esc_html__('Decoded size:', 'formfabricator') . ' ' . $dec_size . '<br>';
+                                    // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                                     echo "</div></div>";
 
                                     $offset = $obj_end + 6;
@@ -2686,24 +2833,24 @@ final class Verificationpage
 
                                 // --- SUSPECT FOUND LABEL (RESTORED) ---
                                 $html .= "<div style='margin-bottom:4px'>";
-                                $html .= "<b>Suspect Found:</b> " . esc_html((string)$check_hash);
+                                $html .= '<b>' . esc_html__('Suspect found:', 'formfabricator') . '</b> ' . esc_html((string)$check_hash);
                                 $html .= "</div>";
 
                                 // --- STATUS AREA ---
                                 $html .= "<div class='img-status' style='margin-bottom:6px'>";
                                 if ($is_allowed) {
                                     $html .= "<span style='color:green;font-weight:bold'>"
-                                           . "Suspect is determined as usual.</span>";
+                                           . esc_html__('Suspect is determined as usual.', 'formfabricator') . '</span>';
                                 } else {
-                                    $html .= "<span style='color:red;font-weight:bold'>Visual mismatch detected</span>";
+                                    $html .= '<span style=' . "'" . 'color:red;font-weight:bold' . "'" . '>' . esc_html__('Visual mismatch detected', 'formfabricator') . '</span>';
                                     $html .= "<div style='margin-top:6px;padding:6px;"
                                            . "background:#fff0f0;border:1px solid #f99;"
                                            . "font-size:11px;font-family:monospace'>";
-                                    $html .= "<b>Why flagged:</b><br>";
-                                    $html .= "Hash method: " . esc_html($hash_method_label ?? '') . "<br>";
-                                    $html .= "Computed hash: <b>{$check_hash}</b><br>";
+                                    $html .= '<b>' . esc_html__('Why flagged:', 'formfabricator') . '</b><br>';
+                                    $html .= esc_html__('Hash method:', 'formfabricator') . ' ' . esc_html($hash_method_label ?? '') . "<br>";
+                                    $html .= esc_html__('Computed hash:', 'formfabricator') . ' <b>' . $check_hash . '</b><br>';
                                     $pool  = $use_exact_hashes ? $exact_image_hashes : $allowed_hashes;
-                                    $html .= "Allowed hashes in seal (" . count($pool) . "):<br>";
+                                    $html .= esc_html__('Allowed hashes in seal', 'formfabricator') . ' (' . count($pool) . "):<br>";
                                     foreach ($pool as $ah) {
                                         $html .= "&nbsp;&nbsp;" . esc_html($ah) . "<br>";
                                     }
@@ -2717,16 +2864,16 @@ final class Verificationpage
                                            . " style='max-width:100%; height:auto;"
                                            . " border:1px solid #999; display:block; margin-bottom:6px'>";
                                 } else {
-                                    $html .= "<p style='color:orange'>[Image could not be rendered]</p>";
+                                    $html .= '<p style=' . "'" . 'color:orange' . "'" . '>' . esc_html__('[Image could not be rendered]', 'formfabricator') . '</p>';
                                 }
 
                                 // --- IMAGE INFO (now BELOW image) ---
                                 $html .= "<div style='margin:5px 0; padding:5px;"
                                        . " border:1px solid #666; background:#f9f9f9; font-size:10px'>";
-                                $html .= "Image ID: <b>{$img_id}</b><br>";
-                                $html .= "Colorspace: {$colorspace}<br>";
+                                $html .= esc_html__('Image ID:', 'formfabricator') . ' <b>' . $img_id . '</b><br>';
+                                $html .= esc_html__('Colorspace:', 'formfabricator') . ' ' . $colorspace . '<br>';
                                 $html .= "Width × Height: {$width}×{$height}<br>";
-                                $html .= "Decoded length: " . strlen($decoded) . " bytes";
+                                $html .= esc_html__('Decoded length:', 'formfabricator') . ' ' . strlen($decoded) . " bytes";
                                 $html .= "</div>";
 
                                 $html .= "</div>";
@@ -2760,7 +2907,7 @@ final class Verificationpage
                         }
 
                         if (!$found && !$parentName) {
-                            echo "[XObject Scan] No XObjects found.\n";
+                            echo esc_html__('[XObject Scan] No XObjects found.', 'formfabricator') . "\n";
                         }
                     };
 
@@ -2790,12 +2937,14 @@ final class Verificationpage
 
                 $cs_section_id  = 'fabricator-pdf-content-streams-' . $uid_prefix;
                 $cs_section_sec = 'fabricator-pdf-section-streams-' . esc_attr($uid_prefix);
+                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                 echo "<div class='fabricator-pdf-detail-section' id='{$cs_section_sec}'>";
                 echo "<div class='fabricator-pdf-detail-hdr'>";
                 echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($cs_section_id) . "'>Content Streams</button>";
                 $cs_badge_id = 'fabricator-pdf-badge-streams-' . esc_attr($uid_prefix);
-                echo "<span id='{$cs_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
+                echo "<span id='{$cs_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
+                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                 echo "</div>";
                 echo "<div id='" . esc_attr($cs_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
 
@@ -2854,6 +3003,7 @@ final class Verificationpage
 
                     $n_seal = count($allowed_content_hashes);
                     $n_pdf  = count($pdf_content_hashes);
+                    // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                     echo "<p class='fabricator-pdf-hash-summary'>"
                        . "{$n_seal} stream(s) in seal &nbsp;·&nbsp; {$n_pdf} verifiable in PDF</p>";
                     echo "<div class='fabricator-pdf-hash-list'>";
@@ -2894,7 +3044,8 @@ final class Verificationpage
                 echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($fonts_section_id) . "'>Fonts</button>";
                 $fonts_badge_id = 'fabricator-pdf-badge-fonts-' . esc_attr($uid_prefix);
-                echo "<span id='{$fonts_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
+                echo "<span id='{$fonts_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
+                    // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                 echo "</div>";
                 echo "<div id='" . esc_attr($fonts_section_id) . "'"
                    . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
@@ -2975,6 +3126,7 @@ final class Verificationpage
                                     $row_cls = 'fabricator-pdf-hash-row--warn';
                                     $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--warn'>UNUSED</span>";
                                 }
+                                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                                 echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
                                    . $pill
                                    . "<code>" . esc_html($font) . "</code>"
@@ -3011,7 +3163,8 @@ final class Verificationpage
                 echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($objects_section_id) . "'>PDF Objects</button>";
                 $objects_badge_id = 'fabricator-pdf-badge-objects-' . esc_attr($uid_prefix);
-                echo "<span id='{$objects_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
+                echo "<span id='{$objects_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
+                                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                 echo "</div>";
                 echo "<div id='" . esc_attr($objects_section_id) . "'"
                    . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
@@ -3173,7 +3326,7 @@ final class Verificationpage
                 echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
                    . " data-target='" . esc_attr($meta_section_id) . "'>PDF Metadata</button>";
                 echo "<span id='fabricator-pdf-badge-meta-" . esc_attr($uid_prefix) . "'"
-                   . " class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>PASS</span>";
+                   . " class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
                 echo "</div>";
                 echo "<div id='" . esc_attr($meta_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
                 echo "<div class='fabricator-pdf-hash-list'>";
@@ -3189,6 +3342,7 @@ final class Verificationpage
                     $row_cls    = $match ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail';
                     $pill_cls   = $match ? 'fabricator-pdf-pill--pass' : 'fabricator-pdf-pill--fail';
                     $pill_text  = $match ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
+                    // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
                     echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
                        . "<span class='fabricator-pdf-pill {$pill_cls}'>{$pill_text}</span>"
                        . "<code>" . esc_html($label) . "</code>"
@@ -3197,6 +3351,7 @@ final class Verificationpage
                        . ($match ? '' : ' <em style="color:#d63638;">erwartet: ' . esc_html($expected) . '</em>')
                        . "</span>"
                        . "</div>";
+                    // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
                 }
 
                 echo "</div>"; // fabricator-pdf-hash-list
@@ -3240,6 +3395,7 @@ final class Verificationpage
             $document_modified = !$seal_matches || $visual_modified || $any_pdf_issue;
 
             // --- Summary panel ---
+            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
             echo self::renderSummaryPanel(
                 [
                 'seal_matches'               => $seal_matches,
@@ -3296,6 +3452,7 @@ final class Verificationpage
             };
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from esc_html() + hardcoded strings; noticeHtml() also wp_kses_post()'s it.
             echo self::noticeHtml($friendly_msg, 'error');
+            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
         } finally {
             $pdf_content = ob_get_clean();
         }
@@ -3371,6 +3528,7 @@ final class Verificationpage
                 . $verdict_badge . '</span>';
         }
 
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
         echo "<div style='" . $hdr_wrap_style . "'>";
         echo "<button type='button' class='fabricator-pdf-toggle fabricator-pdf-pdf-hdr'"
             . " data-target='" . esc_attr($segment_id) . "'"
@@ -3382,9 +3540,9 @@ final class Verificationpage
         echo "</button>";
         echo "<div id='" . esc_attr($segment_id) . "' class='fabricator-pdf-hidden' style='padding:10px;'>";
         echo $pdf_content;
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
         echo "</div>";
         echo "</div>";
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
     }
 
 
@@ -3702,9 +3860,17 @@ final class Verificationpage
             if (!is_array($field)) {
                 continue;
             }
+            /* Verbatim, NOT re-canonicalized. This array is re-hashed and compared against the
+               stored HMAC, so it has to reproduce exactly what Generator::buildSealFields() fed
+               into HashSeal — which is a label with no trim() and a value that
+               Generator::normalizeFieldValue() already normalized once, at seal time.
+               html_entity_decode() and wp_strip_all_tags() are not idempotent, so applying them
+               a second time here mutated the payload and reported genuine, untampered documents
+               as MODIFIED: "&amp;" became "&", "a &nbsp; b" became "a b", and "&lt;tag&gt;" was
+               destroyed outright to "". Any normalization belongs on the seal side only. */
             $rebuilt['fields'][] = [
-                'label' => trim((string) ($field['label'] ?? '')),
-                'value' => self::normalizeValue($field['value'] ?? ''),
+                'label' => (string) ($field['label'] ?? ''),
+                'value' => (string) ($field['value'] ?? ''),
             ];
         }
 
@@ -3842,25 +4008,11 @@ final class Verificationpage
         return $hashes;
     }
 
-    /**
-     * Normalizes a seal field value for comparison against PDF text.
-     *
-     * @param string $value Raw field value from the seal payload.
-     * @return string Normalized plain-text value.
-     */
-    private static function normalizeValue(string $value): string
-    {
-        // Decode HTML entities
-        $value = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-        // Strip HTML tags
-        $value = wp_strip_all_tags($value);
-
-        // Normalize whitespace
-        $value = preg_replace('/\s+/u', ' ', $value);
-
-        return trim($value);
-    }
+    /* normalizeValue() removed deliberately: it was a second, independent copy of
+       Generator::normalizeFieldValue(), and the verifier has no business canonicalizing at all.
+       Seal values arrive already normalized (once, at seal time) and must be re-hashed exactly
+       as stored — see rebuildPayload(). Keeping a normalizer here is what allowed the two
+       implementations to be applied in sequence; there is now exactly one, on the seal side. */
 
     /**
      * Recursively computes the differences between two associative arrays.
@@ -4003,7 +4155,11 @@ final class Verificationpage
     private static function emitImageSlot(string $uid, array $meta): void
     {
 
-        self::$files_to_delete[] = $meta['file_path'];
+        // Relative, not absolute: this ends up serialized into the WP-Cron option.
+        $rel = self::relativeTempPath((string) ($meta['file_path'] ?? ''));
+        if ($rel !== '') {
+            self::$files_to_delete[] = $rel;
+        }
 
         if (!self::$image_cleanup_registered) {
             self::$image_cleanup_registered = true;
@@ -4037,7 +4193,12 @@ final class Verificationpage
      */
     private static function scheduleDeletion(string $file_path): void
     {
-        self::$pdfs_to_delete[] = $file_path;
+        // Relative, not absolute — see relativeTempPath().
+        $rel = self::relativeTempPath($file_path);
+        if ($rel === '') {
+            return;
+        }
+        self::$pdfs_to_delete[] = $rel;
 
         if (!self::$pdf_cleanup_registered) {
             self::$pdf_cleanup_registered = true;

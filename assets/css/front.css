@@ -316,6 +316,13 @@ select.fabricator-input.fabricator-select-native {
     width: 100%;
 }
 
+.fabricator-submit-btn[disabled] { opacity: 0.6; cursor: not-allowed; }
+.fabricator-noscript-notice {
+    color: var(--fabricator-text-muted, #666);
+    font-size: 0.9em;
+    margin-top: 8px;
+}
+
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
     .fabricator-row   { flex-direction: column; gap: 0; }

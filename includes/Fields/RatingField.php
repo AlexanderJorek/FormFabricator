@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,6 +28,19 @@ defined('ABSPATH') || exit;
  */
 class RatingField extends BaseField
 {
+    /**
+     * custom_icon_url is esc_url()'d at render, never treated as HTML — without this,
+     * wp_kses_post() entity-encodes "&" at save time, so an icon URL with a query string is
+     * stored as "…?a=1&amp;b=2", re-encoded to "&#038;" inside the CSS url() string, and
+     * resolves to a broken multi-parameter URL.
+     *
+     * @return string[]
+     */
+    protected function plainTextConfigKeys(): array
+    {
+        return array_merge(parent::plainTextConfigKeys(), ['custom_icon_url']);
+    }
+
     /**
      * Returns field-specific CSS styles.
      *
@@ -100,7 +113,9 @@ class RatingField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $max       = (int)($config['max'] ?? 5);
+        // Clamped: an unclamped mistyped "Number of symbols" value would render that many
+        // <span> DOM nodes per form view (CWE-1050, excessive iteration).
+        $max       = max(1, min(20, (int)($config['max'] ?? 5)));
         $val       = (float)($value ?? 0);
         $half      = !empty($config['allow_half']);
         $custom    = !empty($config['icon_source']) && !empty($config['custom_icon_url']);
@@ -108,6 +123,15 @@ class RatingField extends BaseField
         $icons     = self::ICONS[$icon_key] ?? self::ICONS['star'];
         $req       = !empty($config['required']) ? ' data-required="true"' : '';
         $custom_url = $custom ? esc_url($config['custom_icon_url'], ['http', 'https']) : '';
+        // esc_url() is for href/src attribute context — it deliberately keeps CSS-meaningful
+        // characters like ';', '(' and ')' as valid URL characters (e.g. in a query string), so
+        // interpolating it unquoted into url(...) lets an edit_forms-capable (not
+        // unfiltered_html) user close the url() and append arbitrary CSS declarations. Quoting
+        // it as a CSS string and escaping backslash/quote closes that off: inside a quoted CSS
+        // string, ';', '(', ')' and whitespace are just literal text, not syntax.
+        $custom_url_css = $custom_url !== ''
+            ? '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $custom_url) . '"'
+            : '';
 
         $inner = '<div class="fabricator-rating-group" role="group"'
             . ' aria-label="' . esc_attr($config['label'] ?? __('Rating', 'formfabricator')) . '"'
@@ -129,9 +153,9 @@ class RatingField extends BaseField
             if ($custom_url) {
                 /* Custom image: background image tile, filled overlay clips left half */
                 $base_style = 'display:block;width:30px;height:30px;'
-                    . 'background:url(' . esc_url($custom_url) . ') center/contain no-repeat;opacity:0.2;';
+                    . 'background:url(' . $custom_url_css . ') center/contain no-repeat;opacity:0.2;';
                 $fill_style = 'position:absolute;top:0;left:0;width:30px;height:30px;'
-                    . 'background:url(' . esc_url($custom_url) . ') center/contain no-repeat;'
+                    . 'background:url(' . $custom_url_css . ') center/contain no-repeat;'
                     . 'pointer-events:none;';
                 $inner .= '<span class="fabricator-rating-bg" style="' . esc_attr($base_style) . '"></span>';
                 $inner .= '<span class="fabricator-rating-fill" style="' . esc_attr($fill_style) . '"></span>';
@@ -196,6 +220,7 @@ class RatingField extends BaseField
             // to satisfy for any real rating.
             $max = 5;
         }
+        $max = min(20, $max); // matches the render()-side clamp.
         $half = !empty($config['allow_half']);
         $n    = (float)$value;
         if ($n < 0 || $n > $max) {

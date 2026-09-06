@@ -10,16 +10,7 @@ function (root) {
         var total = pages.length;
         if (!total) return;
 
-        /* If a page break sits before this field, it renders inside a
-         * later page div than 0. Find that div now, before front.js's
-         * initPageBreaks() relocates this field's row to always sit
-         * before page 0 — this must run first (and does: field inits
-         * run before initPageBreaks()) so headerEl is still in its
-         * original position here. Pages before that native page aren't
-         * this bar's concern at all: they don't get a step, and the bar
-         * stays hidden until the visitor actually reaches its own page.
-         * That lets an admin put a small entry/splash page ahead of the
-         * bar without it being counted as "step 1". */
+        /* Must run before front.js's initPageBreaks() relocates this row to page 0, while headerEl is still in its original page. */
         var containingPage = headerEl.closest('.fabricator-form-page');
         var nativePage     = containingPage ? pages.indexOf(containingPage) : 0;
         if (nativePage === -1) nativePage = 0;

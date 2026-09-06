@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -117,8 +117,8 @@ class SelectField extends BaseField
                 . '</option>';
         }
         if (!empty($config['other_option'])) {
-            $other_val = is_array($value) ? '' : (string)($value ?? '');
-            $inner .= '<option value="__other__"' . selected($other_val, '__other__', false) . '>' . esc_html__('Other…', 'formfabricator') . '</option>';
+            // $value was already unwrapped from its ['value' => ...] array form above.
+            $inner .= '<option value="__other__"' . selected((string)($value ?? ''), '__other__', false) . '>' . esc_html__('Other…', 'formfabricator') . '</option>';
         }
         $inner .= '</select>';
         if (!empty($config['other_option'])) {
@@ -190,7 +190,7 @@ class SelectField extends BaseField
             if (!empty($config['required']) && $other === '') {
                 $label = $config['label'] ?? __('Field', 'formfabricator');
                 // translators: %s: field label.
-                return sprintf(__('%s is a required field.', 'formfabricator'), esc_html($label));
+                return sprintf(__('%s is a required field.', 'formfabricator'), $label);
             }
             return self::validateOtherText($other, $config);
         }
@@ -220,7 +220,7 @@ class SelectField extends BaseField
         if ($selected === '__other__' && isset($_POST[$field_id . '_other'])) {
             return [
                 'value'           => $selected,
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce is verified once in FormProcessor::handle() before field extraction runs; capOtherText() unslashes and sanitize_text_field()s the value, WPCS doesn't recognize sanitization/unslashing via the helper method.
+                // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce verified in FormProcessor::handle(); capOtherText() sanitizes/unslashes.
                 '__other_text__'  => self::capOtherText($_POST[$field_id . '_other']),
             ];
         }

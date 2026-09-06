@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -43,7 +43,7 @@ class AdminLock
         [$time, $user] = explode(':', $raw, 2);
         $time   = (int) $time;
         $user   = (int) $user;
-        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- this is WP core's own wp_check_post_lock_window filter, deliberately reused (not a new hook) so a site's existing core-lock-window customization applies consistently to this advisory lock too.
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WP core's own filter, reused so existing core-lock-window customization applies here too.
         $window = (int) apply_filters('wp_check_post_lock_window', 150);
         if ($time && $user && $time > time() - $window && get_current_user_id() !== $user) {
             return $user;

@@ -5,6 +5,17 @@
  */
         (function() {
 
+    /* Sets icon markup then appends translated text as a TEXT NODE.
+       Concatenating a translated string into innerHTML lets whoever supplies the .mo inject
+       markup — and WordPress loads .mo files from WP_LANG_DIR, which is not limited to reviewed
+       WordPress.org language packs. The icon markup here is a literal; only the text varies. */
+    function fabIconThenText(el, iconHtml, text) {
+        if (!el) { return; }
+        el.innerHTML = iconHtml;
+        el.appendChild(document.createTextNode(String(text == null ? '' : text)));
+    }
+
+
             /* Inlined (not a static asset) since this script is embedded directly. */
             var pageData = window.FabricatorFormListPage || {};
             var ffi18n = pageData.i18n || {};
@@ -175,8 +186,8 @@
                 if (copyBtn) {
                     copyBtn.addEventListener('click', function() {
                         navigator.clipboard.writeText(copyBtn.dataset.code).then(function() {
-                            copyBtn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i> ' + ffi18n.copied;
-                            setTimeout(function() { copyBtn.innerHTML = '<i class="fa-regular fa-clipboard" aria-hidden="true"></i> ' + ffi18n.copyShortcode; }, 1500);
+                            fabIconThenText(copyBtn, '<i class="fa-solid fa-check" aria-hidden="true"></i> ', ffi18n.copied);
+                            setTimeout(function() { fabIconThenText(copyBtn, '<i class="fa-regular fa-clipboard" aria-hidden="true"></i> ', ffi18n.copyShortcode); }, 1500);
                         });
                         closeAllDropdowns();
                     });
@@ -425,9 +436,9 @@
                 exportCopy.addEventListener('click', function() {
                     exportString.select();
                     navigator.clipboard.writeText(exportString.value).then(function() {
-                        exportCopy.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i> ' + ffi18n.copied;
+                        fabIconThenText(exportCopy, '<i class="fa-solid fa-check" aria-hidden="true"></i> ', ffi18n.copied);
                         setTimeout(function() {
-                            exportCopy.innerHTML = '<i class="fa-solid fa-copy"></i> ' + ffi18n.copy;
+                            fabIconThenText(exportCopy, '<i class="fa-solid fa-copy"></i> ', ffi18n.copy);
                         }, 1500);
                     });
                 });

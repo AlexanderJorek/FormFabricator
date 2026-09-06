@@ -45,10 +45,7 @@ function (root) {
             var field = input.closest('.fabricator-field--sepa');
             return field ? field.querySelector('.fabricator-sepa-bic') : null;
         }
-        // Mirrors PHP SepaField::ibanChecksumValid() — moves country+check-digits to the
-        // end, converts letters to numbers (A=10..Z=35), then requires mod 97 == 1. Runs
-        // client-side regardless of live_iban_lookup so the field can validate locally
-        // when the (opt-in, GDPR-gated) openiban.com lookup is disabled.
+        // Mirrors PHP SepaField::ibanChecksumValid() — runs client-side regardless of live_iban_lookup so validation still works when the opt-in openiban.com lookup is disabled.
         function ibanChecksumValid(iban) {
             var rearranged = iban.substring(4) + iban.substring(0, 4);
             var numeric = '';

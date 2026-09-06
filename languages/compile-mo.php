@@ -154,4 +154,5 @@ $header = pack(
 );
 
 file_put_contents($moFile, $header . $origTable . $transTable . $origData . $transData);
+// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI-only build tool (stripped from the shipped package by build.ps1); writes to stdout, never to a web response.
 echo "Compiled $count strings → $moFile\n";

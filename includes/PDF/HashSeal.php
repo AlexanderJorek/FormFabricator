@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,10 +28,8 @@ defined('ABSPATH') || exit;
  */
 class HashSeal
 {
-    // Intentionally a public, hardcoded domain-separation string (not a secret); entropy comes from the password/salt.
-    private const PEPPER     = 'fabricator_seal_kdf_v1';
-    // OWASP (2023) recommends >=600,000 iterations for PBKDF2-HMAC-SHA256; the old 200,000 baseline is under-provisioned.
-    private const KDF_ROUNDS = 600000;
+    // Seal key length in bytes (hex-encoded to 64 chars for storage — see the format
+    // addLegacyKey()'s importer validates). Keys are random; nothing is derived from a password.
     private const KDF_LEN    = 32;
     private const ENC_PREFIX = 'enc::';
 
@@ -265,62 +263,20 @@ class HashSeal
         return self::getActiveKeyRecord()['uuid'];
     }
 
-    /**
-     * Derives a key hex string from a password using PBKDF2-SHA256.
-     *
-     * @param string $password The password to derive from.
-     * @return string Derived key as hex string.
-     */
-    private static function deriveKey(string $password, string $salt): string
-    {
-        return bin2hex(
-            hash_pbkdf2('sha256', $password, self::PEPPER . '|' . $salt, self::KDF_ROUNDS, self::KDF_LEN, true)
-        );
-    }
+    /* deriveKey() (PBKDF2-SHA256 over PEPPER|uuid) was removed along with PEPPER/KDF_ROUNDS:
+       seal keys are random_bytes() now, not password-derived. See rotateKey() for why. */
 
     /**
-     * Validates a password against the seal key's strength requirements (length, upper/lowercase, digit,
-     * special character).
+     * Rotates the active seal key. The new key is random.
      *
-     * @param string $password The password to validate.
-     * @return string[] Array of validation error messages; empty when valid.
-     */
-    public static function validatePassword(string $password): array
-    {
-        $errors = [];
-        if (strlen($password) < 12) {
-            $errors[] = __('At least 12 characters required.', 'formfabricator');
-        }
-        if (strlen($password) > 256) {
-            $errors[] = __('Password must not exceed 256 characters.', 'formfabricator');
-        }
-        if (!preg_match('/[A-Z]/', $password)) {
-            $errors[] = __('At least one uppercase letter required.', 'formfabricator');
-        }
-        if (!preg_match('/[a-z]/', $password)) {
-            $errors[] = __('At least one lowercase letter required.', 'formfabricator');
-        }
-        if (!preg_match('/[0-9]/', $password)) {
-            $errors[] = __('At least one digit required.', 'formfabricator');
-        }
-        if (!preg_match('/[^A-Za-z0-9]/', $password)) {
-            $errors[] = __('At least one special character required.', 'formfabricator');
-        }
-        return $errors;
-    }
-
-    /**
-     * Rotates the active seal key, optionally protecting it with a password.
-     *
-     * @param string $password       Password used to derive the new key via PBKDF2.
-     * @param bool   $compromised    True to flag the retiring key as compromised.
-     * @param bool   $nonce_verified True when the caller has already verified a CSRF nonce for
-     *                                this request (e.g. via check_ajax_referer() in an AJAX
-     *                                handler). When false, this method performs its own
-     *                                fallback nonce check.
+     * @param bool $compromised    True to flag the retiring key as compromised.
+     * @param bool $nonce_verified True when the caller has already verified a CSRF nonce for
+     *                              this request (e.g. via check_ajax_referer() in an AJAX
+     *                              handler). When false, this method performs its own
+     *                              fallback nonce check.
      * @return array{uuid: string, key: string, created_at: string}
      */
-    public static function rotateKey(string $password, bool $compromised, bool $nonce_verified = false): array
+    public static function rotateKey(bool $compromised, bool $nonce_verified = false): array
     {
         // Defense-in-depth: don't rely solely on the caller to gate access to seal-key rotation.
         if (!current_user_can('manage_options')) {
@@ -333,12 +289,6 @@ class HashSeal
         }
         if (!$nonce_verified) {
             throw new \RuntimeException('Invalid or missing security token.');
-        }
-
-        $errors = self::validatePassword($password);
-        if (!empty($errors)) {
-            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- exception message, not an HTML-output sink; $errors is composed only of this class's own __() strings (see validatePassword()), never user input; the caller re-escapes via esc_html() at render time.
-            throw new \InvalidArgumentException(implode(' ', $errors));
         }
 
         $user       = wp_get_current_user();
@@ -362,8 +312,9 @@ class HashSeal
             'retired_by_login' => $user_login,
         ];
 
-        $new_uuid    = self::generateUuid();
-        $new_raw_key = self::deriveKey($password, $new_uuid);
+        $new_uuid = self::generateUuid();
+        // Random, NOT derived from $password: deriving from a UUID+public-pepper salt let anyone with one sealed PDF brute-force the password offline.
+        $new_raw_key = bin2hex(random_bytes(self::KDF_LEN));
 
         update_option(
             'fabricator_forms_seal_key',
@@ -377,25 +328,53 @@ class HashSeal
     }
 
     /**
-     * Claims and removes a pending key download transient. Key record, or null if none is pending.
+     * Reads the pending key download transient without consuming it. Used at Settings page
+     * render time — peekPendingDownload() (not claimPendingDownload()) is deliberate here:
+     * rendering the page (or an admin reloading/navigating away without confirming the
+     * download) must not burn the one-shot backup opportunity. Only confirmDownload(), fired
+     * once the admin has actually saved the key file, deletes the transient.
      *
      * @return array{uuid: string, key: string, created_at: string}|null
      */
-    public static function claimPendingDownload(): ?array
+    public static function peekPendingDownload(): ?array
     {
-        // Defense-in-depth: this class has no other guard of its own against
-        // being invoked from an unguarded path — don't rely solely on the
-        // caller (currently the admin key-setup/rotation pages) to gate access
-        // to the pending plaintext seal key download.
+        // Defense-in-depth: don't rely solely on the caller to gate access to the pending plaintext key download.
         if (!current_user_can('manage_options')) {
-            throw new \RuntimeException('Insufficient permissions to claim the pending seal key download.');
+            throw new \RuntimeException('Insufficient permissions to read the pending seal key download.');
+        }
+        return self::decodePendingDownload(get_transient('fabricator_forms_seal_key_pending_download'));
+    }
+
+    /**
+     * Deletes the pending key download transient, once the admin has confirmed (via the
+     * download-modal's "I've saved it" button) that they've actually saved the plaintext key
+     * elsewhere. Returns the record that was deleted, or null if none was pending.
+     *
+     * @return array{uuid: string, key: string, created_at: string}|null
+     */
+    public static function confirmDownload(): ?array
+    {
+        // Defense-in-depth: don't rely solely on the caller to gate access to the pending plaintext key download.
+        if (!current_user_can('manage_options')) {
+            throw new \RuntimeException('Insufficient permissions to confirm the pending seal key download.');
         }
 
-        $raw = get_transient('fabricator_forms_seal_key_pending_download');
+        $record = self::decodePendingDownload(get_transient('fabricator_forms_seal_key_pending_download'));
+        delete_transient('fabricator_forms_seal_key_pending_download');
+        return $record;
+    }
+
+    /**
+     * Decodes a pending-download transient's raw JSON value.
+     *
+     * @param mixed $raw Raw transient value (string JSON, or false when absent).
+     * @return array{uuid: string, key: string, created_at: string}|null
+     */
+    private static function decodePendingDownload(mixed $raw): ?array
+    {
         if (!$raw) {
             return null;
         }
-        delete_transient('fabricator_forms_seal_key_pending_download');
         $record = json_decode((string) $raw, true);
         if (is_array($record) && isset($record['uuid'], $record['key'])) {
             return $record;
@@ -464,10 +443,7 @@ class HashSeal
      */
     public static function getHistory(): array
     {
-        // Defense-in-depth: this class has no other guard of its own against
-        // being invoked from an unguarded path — don't rely solely on the
-        // caller (currently the admin key-rotation page) to gate access to
-        // seal-key history, which includes decrypted plaintext keys.
+        // Defense-in-depth: don't rely solely on the caller to gate access to decrypted plaintext key history.
         if (!current_user_can('manage_options')) {
             throw new \RuntimeException('Insufficient permissions to view the seal key history.');
         }
@@ -489,6 +465,52 @@ class HashSeal
             },
             $history
         );
+    }
+
+    /**
+     * Like getHistory(), but for display purposes that only ever need a short fingerprint, never
+     * the plaintext key itself — each entry's 'key' is replaced with 'fingerprint' (the same
+     * 6-char sha256 prefix callers were computing from the full decrypted key anyway).
+     *
+     * Deliberately does NOT go through getHistory(): that would materialize every retired key in
+     * plaintext in one array, all at once, purely to throw away everything but six hex characters.
+     * Here each key is decrypted, hashed, and discarded one at a time, so at most one plaintext
+     * key exists in memory at any moment (NIST SSDF PW.9 — minimize secret exposure).
+     *
+     * @return array
+     */
+    public static function getHistoryFingerprints(): array
+    {
+        // Defense-in-depth: same gate as getHistory(), since this still decrypts key material.
+        if (!current_user_can('manage_options')) {
+            throw new \RuntimeException('Insufficient permissions to view the seal key history.');
+        }
+
+        $history = get_option('fabricator_forms_seal_key_history', []);
+        if (!is_array($history)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($history as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $fingerprint = '';
+            if (isset($entry['key'])) {
+                try {
+                    $plaintext   = self::decryptKey($entry['key']);
+                    $fingerprint = $plaintext !== '' ? substr(hash('sha256', $plaintext), 0, 6) : '';
+                } catch (\Exception $e) {
+                    $fingerprint = '';
+                }
+                unset($plaintext); // discard before moving to the next entry
+            }
+            unset($entry['key']);
+            $entry['fingerprint'] = $fingerprint;
+            $out[] = $entry;
+        }
+        return $out;
     }
 
     /**
@@ -550,12 +572,7 @@ class HashSeal
     /* ------------------------------------------------------------------ */
 
     /**
-     * Generates an HMAC-SHA256 seal over the given data payload. Note: this seal is a deterministic keyed
-     * fingerprint of the full payload — the same payload sealed with the same active key always produces
-     * the same seal value. That determinism makes it an unintended cross-submission correlation primitive for
-     * as long as a given key stays active (two submissions with identical content are trivially linkable by
-     * anyone who can compare seals). Do not treat the seal as safe for public/third-party disclosure, and
-     * consider a shorter key-rotation cadence for higher-sensitivity forms.
+     * Generates an HMAC-SHA256 seal; deterministic per key, so identical payloads are linkable — not for public disclosure.
      *
      * @param array $data Payload to seal.
      * @return string Hex-encoded HMAC seal.

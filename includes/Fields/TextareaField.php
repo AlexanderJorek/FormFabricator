@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -69,9 +69,20 @@ class TextareaField extends BaseField
         $configured = (int)($config['limit_max'] ?? 0);
         $wlim       = ($config['limit_type'] ?? 'chars') === 'words' && $configured > 0 ? ' data-word-limit="' . $configured . '"' : '';
         $clim       = ($config['limit_type'] ?? 'chars') === 'chars' ? ' maxlength="' . self::clampTextMax($configured) . '"' : '';
+        // Builder-configured "Browser autocomplete" section — <textarea> doesn't go through
+        // inputAttrs(), so it needs the same handling that gives that section an effect.
+        $autocomplete_attr = '';
+        if (array_key_exists('autocomplete_on', $config) && $config['autocomplete_on'] === false) {
+            $autocomplete_attr = ' autocomplete="off"';
+        } else {
+            $autocomplete_val = trim((string)($config['autocomplete'] ?? ''));
+            if ($autocomplete_val !== '') {
+                $autocomplete_attr = ' autocomplete="' . esc_attr($autocomplete_val) . '"';
+            }
+        }
         $inner = '<textarea id="' . esc_attr($field_id) . '" name="' . esc_attr($field_id) . '" '
             . 'class="fabricator-input fabricator-textarea" rows="' . $rows . '" placeholder="' . $ph . '"'
-            . $clim . $wlim . $req . '>'
+            . $clim . $wlim . $req . $autocomplete_attr . '>'
             . esc_textarea((string)($value ?? ''))
             . '</textarea>';
         return $this->wrap($field_id, $config, $inner);

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -64,6 +64,16 @@ class TimeField extends BaseField
     }
 
     /**
+     * Returns client-side initialization JavaScript function body.
+     *
+     * @return string
+     */
+    public function getClientInit(): string
+    {
+        return self::readFieldAsset('assets/js/fields/TimeField.js');
+    }
+
+    /**
      * Renders the field HTML.
      *
      * @param array  $config   Field configuration.
@@ -95,13 +105,16 @@ class TimeField extends BaseField
         if ($base !== true) {
             return $base;
         }
-        // Format validation is intentionally left to the browser's type="time" input.
-        // Any non-empty string is accepted server-side, but still bounded by the
-        // shared hard cap so a direct POST can't submit an unbounded-length value.
         if ($value !== null && $value !== '') {
             $hard = self::validateTextHardCap((string)$value);
             if ($hard !== true) {
                 return $hard;
+            }
+            // <input type="time">'s own value format is HH:MM (or HH:MM:SS) — a direct POST can
+            // send anything else, and that value flows unchecked into the notification email and
+            // the sealed PDF without this check.
+            if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/', (string)$value)) {
+                return __('Please enter a valid time.', 'formfabricator');
             }
         }
         return true;

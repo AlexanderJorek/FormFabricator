@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -79,15 +79,11 @@ class EmailField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         $attrs = $this->inputAttrs($config, $field_id, 'email', ['value' => esc_attr((string)($value ?? ''))]);
-        $mode  = $config['filter_mode'] ?? '';
-        if ($mode !== '') {
-            $attrs .= ' data-filter-mode="' . esc_attr($mode) . '"';
-            $patterns = trim((string)($config['filter_patterns'] ?? ''));
-            if ($patterns !== '') {
-                $list  = array_values(array_filter(array_map('trim', preg_split('/[\r\n;]+/', $patterns))));
-                $attrs .= " data-filter-patterns='" . esc_attr(wp_json_encode($list)) . "'";
-            }
-        }
+        // Nothing about filter_mode/filter_patterns is exposed to the client: the pattern list is
+        // admin-configured and can encode internal/partner/competitor domain names, so it must not
+        // be readable in View Source by every anonymous visitor, and with the client-side filter
+        // check removed (see EmailField.email.js) a bare data-filter-mode had no consumer left.
+        // validate() below is the sole, authoritative enforcement of the pattern list.
         return $this->wrap($field_id, $config, '<input' . $attrs . '>');
     }
 
@@ -124,7 +120,23 @@ class EmailField extends BaseField
             $matched = false;
             foreach ($list as $pat) {
                 $regex = '/^' . str_replace('\*', '.*', preg_quote(strtolower($pat), '/')) . '$/';
-                if (preg_match($regex, $v)) {
+                $hit   = preg_match($regex, $v);
+                /* preg_match() returns false (not 0) when the pattern fails to run — most
+                   plausibly PREG_BACKTRACK_LIMIT_ERROR, since several '*' wildcards expand to
+                   consecutive '.*' groups, which backtrack catastrophically against a long
+                   non-matching subject. Treating that as "no match" made a BLOCK list fail OPEN:
+                   the address it was configured to reject would sail through. Fail closed
+                   instead — an engine failure counts as a match, so 'block' rejects and 'allow'
+                   admits only on a real match. */
+                if ($hit === false) {
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms EmailField: filter pattern failed to evaluate (preg error '
+                        . preg_last_error_msg() . ') — treating as a match so the filter fails closed.'
+                    );
+                    $matched = true;
+                    break;
+                }
+                if ($hit === 1) {
                     $matched = true;
                     break;
                 }

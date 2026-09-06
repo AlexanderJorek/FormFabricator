@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -23,9 +23,7 @@ namespace FabricatorForms\PDF;
 
 defined('ABSPATH') || exit;
 
-// Fluent builder that field classes use to describe their PDF output. Start from BaseField::pdf($field),
-// chain methods for anything non-default, then call build(). Generator consumes the resulting array. Usage:
-// return $this->pdf($field)->attachImage($binary, 'sig.png')->build();
+// Fluent builder for field PDF output: BaseField::pdf($field)->attachImage(...)->build(), consumed by Generator.
 class PdfDescriptor
 {
     /**
@@ -97,7 +95,7 @@ class PdfDescriptor
     }
 
     /**
-     * Renders without a label row â€” just a plain block.
+     * Renders without a label row — just a plain block.
      *
      * @return static
      */

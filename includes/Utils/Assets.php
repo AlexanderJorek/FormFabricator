@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -32,17 +32,43 @@ class Assets
     public const FONT_AWESOME_VERSION = '6.5.2';
 
     /**
-     * Enqueues front-end CSS and JS for pages containing a fabricator form.
+     * Guard so ensureFrontAssets() is idempotent across its two entry points.
+     *
+     * @var bool
+     */
+    private static bool $front_assets_done = false;
+
+    /**
+     * wp_enqueue_scripts handler: fast path that loads front-end assets early when the shortcode is detectable in post_content.
+     *
+     * FormRenderer::render() calls ensureFrontAssets() as the authoritative fallback for cases this misses (widgets, page builders, FSE, etc).
      *
      * @return void
      */
     public static function enqueueFront(): void
     {
-        // Skip loading front-end CSS/JS entirely on pages that don't embed a form —
-        // keeps the plugin's footprint at zero on the rest of the site
         if (!self::pageHasForm()) {
             return;
         }
+        self::ensureFrontAssets();
+        if (self::pageHasSepaLiveLookup()) {
+            self::markSepaLiveLookup();
+        }
+    }
+
+    /**
+     * Enqueues the front-end CSS/JS a rendered form needs. Safe to call more than once.
+     *
+     * The late-call path (from FormRenderer::render()) still works because WordPress prints late-enqueued styles in wp_footer via print_late_styles().
+     *
+     * @return void
+     */
+    public static function ensureFrontAssets(): void
+    {
+        if (self::$front_assets_done) {
+            return;
+        }
+        self::$front_assets_done = true;
 
         \wp_enqueue_style(
             'fabricator-forms-front',
@@ -80,7 +106,8 @@ class Assets
             [
             'ajaxUrl'      => \admin_url('admin-ajax.php'),
             'ibanBicUrl'   => \admin_url('admin-ajax.php'),
-            'ibanBicNonce' => \wp_create_nonce('fabricator_iban_bic'),
+            // Deliberately empty; markSepaLiveLookup() fills it only for pages with a live-lookup SEPA field.
+            'ibanBicNonce' => '',
             'i18n'         => [
                 'submitting'              => __('Sending…', 'formfabricator'),
                 'error_server'            => __('Server error. Please try again.', 'formfabricator'),
@@ -148,13 +175,15 @@ class Assets
                 'date_invalid_date'       => __('Please enter a valid date.', 'formfabricator'),
                 // Email field
                 'email_invalid'           => __('Please enter a valid email address.', 'formfabricator'),
-                'email_not_allowed'       => __('This email address is not allowed.', 'formfabricator'),
                 // Number field
                 'number_invalid'          => __('Please enter a valid number.', 'formfabricator'),
                 // translators: %s: minimum allowed value (substituted client-side).
                 'number_min'              => __('Minimum value: %s', 'formfabricator'),
                 // translators: %s: maximum allowed value (substituted client-side).
                 'number_max'              => __('Maximum value: %s', 'formfabricator'),
+                'number_not_integer'      => __('Please enter a whole number.', 'formfabricator'),
+                'number_not_positive'     => __('Please enter a positive number.', 'formfabricator'),
+                'number_not_positive_int' => __('Please enter a positive whole number.', 'formfabricator'),
             ],
             ]
         );
@@ -233,22 +262,75 @@ class Assets
             );
         }
 
-        /* Form-select shortcode assets — must be enqueued before wp_head() */
+        /* Form-select shortcode assets — enqueued here when detectable so they reach <head>;
+           FormSelectList::shortcode() calls ensureFormSelectAssets() as the same fallback. */
         if (self::pageHasFormSelect()) {
-            \wp_enqueue_style(
-                'fabricator-form-select',
-                FABRICATOR_FORMS_URL . 'assets/css/form-select.css',
-                [],
-                FABRICATOR_FORMS_VERSION
-            );
-            \wp_enqueue_script(
-                'fabricator-form-select',
-                FABRICATOR_FORMS_URL . 'assets/js/form-select.js',
-                [],
-                FABRICATOR_FORMS_VERSION,
-                true
-            );
+            self::ensureFormSelectAssets();
         }
+    }
+
+    /**
+     * Guard so ensureFormSelectAssets() is idempotent across its two entry points.
+     *
+     * @var bool
+     */
+    private static bool $select_assets_done = false;
+
+    /**
+     * Enqueues the [fabricator_form_select] assets. Safe to call more than once.
+     *
+     * @return void
+     */
+    public static function ensureFormSelectAssets(): void
+    {
+        if (self::$select_assets_done) {
+            return;
+        }
+        self::$select_assets_done = true;
+
+        \wp_enqueue_style(
+            'fabricator-form-select',
+            FABRICATOR_FORMS_URL . 'assets/css/form-select.css',
+            [],
+            FABRICATOR_FORMS_VERSION
+        );
+        \wp_enqueue_script(
+            'fabricator-form-select',
+            FABRICATOR_FORMS_URL . 'assets/js/form-select.js',
+            [],
+            FABRICATOR_FORMS_VERSION,
+            true
+        );
+    }
+
+    /**
+     * Guard so the IBAN-lookup nonce is only ever emitted once per request.
+     *
+     * @var bool
+     */
+    private static bool $sepa_nonce_done = false;
+
+    /**
+     * Emits the IBAN-lookup nonce, for forms whose SEPA field has live lookup enabled.
+     *
+     * Attached as an 'after' inline script so it can't be clobbered regardless of print order; SepaField.js reads it at lookup time, not parse time.
+     *
+     * @return void
+     */
+    public static function markSepaLiveLookup(): void
+    {
+        if (self::$sepa_nonce_done) {
+            return;
+        }
+        self::$sepa_nonce_done = true;
+        self::ensureFrontAssets();
+
+        \wp_add_inline_script(
+            'fabricator-forms-front',
+            'window.FabricatorForms=window.FabricatorForms||{};window.FabricatorForms.ibanBicNonce='
+            . \wp_json_encode(\wp_create_nonce('fabricator_iban_bic')) . ';',
+            'after'
+        );
     }
 
     /**
@@ -417,7 +499,7 @@ class Assets
             }
         }
 
-        /* Field test harness (dev-only, WP_DEBUG-gated — see Plugin.php::load()) */
+        // Field test harness (dev-only, WP_DEBUG-gated — see Plugin.php::load()); build.ps1 strips it from releases so this hook never fires there.
         if (str_contains($hook, 'fabricator-field-tests')) {
             \wp_enqueue_style(
                 'fabricator-forms-admin-fieldtest',
@@ -568,5 +650,64 @@ class Assets
             return false;
         }
         return str_contains((string)$post->post_content, '[fabricator_form_select');
+    }
+
+    /**
+     * True when the current post embeds a form with a live-IBAN-lookup SEPA field — the only case needing ibanBicNonce.
+     *
+     * @return bool True when a live-lookup SEPA field is present on the page.
+     */
+    private static function pageHasSepaLiveLookup(): bool
+    {
+        global $post;
+        if (!$post || !\is_a($post, 'WP_Post')) {
+            return false;
+        }
+        $content = (string)$post->post_content;
+        if (!\has_shortcode($content, 'fabricator_form') && !\has_shortcode($content, 'fabricator_form_select')) {
+            return false;
+        }
+
+        $form_ids = [];
+        if (\preg_match_all('/\[fabricator_form\b([^\]]*)\]/', $content, $matches)) {
+            foreach ($matches[1] as $atts_str) {
+                $atts = \shortcode_parse_atts($atts_str);
+                $id   = (int)($atts['id'] ?? 0);
+                if ($id) {
+                    $form_ids[] = $id;
+                }
+            }
+        }
+        if (\preg_match_all('/\[fabricator_form_select\b([^\]]*)\]/', $content, $matches)) {
+            foreach ($matches[1] as $atts_str) {
+                $atts    = \shortcode_parse_atts($atts_str);
+                $fsel_id = (int)($atts['id'] ?? 0);
+                if (!$fsel_id) {
+                    continue;
+                }
+                $fsel = \FabricatorForms\Form\FormSelectModel::get($fsel_id);
+                if (!$fsel) {
+                    continue;
+                }
+                foreach ($fsel->items as $item) {
+                    if (!empty($item['form_id'])) {
+                        $form_ids[] = (int)$item['form_id'];
+                    }
+                }
+            }
+        }
+
+        foreach (array_unique($form_ids) as $form_id) {
+            $form = \FabricatorForms\Form\FormModel::get($form_id);
+            if (!$form) {
+                continue;
+            }
+            foreach ($form->fields as $field) {
+                if (($field['type'] ?? '') === 'sepa' && !empty($field['live_iban_lookup'])) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

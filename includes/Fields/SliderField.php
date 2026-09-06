@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -150,12 +150,14 @@ class SliderField extends BaseField
     public function extractValue(string $field_id): mixed
     {
         self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
         $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : null;
         if (is_array($raw)) {
+            // scalarSubfieldMap() avoids stringifying a nested from[]/to[] array to "Array".
+            $pair = self::scalarSubfieldMap($raw);
             return [
-                'from' => sanitize_text_field((string)($raw['from'] ?? '')),
-                'to'   => sanitize_text_field((string)($raw['to']   ?? '')),
+                'from' => sanitize_text_field($pair['from'] ?? ''),
+                'to'   => sanitize_text_field($pair['to']   ?? ''),
             ];
         }
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.

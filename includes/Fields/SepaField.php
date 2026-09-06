@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,6 +28,26 @@ defined('ABSPATH') || exit;
  */
 class SepaField extends BaseField
 {
+    /**
+     * Adds this field's label-like keys — all rendered via esc_html(), never as raw HTML — to
+     * the base plain-text allowlist. mandate_text/mandate_note are intentionally excluded: their
+     * schema entries say "HTML allowed" and render() passes them through wp_kses_post().
+     *
+     * @return string[]
+     */
+    protected function plainTextConfigKeys(): array
+    {
+        return array_merge(
+            parent::plainTextConfigKeys(),
+            [
+                'mandate_title', 'iban_label', 'bic_label', 'holder_label',
+                'creditor_id', 'mandate_ref', 'sig_label',
+                // esc_attr()'d into a data- attribute at render, never HTML.
+                'placeholder_country',
+            ]
+        );
+    }
+
     /**
      * Returns the client-side empty-check function for the required validator.
      *
@@ -287,7 +307,7 @@ class SepaField extends BaseField
         self::assertRequestNonceVerified();
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         $raw = isset($_POST[$field_id])
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce is verified once in FormProcessor::handle() before field extraction runs; value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
             ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field')
             : [];
         if (!is_array($raw)) {
@@ -361,66 +381,77 @@ class SepaField extends BaseField
             return __('Signature data is too large.', 'formfabricator');
         }
 
-        if (empty($config['required'])) {
-            return true;
-        }
+        $required = !empty($config['required']);
 
         if (!is_array($value)) {
-            return __('SEPA data missing.', 'formfabricator');
+            return $required ? __('SEPA data missing.', 'formfabricator') : true;
         }
 
         $iban   = trim((string)($value['iban']   ?? ''));
         $bic    = trim((string)($value['bic']    ?? ''));
         $holder = trim((string)($value['holder'] ?? ''));
+        $sig    = (string)($value['sig'] ?? '');
+
+        // Optional and fully empty is fine, but any partial data must still be well-formed.
+        if (!$required && $iban === '' && $bic === '' && $holder === '' && $sig === '') {
+            return true;
+        }
 
         if ($iban === '') {
-            return __('IBAN is a required field.', 'formfabricator');
-        }
-        $iban_clean = strtoupper(preg_replace('/\s/', '', $iban));
-        if (!preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/', $iban_clean)) {
-            return __('Please enter a valid IBAN.', 'formfabricator');
-        }
-        $iban_cc = substr($iban_clean, 0, 2);
-        if (isset(self::IBAN_LEN[$iban_cc]) && strlen($iban_clean) !== self::IBAN_LEN[$iban_cc]) {
-            return __('Please enter a valid IBAN.', 'formfabricator');
-        }
-        if (!self::ibanChecksumValid($iban_clean)) {
-            return __('Please enter a valid IBAN.', 'formfabricator');
-        }
-
-        // Re-checks the country allow/disallow list server-side even though front.js
-        // does the same check for instant feedback — the client check alone could be
-        // bypassed by a direct POST
-        $filter_mode = $config['country_filter_mode'] ?? 'off';
-        $filter_list = is_array($config['country_filter_list'] ?? null)
-            ? array_map('strtoupper', $config['country_filter_list'])
-            : [];
-        $iban_country = substr($iban_clean, 0, 2);
-
-        if ($filter_mode === 'allow' && !empty($filter_list)) {
-            if (!in_array($iban_country, $filter_list, true)) {
-                // translators: %s: two-letter IBAN country code.
-                return sprintf(__('IBANs from country "%s" are not allowed.', 'formfabricator'), esc_html($iban_country));
+            if ($required) {
+                return __('IBAN is a required field.', 'formfabricator');
             }
-        } elseif ($filter_mode === 'disallow' && !empty($filter_list)) {
-            if (in_array($iban_country, $filter_list, true)) {
-                // translators: %s: two-letter IBAN country code.
-                return sprintf(__('IBANs from country "%s" are not allowed.', 'formfabricator'), esc_html($iban_country));
+        } else {
+            $iban_clean = strtoupper(preg_replace('/\s/', '', $iban));
+            if (!preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/', $iban_clean)) {
+                return __('Please enter a valid IBAN.', 'formfabricator');
+            }
+            $iban_cc = substr($iban_clean, 0, 2);
+            if (isset(self::IBAN_LEN[$iban_cc]) && strlen($iban_clean) !== self::IBAN_LEN[$iban_cc]) {
+                return __('Please enter a valid IBAN.', 'formfabricator');
+            }
+            if (!self::ibanChecksumValid($iban_clean)) {
+                return __('Please enter a valid IBAN.', 'formfabricator');
+            }
+
+            // Re-checks the country allow/disallow list server-side even though front.js
+            // does the same check for instant feedback — the client check alone could be
+            // bypassed by a direct POST
+            $filter_mode = $config['country_filter_mode'] ?? 'off';
+            $filter_list = is_array($config['country_filter_list'] ?? null)
+                ? array_map('strtoupper', $config['country_filter_list'])
+                : [];
+            $iban_country = substr($iban_clean, 0, 2);
+
+            if ($filter_mode === 'allow' && !empty($filter_list)) {
+                if (!in_array($iban_country, $filter_list, true)) {
+                    // translators: %s: two-letter IBAN country code.
+                    return sprintf(__('IBANs from country "%s" are not allowed.', 'formfabricator'), esc_html($iban_country));
+                }
+            } elseif ($filter_mode === 'disallow' && !empty($filter_list)) {
+                if (in_array($iban_country, $filter_list, true)) {
+                    // translators: %s: two-letter IBAN country code.
+                    return sprintf(__('IBANs from country "%s" are not allowed.', 'formfabricator'), esc_html($iban_country));
+                }
             }
         }
 
         if ($bic === '') {
-            return __('BIC is a required field.', 'formfabricator');
-        }
-        if (!preg_match('/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/i', $bic)) {
+            if ($required) {
+                return __('BIC is a required field.', 'formfabricator');
+            }
+        } elseif (!preg_match('/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/i', $bic)) {
             return __('Please enter a valid BIC.', 'formfabricator');
         }
-        if ($holder === '') {
+
+        if ($holder === '' && $required) {
             return __('Account holder is a required field.', 'formfabricator');
         }
 
-        $sig = (string)($value['sig'] ?? '');
-        if ($sig === '' || !self::isSignatureDataUri($sig)) {
+        if ($required && $sig === '') {
+            return __('Signature is a required field.', 'formfabricator');
+        }
+        if ($sig !== '' && !self::isSignatureDataUri($sig)) {
             return __('Signature is a required field.', 'formfabricator');
         }
 

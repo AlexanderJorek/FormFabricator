@@ -5,6 +5,17 @@
  */
 (function ($) {
     'use strict';
+
+    /* Sets icon markup then appends translated text as a TEXT NODE.
+       Concatenating a translated string into innerHTML lets whoever supplies the .mo inject
+       markup — and WordPress loads .mo files from WP_LANG_DIR, which is not limited to reviewed
+       WordPress.org language packs. The icon markup here is a literal; only the text varies. */
+    function fabIconThenText(el, iconHtml, text) {
+        if (!el) { return; }
+        el.innerHTML = iconHtml;
+        el.appendChild(document.createTextNode(String(text == null ? '' : text)));
+    }
+
     var pageData = window.FabricatorSettingsPage || {};
     var I18N   = pageData.i18n   || {};
     var NONCES = pageData.nonces || {};
@@ -106,7 +117,7 @@ try {
                 }
 
                 confirmBtn.disabled = true;
-                confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + I18N.resetting;
+                fabIconThenText(confirmBtn, '<i class="fa-solid fa-spinner fa-spin"></i> ', I18N.resetting);
 
                 $.post(ajaxurl, {
                     action:    'fabricator_forms_factory_reset',
@@ -139,7 +150,7 @@ try {
                     if (sec <= 0) {
                         clearInterval(countdownTimer);
                         confirmBtn.disabled = false;
-                        confirmBtn.innerHTML = '<i class="fa-solid fa-check"></i> ' + I18N.yesReset;
+                        fabIconThenText(confirmBtn, '<i class="fa-solid fa-check"></i> ', I18N.yesReset);
                     } else {
                         confirmBtn.innerHTML = confirmLabel.replace('%d', sec);
                     }
@@ -165,60 +176,19 @@ try {
             var triggerBtn  = document.getElementById('fabricator-rotate-key-trigger');
             var cancelBtn   = document.getElementById('fabricator-key-cancel');
             var confirmBtn  = document.getElementById('fabricator-key-confirm');
-            var pwInput     = document.getElementById('fabricator_key_pw');
-            var pw2Input    = document.getElementById('fabricator_key_pw2');
             var chk         = document.getElementById('fabricator_key_compromised');
             var cmpHint     = document.getElementById('fabricator-key-compromised-hint');
-            var errList     = document.getElementById('fabricator-key-pw-errors');
-            var bars        = document.querySelectorAll('#fabricator-key-strength span');
             var modalMsg    = document.getElementById('fabricator-key-modal-msg');
 
             if (!triggerBtn) { return; }
 
-            function rules(pw) {
-                return [
-                    { ok: pw.length >= 12,          label: I18N.minChars },
-                    { ok: /[A-Z]/.test(pw),         label: I18N.upperLetter },
-                    { ok: /[a-z]/.test(pw),         label: I18N.lowerLetter },
-                    { ok: /[0-9]/.test(pw),         label: I18N.digit },
-                    { ok: /[^A-Za-z0-9]/.test(pw), label: I18N.specialChar },
-                ];
-            }
-
-            function validate() {
-                var pw  = pwInput.value;
-                var rs  = rules(pw);
-                var passed = rs.filter(function (r) { return r.ok; }).length;
-
-                bars.forEach(function (b, i) {
-                    b.className = i < passed ? 'fabricator-key-bar-' + Math.min(passed, 5) : '';
-                });
-
-                errList.innerHTML = '';
-                rs.forEach(function (r) {
-                    if (!r.ok) {
-                        var li = document.createElement('li');
-                        li.textContent = r.label;
-                        errList.appendChild(li);
-                    }
-                });
-
-                var allPass = rs.every(function (r) { return r.ok; });
-                var match   = pw !== '' && pw === pw2Input.value;
-                confirmBtn.disabled = !(allPass && match);
-            }
-
             function openModal() {
-                pwInput.value  = '';
-                pw2Input.value = '';
                 chk.checked    = false;
                 cmpHint.hidden = true;
                 modalMsg.hidden = true;
-                errList.innerHTML = '';
-                bars.forEach(function (b) { b.className = ''; });
-                confirmBtn.disabled = true;
+                confirmBtn.disabled = false;
                 keyOverlay.hidden = false;
-                pwInput.focus();
+                confirmBtn.focus();
             }
 
             function closeKeyModal() {
@@ -236,9 +206,6 @@ try {
                 if (e.key === 'Escape' && !keyOverlay.hidden) { closeKeyModal(); }
             });
 
-            pwInput.addEventListener('input', validate);
-            pw2Input.addEventListener('input', validate);
-
             chk.addEventListener('change', function () {
                 cmpHint.hidden = !chk.checked;
             });
@@ -250,8 +217,6 @@ try {
                 var fd = new FormData();
                 fd.append('action',               'fabricator_forms_rotate_key');
                 fd.append('nonce',                NONCES.rotate);
-                fd.append('key_password',         pwInput.value);
-                fd.append('key_password_confirm', pw2Input.value);
                 fd.append('key_compromised',      chk.checked ? '1' : '0');
 
                 fetch(ajaxurl, { method: 'POST', body: fd })
@@ -319,16 +284,38 @@ try {
 
             dlConfirm.onclick = function () {
                 dlOverlay.hidden = true;
-                location.reload();
+                // Only this confirmation actually deletes the one-shot pending-download
+                // transient server-side — page render only ever peeks at it, so a lost/failed
+                // request here just means the modal reappears on the next page load.
+                var fd = new FormData();
+                fd.append('action', 'fabricator_confirm_key_download');
+                fd.append('nonce', NONCES.confirmDownload || '');
+                fetch(ajaxurl, { method: 'POST', body: fd })
+                    .catch(function () {})
+                    .then(function () {
+                        location.reload();
+                    });
             };
         }
 
-        /* Show download modal on page load if a key was just auto-generated */
+        /* Show download modal on page load if a key was just auto-generated. The page only
+           carries a boolean flag — the plaintext key itself is fetched here, on demand, so it
+           never appears in page source or bfcache (see FormSettings::handlePeekKeyDownload()). */
         (function () {
-            var pending = DATA.pendingDownload;
-            if (pending && pending.uuid && pending.key) {
-                showKeyDownloadModal(pending);
-            }
+            if (!DATA.hasPendingDownload) { return; }
+
+            var fd = new FormData();
+            fd.append('action', 'fabricator_peek_key_download');
+            fd.append('nonce', NONCES.confirmDownload || '');
+            fetch(ajaxurl, { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var pending = data && data.success ? data.data : null;
+                    if (pending && pending.uuid && pending.key) {
+                        showKeyDownloadModal(pending);
+                    }
+                })
+                .catch(function () {});
         }());
 
         /* ── Legacy-key import modal ── */
@@ -681,13 +668,6 @@ try {
                         mkError.textContent   = I18N.networkError;
                         mkError.style.display = 'block';
                     });
-            });
-        }());
-
-        /* ── Fake-password: remove readonly on focus so managers can't pre-fill ── */
-        (function () {
-            document.querySelectorAll('.fabricator-fake-password').forEach(function (el) {
-                el.addEventListener('focus', function () { el.removeAttribute('readonly'); });
             });
         }());
 
@@ -1137,7 +1117,7 @@ try {
                 e.preventDefault();
                 var btn = form.querySelector('button[type="submit"]');
                 var origHtml = btn ? btn.innerHTML : '';
-                if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fabricator-spinner"></span> ' + I18N.saving; }
+                if (btn) { btn.disabled = true; fabIconThenText(btn, '<span class="fabricator-spinner"></span> ', I18N.saving); }
                 var fd = new FormData(form);
                 fd.set('action', 'fabricator_save_general_settings');
                 requestAnimationFrame(function(){ requestAnimationFrame(function(){

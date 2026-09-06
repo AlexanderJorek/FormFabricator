@@ -5,6 +5,17 @@
  */
 (function () {
     'use strict';
+
+    /* Sets icon markup then appends translated text as a TEXT NODE.
+       Concatenating a translated string into innerHTML lets whoever supplies the .mo inject
+       markup — and WordPress loads .mo files from WP_LANG_DIR, which is not limited to reviewed
+       WordPress.org language packs. The icon markup here is a literal; only the text varies. */
+    function fabIconThenText(el, iconHtml, text) {
+        if (!el) { return; }
+        el.innerHTML = iconHtml;
+        el.appendChild(document.createTextNode(String(text == null ? '' : text)));
+    }
+
     var pageData = window.FabricatorPdfLayoutPage || {};
     var I18N = pageData.i18n || {};
     var DATA = pageData.data || {};
@@ -20,6 +31,16 @@
         + DATA.dummySignature;
     var dummyUploadSrc = 'data:image/png;base64,'
         + DATA.dummyUpload;
+
+    /* Escapes a localized string before it's concatenated into the preview's HTML string
+       (this preview is built by string concatenation, not DOM nodes). */
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
 
     /* Same msgid as Generator.php's footerHtml() so this preview matches the real PDF, not a hardcoded duplicate. */
         
@@ -203,17 +224,17 @@
                 var imgStyle = 'max-width:100%;max-height:300px;border:1px solid #ccc;padding:4px;display:block;';
                 /* Signature */
                 out+='<div style="margin-bottom:14px;">';
-                out+='<div style="font-weight:700;font-size:'+pt(s.title_size)+';margin-bottom:4px;color:#222;">Unterschrift</div>';
+                out+='<div style="font-weight:700;font-size:'+pt(s.title_size)+';margin-bottom:4px;color:#222;">'+escHtml(I18N.sampleSignature||'Signature')+'</div>';
                 out+='<div style="border-bottom:1px solid '+s.separator_color+';margin-bottom:4px;"></div>';
-                out+='<div style="margin:8px 0;"><img src="'+dummySignatureSrc+'" width="300" height="80" style="'+imgStyle+'" alt="Unterschrift"></div>';
+                out+='<div style="margin:8px 0;"><img src="'+dummySignatureSrc+'" width="300" height="80" style="'+imgStyle+'" alt="'+escHtml(I18N.sampleSignature||'Signature')+'"></div>';
                 out+='<div style="border-bottom:3px solid '+s.accent_color+';margin-top:2px;"></div>';
                 out+='</div>';
                 /* Upload / Anhang */
                 out+='<div style="margin-bottom:14px;">';
-                out+='<div style="font-weight:700;font-size:'+pt(s.title_size)+';margin-bottom:4px;color:#222;">Anhang</div>';
+                out+='<div style="font-weight:700;font-size:'+pt(s.title_size)+';margin-bottom:4px;color:#222;">'+escHtml(I18N.sampleAttachment||'Attachment')+'</div>';
                 out+='<div style="border-bottom:1px solid '+s.separator_color+';margin-bottom:4px;"></div>';
-                out+='<div style="font-size:'+pt(s.font_size_body)+';margin-bottom:5px;color:#333;">beispiel-dokument.png</div>';
-                out+='<div style="margin:8px 0;"><img src="'+dummyUploadSrc+'" width="300" height="80" style="'+imgStyle+'" alt="Anhang"></div>';
+                out+='<div style="font-size:'+pt(s.font_size_body)+';margin-bottom:5px;color:#333;">sample-document.png</div>';
+                out+='<div style="margin:8px 0;"><img src="'+dummyUploadSrc+'" width="300" height="80" style="'+imgStyle+'" alt="'+escHtml(I18N.sampleAttachment||'Attachment')+'"></div>';
                 out+='<div style="border-bottom:3px solid '+s.accent_color+';margin-top:2px;"></div>';
                 out+='</div>';
             }
@@ -402,7 +423,7 @@
         pdfBtn.addEventListener('click', function(){
             var origHtml = pdfBtn.innerHTML;
             pdfBtn.disabled = true;
-            pdfBtn.innerHTML = '<span class="fabricator-spinner"></span> ' + I18N.generating;
+            fabIconThenText(pdfBtn, '<span class="fabricator-spinner"></span> ', I18N.generating);
             var fd = new FormData();
             fd.append('action', 'fabricator_forms_pdf_preview');
             fd.append('nonce',  DATA.nonce);
@@ -690,6 +711,8 @@
             +'<div class="fabricator-hb-img-picker-sep"><span>' + I18N.orLabel + '</span></div>'
             +'<div class="fabricator-hb-prop-group"><span>' + I18N.externalUrl + '</span>'
             +'<input type="text" id="hb-pick-url" placeholder="https://…" style="margin-bottom:4px">'
+            +'<p class="fabricator-hb-img-picker-hint"><i class="fa-solid fa-circle-info"></i> '
+            + hbEsc(I18N.externalUrlHint) + '</p>'
             +'<button type="button" class="button" id="hb-pick-url-confirm" style="width:100%">' + I18N.insert + '</button>'
             +'</div>'
             +'<button type="button" class="button" id="hb-pick-cancel" style="width:100%;margin-top:8px">' + I18N.cancel + '</button>'
@@ -1229,7 +1252,7 @@
         var btn = document.querySelector('[form="fabricator-pdf-layout-form"][type="submit"]')
             || form.querySelector('button[type="submit"]');
         var origHtml = btn ? btn.innerHTML : '';
-        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="fabricator-spinner"></span> ' + I18N.saving; }
+        if (btn) { btn.disabled = true; fabIconThenText(btn, '<span class="fabricator-spinner"></span> ', I18N.saving); }
         var fd = new FormData(form);
         fd.set('action', 'fabricator_save_pdf_layout');
         requestAnimationFrame(function(){ requestAnimationFrame(function(){

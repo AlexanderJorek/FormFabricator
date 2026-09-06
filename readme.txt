@@ -4,7 +4,7 @@ Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -41,13 +41,13 @@ FormFabricator's core functionality does not communicate with any external servi
 **Google reCAPTCHA** (Captcha field)
 When you configure a reCAPTCHA site key and secret key in the form settings and add a Captcha field to a form, each form submission's response token is verified server-side against:
 `https://www.google.com/recaptcha/api/siteverify`
-The token itself (and nothing else from the submission) is sent to Google. This only happens if you explicitly add a Captcha field and configure the keys.
+The token itself, plus the visitor's IP address (passed as reCAPTCHA's `remoteip` parameter), is sent to Google — no other submission data. This only happens if you explicitly add a Captcha field and configure the keys.
 Google reCAPTCHA [Terms of Service](https://policies.google.com/terms) | [Privacy Policy](https://policies.google.com/privacy)
 
 **openiban.com IBAN/BIC lookup** (SEPA field)
-If a form contains a SEPA Direct Debit field, every time a site visitor finishes typing a syntactically valid IBAN into that field, their browser automatically sends that IBAN to:
+If a form contains a SEPA Direct Debit field with live IBAN lookup enabled, every time a site visitor finishes typing a syntactically valid IBAN into that field, their browser sends that IBAN to this site's own admin-ajax.php endpoint, which then makes the outbound request server-side to:
 `https://openiban.com/validate/`
-to look up and auto-fill the matching BIC. This happens live on the public-facing form for every visitor who fills in the IBAN field on a form containing a SEPA field — not just in the admin editor. No other submission data is sent. openiban.com is a free lookup service built on the [MIT-licensed goiban-service](https://github.com/apilayer/goiban-service#the-mit-license-mit); it does not publish a separate terms-of-service or privacy-policy document. Its [homepage](https://openiban.com/) states its data practice directly ("No personal data is stored. No request logs are written. Everything works in memory.") and its [imprint](https://openiban.com/imprint.html) identifies the operator.
+to look up and auto-fill the matching BIC — the visitor's browser never contacts openiban.com directly, so it is this site's server IP (not the visitor's) that reaches openiban.com. This happens live on the public-facing form for every visitor who fills in the IBAN field on a form containing a SEPA field with live lookup enabled — not just in the admin editor. No other submission data is sent. openiban.com is a free lookup service built on the [MIT-licensed goiban-service](https://github.com/apilayer/goiban-service#the-mit-license-mit); it does not publish a separate terms-of-service or privacy-policy document. Its [homepage](https://openiban.com/) states its data practice directly ("No personal data is stored. No request logs are written. Everything works in memory.") and its [imprint](https://openiban.com/imprint.html) identifies the operator.
 
 == Third-Party Libraries & Credits ==
 
@@ -91,6 +91,17 @@ FormFabricator generates a cryptographic seal key used to make generated PDFs ta
 Yes — the PDF Layout Editor (under FormFabricator → PDF Layout) lets you configure the logo, colors, fonts, margins, and header/footer content used when rendering submissions to PDF.
 
 == Changelog ==
+
+= 1.0.6 =
+* Security: PDF seal-key rotation now generates a fully random key instead of deriving it from a password, closing a theoretical offline brute-force path. Please back up your key file after updating (Settings → PDF Seal Key) — existing PDFs remain fully verifiable.
+* Fixed: CC/BCC recipients on notification emails were saved but never actually sent.
+* Fixed: using a form field as the notification recipient, reply-to, sender, or subject could produce a broken, undeliverable address.
+* Fixed: forms placed in a widget, page builder, block template, or theme template could fail to load their scripts and be unable to submit.
+* Fixed: a shortcode without an explicit form ID could crash the whole page instead of simply showing nothing.
+* Fixed: various conditional-logic, file-upload, GDPR-checkbox, and per-user access-control bugs.
+* Fixed: deleting the plugin on a multisite network now cleans up every site, not just one.
+* Improved: memory usage during large submissions now scales with the upload size and your server's actual capacity, instead of a fixed limit.
+* Smaller, more secure release package — development-only files removed, more admin text translatable.
 
 = 1.0.5 =
 * Compliance: removed all remaining HEREDOC/NOWDOC syntax from field code (a WordPress.org hosting requirement); larger embedded field scripts/styles moved to proper, lintable .js/.css files.

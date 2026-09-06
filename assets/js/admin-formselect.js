@@ -66,10 +66,15 @@
                 if (isEmpty) { syncBulkBar(); }
             }
 
+            /* Also encodes ' (not just &,<,>,"), matching admin-builder.js's escHtml() so two
+               helpers of the same name can't offer different guarantees — every current call
+               site interpolates into a double-quoted attribute, but a future single-quoted one
+               would silently be unprotected. */
             function escHtml(str) {
                 return String(str)
                     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
             }
 
             var colHeader      = document.getElementById('fabricator-fsel-col-header');

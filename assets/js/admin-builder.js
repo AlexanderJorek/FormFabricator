@@ -2427,7 +2427,7 @@ function spInfoIcon(text) {
     icon.className = 'fa-solid fa-circle-info';
     wrap.appendChild(icon);
 
-    // Appended to <body> (position:fixed), not `wrap` — the settings modal's overflow:hidden would clip an absolutely-positioned descendant tooltip (same fix as fabricator-access-dropdown in FormSettings.php).
+    // Appended to <body>, not `wrap` — avoids clipping by the settings modal's overflow:hidden (same fix as fabricator-access-dropdown in FormSettings.php).
     var tip = document.createElement('span');
     tip.className   = 'fabricator-info-tooltip';
     tip.textContent = text;
@@ -2465,9 +2465,7 @@ function spInfoIcon(text) {
         if (e.key === 'Escape') { hide(); }
     });
 
-    // The tooltip lives on <body>, not inside `wrap` — remove it when the icon
-    // itself is ever removed from the DOM (e.g. rebuilding the settings panel),
-    // or it would leak a detached, invisible node on every rebuild.
+    // Tooltip lives on <body>, not inside `wrap` — remove it when the icon is removed or it leaks a detached node.
     var observer = new MutationObserver(function () {
         if (!document.body.contains(wrap)) {
             tip.remove();
@@ -3400,9 +3398,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
 
 /* Shared cleaning pass used by both serialization modes below — mutates doc in place, returns nothing. */
 function cleanRichDoc(doc) {
-    // The editor's own display-only scaffold (see loadDoc()) — never part of the admin's actual
-    // authored content, and must not survive into either the fragment or the full-document
-    // serialization below (the latter is what notification emails are literally sent as).
+    // Editor's own display-only scaffold (see loadDoc()) — must not survive into the fragment/full-document output (sent as emails).
     var editorStyle = doc.getElementById('fabricator-editor-preview-style');
     if (editorStyle) { editorStyle.remove(); }
     // loadDoc() also sets overflow-x:hidden inline on <html>/<body> for the editor widget; that's scaffolding too and must not leak into the stored/sent document.

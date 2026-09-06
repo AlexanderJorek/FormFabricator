@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -31,8 +31,7 @@ defined('ABSPATH') || exit;
 function fabricator_log(string $message): void
 {
     if (defined('WP_DEBUG') && WP_DEBUG) {
-        // This is the plugin's shared WP_DEBUG-gated logging helper, called from many files;
-        // it never runs unless WP_DEBUG is on, so it's not leftover production debug code.
+        // Gated on WP_DEBUG so this isn't leftover production debug code.
         // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see comment above
         error_log($message);
     }
@@ -45,15 +44,21 @@ class Plugin
 {
     private static bool $initialized = false;
 
-    // Every recurring cron hook this plugin schedules. Kept in one place so
-    // register_deactivation_hook() (forge-forms.php) can clear all of them without the
-    // cleanup list drifting out of sync as new sweeps are added here.
+    /* Recurring sweeps: scheduled hourly by scheduleSweeps() AND cleared on deactivation/uninstall.
+       Anything added here starts firing every hour, so one-off events belong in ONE_OFF_CRON_HOOKS. */
     public const CRON_HOOKS = [
         'fabricator_generator_sweep_tmp_dirs',
         'fabricator_rl_sweep_expired',
         'fabricator_su_sweep_expired',
         'fabricator_cs_sweep_expired',
         'fabricator_verifier_sweep_tmp_dirs',
+    ];
+
+    /* Cron hooks that are scheduled on demand as single events (never by scheduleSweeps()) and so must
+       NOT be added to CRON_HOOKS above -- listing one there would schedule it as a recurring hourly job.
+       They can still be pending when the plugin is deactivated or deleted, so teardown must clear them. */
+    public const ONE_OFF_CRON_HOOKS = [
+        'fabricator_verifier_cleanup_files',
     ];
 
     /**
@@ -109,8 +114,11 @@ class Plugin
             'Utils/RateLimiter.php',
             'Utils/SingleUseToken.php',
             'Utils/ConcurrencySlot.php',
+            'Utils/MemoryBudget.php',
             'Utils/AdminLock.php',
-            'Utils/Sanitize.php',
+            'Utils/Cast.php',
+            'Utils/AjaxGuard.php',
+            'Utils/SecureDir.php',
         ]);
 
         foreach ($files as $file) {
@@ -123,14 +131,32 @@ class Plugin
                 'Admin/FormList.php', 'Admin/FormEditor.php', 'Admin/FormSettings.php',
                 'Admin/PDFLayoutEditor.php', 'Admin/Verificationpage.php',
             ];
-            // Dev-only test harness — never loaded (or registered as a menu page) on
-            // a production site where WP_DEBUG is off
-            if (defined('WP_DEBUG') && WP_DEBUG) {
+            // Dev-only test harness, off in production; file_exists() since build.ps1 strips it from the shipped package.
+            if (defined('WP_DEBUG') && WP_DEBUG
+                && file_exists(FABRICATOR_FORMS_PATH . 'includes/Admin/FieldTestPage.php')
+            ) {
                 $adminFiles[] = 'Admin/FieldTestPage.php';
             }
             foreach ($adminFiles as $file) {
                 // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file is drawn from the hardcoded $adminFiles array above (every entry already ends in .php); nothing here is attacker- or request-influenced.
                 include_once FABRICATOR_FORMS_PATH . 'includes/' . $file;
+            }
+        }
+    }
+
+    /**
+     * Ensures every recurring sweep is scheduled. Idempotent.
+     *
+     * Called from the activation hook, and again from admin_init as a self-heal for sites upgraded in place.
+     *
+     * @return void
+     */
+    public static function scheduleSweeps(): void
+    {
+        foreach (self::CRON_HOOKS as $hook) {
+            // Scheduling the verifier sweep here too is harmless and keeps all scheduling in one place.
+            if (!wp_next_scheduled($hook)) {
+                wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', $hook);
             }
         }
     }
@@ -180,33 +206,24 @@ class Plugin
            happens on public form submissions and wp-cron.php requests aren't
            admin requests either. */
         add_action('fabricator_generator_sweep_tmp_dirs', [PDF\Generator::class, 'cronSweepTmpDirs']);
-        if (!wp_next_scheduled('fabricator_generator_sweep_tmp_dirs')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_generator_sweep_tmp_dirs');
-        }
 
         /* Fallback sweep for expired fabricator_rl_* rate-limit rows — without this,
            every distinct IP+form bucket that ever hits RateLimiter::increment()
            leaves a permanent wp_options row (GDPR storage-limitation: the key
            embeds a hash of the visitor's IP). */
         add_action('fabricator_rl_sweep_expired', [Utils\RateLimiter::class, 'cronSweepExpired']);
-        if (!wp_next_scheduled('fabricator_rl_sweep_expired')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_rl_sweep_expired');
-        }
 
         /* Sweeps expired fabricator_su_* single-use-claim rows — same rationale as the sweep above. */
         add_action('fabricator_su_sweep_expired', [Utils\SingleUseToken::class, 'cronSweepExpired']);
-        if (!wp_next_scheduled('fabricator_su_sweep_expired')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_su_sweep_expired');
-        }
 
         /* Sweeps expired fabricator_cs_* concurrency-slot rows — same rationale as the sweep above. */
         add_action('fabricator_cs_sweep_expired', [Utils\ConcurrencySlot::class, 'cronSweepExpired']);
-        if (!wp_next_scheduled('fabricator_cs_sweep_expired')) {
-            wp_schedule_event(time() + HOUR_IN_SECONDS, 'hourly', 'fabricator_cs_sweep_expired');
-        }
 
         /* Remove deleted forms from all FormSelect lists */
         add_action('before_delete_post', [Form\FormSelectModel::class, 'removeFormId'], 10, 1);
+
+        /* Remove deleted forms' per-notification PDF-attachment flags */
+        add_action('before_delete_post', [Form\FormModel::class, 'removeFormPdfSettings'], 10, 1);
 
         /* Assets */
         add_action('wp_enqueue_scripts', [Utils\Assets::class, 'enqueueFront']);
@@ -218,12 +235,19 @@ class Plugin
             Admin\FormSettings::init();
             Admin\PDFLayoutEditor::init();
             Admin\Verificationpage::register();
-            if (defined('WP_DEBUG') && WP_DEBUG) {
+            // class_exists(): the harness is absent from release builds (see load()).
+            if (defined('WP_DEBUG') && WP_DEBUG && class_exists(Admin\FieldTestPage::class)) {
                 Admin\FieldTestPage::register();
             }
             add_action('admin_enqueue_scripts', [Utils\Assets::class, 'enqueueAdmin']);
             add_action('admin_init', [self::class, 'maybeSealSetupRedirect']);
+            /* Self-heal for sites upgraded in place (no activation hook fires) or whose cron
+               array was cleared. Admin-only, so public page loads never pay for the lookup. */
+            add_action('admin_init', [self::class, 'scheduleSweeps']);
+            /* Surfaces the openiban.com / reCAPTCHA disclosure in Settings > Privacy. */
+            add_action('admin_init', [self::class, 'registerPrivacyPolicyContent']);
             add_filter('plugin_action_links_' . FABRICATOR_FORMS_BASENAME, [self::class, 'addDeleteWarningLink']);
+            add_action('admin_enqueue_scripts', [self::class, 'enqueuePluginDeleteWarning']);
         }
     }
 
@@ -265,17 +289,13 @@ class Plugin
      */
     public static function ajaxIbanBic(): void
     {
-        // Nonce is only emitted on pages embedding a form, so this can't be a bare IBAN/BIC oracle.
-        // Checked before the rate-limit increment below so an unauthenticated request without a
-        // valid nonce can't write wp_options rows via RateLimiter::increment() at all.
+        // Checked before the rate-limit increment so a request without a valid nonce can't write wp_options rows at all.
         if (!check_ajax_referer('fabricator_iban_bic', 'nonce', false)) {
             wp_send_json_error();
             return;
         }
 
-        // Proxied through this WP endpoint (rather than calling openiban.com from the
-        // browser) to avoid CORS issues and to rate-limit our own usage of their API.
-        // See includes/Utils/ClientIp.php for the trusted-proxy-aware IP resolution.
+        // Proxied through this WP endpoint to avoid CORS and to rate-limit our own usage of the openiban.com API.
         $ip  = Utils\ClientIp::resolve();
         $key = 'iban_' . hash_hmac('sha256', $ip, wp_salt('auth'));
         if (Utils\RateLimiter::increment($key, MINUTE_IN_SECONDS) > 20) {
@@ -283,16 +303,39 @@ class Plugin
             return;
         }
 
-        // 15 is the shortest valid IBAN length (Norway); the openiban.com call below
-        // rejects anything malformed regardless, this is just an early cheap reject
+        // 15 = shortest valid IBAN (Norway), 34 = longest (ISO 13616); cheap early reject before hitting openiban.com.
         $iban = preg_replace('/[^A-Z0-9]/', '', strtoupper(sanitize_text_field(wp_unslash($_POST['iban'] ?? ''))));
-        if (strlen($iban) < 15) {
+        if (strlen($iban) < 15 || strlen($iban) > 34) {
             wp_send_json_error();
             return;
         }
 
+        // Global concurrency cap, not just a per-IP rate limit: the nopriv nonce is identical for
+        // every anonymous visitor for its ~12-24h tick window (that's inherent to how WP nonces
+        // work for logged-out actions, not something this endpoint can change), so a distributed
+        // source can stay under the 20/min-per-IP cap and still occupy a worker per request for
+        // the whole outbound round trip. 4 concurrent × the 5s timeout below bounds the worst
+        // case to a small, fixed slice of any FPM pool; live BIC lookup is inherently low-volume,
+        // so a tight cap costs legitimate visitors nothing.
+        // This job is bounded by worker occupancy, not memory, so it reserves a nominal 1 byte
+        // against a 1-byte-per-holder budget and lets ConcurrencySlot's $max_holders cap (4) be
+        // the binding constraint.
+        $cs_bucket = 'iban_bic';
+        $cs_token  = Utils\ConcurrencySlot::reserve($cs_bucket, 1, 4, 15, 4);
+        if ($cs_token === false) {
+            wp_send_json_error();
+            return;
+        }
+        register_shutdown_function(
+            static function () use ($cs_bucket, $cs_token): void {
+                Utils\ConcurrencySlot::release($cs_bucket, $cs_token);
+            }
+        );
+
         $url      = 'https://openiban.com/validate/' . rawurlencode($iban) . '?getBIC=true&validateBankCode=true';
-        $response = wp_remote_get($url, ['timeout' => 8]);
+        // 5s, matching CaptchaField's outbound timeout — long enough for a lookup API, short
+        // enough that a stalled upstream can't pin workers for the old 8s each.
+        $response = wp_remote_get($url, ['timeout' => 5]);
 
         if (is_wp_error($response)) {
             wp_send_json_error();
@@ -324,9 +367,16 @@ class Plugin
     public static function availablePrivacyLanguages(): array
     {
         $langs = ['en' => 'English'];
-        foreach (glob(FABRICATOR_FORMS_PATH . 'languages/formfabricator-*.mo') ?: [] as $path) {
-            if (preg_match('/^formfabricator-([A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?)\.mo$/', basename($path), $m)) {
-                $langs[$m[1]] = self::localeDisplayName($m[1]);
+        // WP_LANG_DIR/plugins is where WP.org language packs install (the only one populated in production); the bundled path covers dev checkouts.
+        $dirs = [
+            rtrim((string) WP_LANG_DIR, '/\\') . '/plugins',
+            rtrim(FABRICATOR_FORMS_PATH, '/\\') . '/languages',
+        ];
+        foreach ($dirs as $dir) {
+            foreach (glob($dir . '/formfabricator-*.mo') ?: [] as $path) {
+                if (preg_match('/^formfabricator-([A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?)\.mo$/', basename($path), $m)) {
+                    $langs[$m[1]] = self::localeDisplayName($m[1]);
+                }
             }
         }
         return $langs;
@@ -356,7 +406,7 @@ class Plugin
         return [
             __('SEPA Direct Debit (OpenIBAN)', 'formfabricator') . "\n" . __(
                 // phpcs:ignore Generic.Files.LineLength -- must be a single string literal for WordPress i18n tooling to extract it correctly, see WordPress.WP.I18n.NonSingularStringLiteralText
-                "If you enter an IBAN in a form, it will be transmitted to the OpenIBAN service (openiban.com) for validation and to determine the corresponding BIC. Only the IBAN you entered and the connection data required for technical transmission will be processed. This processing is carried out for the purpose of verifying the bank account information. For more information on data processing, please refer to OpenIBAN's Privacy Policy.",
+                "If a form on this site uses a SEPA Direct Debit field with live IBAN lookup enabled, the IBAN you type is sent to our server, which then queries the OpenIBAN service (openiban.com) to validate it and determine the corresponding BIC. The request to OpenIBAN is made by our server, not by your browser, so your IP address is not disclosed to OpenIBAN. Only the IBAN itself is transmitted. This processing is carried out for the purpose of verifying the bank account information. Where live lookup is not enabled, no IBAN data leaves this site before you submit the form. For more information on data processing, please refer to OpenIBAN's Privacy Policy.",
                 'formfabricator'
             ),
             __('Google reCAPTCHA', 'formfabricator') . "\n" . __(
@@ -368,9 +418,32 @@ class Plugin
     }
 
     /**
+     * Registers the third-party disclosure with WordPress's Privacy Policy Guide (Settings > Privacy).
+     *
+     * @return void
+     */
+    public static function registerPrivacyPolicyContent(): void
+    {
+        if (!function_exists('wp_add_privacy_policy_content')) {
+            return;
+        }
+        $html = '';
+        foreach (self::privacyPolicyParagraphs() as $paragraph) {
+            // Each paragraph is "Heading\nBody" — render the heading as a sub-heading.
+            $parts   = explode("\n", $paragraph, 2);
+            $heading = $parts[0];
+            $body    = $parts[1] ?? '';
+            $html   .= '<h3>' . esc_html($heading) . '</h3>'
+                . '<p class="privacy-policy-tutorial">' . esc_html($body) . '</p>';
+        }
+        wp_add_privacy_policy_content('FormFabricator', $html);
+    }
+
+    /**
      * Suggested privacy-policy text, rendered in $lang regardless of the site's current admin-UI locale.
      *
      * @param string $lang Locale code from availablePrivacyLanguages().
+     * @return string The disclosure paragraphs, blank-line separated.
      */
     public static function privacyPolicyPlainText(string $lang): string
     {
@@ -381,10 +454,7 @@ class Plugin
     }
 
     /**
-     * Runs $callback with this plugin's textdomain swapped to $locale, then restores it; saves/restores only
-     * $l10n['formfabricator'] rather than switch_to_locale() to avoid mutating WP's global locale stack. For
-     * 'en' installs NOOP_Translations instead of unsetting the key, since unsetting re-triggers WP 6.7's
-     * just-in-time textdomain auto-reload (from the site's locale, not English) on the next __()/_e() call.
+     * Runs $callback with this plugin's textdomain swapped to $locale, then restores it.
      *
      * @param string   $locale   Locale code, e.g. 'de_DE', or 'en' for the gettext source language (no
      *                           .mo to load).
@@ -392,31 +462,21 @@ class Plugin
      */
     private static function withPluginLocale(string $locale, callable $callback): string
     {
-        global $l10n;
-        $had_previous = array_key_exists('formfabricator', $l10n);
-        $previous     = $had_previous ? $l10n['formfabricator'] : null;
-
-        if ($locale === 'en' || $locale === '') {
-            if (!class_exists(\NOOP_Translations::class)) {
-                require_once ABSPATH . WPINC . '/pomo/translations.php';
-            }
-            $l10n['formfabricator'] = new \NOOP_Translations();
-        } elseif (preg_match('/^[A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?$/', $locale)) {
-            unset($l10n['formfabricator']);
-            // Reads from WP_LANG_DIR, where WordPress.org's language-pack system installs it (no bundled .mo ships).
-            $mofile = WP_LANG_DIR . '/plugins/formfabricator-' . $locale . '.mo';
-            if (file_exists($mofile)) {
-                load_textdomain('formfabricator', $mofile);
-            }
+        // Uses WP's switch_to_locale()/restore_previous_locale() API rather than reaching into the $l10n global directly.
+        // 'en' -> 'en_US': this plugin's gettext source language has no .mo, so translation falls through to the original msgids.
+        $target = ($locale === 'en' || $locale === '') ? 'en_US' : $locale;
+        if (!preg_match('/^[A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?$/', $target)) {
+            return $callback();
         }
 
+        $switched = switch_to_locale($target);
         try {
             return $callback();
         } finally {
-            if ($had_previous) {
-                $l10n['formfabricator'] = $previous;
-            } else {
-                unset($l10n['formfabricator']);
+            // Only restore when the switch actually took effect; restoring otherwise would pop a
+            // locale off the switcher's stack that this call never pushed.
+            if ($switched) {
+                restore_previous_locale();
             }
         }
     }
@@ -438,9 +498,7 @@ class Plugin
                 'add_new_item'  => __('Add New Form', 'formfabricator'),
                 'edit_item'     => __('Edit Form', 'formfabricator'),
             ],
-            // public/show_ui/show_in_menu/show_in_rest are all false because forms are
-            // managed entirely through this plugin's own custom admin UI (Admin\FormEditor,
-            // Admin\FormList), not WordPress's default post-editing screens
+            // public/show_ui/show_in_menu/show_in_rest are false — forms use this plugin's own custom admin UI, not WP's post-editing screens.
             'public'              => false,
             'show_ui'             => false,
             'show_in_menu'        => false,
@@ -479,22 +537,38 @@ class Plugin
      */
     public static function addDeleteWarningLink(array $links): array
     {
-        if (isset($links['delete'])) {
-            $links['delete'] = preg_replace(
-                '/(<a\s)/i',
-                '$1onclick="return confirm(\''
-                    . esc_js(__('WARNING: Deleting the plugin will permanently delete all PDF seal keys. Make sure you have backed up your keys. Continue?', 'formfabricator'))
-                    . '\');" ',
-                (string) $links['delete']
-            );
+        if (!isset($links['delete'])) {
+            return $links;
         }
+        // Wraps core's delete link rather than regex-injecting an inline onclick (which Plugin Check flags); behavior lives in admin-plugin-delete-warning.js.
+        $links['delete'] = '<span class="fabricator-delete-warning" data-fabricator-warning="'
+            . esc_attr(__('WARNING: Deleting the plugin will permanently delete all PDF seal keys. Make sure you have backed up your keys. Continue?', 'formfabricator'))
+            . '">' . $links['delete'] . '</span>';
         return $links;
     }
 
     /**
-     * Checks if the given user has a specific FormFabricator capability. Valid caps: view_forms, edit_forms,
-     * edit_pdf_layout, use_verifier, settings. Administrators always pass; user-specific override wins over
-     * role setting.
+     * Enqueues the plugins-screen delete confirmation handler. Hooked to admin_enqueue_scripts.
+     *
+     * @param string $hook Current admin page hook suffix.
+     * @return void
+     */
+    public static function enqueuePluginDeleteWarning(string $hook): void
+    {
+        if ($hook !== 'plugins.php') {
+            return;
+        }
+        wp_enqueue_script(
+            'fabricator-forms-plugin-delete-warning',
+            FABRICATOR_FORMS_URL . 'assets/js/admin-plugin-delete-warning.js',
+            [],
+            FABRICATOR_FORMS_VERSION,
+            true
+        );
+    }
+
+    /**
+     * Checks if the given user has a specific FormFabricator capability.
      *
      * @param string $cap     The capability slug to check.
      * @param int    $user_id User ID, or 0 for the current user.
@@ -508,13 +582,15 @@ class Plugin
         if (user_can($user_id, 'manage_options')) {
             return true;
         }
-        static $access = null;
-        if ($access === null) {
-            $access = get_option('fabricator_forms_access', []);
-        }
+        // Not memoized in a function-static — that risked serving a stale value if a later call in the same request saved this option.
+        $access = get_option('fabricator_forms_access', []);
         $user_overrides = $access['users'] ?? [];
-        if (isset($user_overrides[$user_id]) && is_array($user_overrides[$user_id])) {
-            return !empty($user_overrides[$user_id][$cap]);
+        // A per-user entry GRANTS on top of the role, it does not replace it (else "add user" silently revoked role caps).
+        if (isset($user_overrides[$user_id])
+            && is_array($user_overrides[$user_id])
+            && !empty($user_overrides[$user_id][$cap])
+        ) {
+            return true;
         }
         $user = get_userdata($user_id);
         if (!$user) {

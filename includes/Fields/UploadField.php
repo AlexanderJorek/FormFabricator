@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,9 +28,7 @@ defined('ABSPATH') || exit;
  */
 class UploadField extends BaseField
 {
-    // Extensions that can execute server-side or run scripts in a browser if opened
-    // directly — always denied regardless of allowed_types config (defense-in-depth
-    // against a malicious file renamed to a permitted-looking extension)
+    // Always denied regardless of allowed_types config — defense-in-depth against a renamed malicious file.
     private const BLOCKED_TYPES = [
         'htm','html','shtml','phtml','jse','jar','xml','css','asp','aspx',
         'jsp','jspx','sql','hta','dll','bat','com','sh','bash','py','pl','js',
@@ -220,7 +218,7 @@ class UploadField extends BaseField
     public function extractValue(string $field_id): mixed
     {
         self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); 'name' is sanitized below, other keys (tmp_name/size/error) are PHP-generated, not attacker text.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; 'name' sanitized below, other keys are PHP-generated.
         $file = isset($_FILES[$field_id]) ? wp_unslash($_FILES[$field_id]) : null;
         if (!is_array($file) || !isset($file['name'])) {
             return $file;
@@ -265,7 +263,7 @@ class UploadField extends BaseField
             if (!$file || !self::hasFileName($file['name'] ?? null)) {
                 $label = $config['label'] ?? __('File', 'formfabricator');
                 // translators: %s: field label.
-                return sprintf(__('%s: Please upload a file.', 'formfabricator'), esc_html($label));
+                return sprintf(__('%s: Please upload a file.', 'formfabricator'), $label);
             }
         }
 
@@ -288,9 +286,7 @@ class UploadField extends BaseField
 
             $max_bytes = self::maxSizeMb($config) * 1024 * 1024;
             $finfo     = new \finfo(FILEINFO_MIME_TYPE);
-            // Enforce the admin-configured allow-list server-side too — the <input accept>
-            // attribute built by buildAccept() only constrains the browser's file picker,
-            // a direct POST can otherwise submit any type not on the hard-coded deny-list.
+            // <input accept> from buildAccept() only constrains the browser picker; enforce the allow-list here too.
             $allowed_exts = array_filter(array_map(
                 static function (string $e): string {
                     return ltrim(strtolower(trim($e)), '.');

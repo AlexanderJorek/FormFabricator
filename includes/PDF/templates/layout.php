@@ -17,7 +17,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -59,22 +59,22 @@ $fabricator_section_hidden = is_array($fabricator_o['section_hidden']) ? $fabric
 
 $fabricator_margin_top_mm = (int) ($fabricator_o['margin_top'] ?? 15);
 
-// Shared kses allowlist for admin-configured rich text; uses defined()-guarded define() since this file
-// is include()d (not include_once) and can run more than once per process, which would redeclare a const.
+// defined()-guarded since this file is include()d (not include_once) and can run more than once per process.
 if (!defined('FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS')) {
     define(
         'FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS',
         [
+        // Must match PDFLayoutEditor::sanitizeHeaderLayout()'s save-time allowlist (style on u/span), or accepted styling gets silently stripped here.
         'b'      => [],
         'strong' => [],
         'i'      => [],
         'em'     => [],
-        'u'      => [],
+        'u'      => ['style' => true],
         's'      => [],
         'del'    => [],
         'sup'    => [],
         'sub'    => [],
-        'span'   => [],
+        'span'   => ['style' => true],
         'br'     => [],
         ]
     );
@@ -222,9 +222,7 @@ return [
     'field' => function (string $label, string $value) use ($fabricator_field_layout, $fabricator_title_fs, $fabricator_fs): string {
         $lbl_style = 'font-weight:bold;font-size:' . $fabricator_title_fs . 'pt;color:#222;';
         $val_style = 'font-size:' . $fabricator_fs . 'pt;color:#333;';
-        // $value has already been run through FABRICATOR_PDF_ALLOWED_VALUE_TAGS by Generator.php,
-        // before it was wrapped with the invisible marker spans / <img> tags this
-        // closure now receives — sanitizing again here would strip those trusted tags.
+        // $value is already kses()'d by Generator.php before the marker spans/<img> were added; don't re-sanitize.
         if ($fabricator_field_layout === 'inline') {
             return '
         <div class="field-block">
@@ -278,9 +276,7 @@ return [
             [get_bloginfo('name'), get_bloginfo('url'), current_time('d.m.Y')],
             $text
         );
-        // Defense-in-depth: footer_text is an admin-configured option value (same
-        // trust level as the header "title" element content above), so apply the
-        // same wp_kses() allowlist before it's returned unescaped into mPDF HTML.
+        // Defense-in-depth: same trust level as the header title above, so apply the same wp_kses() allowlist.
         return wp_kses($text, FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS);
     },
 ];

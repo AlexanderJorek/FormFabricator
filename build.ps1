@@ -29,9 +29,27 @@ Get-ChildItem -Path $root -Force | Where-Object { $exclude -notcontains $_.Name 
     Copy-Item -Path $_.FullName -Destination $stageDir -Recurse -Force
 }
 
-# Dev-notes files that live inside otherwise-shipped folders (not excludable by
-# top-level name above) — remove them individually from the staged copy.
-$nestedExclude = @('includes/PDF/templates/HEADER-RENDERING.md', 'languages/compile-mo.php')
+# Dev-only files that live inside otherwise-shipped folders (not excludable by top-level name
+# above) — remove them individually from the staged copy.
+#
+# The field-test harness and the example field are development tooling: _ExampleField.php is a
+# template that is deliberately absent from FieldRegistry::FIELD_MAP and therefore never loaded,
+# and FieldTestPage.php (with its JS/CSS) only registers under WP_DEBUG. Shipping them added
+# ~4,200 lines of unreachable code to the package, which WordPress.org's guidelines ask plugins
+# not to include and which enlarges the review surface for no user-facing benefit.
+$nestedExclude = @(
+    'includes/PDF/templates/HEADER-RENDERING.md',
+    'languages/compile-mo.php',
+    'includes/Fields/_ExampleField.php',
+    'includes/Admin/FieldTestPage.php',
+    'assets/js/admin-fieldtest.js',
+    'assets/js/admin-fieldtest-tabs.js',
+    'assets/css/admin-fieldtest.css',
+    'assets/js/fabricator-perf-debug.js',
+    'assets/js/fields/ExampleField.clientInitClickHandler.js',
+    'assets/js/fields/ExampleField.clientValidationZip.js',
+    'assets/css/fields/ExampleField.stylesComposite.css'
+)
 foreach ($rel in $nestedExclude) {
     $path = Join-Path $stageDir $rel
     if (Test-Path $path) { Remove-Item -Force $path }

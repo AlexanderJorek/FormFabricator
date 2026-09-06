@@ -1,3 +1,16 @@
+### PHP / Composer
+# Composer-managed dependencies. Not tracked: composer.json + composer.lock pin
+# exact versions, and build.ps1 excludes vendor/ from the staged copy and runs
+# `composer install --no-dev` inside it, so the release artifact is built from
+# the lock file, never from this directory.
+# Restore a working tree with: composer install
+/vendor/*
+
+# EXCEPTION: pdf.js is vendored by hand, not by Composer (it is an npm package,
+# not a PHP one), so nothing can regenerate it from composer.lock — build.ps1
+# copies it straight out of the working tree. It must stay tracked.
+!/vendor/pdfjs/
+
 ### Node
 # Dependencies
 node_modules/

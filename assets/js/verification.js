@@ -133,13 +133,7 @@ function _fabricatorCreateProgressCard(name) {
     return card;
 }
 
-/* The bar/pct is a safety-netted high-water mark, not a direct mirror of
-   whatever pct a caller passes: several independent progress sources feed
-   this one card (client-side PDF.js extraction, the server's own 0-100
-   verification-step scale, retry/queue states) and a caller passing a lower
-   number than what's already shown — even a legitimate one from a different
-   phase — must never visually move the bar backward. The step *text* always
-   updates; only the bar/percentage is clamped. */
+/* Bar/pct is clamped to a high-water mark so it never visually moves backward; step text always updates. */
 function _fabricatorUpdateCard(card, step, pct) {
     var s = card.querySelector('.fabricator-vpc__step');
     var b = card.querySelector('.fabricator-vpc__bar');
@@ -151,20 +145,10 @@ function _fabricatorUpdateCard(card, step, pct) {
     if (p) p.textContent = Math.round(shown) + ' %';
 }
 
-/* ── Queue of PDFs to verify, localized once by Verificationpage.php's upload handler
-   (FabricatorVerifierQueueData) rather than pushed via per-file inline <script> tags. ── */
+/* ── Queue of PDFs to verify, localized once by Verificationpage.php's upload handler. ── */
 window.FABRICATOR_VERIFICATION_QUEUE = window.FabricatorVerifierQueueData || [];
 
-/* Server-side rate-limits fabricator_verify_push_lines to 1 call per 5 seconds per
-   user (see Admin/Verificationpage.php). Batch-scanning several PDFs kicks
-   off processPdf() for each one back-to-back, with no natural stagger
-   between their resulting server calls, so without this gate most of a
-   batch used to get silently 429-rejected. Only the server call is
-   throttled — concurrent client-side PDF.js extraction is unaffected.
-   Slots are reserved by *start* time, computed synchronously when requested
-   — not chained after the previous response arrives, which (given slow
-   requests) would compound into "request duration + 5s" per file instead
-   of a flat 5s. */
+/* Staggers server calls to match the 1-per-5s rate limit; slots reserved by start time, not chained after responses. */
 var _fabricatorNextPushSlotAt = 0; // epoch ms
 var _fabricatorPushSlotGapMs  = 5200; // grows on an actual 429 — see forceNextSlotLater() below
 
@@ -316,9 +300,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
         if (queuedForLoad) { card.classList.remove('fabricator-vpc--queued'); }
         _fabricatorUpdateCard(card, i18n.pdf_loading || 'Loading PDF…', 2);
         try {
-            // Fetched via POST (nonce/token in the body, not the URL — see Verificationpage.php)
-            // rather than handing pdf.js a GET url directly, so the secret download token never
-            // becomes a query-string param that could land in server logs or a Referer header.
+            // Fetched via POST so the secret download token never lands in a URL, server log, or Referer header.
             var downloadBody = new URLSearchParams();
             downloadBody.set('action', pdfAction || 'fabricator_serve_pdf');
             downloadBody.set('nonce', pdfNonce || '');
@@ -507,12 +489,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
             done();
 
             if (json.success === true && json.data && typeof json.data.html === 'string') {
-                // Server-rendered fragment: every dynamic value in it is passed through
-                // esc_html()/wp_kses() in Verificationpage.php before reaching here. A
-                // hand-rolled regex sanitizer used to run on it client-side too, but a
-                // regex HTML sanitizer is inherently bypassable (nested/malformed tags,
-                // unusual attribute quoting) and gave false confidence without reliably
-                // adding protection beyond the server-side escaping this already depends on.
+                // Already escaped server-side (esc_html()/wp_kses() in Verificationpage.php) — no client-side regex sanitizer, which would be bypassable and add false confidence.
                 const tmp = document.createElement('div');
                 tmp.innerHTML = json.data.html;
                 card.parentNode.replaceChild(tmp.firstElementChild || tmp, card);

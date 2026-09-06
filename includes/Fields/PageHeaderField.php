@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.5
+ * @version   1.0.6
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -82,7 +82,7 @@ class PageHeaderField extends BaseField
     }
 
     /**
-     * Excluded from the {all_fields} email summary â€” no user-submitted value.
+     * Excluded from the {all_fields} email summary — no user-submitted value.
      *
      * @return bool
      */
@@ -104,8 +104,9 @@ class PageHeaderField extends BaseField
         $show_names = !empty($config['show_names']);
         $names      = [];
         if ($show_names && is_array($config['page_names'] ?? null)) {
-            // wp_strip_all_tags() is a real backstop here: FormEditor::sanitizeFields() only
-            // sanitizes string-valued config keys, so this array-valued one arrives unsanitized.
+            // wp_strip_all_tags() here is defense-in-depth, not the sole sanitizer:
+            // FormEditor::sanitizeArrayValue() already wp_kses_post()'s every string element of
+            // an array-valued config key like this one at save time.
             $names = array_slice(
                 array_values(array_map(
                     static fn($n) => wp_strip_all_tags(trim((string)$n)),
