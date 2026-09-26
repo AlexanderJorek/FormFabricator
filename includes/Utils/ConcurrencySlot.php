@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,18 +24,12 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 /**
- * Byte-weighted admission control for expensive work, shared across all requests via wp_options.
- *
- * Each holder reserves an estimated memory cost, not an anonymous slot; row format "<expiry>|<bytes>" (legacy bare "<expiry>" rows still expire correctly).
+ * Byte-weighted admission control for expensive work, shared via wp_options — each holder reserves an estimated memory cost (row format "<expiry>|<bytes>").
  */
 class ConcurrencySlot
 {
     /**
-     * Reserves $bytes of the shared budget in $bucket.
-     *
-     * Insert-then-check, not check-then-insert: the row is inserted first, then checked against
-     * only rows with a lower (monotonic) option_id, so two simultaneous callers get a strict order
-     * instead of both passing the same stale total.
+     * Reserves $bytes in $bucket via insert-then-check: the row is inserted first, then checked only against rows with a lower option_id, giving simultaneous callers a strict order.
      *
      * @param string $bucket        Bucket name (hardcoded literal per caller, never request input).
      * @param int    $bytes         Estimated peak memory for this job (see MemoryBudget).
@@ -83,19 +77,12 @@ class ConcurrencySlot
         }
         $my_row_id = (int) $wpdb->insert_id;
 
-        /* Sum only unexpired rows inserted BEFORE ours. LOCATE() guards the bytes extraction so a
-           legacy bare-expiry row contributes 0 rather than being read as a colossal byte count. */
+        /* Sum only unexpired rows inserted BEFORE ours. */
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- own private rows, never cached; a fresh read every call is the whole point.
         $prior = $wpdb->get_row(
             $wpdb->prepare(
                 "SELECT
-                    COALESCE(SUM(
-                        IF(
-                            LOCATE('|', option_value) > 0,
-                            CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED),
-                            0
-                        )
-                    ), 0) AS reserved_bytes,
+                    COALESCE(SUM(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED)), 0) AS reserved_bytes,
                     COUNT(*) AS holders
                  FROM {$wpdb->options}
                  WHERE option_name LIKE %s
@@ -133,13 +120,7 @@ class ConcurrencySlot
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- own private rows, never cached; see reserve().
         return (int) $wpdb->get_var(
             $wpdb->prepare(
-                "SELECT COALESCE(SUM(
-                    IF(
-                        LOCATE('|', option_value) > 0,
-                        CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED),
-                        0
-                    )
-                ), 0)
+                "SELECT COALESCE(SUM(CAST(SUBSTRING_INDEX(option_value, '|', -1) AS UNSIGNED)), 0)
                  FROM {$wpdb->options}
                  WHERE option_name LIKE %s
                    AND CAST(SUBSTRING_INDEX(option_value, '|', 1) AS UNSIGNED) > %d",
@@ -152,8 +133,8 @@ class ConcurrencySlot
     /**
      * Releases a previously-claimed slot.
      *
-     * @param string $bucket Same bucket name passed to acquire().
-     * @param string $token  Token returned by acquire().
+     * @param string $bucket Same bucket name passed to reserve().
+     * @param string $token  Token returned by reserve().
      * @return void
      */
     public static function release(string $bucket, string $token): void
@@ -161,7 +142,7 @@ class ConcurrencySlot
         global $wpdb;
 
         $opt = 'fabricator_cs_' . $bucket . '_' . $token;
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see acquire() above; never cached.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see reserve() above; never cached.
         $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s", $opt));
         wp_cache_delete($opt, 'options');
     }
@@ -172,8 +153,7 @@ class ConcurrencySlot
         global $wpdb;
 
         $now = time();
-        /* SUBSTRING_INDEX(value, '|', 1) reads the expiry from both the current "<expiry>|<bytes>"
-           format and any legacy bare "<expiry>" row, which it returns whole. */
+        /* SUBSTRING_INDEX(value, '|', 1) is the expiry of an "<expiry>|<bytes>" row. */
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- bulk sweep of own private rows; WP-Cron cleanup, not request-path.
         $wpdb->query(
             $wpdb->prepare(

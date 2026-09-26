@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -106,8 +106,8 @@ class PdfDescriptor
     }
 
     /**
-     * Embeds an image in the PDF and records its fingerprint in the seal. TIFF images are converted to PNG
-     * first — mPDF does not support TIFF natively.
+     * Embeds an image in the PDF and records its fingerprint in the seal. Only types the PDF can show are taken
+     * (PdfUtils::embeddableImageMime()); TIFF is not among them, since neither mPDF nor GD reads it.
      *
      * @param string $binary   Raw binary image data.
      * @param string $filename Display name used in the seal.
@@ -119,25 +119,28 @@ class PdfDescriptor
         string $filename,
         string $mime = 'image/png'
     ): static {
-        if ($mime === 'image/tiff' && PdfUtils::precheckDimensions($binary)) {
-            $gd = @imagecreatefromstring($binary);
-            if ($gd !== false) {
-                // Backstop for the rare case getimagesizefromstring() couldn't parse
-                // the TIFF header but GD could still decode it.
-                if (imagesx($gd) * imagesy($gd) > PdfUtils::maxSafePixels()) {
-                    imagedestroy($gd);
-                } else {
-                    ob_start();
-                    imagepng($gd);
-                    $binary   = (string) ob_get_clean();
-                    $mime     = 'image/png';
-                    $filename = preg_replace('/\.tiff?$/i', '.png', $filename);
-                }
-            }
+        // Every format, not only TIFF: mPDF decodes PNG/JPEG/GIF itself, so an image whose header declares more pixels
+        // than memory allows (a few-KB decompression bomb) must never reach it. A submission with such an image is
+        // refused before the PDF is made (FormProcessor), so this is the last guard.
+        if (!PdfUtils::precheckDimensions($binary)) {
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms PdfDescriptor: image "' . sanitize_file_name($filename)
+                . '" not embedded, its declared dimensions exceed the safe pixel limit.'
+            );
+            return $this;
+        }
+        // A type mPDF and GD can't read, TIFF above all, would be sealed yet never shown. Upload fields attach such files
+        // like documents instead (UploadField's pdf_embeddable), so this is the last guard.
+        if (!PdfUtils::embeddableImageMime($mime)) {
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms PdfDescriptor: image "' . sanitize_file_name($filename) . '" not embedded, the PDF cannot show ' . $mime . '.'
+            );
+            return $this;
         }
 
         $key = 'img' . bin2hex(random_bytes(8));
         $this->imageVars[$key] = $binary;
+        // 'sha256' name is load-bearing (hashed into every seal); normally hashes thumbnailHash()'s perceptual grid (survives mPDF re-encoding), raw bytes only without GD.
         $this->sealedUploads[] = [
             'name'   => $filename,
             'mime'   => $mime,

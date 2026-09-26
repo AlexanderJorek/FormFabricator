@@ -4,93 +4,136 @@ Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.0.6
+Stable tag: 1.0.7
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
-A drag-and-drop form builder that emails submissions and/or renders them to a cryptographically sealed, tamper-evident PDF.
+Drag-and-drop form builder. Sends each submission by email, optionally with a sealed PDF that shows whether it was changed later.
 
 == Description ==
 
-FormFabricator lets you build forms with a drag-and-drop admin editor and deliver every submission by email and/or as a generated PDF — without ever writing submission data to a database table. Nothing is retained after the request finishes except what you choose to email or download.
+Submissions are never saved in WordPress: they go out by email, optionally with a sealed PDF.
+
+**Forms**
+
+* Groups, multiple pages, and fields that appear depending on earlier answers
+* Field rules: required, value range, text length, date range, allowed countries or email addresses
+* Duplicate, export and import forms; insert them with a shortcode, or offer several in a form selection
 
 **Field types**
 
-* Text, textarea, email, name, phone, number
-* Address, date, time, currency
-* Select, radio, checkboxes (multivalue)
-* File upload, signature (canvas)
-* Rating, slider
-* Captcha (Google reCAPTCHA), consent checkbox, GDPR checkbox
-* HTML block, section/group, page break
-* Hidden post-data field, website (honeypot-friendly)
-* SEPA Direct Debit mandate (IBAN with masked input + checksum validation, BIC, account holder, creditor info block, signature capture)
+Text, text area, email, website, phone, number, amount, name, address, date, time, dropdown, radio buttons, checkboxes, file upload, signature, rating, slider, CAPTCHA (Google reCAPTCHA), consent and privacy policy checkboxes (recorded with date and time), text block, field group, page break, page step bar, page details (hidden), SEPA Direct Debit mandate.
 
-**PDF generation & tamper detection**
+**Emails**
 
-Every generated PDF can be embedded with a cryptographic seal. The included PDF Verification tool re-derives the seal from an uploaded PDF and reports byte-level and content-level tampering, including incremental-update ("PDF shadow attack") detection.
+* Several notifications per form, each with its own recipients, sender, subject and message
+* Recipients can depend on the answers, and answers can be inserted into subject and message
+* Attach the PDF and uploaded files
+* If an email fails, the visitor sees an error and can try again
 
-**Privacy by design**
+**Sealed PDFs**
 
-FormFabricator has no custom database tables for form entries and stores no submission data locally. All submitted data is delivered exclusively via email and/or the generated PDF, both of which are under your own server's/mailbox's control.
+* Every PDF is sealed with a key only your site has. The PDF Verification page shows whether a PDF is authentic, what was changed, and the original answers.
+* The seal carries every answer, including ones the layout hides. Hiding a field changes what the PDF shows, not what it contains, so don't treat it as a way to remove data from the document.
+* Design the PDF with the layout editor: logo, fonts, colors, sections, footer.
+* Back up, replace and restore the key, and optionally store it encrypted.
+
+**Privacy and security**
+
+* Uploads and PDFs exist only as temporary files while the emails are sent. PDFs uploaded for checking are deleted right after the check, or 10 minutes after their last use if the check doesn't finish (on a site without visitors, at the next visit).
+* Besides that, only short-lived entries such as the sending-limit counter are stored, none containing anything visitors entered.
+* Sending limit per IP address, no duplicate submissions, dangerous file types always refused.
+* You decide which roles or users may view or edit forms, the PDF layout, the PDF check and the settings.
+
+**Known limitation**
+
+The signature field, and the signature in the SEPA mandate, are drawn with a mouse, finger or pen. There is no way to produce one with a keyboard alone. If a visitor who cannot use a pointing device has to reach you, offer a second form without a required signature, or another way to get in touch.
 
 == Uses Third Party / External Services ==
 
-FormFabricator's core functionality does not communicate with any external service. Two *optional* fields, only present on forms where you've explicitly added them, do:
+**Google reCAPTCHA**: only on forms with a CAPTCHA field, once an administrator has entered the reCAPTCHA keys.
 
-**Google reCAPTCHA** (Captcha field)
-When you configure a reCAPTCHA site key and secret key in the form settings and add a Captcha field to a form, each form submission's response token is verified server-side against:
-`https://www.google.com/recaptcha/api/siteverify`
-The token itself, plus the visitor's IP address (passed as reCAPTCHA's `remoteip` parameter), is sent to Google — no other submission data. This only happens if you explicitly add a Captcha field and configure the keys.
-Google reCAPTCHA [Terms of Service](https://policies.google.com/terms) | [Privacy Policy](https://policies.google.com/privacy)
+* When the visitor clicks "Load CAPTCHA", their browser loads `https://www.google.com/recaptcha/api.js`. Google receives the visitor's IP address, browser and device details, and existing Google cookies.
+* On sending, once every other field is filled in correctly, your site sends the CAPTCHA response to `https://www.google.com/recaptcha/api/siteverify`. Nothing else is sent — not the visitor's IP address, and none of their answers.
 
-**openiban.com IBAN/BIC lookup** (SEPA field)
-If a form contains a SEPA Direct Debit field with live IBAN lookup enabled, every time a site visitor finishes typing a syntactically valid IBAN into that field, their browser sends that IBAN to this site's own admin-ajax.php endpoint, which then makes the outbound request server-side to:
-`https://openiban.com/validate/`
-to look up and auto-fill the matching BIC — the visitor's browser never contacts openiban.com directly, so it is this site's server IP (not the visitor's) that reaches openiban.com. This happens live on the public-facing form for every visitor who fills in the IBAN field on a form containing a SEPA field with live lookup enabled — not just in the admin editor. No other submission data is sent. openiban.com is a free lookup service built on the [MIT-licensed goiban-service](https://github.com/apilayer/goiban-service#the-mit-license-mit); it does not publish a separate terms-of-service or privacy-policy document. Its [homepage](https://openiban.com/) states its data practice directly ("No personal data is stored. No request logs are written. Everything works in memory.") and its [imprint](https://openiban.com/imprint.html) identifies the operator.
+Mention this in your privacy policy (example text under FormFabricator → Settings). [Terms of Service](https://policies.google.com/terms) | [Privacy Policy](https://policies.google.com/privacy)
+
+**Images from other websites**: if you enter an image's web address in the PDF layout editor, your site downloads the image once into your media library.
 
 == Third-Party Libraries & Credits ==
 
-This plugin bundles the following open-source libraries. Both are distributed under GPL-compatible
-licenses (MIT / SIL OFL / CC BY 4.0 for Font Awesome; Apache License 2.0 for pdf.js); full license
-text ships alongside each in the plugin package.
+License texts are included; `THIRD-PARTY-NOTICES.txt` lists every component.
 
-**Font Awesome Free** (icons) — [fontawesome.com](https://fontawesome.com/), source and build tools
-at [github.com/FortAwesome/Font-Awesome](https://github.com/FortAwesome/Font-Awesome). The bundled
-CSS is the project's own minified distribution build; unminified source is published in that
-repository.
-
-**pdf.js** (PDF rendering on the verification page) — a Mozilla project,
-[github.com/mozilla/pdf.js](https://github.com/mozilla/pdf.js), vendored from the official
-`pdfjs-dist` npm package.
+* **mPDF** (GPL-2.0): creates PDFs
+* **PdfParser** (LGPL-3.0): reads PDFs for checking
+* **FPDI**, **DeepCopy**, **random_compat**, **Symfony mbstring polyfill**, **PSR-7 HTTP message**, **PSR-3 logging**, **mPDF PSR-7 and PSR-3 shims** (all MIT): helpers for mPDF and PdfParser
+* **pdf.js** (Apache 2.0, [Mozilla](https://github.com/mozilla/pdf.js)): reads PDFs in the browser, unchanged from the official `pdfjs-dist` package
+* **Font Awesome Free** (icons CC BY 4.0, fonts SIL OFL 1.1, code MIT, [fontawesome.com](https://fontawesome.com/)): icons; readable source of its compressed style file at [github.com/FortAwesome/Font-Awesome](https://github.com/FortAwesome/Font-Awesome)
 
 == Installation ==
 
-1. Upload the `formfabricator` folder to `/wp-content/plugins/`, or install the plugin zip through the WordPress admin (Plugins → Add New → Upload Plugin).
-2. Activate the plugin through the "Plugins" menu in WordPress.
-3. On activation you'll be redirected to **FormFabricator → Settings** to complete a one-time PDF seal key setup. This is required before you can create forms.
-4. Once setup is complete, go to **FormFabricator** in the admin menu to create your first form.
-5. Insert the form into a page or post with the provided shortcode, shown on the form's edit screen.
+Requires WordPress 6.5+, PHP 8.1+ and the PHP extensions fileinfo, gd and mbstring (included by almost every host). Without fileinfo, upload fields refuse all files.
+
+The database must be MySQL or MariaDB, which is what WordPress normally runs on. Spam limits and the safeguards against two submissions colliding are handled by the database itself, and that needs these. Test setups on SQLite, such as WordPress Playground, are not supported.
+
+1. As an administrator, complete the one-time setup under **FormFabricator → Settings**. Keep the key backup file it gives you somewhere safe.
+2. Create a form with at least one active email notification.
+3. Copy its shortcode from the form list into a page or post.
+
+If a notice says generated PDFs are not protected, add the server rule it shows, or ask your host.
 
 == Frequently Asked Questions ==
 
 = Where is submitted form data stored? =
 
-Nowhere, by design. FormFabricator has no database table for submissions. Each submission is processed in-memory for the duration of the request and delivered only via email and/or a generated PDF, then discarded.
+Nowhere in WordPress. Submissions go out by email (and as a PDF, if chosen); temporary files are deleted after sending. Where the emails end up depends on your email setup.
 
-= Does FormFabricator send data to any external service? =
+= Why can't visitors send my form? =
 
-Only if a form uses the Captcha field (Google reCAPTCHA) or the SEPA Direct Debit field (openiban.com, called live for every IBAN entered on the public form). See "Uses Third Party / External Services" above. No other part of the plugin makes external requests.
+Usually one of these: the form has no active notification; an email failed (the reason is in the server's error log); the PDF seal key is missing (administrators see a notice); JavaScript is turned off; the sending limit was reached; the attached files are too large in total for the server (visitors are told so); an ad blocker stopped the CAPTCHA.
 
-= Why am I asked to complete a setup step right after activating? =
+= Why did a recipient get a submission twice? =
 
-FormFabricator generates a cryptographic seal key used to make generated PDFs tamper-evident. This one-time setup must be completed before any forms can be created, so the seal key exists from the start rather than being added retroactively.
+When one email of a submission fails, the visitor tries again and all emails are sent again. A duplicate is easier to deal with than a lost submission.
 
-= Can I customize the generated PDF layout? =
+= My site runs behind a proxy or CDN such as Cloudflare. What do I need to set? =
 
-Yes — the PDF Layout Editor (under FormFabricator → PDF Layout) lets you configure the logo, colors, fonts, margins, and header/footer content used when rendering submissions to PDF.
+Otherwise all visitors share the proxy's address and one sending limit. Enter the proxy's addresses or ranges (e.g. `203.0.113.10`, `198.51.100.0/24`) under **FormFabricator → Settings → Trusted proxies**, or in wp-config.php: `define('FABRICATOR_TRUSTED_PROXIES', '203.0.113.10, 198.51.100.0/24');`
+
+= What happens to older PDFs if I replace the key or lose my server? =
+
+Replaced keys stay on your site, so older PDFs remain checkable. After a server loss, add the old keys back from their backup files. Without a backup, those PDFs can no longer be confirmed.
+
+= What happens when I delete the plugin? =
+
+Deactivating keeps everything. Deleting removes all forms, settings, seal keys and stored files for good, so keep your key backup files.
 
 == Changelog ==
+
+= 1.0.7 =
+* New: choose a date format for each date field (for example 31.12.2026 or 12/31/2026).
+* New: "Show button when conditions match" now works, on every page of a multi-page form, and the server refuses a submission that doesn't meet the conditions.
+* New: the Back and Next labels of a page break can be edited.
+* New: a "Trusted proxies" setting for sites behind a proxy or CDN, so visitors don't all share one spam limit.
+* Changed: a form needs at least one active notification before it can be sent; the form editor warns you when you save one without.
+* Changed: number and slider fields only accept values that fit their step, and amount fields at most two decimal places.
+* Changed: rich texts (HTML block, consent and mandate texts) no longer allow form elements such as input fields.
+* Changed: on forms that create a PDF, an image too large to embed is refused with a message naming it. TIFF images are now attached next to the PDF, like documents.
+* Changed: the date in the PDF footer uses your site's date format.
+* Improved: if a form, email or upload can't be sent, visitors see an error and can try again, instead of a "Thank you". The reason is written to the server's error log.
+* Improved: a missing or damaged PDF seal key now shows a warning, instead of being quietly replaced.
+* Improved: the PDF check marks documents it cannot confirm as "Not Verifiable", deletes uploaded PDFs right after the check, and can no longer be kept busy or run out of memory by crafted files.
+* Improved: stronger protection against spam, disguised file uploads and other misuse. Before importing a form, you see where its emails will go.
+* Improved: keyboard and screen-reader support for star ratings, dropdowns, choice groups and the name and address fields.
+* Improved: the same form can be placed twice on one page.
+* Privacy: the SEPA field no longer contacts an outside service.
+* Fixed: file uploads and the PDF check did not work on Windows servers.
+* Fixed: email rules and show/hide rules that never matched, or that browser and server judged differently, so a visible field could be missing from the email and the PDF.
+* Fixed: the simple address field lost the typed address; a tap on a signature pad stored an empty signature; a signature could vanish when a phone was rotated.
+* Fixed: after a failed submission, the CAPTCHA kept saying it was unsolved. It is now checked only once the rest of the form is valid.
+* Fixed: on translated sites, a failed step of the PDF check could still show a green badge.
+* Fixed: saving settings, access settings, PDF layouts or forms could lose or reset values (such as the reCAPTCHA site key, the logo or backslashes), and two saves at the same moment could overwrite each other. Conflicting saves are now refused.
+* Fixed: many smaller problems with emails, PDFs, file uploads, imports and the admin screens.
 
 = 1.0.6 =
 * Security: PDF seal-key rotation now generates a fully random key instead of deriving it from a password, closing a theoretical offline brute-force path. Please back up your key file after updating (Settings → PDF Seal Key) — existing PDFs remain fully verifiable.

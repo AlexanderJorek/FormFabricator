@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -79,11 +79,7 @@ class EmailField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         $attrs = $this->inputAttrs($config, $field_id, 'email', ['value' => esc_attr((string)($value ?? ''))]);
-        // Nothing about filter_mode/filter_patterns is exposed to the client: the pattern list is
-        // admin-configured and can encode internal/partner/competitor domain names, so it must not
-        // be readable in View Source by every anonymous visitor, and with the client-side filter
-        // check removed (see EmailField.email.js) a bare data-filter-mode had no consumer left.
-        // validate() below is the sole, authoritative enforcement of the pattern list.
+        // filter_mode/filter_patterns stay out of markup (may encode partner/competitor domains) — validate() below is the sole enforcement.
         return $this->wrap($field_id, $config, '<input' . $attrs . '>');
     }
 
@@ -121,20 +117,14 @@ class EmailField extends BaseField
             foreach ($list as $pat) {
                 $regex = '/^' . str_replace('\*', '.*', preg_quote(strtolower($pat), '/')) . '$/';
                 $hit   = preg_match($regex, $v);
-                /* preg_match() returns false (not 0) when the pattern fails to run — most
-                   plausibly PREG_BACKTRACK_LIMIT_ERROR, since several '*' wildcards expand to
-                   consecutive '.*' groups, which backtrack catastrophically against a long
-                   non-matching subject. Treating that as "no match" made a BLOCK list fail OPEN:
-                   the address it was configured to reject would sail through. Fail closed
-                   instead — an engine failure counts as a match, so 'block' rejects and 'allow'
-                   admits only on a real match. */
+                // preg_match() returning false is an engine failure, not "no match". Reject in both modes: counting it
+                // as a match failed open for an allow-list, counting it as a miss would fail open for a block-list.
                 if ($hit === false) {
                     \FabricatorForms\fabricator_log(
                         'FabricatorForms EmailField: filter pattern failed to evaluate (preg error '
-                        . preg_last_error_msg() . ') — treating as a match so the filter fails closed.'
+                        . preg_last_error_msg() . '), rejecting the address so the filter fails closed.'
                     );
-                    $matched = true;
-                    break;
+                    return __('This email address is not allowed.', 'formfabricator');
                 }
                 if ($hit === 1) {
                     $matched = true;

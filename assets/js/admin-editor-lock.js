@@ -13,7 +13,8 @@
     });
     $(document).on('heartbeat-tick', function (e, hbData) {
         if (!hbData.fabricator_forms_lock_conflict) { return; }
-        var msg = (data.i18n.lockConflict || '').replace('%s', hbData.fabricator_forms_lock_conflict);
+        /* Function replacement: a user name containing $& or $' would otherwise be expanded by String.replace. */
+        var msg = (data.i18n.lockConflict || '').replace('%s', function () { return hbData.fabricator_forms_lock_conflict; });
         var notice = document.getElementById('fabricator-lock-notice');
         if (notice) {
             notice.textContent = msg;

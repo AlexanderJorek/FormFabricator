@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -27,6 +27,79 @@ defined('ABSPATH') || exit;
 // window a get_transient()/set_transient() read-then-write would leave open.
 class SingleUseToken
 {
+    /**
+     * How long an issued submission token is accepted. Matches wp_verify_nonce()'s outer bound, which
+     * the submit nonce minted alongside it cannot outlive either.
+     *
+     * @var int
+     */
+    public const ISSUED_MAX_AGE = 86400;
+
+    /**
+     * How long a claim row is kept: the token's own lifetime plus clock slack, after which a replay
+     * would fail the age check in verifyIssued() anyway.
+     *
+     * @var int
+     */
+    public const CLAIM_TTL = 90000;
+
+    /**
+     * Mints a submission token bound to $form_id and its issue time: "<uuid>.<issued>.<hmac>".
+     *
+     * Stateless on purpose. Issuing writes nothing, so the token endpoint cannot be used to grow the
+     * options table; only a token that passes verifyIssued() and full validation is ever claimed.
+     *
+     * @param int $form_id Form the token is valid for.
+     * @return string Token for the fabricator_submission_token field.
+     */
+    public static function issue(int $form_id): string
+    {
+        $id     = wp_generate_uuid4();
+        $issued = time();
+        return $id . '.' . $issued . '.' . self::sign($id, $issued, $form_id);
+    }
+
+    /**
+     * Checks that a token was issued by issue() for this form and has not expired.
+     *
+     * @param string $token   Submitted token.
+     * @param int    $form_id Form being submitted.
+     * @return bool True for a genuine, unexpired token.
+     */
+    public static function verifyIssued(string $token, int $form_id): bool
+    {
+        $parts = explode('.', $token);
+        if (count($parts) !== 3) {
+            return false;
+        }
+        [$id, $issued, $mac] = $parts;
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/', $id)
+            || !ctype_digit($issued)
+            || !preg_match('/^[0-9a-f]{64}$/', $mac)
+        ) {
+            return false;
+        }
+        // Five minutes of forward slack for clock skew between web nodes.
+        $age = time() - (int) $issued;
+        if ($age < -300 || $age > self::ISSUED_MAX_AGE) {
+            return false;
+        }
+        return hash_equals(self::sign($id, (int) $issued, $form_id), $mac);
+    }
+
+    /**
+     * HMAC over everything the token binds.
+     *
+     * @param string $id      Token uuid.
+     * @param int    $issued  Issue timestamp.
+     * @param int    $form_id Form the token is valid for.
+     * @return string Hex HMAC-SHA256.
+     */
+    private static function sign(string $id, int $issued, int $form_id): string
+    {
+        return hash_hmac('sha256', 'fabricator_submission|' . $form_id . '|' . $id . '|' . $issued, wp_salt('nonce'));
+    }
+
     /**
      * Atomically attempts to claim $key. Returns true only for the first caller to claim it.
      *

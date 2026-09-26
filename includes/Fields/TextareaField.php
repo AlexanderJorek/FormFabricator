@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -98,16 +98,6 @@ class TextareaField extends BaseField
         self::assertRequestNonceVerified();
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         return isset($_POST[$field_id]) ? sanitize_textarea_field(wp_unslash($_POST[$field_id])) : '';
-    }
-
-    /**
-     * Sanitizes a raw textarea value from a group copy array, preserving newlines.
-     *
-     * @param mixed $raw The raw value from the group copy array.
-     */
-    public function extractFromRaw(mixed $raw): mixed
-    {
-        return sanitize_textarea_field(wp_unslash((string)$raw));
     }
 
     /**

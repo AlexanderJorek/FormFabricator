@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,8 +28,10 @@ defined('ABSPATH') || exit;
  *  HOW TO ADD A NEW FIELD
  * ════════════════════════════════════════════════════════════
  *
- * This file is a teaching document — its leading underscore causes Plugin.php
- * to skip it during auto-discovery, so it has zero runtime effect.
+ * This file is a teaching document with zero runtime effect — but not because of its leading underscore, which
+ * Plugin.php's glob('*Field.php') matches like any other. What keeps it out is FieldRegistry::FIELD_MAP: only a
+ * class named there is included at all. Add your new field to that map, or it will never load, underscore or not.
+ * (build.ps1 also strips this file from the release package.)
  *
  * First time? Read top to bottom once. After that, use the DECISION TREE
  * below and jump straight to the section you need.
@@ -67,7 +69,8 @@ defined('ABSPATH') || exit;
  *       }
  *   }
  *
- *   Drop the file in includes/Fields/ — Plugin.php auto-discovers it via getType().
+ *   Drop the file in includes/Fields/ and add it to FieldRegistry::FIELD_MAP (step 4 above); the registry then
+ *   picks up its slug from getType().
  *   That's a complete, working field. Treat inputAttrs() and wrap() as black
  *   boxes for now — they generate the standard input attributes and the
  *   outer .fabricator-field wrapper (label, description, error placeholder).
@@ -96,10 +99,8 @@ defined('ABSPATH') || exit;
  *   getGeneralSchema()                   General settings tab controls
  *
  * Some fields (~15%)
- *   extractValue()                       non-standard $_POST / $_FILES shape
- *   extractFromRaw()                     same field can appear inside a group
- *   extractFromRawWithOther()            group copy + a "{child_id}_other" sibling value
- *                                         (Checkbox/Radio/Select "Other" free-text option)
+ *   extractValue()                       non-standard $_POST / $_FILES shape, or a "{field_id}_other"
+ *                                         sibling value (Checkbox/Radio/Select "Other" free-text option)
  *   mapNormalized()                      file uploads or multiple output entries
  *   pdfData()                            image embed or raw HTML in PDF
  *   hasTextPreview() → true              include in PDF token-picker preview
@@ -121,7 +122,7 @@ defined('ABSPATH') || exit;
  *   Needs interactive JS?          → getClientInit()
  *   Needs field-specific CSS?      → getStyles()
  *   Reads $_FILES or a custom
- *     $_POST shape?                → extractValue() (+ extractFromRaw() for groups)
+ *     $_POST shape?                → extractValue()
  *   Value is composite/array?      → map()
  *   Multiple outputs or files?     → mapNormalized()
  *   Embeds an image / raw HTML
@@ -140,13 +141,13 @@ defined('ABSPATH') || exit;
  * ─────────────────────────────────────
  * UploadField      render(), extractValue(), validate(), mapNormalized(), pdfData(),
  *                  needsMultipartEncoding()
- * TextareaField    extractValue(), extractFromRaw()
+ * TextareaField    extractValue()
  * SignatureField   mapNormalized(), pdfData(), includeValueInSeal()
- * CheckboxField    extractValue(), extractFromRaw(), extractFromRawWithOther(),
+ * CheckboxField    extractValue(),
  *                  element-count capping (see NONCE / RESOURCE LIMITS note below)
  * RadioField       extractValue() returning ['value' => ..., '__other_text__' => ...]
  * SepaField        extractValue(), mapNormalized(), size cap on signature data URI
- * CaptchaField     enqueueFrontScripts(), validate()
+ * CaptchaField     enqueueFrontScripts(), validate(), defersValidation()
  * GroupField       isGroupContainer(), openTag(), closeTag()
  * PageBreakField   isPageBreak(), renderBreak(), skipValidation(), includeInEmailSummary()
  * HtmlField        skipValidation(), includeInEmailSummary(), rawEmailHtml(), mapNormalized()
@@ -157,19 +158,19 @@ defined('ABSPATH') || exit;
  *                  re-resolves via get_post() instead of relying on the (absent) Loop context
  * TextField        hasTextPreview()
  *
- * NONCE / RESOURCE-LIMIT CONVENTIONS — apply to every extractValue()/extractFromRaw() override
+ * NONCE / RESOURCE-LIMIT CONVENTIONS — apply to every extractValue() override
  * ────────────────────────────────────────────────────────────────────────────────────────────
  * Every extractValue() override must call self::assertRequestNonceVerified(); as its first
  * statement (see BaseField::assertRequestNonceVerified()) — a structural guard, not just a
  * comment, against ever reading $_POST/$_FILES without FormProcessor::handle() having already
- * verified the request nonce. Then, every direct $_POST/$_FILES read in extractValue()/
- * extractFromRaw() still needs:
+ * verified the request nonce. Then, every direct $_POST/$_FILES read in extractValue()
+ * still needs:
  *   // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via
  *   // assertRequestNonceVerified().
  * immediately above the line touching the superglobal — WPCS's sniff works line-by-line and
  * can't see the guard call above it, so this silences that otherwise-correct per-line warning.
  *
- * If your field accepts an array-valued POST field (checkboxes, repeatable groups),
+ * If your field accepts an array-valued POST field (checkboxes, multi-selects),
  * cap the element count with array_slice() BEFORE sanitizing/validating each entry —
  * an unbounded array otherwise costs unbounded O(n) sanitize calls and O(n*m)
  * validation work per submission (see CheckboxField::extractValue()). If your field
@@ -337,21 +338,12 @@ class ExampleField extends BaseField
     //  EXTRACT VALUE — assemble the raw value from $_POST / $_FILES
     // ═══════════════════════════════════════════════════════
     //
-    //  These two methods solve the same problem in two different contexts:
-    //
     //    extractValue(string $field_id): mixed
-    //      → called for normal top-level fields
     //      → reads directly from $_POST / $_FILES by field_id
-    //      → called by FormProcessor once per field before validate()
+    //      → called by FormProcessor once per field before validate(), for top-level fields and
+    //        for children of a Group alike: a group renders its children as ordinary top-level
+    //        inputs, so there is no per-copy extraction (repeatable group copies were removed in 1.0.7)
     //      → the returned value is what validate(), map(), and mapNormalized() receive
-    //
-    //    extractFromRaw(mixed $raw): mixed
-    //      → only called when this field lives inside a repeatable Group field
-    //      → Repeatable group children submit as $_POST[$group_id][$copy_idx][$child_id].
-    //        FormProcessor slices out the child's value and passes it here.
-    //      → Non-repeatable group children submit with their own flat names and are read
-    //        via extractValue($child_id) — extractFromRaw() is never called for them.
-    //      → Should sanitize $raw the same way extractValue() sanitizes $_POST.
     //
     //  BaseField default for extractValue(): reads $_POST[$field_id] with sanitize_text_field().
     //  This is correct for every plain text field — override only when your field's value
@@ -364,9 +356,6 @@ class ExampleField extends BaseField
     //
     //  See "NONCE / RESOURCE-LIMIT CONVENTIONS" at the top of this file for the
     //  phpcs:ignore comment and array element-count capping this method needs.
-    //
-    //  If you override extractValue(), check whether your field can appear inside a
-    //  group and override extractFromRaw() as well so group copies sanitize correctly.
 
     /**
      * EXAMPLE (unused) — parallel file + caption arrays. Would replace the
@@ -377,8 +366,10 @@ class ExampleField extends BaseField
         // A real override must call self::assertRequestNonceVerified(); first, same as every
         // extractValue() implementation in this plugin — see BaseField::assertRequestNonceVerified().
         self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); 'name' is sanitized below, other keys (tmp_name/size/error) are PHP-generated, not attacker text.
-        $files = isset($_FILES[$field_id]) ? wp_unslash($_FILES[$field_id]) : [];
+        // No wp_unslash(): WordPress never slashes $_FILES, and unslashing stripped the backslashes out of Windows temp paths,
+        // which then failed is_readable()/is_uploaded_file() (the UploadField bug fixed in 1.0.7).
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- verified above via assertRequestNonceVerified(); 'name' is sanitized below, other keys (tmp_name/size/error) are PHP-generated, not attacker text.
+        $files = isset($_FILES[$field_id]) ? $_FILES[$field_id] : [];
         if (is_array($files) && isset($files['name'])) {
             $files['name'] = is_array($files['name'])
                 ? map_deep($files['name'], 'sanitize_file_name')
@@ -534,6 +525,10 @@ class ExampleField extends BaseField
     //
     //  Use querySelectorAll / addEventListener directly. The on() helper in front.js is scoped to its IIFE and is NOT available here.
     //
+    //  Must be idempotent: front.js calls every init again after each successful submit, so mark each element once
+    //  (e.g. el._fabricatorMyFieldInited = true) and skip it next time, or every submit attaches another listener.
+    //  See RatingField.js and ExampleField.clientInitClickHandler.js.
+    //
     //  Return '' (default) when no client-side init is needed.
     //
     //  fabricator:upload-overflow — front.js dispatches this custom event on the <form> element
@@ -656,7 +651,7 @@ class ExampleField extends BaseField
     //    Suppress the label row — only for HTML blocks without a heading.
     //
     //  ->attachImage(string $binary, string $filename, string $mime = 'image/png')
-    //    Embeds an image and records its perceptual hash in the HMAC seal. TIFF is auto-converted to PNG. PdfUtils::thumbnailHash($binary) is used internally — no manual call needed.
+    //    Embeds an image and records its perceptual hash in the HMAC seal. Only types PdfUtils::embeddableImageMime() accepts are shown (not TIFF); attach others as files. PdfUtils::thumbnailHash($binary) is used internally — no manual call needed.
     //    Chain multiple times to attach several images — each call appends one image after the cell text, in attachment order.
     //    All images appear together after the cell text; there is no mechanism to interleave per-image captions between images.
     //    For per-image captions, build the caption list into ->rawHtml() and accept that images are grouped below it.
@@ -665,15 +660,28 @@ class ExampleField extends BaseField
     //    Returns the array Generator consumes. Always call last.
 
     /**
-     * EXAMPLE (unused) — a field that also renders a QR code image of its value.
+     * EXAMPLE (unused) — a field that also puts an image of its value in the PDF.
      * Would replace the inherited BaseField::pdfData() as a real override.
+     *
+     * $binary stands in for whatever your field produces; there is no image encoder in this plugin, so a field that
+     * needs one has to bring its own. (This used to call a generateQrPng() that never existed.)
      */
-    private function examplePdfDataQrCode(array $field): array
+    private function examplePdfDataImage(array $field): array
     {
-        $binary = $this->generateQrPng((string)($field['value'] ?? ''));
+        $binary = $this->exampleRenderPng((string)($field['value'] ?? ''));
         return $this->pdf($field)
-            ->attachImage($binary, 'qr.png')
+            ->attachImage($binary, 'value.png')
             ->build();
+    }
+
+    /**
+     * EXAMPLE (unused) — stands in for a real encoder; returns a 1×1 transparent PNG.
+     */
+    private function exampleRenderPng(string $value): string
+    {
+        unset($value);
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- a literal 1x1 PNG for the example, not obfuscation.
+        return (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', true);
     }
 
     /**
@@ -703,14 +711,30 @@ class ExampleField extends BaseField
 
 
     // ═══════════════════════════════════════════════════════
+    //  DEFER VALIDATION — checks that reach outside this request
+    // ═══════════════════════════════════════════════════════
+    //
+    //  Return true when validate() does something that can't be taken back — CaptchaField asks Google, and the token
+    //  it spends is single-use. FormProcessor then runs your validate() only after every other field has passed, so a
+    //  submission that fails elsewhere doesn't consume it. Default (BaseField): false. Only CaptchaField returns true.
+
+    /** EXAMPLE (unused) — would replace the inherited BaseField::defersValidation(). */
+    private function exampleDefersValidation(): bool
+    {
+        return true;
+    }
+
+
+    // ═══════════════════════════════════════════════════════
     //  OUTPUT FLAGS — control how the field appears in email and PDF
     // ═══════════════════════════════════════════════════════
     //
     //  includeInEmailSummary(): bool
     //    Default: true. Return false for fields that carry no user-submitted
     //    value and should be invisible in the {all_fields} email block.
-    //    MailSender checks this before building each row. HtmlField and
-    //    PageBreakField return false.
+    //    MailSender checks this before building each row. GroupField, PageBreakField
+    //    and PageHeaderField return false; HtmlField returns true and gates its output
+    //    in mapNormalized() through its "Show in mail/PDF" toggle instead.
     //
     //  includeValueInSeal(): bool
     //    Default: true. Return false when the field value is a data URI,

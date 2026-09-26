@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -25,22 +25,32 @@ use Mpdf\Mpdf;
 use Mpdf\MpdfException;
 use Mpdf\HTMLParserMode;
 use FabricatorForms\Fields\FieldRegistry;
-use FabricatorForms\Fields\HtmlField;
+use FabricatorForms\Utils\HtmlSanitizer;
 
 defined('ABSPATH') || exit;
 
 class Generator
 {
     /**
+     * Most different font names sealed as allowed. A document from this plugin uses a handful; the cap only matters for
+     * names that uploaded image bytes happen to contain, which appear in no font resource the verifier checks.
+     *
+     * @var int
+     */
+    private const MAX_SEALED_FONTS = 256;
+
+    /**
      * Generates a PDF from normalized submission data and returns its path.
      *
      * @param array  $mapped     Normalized field data from FieldRegistry::mapSubmission().
      * @param int    $form_id    The form identifier.
      * @param string $form_title Human-readable form title used in the PDF header.
+     * @param bool   $seal       Embed the HMAC seal. False for layout previews: a preview signed with the
+     *                           production key would verify as an authentic submission.
      * @return string|false Absolute path to the generated PDF, or false on failure.
      */
     // Renders twice (PASS 1/2 below): the seal is an HMAC of the content but must also be embedded in it.
-    public static function generate(array $mapped, int $form_id, string $form_title = ''): string|false
+    public static function generate(array $mapped, int $form_id, string $form_title = '', bool $seal = true): string|false
     {
         if (empty($mapped)) {
             \FabricatorForms\fabricator_log('FabricatorForms Generator: No data provided');
@@ -55,7 +65,9 @@ class Generator
         $title = $form_title !== '' ? $form_title : __('Form submission', 'formfabricator');
 
         $metadata = [
-            'generated' => current_time('mysql'),
+            // Site-local time plus its UTC offset: local keeps the PDF's "Created:" line readable, the offset removes the
+            // hour that repeats at the daylight-saving changeover.
+            'generated' => wp_date('Y-m-d H:i:s P'),
             'nonce'     => bin2hex(random_bytes(16)),
             'form_id'   => $form_id,
             'form_name' => $title,
@@ -92,7 +104,7 @@ class Generator
             $pdf_sealed_uploads = is_array($pdf['sealed_uploads'] ?? null) ? $pdf['sealed_uploads'] : [];
 
             $allowed_tags = ($pdf['trusted_rich_html'] ?? false)
-                ? HtmlField::trustedPdfAllowedTags()
+                ? HtmlSanitizer::allowedTags()
                 : FABRICATOR_PDF_ALLOWED_VALUE_TAGS;
             $cell_html = wp_kses((string)($pdf['cell_html'] ?? ''), $allowed_tags);
             foreach (array_keys($pdf_image_vars) as $var) {
@@ -109,7 +121,9 @@ class Generator
             $cell_html = $start . $cell_html . $end;
 
             $fields_html .= ($pdf['labeled'] ?? true)
-                ? $layout['field']($field['label'] ?? '', $cell_html)
+                // The label must be a string: layout.php's closure is typed, and this runs before the try below, so an array
+                // label from a crafted import ended every PDF-attaching submission of that form in an uncaught TypeError.
+                ? $layout['field'](is_string($field['label'] ?? null) ? $field['label'] : '', $cell_html)
                 : '<div class="field-block">' . $cell_html . '</div>';
         }
 
@@ -136,47 +150,25 @@ class Generator
 
         /* ---- mPDF setup ---- */
         try {
-            $prev_backtrack = (int)ini_get('pcre.backtrack_limit');
-            // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- needed for mPDF's regex-heavy parsing on large forms; restored in finally below.
-            ini_set('pcre.backtrack_limit', (string)max($prev_backtrack, 16 * 1024 * 1024));
+            // Raised only when below mPDF's need, and restored below only if raised here.
+            $prev_backtrack   = (int)ini_get('pcre.backtrack_limit');
+            $raised_backtrack = false;
+            if ($prev_backtrack < 16 * 1024 * 1024) {
+                // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.IniSet.Risky -- needed for mPDF's regex-heavy parsing on large forms; only raised when lower, restored in finally below.
+                $raised_backtrack = ini_set('pcre.backtrack_limit', (string)(16 * 1024 * 1024)) !== false;
+            }
 
             $upload_dir = wp_upload_dir();
             $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
 
-            if (!get_transient('fabricator_pdf_dirs_ready')) {
-                // Restrictive umask closes the window between dir/file creation and the chmod() below.
-                $prev_umask = umask(0027);
-                try {
-                    foreach (['', '/pdf', '/embed', '/mpdf'] as $sub) {
-                        $dir = $safe_dir . $sub;
-                        if (!is_dir($dir)) {
-                            wp_mkdir_p($dir);
-                            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- runs on front-end AJAX with no WP_Filesystem credentials; defense-in-depth on plugin-owned dirs.
-                            chmod($dir, 0750);
-                            file_put_contents($dir . '/index.php', '<?php // Silence is golden ?>');
-                            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- same rationale as above.
-                            chmod($dir . '/index.php', 0640);
-                        }
-                    }
-                    $htaccess = $safe_dir . '/.htaccess';
-                    if (!file_exists($htaccess)) {
-                        file_put_contents(
-                            $htaccess,
-                            "Options -Indexes\n<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nDeny from all\n</IfModule>\n"
-                        );
-                        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- same rationale as above.
-                        chmod($htaccess, 0640);
-                    }
-                    // .htaccess only blocks Apache/LiteSpeed; this is the IIS-equivalent deny rule.
-                    $web_config = $safe_dir . '/web.config';
-                    if (!file_exists($web_config)) {
-                        file_put_contents($web_config, \FabricatorForms\Utils\SecureDir::WEB_CONFIG);
-                        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- same rationale as above.
-                        chmod($web_config, 0640);
-                    }
-                } finally {
-                    umask($prev_umask);
-                }
+            // The transient alone would leave a directory unhardened for up to 24 hours after it is
+            // removed or its guard files are deleted; is_dir() costs a cached stat per PDF.
+            if (!get_transient('fabricator_pdf_dirs_ready') || !is_dir($safe_dir . '/pdf')) {
+                // One shared implementation: this triad was duplicated here and three times in Verificationpage; SecureDir::harden() also routes writes through WP_Filesystem when direct.
+                \FabricatorForms\Utils\SecureDir::harden(
+                    $safe_dir,
+                    array_map(static fn($sub) => $safe_dir . $sub, ['', '/pdf', '/embed', '/mpdf'])
+                );
                 set_transient('fabricator_pdf_dirs_ready', true, DAY_IN_SECONDS);
             }
 
@@ -184,19 +176,26 @@ class Generator
             $mpdf_temp = $safe_dir . '/mpdf';
             $grid_svg  = FABRICATOR_FORMS_PATH . 'includes/PDF/templates/construction-grid.svg';
 
-            $form_name_clean = substr(preg_replace('/[^a-zA-Z0-9_-]/', '_', $title), 0, 80);
-            $date_time       = wp_date('D_d_m_Y_T_H_i');
 
             $margin_top    = (int) ($layout['margin_top_mm']    ?? 30);
             $margin_left   = (int) ($layout['margin_left_mm']   ?? 15);
             $margin_right  = (int) ($layout['margin_right_mm']  ?? 15);
             $margin_bottom = (int) ($layout['margin_bottom_mm'] ?? 15);
 
-            /* Strip any HTML wrapper that older cached versions of layout.php
-               may have returned (e.g. a <div style="border-top:...">). */
+            /* The layout's footer callback returns plain text. */
             $user_footer_text = isset($layout['footer'])
                 ? trim((string) $layout['footer']())
                 : '';
+
+            // Per-document page-number aliases (see PageAliasMpdf): random, so submitted text can never contain them.
+            // The admin's footer text may use {PAGENO}/{nbpg}/{nb} (the layout editor previews them), mapped here.
+            $alias_suffix     = bin2hex(random_bytes(6));
+            $pageno_alias     = '{fabpageno' . $alias_suffix . '}';
+            $nbpg_alias       = '{fabnbpg' . $alias_suffix . '}';
+            $nb_alias         = '{fabnb' . $alias_suffix . '}';
+            $user_footer_text = str_replace(['{PAGENO}', '{nbpg}', '{nb}'], [$pageno_alias, $nbpg_alias, $nb_alias], $user_footer_text);
+            // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded literal path, not request-influenced.
+            require_once FABRICATOR_FORMS_PATH . 'includes/PDF/PageAliasMpdf.php';
             /* Reserve enough vertical space: ~5mm per line of user footer text. */
             $footer_lines  = $user_footer_text !== '' ? max(1, substr_count($user_footer_text, "\n") + 1) : 0;
             $footer_margin = $footer_lines > 0 ? 5 + ($footer_lines * 5) : 5;
@@ -211,40 +210,57 @@ class Generator
                 'margin_footer' => $footer_margin,
                 // Never subset: PASS 2's extra seal text would pull in glyphs PASS 1 didn't render, making fonts differ.
                 'percentSubset' => 0,
+                'aliasNbPg'     => $nb_alias,
+                'aliasNbPgGp'   => $nbpg_alias,
             ];
 
             /* ---- PASS 1: font discovery ---- */
-            $mpdf = new Mpdf($mpdf_config);
-            self::configureMpdfInstance($mpdf, $grid_svg, $user_footer_text, $image_vars);
+            $mpdf = new PageAliasMpdf($mpdf_config);
+            self::configureMpdfInstance($mpdf, $grid_svg, $user_footer_text, $image_vars, $pageno_alias);
 
             self::writeHtmlChunked($mpdf, $html);
 
-            $sl_path = $mpdf_temp . "/SL_{$form_name_clean}_{$date_time}.pdf";
+            // Random, not form name + minute: two submissions of one form in the same minute shared this path,
+            // so each could overwrite or delete the other's PASS-1 file and seal the wrong hash sets.
+            $sl_path = $mpdf_temp . '/SL_' . bin2hex(random_bytes(16)) . '.pdf';
             $mpdf->Output($sl_path, \Mpdf\Output\Destination::FILE);
             unset($mpdf);
 
             $fonts           = [];
             $expected_pages  = 0;
             $content_hashes  = [];
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of a path this request just wrote; wp_remote_get() is for remote URLs only.
             $pdf_raw         = file_get_contents($sl_path);
 
             $image_hashes = [];
             if ($pdf_raw !== false) {
-                if (preg_match_all('/\/BaseFont\s*\/([A-Za-z0-9\+\-_]+)/', $pdf_raw, $m)) {
-                    foreach ($m[1] as $font) {
-                        $fonts[preg_replace('/^[A-Z]{6}\+/', '', $font)] = true;
+                // Both walked forward rather than collected with preg_match_all(): an uploaded JPEG goes into this file
+                // byte for byte, and a JPEG can carry any bytes in a comment, so a visitor could fill it with these
+                // markers and make the match lists several times the upload's size. The font set is also held to what a
+                // document can plausibly use; a real one names a handful, so nothing real is left out.
+                $font_at = 0;
+                while (preg_match('/\/BaseFont\s*\/([A-Za-z0-9\+\-_]+)/', $pdf_raw, $m, PREG_OFFSET_CAPTURE, $font_at) === 1) {
+                    $font_at = $m[0][1] + strlen($m[0][0]);
+                    if (count($fonts) < self::MAX_SEALED_FONTS) {
+                        $fonts[preg_replace('/^[A-Z]{6}\+/', '', $m[1][0])] = true;
                     }
                 }
-                preg_match_all('/\/Type\s*\/Page\b/', $pdf_raw, $pm);
-                $expected_pages  = count($pm[0]);
-                $content_hashes   = self::hashPageContentStreams($pdf_raw);
+                $expected_pages = 0;
+                $page_at        = 0;
+                while (preg_match('/\/Type\s*\/Page\b/', $pdf_raw, $pm, PREG_OFFSET_CAPTURE, $page_at) === 1) {
+                    $expected_pages++;
+                    $page_at = $pm[0][1] + strlen($pm[0][0]);
+                }
+                $content_hashes   = PdfUtils::hashPageContentStreams($pdf_raw, 2);
                 $image_hashes     = self::hashImageXObjects($pdf_raw);
-                $font_prog_hashes = self::hashFontProgramStreams($pdf_raw);
-                $all_stream_hashes = self::hashAllCompressedStreams($pdf_raw);
+                $font_prog_hashes = PdfUtils::hashFontProgramStreams($pdf_raw);
+                $all_stream_hashes = PdfUtils::hashAllCompressedStreams($pdf_raw);
+                $seal_page_text    = PdfUtils::sealPageTextFingerprint($pdf_raw);
             }
             $fonts             = array_keys($fonts);
             $font_prog_hashes  = $font_prog_hashes  ?? [];
             $all_stream_hashes = $all_stream_hashes ?? [];
+            $seal_page_text    = $seal_page_text    ?? '';
             wp_delete_file($sl_path);
             if (file_exists($sl_path)) {
                 \FabricatorForms\fabricator_log('FabricatorForms Generator: failed to delete temp PDF: ' . $sl_path);
@@ -257,47 +273,57 @@ class Generator
                 'creator' => 'FormFabricator',
             ];
 
-            $seal_data = [
-                'generated'       => trim((string)$metadata['generated']),
-                'key_id'          => HashSeal::getCurrentKeyId(),
-                'nonce'           => (string)$metadata['nonce'],
-                'form_id'         => (int)$metadata['form_id'],
-                'form_name'       => self::normalizeFieldValue($metadata['form_name']),
-                'fields'          => self::buildSealFields($mapped),
-                'uploads'         => $sealed_uploads,
-                'template'        => $template,
-                'fonts'           => $fonts,
-                'expected_pages'  => $expected_pages,
-                'content_streams' => $content_hashes,
-                'image_hashes'      => $image_hashes,
-                'font_prog_hashes'  => $font_prog_hashes,
-                'all_stream_hashes' => $all_stream_hashes,
-                'pdf_meta'          => $pdf_meta,
-            ];
+            if ($seal) {
+                // Unreadable PASS-1 output, or no content streams, would seal empty hash sets that the verifier
+                // reports as "not recorded" rather than failing. A real mPDF document always has content streams.
+                if ($pdf_raw === false || $content_hashes === []) {
+                    throw new \RuntimeException('FabricatorForms Generator: PASS 1 yielded no readable content streams; refusing to seal.');
+                }
+                $seal_data = [
+                    'generated'       => trim((string)$metadata['generated']),
+                    'key_id'          => HashSeal::getCurrentKeyId(),
+                    'nonce'           => (string)$metadata['nonce'],
+                    'form_id'         => (int)$metadata['form_id'],
+                    'form_name'       => self::normalizeFieldValue($metadata['form_name']),
+                    'fields'          => self::buildSealFields($mapped),
+                    'uploads'         => $sealed_uploads,
+                    'template'        => $template,
+                    'fonts'           => $fonts,
+                    'expected_pages'  => $expected_pages,
+                    'content_streams' => $content_hashes,
+                    'image_hashes'      => $image_hashes,
+                    'font_prog_hashes'  => $font_prog_hashes,
+                    'all_stream_hashes' => $all_stream_hashes,
+                    'pdf_meta'          => $pdf_meta,
+                    // Key order is part of the HMAC input; Verificationpage::rebuildPayload() builds the same order.
+                    'seal_page_text'    => $seal_page_text,
+                ];
 
-            $hash = HashSeal::generate($seal_data);
-            $seal_data['seal'] = $hash;
+                $hash = HashSeal::generate($seal_data);
+                $seal_data['seal'] = $hash;
 
-            $seal_json = wp_json_encode($seal_data);
-            if ($seal_json === false) {
-                throw new \RuntimeException(
-                    'FabricatorForms Generator: JSON encode failed — ' . json_last_error_msg()
-                );
+                $seal_json = wp_json_encode($seal_data);
+                if ($seal_json === false) {
+                    throw new \RuntimeException(
+                        'FabricatorForms Generator: JSON encode failed — ' . json_last_error_msg()
+                    );
+                }
+                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- transport encoding so the seal JSON survives mPDF text rendering, not obfuscation.
+                $seal_base64 = base64_encode($seal_json);
+
+                $seal_div = '<div style="font-size:0.1px;line-height:0.1px;color:#000;">'
+                    . '---BEGIN-SEAL---' . $seal_base64 . '---END-SEAL---'
+                    . '</div>';
+
+                $html .= $seal_div;
             }
-            $seal_base64 = base64_encode($seal_json);
-
-            $seal_div = '<div style="font-size:0.1px;line-height:0.1px;color:#000;">'
-                . '---BEGIN-SEAL---' . $seal_base64 . '---END-SEAL---'
-                . '</div>';
-
-            $html .= $seal_div;
 
             /* ---- PASS 2: final PDF with seal ---- */
-            $mpdf = new Mpdf($mpdf_config);
+            $mpdf = new PageAliasMpdf($mpdf_config);
             $mpdf->SetTitle($pdf_meta['title']);
             $mpdf->SetAuthor($pdf_meta['author']);
             $mpdf->SetCreator($pdf_meta['creator']);
-            self::configureMpdfInstance($mpdf, $grid_svg, $user_footer_text, $image_vars);
+            self::configureMpdfInstance($mpdf, $grid_svg, $user_footer_text, $image_vars, $pageno_alias);
 
             self::writeHtmlChunked($mpdf, $html);
 
@@ -310,14 +336,13 @@ class Generator
             \FabricatorForms\fabricator_log('FabricatorForms Generator error: ' . $e->getMessage());
             return false;
         } catch (\Throwable $e) {
-            // Catches \RuntimeException from HashSeal::generate() too, since neither caller wraps this in try/catch;
-            // uncaught it would fatal the visitor's submission and disclose a stack trace (CWE-209) under WP_DEBUG_DISPLAY.
+            // Also catches HashSeal::generate()'s \RuntimeException — uncaught it would disclose a stack trace (CWE-209) under WP_DEBUG_DISPLAY.
             \FabricatorForms\fabricator_log('FabricatorForms Generator error: ' . $e->getMessage());
             return false;
         } finally {
             // Must restore on every exit path or the setting stays elevated for the rest of the PHP-FPM worker's life.
-            if (isset($prev_backtrack)) {
-                // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the setting raised above, must run regardless of exit path.
+            if (!empty($raised_backtrack) && isset($prev_backtrack)) {
+                // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.IniSet.Risky -- restoring the setting raised above, must run regardless of exit path.
                 ini_set('pcre.backtrack_limit', (string)$prev_backtrack);
             }
         }
@@ -346,7 +371,8 @@ class Generator
                 if (!is_file($file)) {
                     continue;
                 }
-                $mtime = @filemtime($file);
+                // A concurrent request may delete the file between is_file() and here; false is then the right answer.
+                $mtime = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => filemtime($file));
                 if ($mtime !== false && ($now - $mtime) > self::SWEEP_MAX_AGE) {
                     wp_delete_file($file);
                     if (file_exists($file)) {
@@ -362,20 +388,20 @@ class Generator
     // Backstop for MailSender's shutdown-function cleanup, which never runs if PHP dies first (fatal/OOM/kill).
     private static function sweepMailSenderTmpDirs(int $now): void
     {
-        $sys_tmp = rtrim(get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR;
-        foreach ((glob($sys_tmp . 'fabricator_*', GLOB_ONLYDIR) ?: []) as $dir) {
-            $mtime = @filemtime($dir);
-            if ($mtime === false || ($now - $mtime) <= self::SWEEP_MAX_AGE) {
-                continue;
-            }
-            foreach ((glob(rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . '*') ?: []) as $file) {
-                if (is_file($file)) {
-                    wp_delete_file($file);
+        // Both places MailSender::tempBaseDir() creates them: the system temp dir, and the protected PDF folder it uses when
+        // WordPress's temp dir lies inside the site.
+        $bases = array_unique([
+            rtrim(get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR,
+            wp_upload_dir()['basedir'] . '/fabricator-secure-pdf/mail/',
+        ]);
+        foreach ($bases as $base) {
+            foreach ((glob($base . 'fabricator_*', GLOB_ONLYDIR) ?: []) as $dir) {
+                $mtime = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => filemtime($dir));
+                if ($mtime === false || ($now - $mtime) <= self::SWEEP_MAX_AGE) {
+                    continue;
                 }
-            }
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- WP-Cron has no WP_Filesystem context; plugin-owned private temp dir.
-            if (!@rmdir($dir)) {
-                \FabricatorForms\fabricator_log("FabricatorForms Generator: sweep failed to remove stale temp dir {$dir}");
+                // Same routine as the request's own shutdown cleanup, including its per-file subdirectories.
+                \FabricatorForms\Form\MailSender::removeTempTree($dir);
             }
         }
     }
@@ -385,22 +411,25 @@ class Generator
     /**
      * Applies shared body-background, footer, and image-vars config to both PASS 1 and PASS 2 mPDF instances.
      *
-     * @param Mpdf   $mpdf             The mPDF instance to configure.
-     * @param string $grid_svg         Absolute path to the background grid SVG.
-     * @param string $user_footer_text User-configured footer text (already trimmed).
-     * @param array  $image_vars       Image variable map for inline images.
+     * @param PageAliasMpdf $mpdf             The mPDF instance to configure.
+     * @param string        $grid_svg         Absolute path to the background grid SVG.
+     * @param string        $user_footer_text User-configured footer text (already trimmed, aliases mapped).
+     * @param array         $image_vars       Image variable map for inline images.
+     * @param string        $pageno_alias     This document's current-page alias.
      * @return void
      */
     private static function configureMpdfInstance(
-        Mpdf $mpdf,
+        PageAliasMpdf $mpdf,
         string $grid_svg,
         string $user_footer_text,
-        array $image_vars
+        array $image_vars,
+        string $pageno_alias
     ): void {
         $mpdf->SetDefaultBodyCSS('background', "url('" . str_replace("'", "%27", $grid_svg) . "')");
         $mpdf->SetDefaultBodyCSS('background-repeat', 'repeat');
         $mpdf->SetDefaultBodyCSS('background-position', 'center center');
-        $mpdf->SetHTMLFooter(self::footerHtml($user_footer_text));
+        $mpdf->setPagenoAlias($pageno_alias);
+        $mpdf->SetHTMLFooter(self::footerHtml($user_footer_text, $pageno_alias, (string) $mpdf->aliasNbPgGp));
         if (!empty($image_vars)) {
             $mpdf->imageVars = $image_vars;
         }
@@ -409,14 +438,17 @@ class Generator
     /**
      * Returns the mPDF HTML footer string with page number tokens.
      *
+     * @param string $user_text    Admin footer text, already kses()'d, aliases mapped.
+     * @param string $pageno_alias This document's current-page alias.
+     * @param string $nbpg_alias   This document's page-total alias.
      * @return string HTML footer markup.
      */
-    private static function footerHtml(string $user_text = ''): string
+    private static function footerHtml(string $user_text, string $pageno_alias, string $nbpg_alias): string
     {
         $pageno = '<span style="font-size:0.1px;line-height:0.1px;color:#fff;">'
             . '[FABRICATOR_PDF_PAGENO_START]</span>'
             // translators: %1$s: current page number placeholder, %2$s: total page count placeholder (both substituted by mPDF at render time).
-            . sprintf(__('Page %1$s of %2$s', 'formfabricator'), '{PAGENO}', '{nbpg}')
+            . sprintf(__('Page %1$s of %2$s', 'formfabricator'), $pageno_alias, $nbpg_alias)
             . '<span style="font-size:0.1px;line-height:0.1px;color:#fff;">'
             . '[FABRICATOR_PDF_PAGENO_END]</span>';
 
@@ -451,7 +483,8 @@ class Generator
             return $cached;
         }
 
-        $finfo    = new \finfo(FILEINFO_MIME_TYPE);
+        // Null without PHP's fileinfo extension; PDF generation must not die on it (this runs before the try below).
+        $finfo    = class_exists('finfo') ? new \finfo(FILEINFO_MIME_TYPE) : null;
         $seen     = [];
         $template = [];
 
@@ -461,11 +494,12 @@ class Generator
                 return;
             }
             $seen[$real] = true;
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of a resolved image path; wp_remote_get() is for remote URLs only.
             $data = file_get_contents($real);
             if ($data === false) {
                 return;
             }
-            $mime = $finfo->file($real) ?: 'application/octet-stream';
+            $mime = ($finfo !== null ? $finfo->file($real) : false) ?: (wp_check_filetype($real)['type'] ?: 'application/octet-stream');
             $th   = str_starts_with($mime, 'image/') ? PdfUtils::thumbnailHash($data) : null;
             $template[] = ['name' => $name, 'mime' => $mime, 'sha256' => $th ?? hash('sha256', $data)];
         };
@@ -501,54 +535,7 @@ class Generator
     }
 
     /**
-     * Hashes every decoded page content stream found in the raw PDF bytes.
-     *
-     * @param string $pdf_raw Raw PDF binary string.
-     * @return array Sorted SHA-256 hashes of decoded page content streams.
-     */
-    private static function hashPageContentStreams(string $pdf_raw): array
-    {
-        $hashes = [];
-        $offset = 0;
-        while (true) {
-            $pos  = strpos($pdf_raw, "stream\r\n", $offset);
-            $pos2 = strpos($pdf_raw, "stream\n", $offset);
-            if ($pos === false && $pos2 === false) {
-                break;
-            }
-            if ($pos === false) {
-                $pos = $pos2;
-            } elseif ($pos2 !== false && $pos2 < $pos) {
-                $pos = $pos2;
-            }
-
-            $eol = (substr($pdf_raw, $pos + 6, 2) === "\r\n") ? 2 : 1;
-            $bs  = $pos + 6 + $eol;
-            $be  = strpos($pdf_raw, 'endstream', $bs);
-            if ($be === false) {
-                $offset = $pos + 7;
-                continue;
-            }
-
-            $body = substr($pdf_raw, $bs, $be - $bs);
-            if (strlen($body) > 67108864) {
-                $offset = $be + 9;
-                continue;
-            }
-            $dec  = @gzuncompress($body) ?: @gzinflate(substr($body, 2));
-
-            if ($dec !== false && strlen($dec) <= 67108864 && self::isPageContentStream($dec)) {
-                $hashes[] = hash('sha256', $dec);
-            }
-            $offset = $be + 9;
-        }
-        return $hashes;
-    }
-
-    /**
-     * Hashes every image XObject stream in the PDF, skipping SMask alpha channels. Uses the same decoding
-     * pipeline as Verificationpage so the hashes match exactly. Called on PASS-1 output; PASS-2 produces
-     * byte-identical XObjects.
+     * Hashes image XObject streams, skipping SMask alpha channels; matches Verificationpage's decoding so hashes agree.
      *
      * @param string $pdf_raw Raw PDF binary string.
      * @return array SHA-256 hashes of raw compressed image XObject streams.
@@ -558,16 +545,28 @@ class Generator
         $hashes = [];
 
         // Collect SMask object numbers so alpha-channel XObjects are skipped.
+        // Walked forward into a set rather than collected with preg_match_all(), for the reason given where the fonts are
+        // gathered: uploaded JPEG bytes sit in this file and can repeat the marker at will.
         $smask_nums = [];
-        if (preg_match_all('/\/SMask\s+(\d+)\s+\d+\s+R/', $pdf_raw, $sm)) {
-            $smask_nums = array_flip($sm[1]);
+        $smask_at   = 0;
+        while (preg_match('/\/SMask\s+(\d+)\s+\d+\s+R/', $pdf_raw, $sm, PREG_OFFSET_CAPTURE, $smask_at) === 1) {
+            $smask_at = $sm[0][1] + strlen($sm[0][0]);
+            if (count($smask_nums) < PdfUtils::MAX_OBJECTS) {
+                $smask_nums[$sm[1][0]] = true;
+            }
         }
 
         $offset = 0;
+        // Forward cursors (PdfUtils::nextAt()), as in the verifier's walk: this reads the plugin's own output, but uploaded
+        // image bytes sit inside it and can hold any sequence, and a strpos() per XObject searched to the end of the file
+        // whenever its needle was missing. The results are strpos()'s exactly, so the sealed hashes are unchanged.
+        $walk_cache = [];
         while (($pos = strpos($pdf_raw, '/XObject', $offset)) !== false) {
-            $line_start = strrpos(substr($pdf_raw, 0, $pos), "\n") ?: 0;
+            // A negative offset searches backwards from $pos in place; strrpos(substr()) copied the whole prefix for
+            // every XObject, quadratic in file size. Same result, including 0 when there is no newline.
+            $line_start = $pos > 0 ? (strrpos($pdf_raw, "\n", $pos - strlen($pdf_raw) - 1) ?: 0) : 0;
             $obj_start  = $line_start + 1;
-            $obj_end    = strpos($pdf_raw, 'endobj', $obj_start);
+            $obj_end    = PdfUtils::nextAt($pdf_raw, 'endobj', $obj_start, $walk_cache);
             if ($obj_end === false) {
                 $offset = $pos + 10;
                 continue;
@@ -588,8 +587,8 @@ class Generator
             }
 
             // Extract stream — use same boundary logic as Verificationpage.
-            $sp  = strpos($pdf_raw, 'stream', $obj_start);
-            $esp = $sp !== false ? strpos($pdf_raw, 'endstream', $sp) : false;
+            $sp  = PdfUtils::nextAt($pdf_raw, 'stream', $obj_start, $walk_cache);
+            $esp = $sp !== false ? PdfUtils::nextAt($pdf_raw, 'endstream', $sp, $walk_cache) : false;
             if ($sp === false || $esp === false) {
                 $offset = $obj_end + 6;
                 continue;
@@ -605,117 +604,10 @@ class Generator
         return $hashes;
     }
 
-    /**
-     * Hashes every non-content compressed stream in the PDF; content streams are excluded since they change between passes.
-     *
-     * @param string $pdf_raw Raw PDF binary string.
-     * @return array Sorted SHA-256 hashes of all non-content compressed streams.
-     */
-    private static function hashAllCompressedStreams(string $pdf_raw): array
-    {
-        $hashes = [];
-        $offset = 0;
-        while (true) {
-            $pos  = strpos($pdf_raw, "stream\r\n", $offset);
-            $pos2 = strpos($pdf_raw, "stream\n", $offset);
-            if ($pos === false && $pos2 === false) {
-                break;
-            }
-            if ($pos === false) {
-                $pos = $pos2;
-            } elseif ($pos2 !== false && $pos2 < $pos) {
-                $pos = $pos2;
-            }
-            $eol = (substr($pdf_raw, $pos + 6, 2) === "\r\n") ? 2 : 1;
-            $bs  = $pos + 6 + $eol;
-            $be  = strpos($pdf_raw, 'endstream', $bs);
-            if ($be === false) {
-                $offset = $bs;
-                continue;
-            }
-            $body = substr($pdf_raw, $bs, $be - $bs);
-            if (strlen($body) > 67108864) {
-                $offset = $be + 9;
-                continue;
-            }
-            $dec = @gzuncompress($body) ?: @gzinflate($body);
-            if ($dec === false || strlen($dec) > 67108864) {
-                $offset = $be + 9;
-                continue;
-            }
-            // Skip page content streams; handled by content_streams and change between passes.
-            if (!self::isPageContentStream($dec)) {
-                $hashes[] = hash('sha256', $dec);
-            }
-            $offset = $be + 9;
-        }
-        sort($hashes);
-        return $hashes;
-    }
 
-    /**
-     * Hashes every embedded font program stream (TrueType, CIDFontType2, Type1), sorted for order-independence.
-     *
-     * @param string $pdf_raw Raw PDF binary string.
-     * @return array Sorted SHA-256 hashes of decoded font program streams.
-     */
-    private static function hashFontProgramStreams(string $pdf_raw): array
-    {
-        $hashes = [];
-        // mPDF writes FontDescriptors as independent objects ("<N> 0 obj << /Type /FontDescriptor ... >>").
-        // Find every such object body, then follow its /FontFile, /FontFile2, /FontFile3 reference.
-        $pat_desc = '/\d+\s+\d+\s+obj\s*<<([\s\S]*?\/Type\s*\/FontDescriptor[\s\S]*?)>>\s*endobj/m';
-        if (!preg_match_all($pat_desc, $pdf_raw, $descs, PREG_SET_ORDER)) {
-            return $hashes;
-        }
-
-        $seen = [];
-        foreach ($descs as $desc) {
-            if (!preg_match('/\/FontFile[23]?\s+(\d+)\s+\d+\s+R/', $desc[1], $ref)) {
-                continue;
-            }
-            $obj_num = (int) $ref[1];
-            if (isset($seen[$obj_num])) {
-                continue;
-            }
-            $seen[$obj_num] = true;
-
-            $pat_obj = '/' . $obj_num . '\s+\d+\s+obj[\s\S]*?stream\r?\n([\s\S]*?)\r?\nendstream/m';
-            if (!preg_match($pat_obj, $pdf_raw, $so)) {
-                continue;
-            }
-            $body = $so[1];
-            if (strlen($body) > 67108864) {
-                continue;
-            }
-            $dec = @gzuncompress($body) ?: @gzinflate($body);
-            if ($dec === false || strlen($dec) > 67108864) {
-                $dec = $body;
-            }
-            $hashes[] = hash('sha256', $dec);
-        }
-
-        sort($hashes);
-        return $hashes;
-    }
-
-    /**
-     * Returns true when the decoded stream data looks like a PDF page content stream.
-     *
-     * @param string $decoded Decompressed stream data.
-     * @return bool True if the stream appears to be a page content stream.
-     */
-    private static function isPageContentStream(string $decoded): bool
-    {
-        $head = substr($decoded, 0, 16);
-        for ($i = 0; $i < strlen($head); $i++) {
-            $b = ord($head[$i]);
-            if ($b < 9 || ($b > 13 && $b < 32 && $b !== 27)) {
-                return false;
-            }
-        }
-        return (bool)preg_match('/\bBT\b|\bq\b|\bQ\b|\bcm\b|\bTf\b|\bTj\b|\bTd\b/', $decoded);
-    }
+    /* hashAllCompressedStreams(), hashPageContentStreams() and isPageContentStream() moved to PdfUtils
+       (hashAllCompressedStreams(), hashPageContentStreams(), looksLikeContentStream()), shared with the verifier so
+       sealing and checking can never drift apart. */
 
     /**
      * Writes an HTML string to mPDF in chunks to avoid PCRE backtrack limit errors.

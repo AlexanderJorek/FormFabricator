@@ -3,6 +3,10 @@ function (root) {
         if (native.dataset.fabricatorSelectInit) return;
         native.dataset.fabricatorSelectInit = '1';
         native.classList.add('fabricator-select-native');
+        /* The native select stays for the form data but is invisible, so it must not be a tab stop of its own or
+           be announced twice; the custom combobox below takes its place and its name. */
+        native.tabIndex = -1;
+        native.setAttribute('aria-hidden', 'true');
         var wrap = document.createElement('div');
         wrap.className = 'fabricator-select-wrap';
         native.parentNode.insertBefore(wrap, native);
@@ -24,6 +28,14 @@ function (root) {
         panel.setAttribute('role', 'listbox');
         custom.appendChild(display); custom.appendChild(arrow); custom.appendChild(panel);
         wrap.appendChild(custom);
+        /* The field's label points at the hidden select, so its text names the combobox and clicking it focuses it. */
+        var labelEl = native.id ? document.querySelector('label[for="' + CSS.escape(native.id) + '"]') : null;
+        if (labelEl) {
+            if (!labelEl.id) { labelEl.id = native.id + '-label'; }
+            custom.setAttribute('aria-labelledby', labelEl.id);
+            labelEl.addEventListener('click', function () { custom.focus(); });
+        }
+        if (native.required) { custom.setAttribute('aria-required', 'true'); }
         function buildOptions() {
             panel.innerHTML = '';
             Array.from(native.options).forEach(function (opt) {
@@ -32,6 +44,7 @@ function (root) {
                 item.textContent = opt.text;
                 item.dataset.value = opt.value;
                 item.setAttribute('role', 'option');
+                item.id = (native.id || 'fabricator-select') + '-opt-' + opt.index;
                 if (!opt.value) item.classList.add('fabricator-select-option--placeholder');
                 if (opt.selected) item.classList.add('fabricator-select-option--selected');
                 item.addEventListener('click', function (e) {
@@ -47,7 +60,11 @@ function (root) {
         function syncDisplay() {
             var sel = native.options[native.selectedIndex];
             panel.querySelectorAll('.fabricator-select-option').forEach(function (el) {
-                el.classList.toggle('fabricator-select-option--selected', el.dataset.value === native.value);
+                var isSel = el.dataset.value === native.value;
+                el.classList.toggle('fabricator-select-option--selected', isSel);
+                /* role="option" without aria-selected leaves a screen reader unable to say which one is current. */
+                el.setAttribute('aria-selected', isSel ? 'true' : 'false');
+                if (isSel) { custom.setAttribute('aria-activedescendant', el.id); }
             });
             if (sel && sel.value) {
                 display.textContent = sel.text;

@@ -105,10 +105,23 @@
  * ================================================================ */
 .fabricator-editor-page #wpfooter,
 .fabricator-editor-page #screen-meta,
-.fabricator-editor-page .notice,
-.fabricator-editor-page .updated,
-.fabricator-editor-page .error,
 .fabricator-editor-page .clear              { display: none !important; }
+/* Admin notices are never hidden (WordPress.org guideline 11: core update prompts and other plugins' warnings must stay
+   visible). Core's common.js moves them into the notice dock the editor prints (Assets::renderNoticeDock()), floated
+   over the builder so they stay readable without changing its full height. */
+.fabricator-editor-page .fabricator-notice-dock {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 100000;
+    width: min(440px, calc(100vw - 32px));
+    max-height: 40vh;
+}
+.fabricator-editor-page .fabricator-notice-dock > .notice,
+.fabricator-editor-page .fabricator-notice-dock > .updated,
+.fabricator-editor-page .fabricator-notice-dock > .error {
+    box-shadow: 0 4px 16px rgba(0,0,0,.18);
+}
 .fabricator-editor-page html,
 .fabricator-editor-page body                { overflow: hidden !important; height: 100% !important; }
 .fabricator-editor-page #wpcontent          { overflow: hidden !important; height: 100% !important;
@@ -251,6 +264,19 @@
     background: #fdf2f2;
     color: var(--fabricator-danger-dark);
     border: 1px solid #f5c2c2;
+}
+
+/* Saved with a warning: the sentence is long, so it wraps and grows downward from where the one-line pill sits. */
+#fabricator-save-status.fabricator-ss--warn {
+    opacity: 1;
+    top: calc(100% + 5px);
+    bottom: auto;
+    white-space: normal;
+    max-width: min(420px, calc(100vw - 60px));
+    border-radius: 8px;
+    background: #fcf9e8;
+    color: #7a5a00;
+    border: 1px solid #f0d98c;
 }
 
 @keyframes fabricator-spin {
@@ -593,6 +619,17 @@
 .fabricator-field-row:hover .fabricator-row-actions {
     opacity: 1;
 }
+/* Also while anything in the row has keyboard focus, and always on devices that can't hover (WCAG 2.1.1). */
+.fabricator-field-row:focus-within .fabricator-row-actions,
+.fabricator-field-row:focus-within .fabricator-row-id {
+    opacity: 1;
+}
+@media (hover: none) {
+    .fabricator-row-actions,
+    .fabricator-row-id {
+        opacity: 1;
+    }
+}
 
 .fabricator-row-btn {
     background: none;
@@ -679,10 +716,9 @@
 }
 
 /* Shared accent-fill: also applied to .fabricator-placeholder-chip:hover,
-   .fabricator-hb-fit-btn--active, .fabricator-hb-tb-btn--active */
+   .fabricator-hb-tb-btn--active */
 .fabricator-submit-preview:hover .fabricator-submit-preview-btn,
 .fabricator-placeholder-chip:hover,
-.fabricator-hb-fit-btn--active,
 .fabricator-hb-tb-btn--active {
     background: var(--fabricator-admin-accent);
     border-color: var(--fabricator-admin-accent);
@@ -2115,6 +2151,20 @@
     line-height: 1.5;
 }
 
+/* For hints that correct a likely wrong assumption rather than merely explaining a control. */
+.fabricator-settings-hint--warn {
+    margin: 14px 0;             /* same 14px rhythm as .fabricator-settings-field */
+    padding: 6px 8px;
+    border-left: 3px solid #d98600;
+    background: rgba(217, 134, 0, 0.08);
+    border-radius: 0 3px 3px 0;
+}
+
+.fabricator-settings-hint--warn i {
+    color: #d98600;
+    margin-right: 3px;
+}
+
 .fabricator-card-radio-group {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2471,6 +2521,11 @@
     transition: background .15s, border-color .15s;
 }
 
+.fabricator-reset-check-wrap input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--fabricator-danger-dark) !important;
+    outline-offset: 2px;
+}
+
 .fabricator-reset-check-wrap input[type="checkbox"]:checked {
     background: var(--fabricator-danger-dark) !important;
     border-color: var(--fabricator-danger-dark) !important;
@@ -2678,10 +2733,14 @@
     display: block !important;
     margin: -4px 0 0 -5px !important;
 }
-.fabricator-access-cb:focus,
-.fabricator-access-cb:focus-visible {
+.fabricator-access-cb:focus {
     outline: none !important;
     box-shadow: none !important;
+}
+/* Keyboard focus stays visible (WCAG 2.4.7); only the ring on mouse click is suppressed above. */
+.fabricator-access-cb:focus-visible {
+    outline: 2px solid var(--fabricator-admin-accent) !important;
+    outline-offset: 2px;
 }
 
 .fabricator-access-always {
@@ -3438,19 +3497,68 @@
 .fabricator-form-row-title:hover {
     color: var(--fabricator-admin-accent);
 }
-.fabricator-form-row-title:focus,
-.fabricator-form-row-title:focus-visible {
+.fabricator-form-row-title:focus {
     outline: none !important;
     box-shadow: none !important;
 }
+/* Keyboard focus stays visible (WCAG 2.4.7); only the ring on mouse click is suppressed above. */
+.fabricator-form-row-title:focus-visible {
+    outline: 2px solid var(--fabricator-admin-accent) !important;
+    outline-offset: 2px;
+    border-radius: 2px;
+}
 
-/* Suppress WP core admin notices on the settings page.
-   WP moves notices inside .wrap after hr.wp-header-end, so target by class anywhere on the page. */
-.fabricator-list-page .notice:not(.fabricator-settings-notice),
-.fabricator-list-page .updated,
-.fabricator-list-page .error,
-.fabricator-list-page .update-nag {
-    display: none !important;
+/* No admin notice is hidden on FormFabricator's screens (WordPress.org guideline 11): core update prompts and other
+   plugins' warnings must stay visible. Core's common.js moves notices into the notice dock on DOM-ready; one that another
+   plugin injects later stays wherever it was put. */
+
+/* ---- Notice dock (Assets::renderNoticeDock()) ----
+   Readable, but deliberately quieter than the page around it: a lighter version of the frosted
+   settings card, a bounded height that scrolls, and compact notices inside. When empty it holds only
+   the hidden anchor and takes no space. */
+.fabricator-notice-dock {
+    flex-shrink: 0;             /* the list and verifier wraps are flex columns and would squeeze it */
+    position: relative;
+    z-index: 2;
+    max-height: min(30vh, 220px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Chrome only when something is inside. Without :has() support the dock keeps its bound and scroll,
+   just without the card around it. */
+.fabricator-notice-dock:has(> .notice, > .updated, > .error) {
+    margin: 0 0 12px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(220, 220, 222, 0.7);
+    border-radius: 6px;
+}
+
+/* Compact notices inside the dock. */
+.fabricator-list-page .fabricator-notice-dock > .notice:not(.fabricator-settings-notice),
+.fabricator-list-page .fabricator-notice-dock > .updated,
+.fabricator-list-page .fabricator-notice-dock > .error,
+.fabricator-verification-page .fabricator-notice-dock > .notice:not(.fabricator-settings-notice),
+.fabricator-verification-page .fabricator-notice-dock > .updated,
+.fabricator-verification-page .fabricator-notice-dock > .error {
+    display: block !important;
+    margin: 0 0 6px !important;
+    box-shadow: none;
+}
+
+.fabricator-notice-dock > .notice:last-child,
+.fabricator-notice-dock > .updated:last-child,
+.fabricator-notice-dock > .error:last-child {
+    margin-bottom: 0 !important;
+}
+
+.fabricator-notice-dock > .notice p,
+.fabricator-notice-dock > .updated p,
+.fabricator-notice-dock > .error p {
+    margin: 0.4em 0;
+    font-size: 13px;
 }
 
 .fabricator-settings-topbar .fabricator-title-pill {
@@ -3907,338 +4015,7 @@
     color: var(--fabricator-text-muted);
 }
 
-.fabricator-pdf-detail-section {
-    display: none;
-    margin-bottom: 8px;
-    border: 1px solid var(--fabricator-border-light);
-    border-radius: 6px;
-    overflow: hidden;
-}
-
-.fabricator-pdf-detail-hdr {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--fabricator-bg-subtle);
-    border-bottom: 1px solid var(--fabricator-border-light);
-}
-
-.fabricator-pdf-detail-content {
-    padding: 14px 16px;
-    background: #fff;
-}
-
-.fabricator-pdf-hidden { display: none; }
-
-.fabricator-pdf-detail-badge,
-.fabricator-pdf-pill {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: .04em;
-    padding: 2px 8px;
-    border-radius: 10px;
-    white-space: nowrap;
-}
-
-.fabricator-pdf-badge-pass, .fabricator-pdf-pill--pass { background: var(--fabricator-pass-bg); color: var(--fabricator-pass-fg); }
-.fabricator-pdf-badge-fail, .fabricator-pdf-pill--fail { background: var(--fabricator-fail-bg); color: var(--fabricator-fail-fg); }
-.fabricator-pdf-badge-info { background: #d1ecf1; color: #0c5460; }
-.fabricator-pdf-pill--warn { background: #fff3cd; color: #856404; }
-
-/* Nested sub-section toggle (inside an open fabricator-pdf-detail-content) */
-.fabricator-pdf-subsection { border-top: 1px solid var(--fabricator-border-lighter); }
-.fabricator-pdf-subsection:first-child { border-top: none; }
-
-.fabricator-pdf-subtoggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    background: var(--fabricator-bg-subtle);
-    border: none;
-    border-bottom: 1px solid transparent;
-    padding: 7px 12px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--fabricator-text-alt);
-    cursor: pointer;
-    text-align: left;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-}
-
-.fabricator-pdf-subtoggle:hover { background: var(--fabricator-bg-subtler); color: var(--fabricator-text); }
-.fabricator-pdf-subtoggle.fabricator-pdf-open { border-bottom-color: var(--fabricator-border-lighter); color: var(--fabricator-text); }
-.fabricator-pdf-subtoggle__icon { font-size: 18px; transition: transform 0.15s; color: var(--fabricator-icon-muted); }
-.fabricator-pdf-subtoggle.fabricator-pdf-open .fabricator-pdf-subtoggle__icon { transform: rotate(90deg); }
-
-/* Comparison cards (fields, annotations) */
-.fabricator-pdf-cmp-list { display: flex; flex-direction: column; gap: 8px; }
-.fabricator-pdf-cmp-row {
-    border: 1px solid var(--fabricator-border-light);
-    border-left: 4px solid var(--fabricator-border-light);
-    border-radius: 5px;
-    background: #fff;
-    overflow: hidden;
-}
-
-.fabricator-pdf-cmp-row--pass { border-left-color: #00a32a; }
-.fabricator-pdf-cmp-row--fail { border-left-color: var(--fabricator-danger); }
-.fabricator-pdf-cmp-row--warn { border-left-color: #dba617; }
-.fabricator-pdf-cmp-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: #f9f9f9;
-    border-bottom: 1px solid #efefef;
-}
-
-.fabricator-pdf-cmp-label {
-    flex: 1;
-    font-weight: 600;
-    font-size: 12px;
-    color: var(--fabricator-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.fabricator-pdf-cmp-marker {
-    font-family: monospace;
-    font-size: 10px;
-    color: var(--fabricator-text-muted);
-    background: var(--fabricator-bg-subtler);
-    padding: 1px 6px;
-    border-radius: 3px;
-    flex-shrink: 0;
-}
-
-.fabricator-pdf-cmp-body {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-}
-.fabricator-pdf-cmp-col {
-    padding: 8px 10px;
-}
-.fabricator-pdf-cmp-col + .fabricator-pdf-cmp-col {
-    border-left: 1px solid #efefef;
-}
-.fabricator-pdf-cmp-col__label {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: var(--fabricator-text-muted);
-    margin-bottom: 4px;
-}
-
-.fabricator-pdf-cmp-col__value {
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--fabricator-text);
-    word-break: break-word;
-    white-space: pre-wrap;
-    max-height: 120px;
-    overflow-y: auto;
-}
-
-.fabricator-pdf-diff-row {
-    padding: 5px 10px;
-    background: #fff8f8;
-    border-top: 1px solid #f5c6cb;
-    font-family: monospace;
-    font-size: 11px;
-    color: var(--fabricator-fail-fg);
-}
-
-/* Hash rows — content streams / image hashes */
-.fabricator-pdf-hash-list { display: flex; flex-direction: column; gap: 4px; }
-.fabricator-pdf-hash-summary {
-    font-size: 11px;
-    color: var(--fabricator-text-muted);
-    margin-bottom: 8px;
-}
-.fabricator-pdf-hash-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 8px;
-    border-radius: 4px;
-    background: #f9f9f9;
-    border: 1px solid var(--fabricator-border-lighter);
-    border-left: 3px solid var(--fabricator-border-light);
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--fabricator-text);
-}
-
-.fabricator-pdf-hash-row--pass { border-left-color: #00a32a; }
-.fabricator-pdf-hash-row--fail { border-left-color: var(--fabricator-danger); }
-.fabricator-pdf-hash-row--warn { border-left-color: #dba617; }
-
-/* PDF object chips */
-.fabricator-pdf-tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.fabricator-pdf-tag {
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
-    background: var(--fabricator-fail-bg);
-    color: var(--fabricator-fail-fg);
-    border: 1px solid #f5c6cb;
-    font-family: monospace;
-}
-
-/* Page count stat */
-.fabricator-pdf-stat-row {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 4px 0 8px;
-}
-.fabricator-pdf-stat { display: flex; flex-direction: column; gap: 2px; }
-
-.fabricator-pdf-stat__label {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: var(--fabricator-text-muted);
-}
-
-.fabricator-pdf-stat__value {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--fabricator-text);
-    font-family: monospace;
-    line-height: 1;
-}
-
-.fabricator-pdf-stat-sep { font-size: 22px; color: var(--fabricator-border-light); font-weight: 300; margin-top: 10px; }
-
-.fabricator-pdf-empty-state {
-    color: var(--fabricator-text-muted);
-    font-size: 12px;
-    font-style: italic;
-    padding: 4px 0;
-}
-
-/* Side-by-side seal comparison */
-.fabricator-pdf-sbs-headers {
-    display: grid;
-    grid-template-columns: 1fr 1px 1fr;
-    padding: 6px 12px 4px;
-    border-bottom: 1px solid var(--fabricator-border-lighter);
-    background: var(--fabricator-bg-subtle);
-}
-
-.fabricator-pdf-sbs-col-label {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: var(--fabricator-text-muted);
-}
-
-.fabricator-pdf-sbs-scroll {
-    display: grid;
-    grid-template-columns: 1fr 1px 1fr;
-    overflow-x: auto;
-    overflow-y: auto;
-    max-height: 480px;
-}
-
-.fabricator-pdf-sbs-pre {
-    margin: 0;
-    padding: 10px 12px;
-    font-family: monospace;
-    font-size: 11px;
-    color: var(--fabricator-text);
-    white-space: pre;
-    background: #f9f9f9;
-    min-width: 0;
-}
-
-.fabricator-pdf-sbs-divider {
-    background: var(--fabricator-border-lighter);
-    width: 1px;
-}
-
-/* Raw seal JSON */
-.fabricator-pdf-json-pre {
-    margin: 0;
-    font-family: monospace;
-    font-size: 11px;
-    color: var(--fabricator-text);
-    white-space: pre;
-    overflow-x: auto;
-    background: #f9f9f9;
-    border: 1px solid var(--fabricator-border-lighter);
-    border-radius: 4px;
-    padding: 10px 12px;
-    max-height: 400px;
-    overflow-y: auto;
-}
-
-/* Summary panel */
-.fabricator-pdf-summary-panel {
-    background: #fff;
-    border: 1px solid var(--fabricator-border-light);
-    border-radius: 6px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.fabricator-pdf-summary-verdict {
-    padding: 12px 16px;
-    font-size: 15px;
-    font-weight: 700;
-}
-
-.fabricator-pdf-verdict-pass { background: var(--fabricator-pass-bg); color: var(--fabricator-pass-fg); }
-.fabricator-pdf-verdict-fail { background: var(--fabricator-fail-bg); color: var(--fabricator-fail-fg); }
-
-.fabricator-pdf-doc-id {
-    padding: 5px 16px 6px;
-    font-size: 11px;
-    color: var(--fabricator-text-secondary);
-    background: var(--fabricator-bg-subtle);
-    border-bottom: 1px solid var(--fabricator-border-light);
-}
-
-.fabricator-pdf-doc-id code {
-    font-size: 11px;
-    color: #3c434a;
-    background: none;
-    padding: 0;
-}
-
-.fabricator-pdf-summary-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-}
-.fabricator-pdf-summary-table th {
-    padding: 6px 12px;
-    text-align: left;
-    background: var(--fabricator-bg-subtle);
-    border-bottom: 1px solid var(--fabricator-border-light);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    color: var(--fabricator-text-muted);
-}
-
-.fabricator-pdf-summary-table td { padding: 8px 12px; border-bottom: 1px solid var(--fabricator-bg-subtler); }
-.fabricator-pdf-summary-table tr:last-child td { border-bottom: none; }
-.fabricator-pdf-toggle { cursor: pointer; }
-.fabricator-pdf-summary-row { cursor: pointer; transition: background .1s; }
-.fabricator-pdf-summary-row:hover { background: var(--fabricator-bg-subtle); }
-.fabricator-pdf-row-fail { color: var(--fabricator-danger); font-weight: 600; }
-.fabricator-pdf-row-caret-cell { text-align: right; color: var(--fabricator-text-tertiary); font-size: 11px; }
+/* The PDF verifier's detail, summary and verdict styles are defined once, in admin-verification.css. */
 
 .fabricator-key-master-table {
     width: 100%;
@@ -4328,6 +4105,9 @@
     white-space: nowrap;
 }
 
+/* ACTIVE is the key in use now; distinct from --rotated, which marks a retired key that was
+   never compromised. Both being green would make the current key indistinguishable. */
+.fabricator-key-badge--active   { background: var(--fabricator-admin-accent); color: #fff; }
 .fabricator-key-badge--rotated  { background: var(--fabricator-pass-bg); color: var(--fabricator-pass-fg); }
 .fabricator-key-badge--compromised { background: var(--fabricator-fail-bg); color: var(--fabricator-fail-fg); }
 .fabricator-key-rotate-fields { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--fabricator-border-lighter); }
@@ -4409,6 +4189,50 @@
     height: calc(100vh - 120px);
     display: flex;
     flex-direction: column;
+}
+
+/* PDF layout, desktop: fit the page to the viewport and let each panel scroll inside it, instead of
+   giving both panels a fixed calc(100vh - 120px). That budget assumed nothing sits between the title
+   pill and the editor, so the notice dock, "Layout saved" and the edit-lock banner all pushed the panels
+   below the fold and gave the whole page a scrollbar. Here the editor takes whatever height is left.
+
+   "not all and (max-width: 1440px)" is the exact complement of the responsive block further down,
+   which deliberately lets this page grow and scroll; min-width: 1441px would leave fractional widths
+   (browser zoom) matched by neither. */
+@media not all and (max-width: 1440px) {
+    .fabricator-list-page .fabricator-list-wrap.wrap.fabricator-pdf-layout-wrap {
+        height: calc(100vh - 32px) !important;   /* WP adminbar */
+        overflow: hidden !important;
+        padding-bottom: 20px !important;
+    }
+
+    .fabricator-pdf-layout-wrap #fabricator-pdf-layout-form {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .fabricator-pdf-layout-wrap .fabricator-pdf-editor-wrap {
+        flex: 1;
+        min-height: 0;
+        grid-template-rows: minmax(0, 1fr);
+        align-items: stretch;
+    }
+
+    /* min-height: 0 lets a grid item be shorter than its content and scroll; the default (auto) sizes
+       it to its content, which would overflow the row and bring the page scrollbar back. */
+    .fabricator-pdf-layout-wrap .fabricator-pdf-settings-panel {
+        position: static;
+        max-height: none;
+        min-height: 0;
+    }
+
+    .fabricator-pdf-layout-wrap .fabricator-pdf-preview-panel {
+        position: static;
+        height: auto;
+        min-height: 0;
+    }
 }
 
 .fabricator-preview-toolbar {
@@ -4623,26 +4447,6 @@
 .fabricator-hb-card .fabricator-hb-fmt-toolbar { background: transparent; border: none; padding: 0; }
 .fabricator-hb-card--image { gap: 6px; }
 .fabricator-hb-card--image .fabricator-hb-img-preview { margin: 0; }
-
-/* Image fit toggle buttons */
-.fabricator-hb-fit-btns {
-    display: flex;
-    gap: 4px;
-}
-.fabricator-hb-fit-btn {
-    flex: 1;
-    padding: 5px 4px;
-    font-size: 12px;
-    border: 1px solid var(--fabricator-border);
-    border-radius: 3px;
-    background: #fff;
-    color: var(--fabricator-text);
-    cursor: pointer;
-    text-align: center;
-    transition: background 0.1s, border-color 0.1s;
-}
-
-.fabricator-hb-fit-btn:hover { background: #f0f6fc; border-color: var(--fabricator-admin-accent); }
 
 /* Delete button — no default outline */
 #hb-delete-btn {
@@ -5227,9 +5031,10 @@ input[type="range"]:focus-visible::-moz-range-thumb {
  * Responsive / Media-Query Overrides
  * ================================================================ */
 @media (max-width: 782px) {
-    /* Form editor: row actions are hover-only (inaccessible on touch) — remove from layout
-       so the flex row's minimum width fits inside a narrow 2-col grid cell */
-    .fabricator-row-actions { display: none !important; }
+    /* Form editor: row actions stay reachable on touch screens (they were display:none here, leaving no way to edit,
+       duplicate or delete a field on a phone). The row wraps so they drop below the label instead of widening the cell. */
+    .fabricator-field-row { flex-wrap: wrap; }
+    .fabricator-row-actions { opacity: 1; margin-left: auto; }
     #fabricator-field-list { padding: 8px 8px 0 !important; }
 
     /* Form editor: WP admin bar is 46px on mobile (vs 32px desktop). The editor-page CSS sets
@@ -5337,4 +5142,11 @@ input[type="range"]:focus-visible::-moz-range-thumb {
         transform-origin: unset !important;
         flex-shrink: 0;
     }
+}
+
+/* Column headers whose one-word label is explained by a title tooltip. */
+.fabricator-access-th--help {
+    cursor: help;
+    text-decoration: underline dotted currentColor;
+    text-underline-offset: 3px;
 }

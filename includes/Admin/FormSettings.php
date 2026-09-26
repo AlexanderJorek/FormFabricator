@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -44,17 +44,18 @@ class FormSettings
     {
         add_action('admin_menu', [self::class, 'addSettingsPage']);
         add_action('admin_body_class', [self::class, 'bodyClass']);
-        add_action('wp_ajax_fabricator_forms_save_pdf_settings', [self::class, 'savePdfSettings']);
         add_action('wp_ajax_fabricator_forms_factory_reset', [self::class, 'handleFactoryReset']);
         add_action('wp_ajax_fabricator_forms_rotate_key', [self::class, 'handleRotateKey']);
         add_action('wp_ajax_fabricator_setup_keep_default', [self::class, 'handleSetupKeepDefault']);
         add_action('wp_ajax_fabricator_setup_get_master_key', [self::class, 'handleSetupGetMasterKey']);
+        add_action('wp_ajax_fabricator_upgrade_get_master_key', [self::class, 'handleUpgradeGetMasterKey']);
         add_action('wp_ajax_fabricator_setup_confirm_secure', [self::class, 'handleSetupConfirmSecure']);
         add_action('wp_ajax_fabricator_setup_reset_choice', [self::class, 'handleSetupResetChoice']);
         add_action('wp_ajax_fabricator_add_legacy_key', [self::class, 'handleAddLegacyKey']);
         add_action('wp_ajax_fabricator_peek_key_download', [self::class, 'handlePeekKeyDownload']);
         add_action('wp_ajax_fabricator_confirm_key_download', [self::class, 'handleConfirmKeyDownload']);
         add_action('wp_ajax_fabricator_save_access_settings', [self::class, 'handleSaveAccessSettings']);
+        add_action('wp_ajax_fabricator_access_user_search', [self::class, 'handleAccessUserSearch']);
         add_action('wp_ajax_fabricator_save_general_settings', [self::class, 'handleSaveGeneralSettings']);
         add_action('wp_ajax_fabricator_forms_unlock_settings', [self::class, 'ajaxUnlock']);
         add_filter('heartbeat_received', [self::class, 'heartbeatReceived'], 10, 2);
@@ -117,15 +118,45 @@ class FormSettings
     public static function addSettingsPage(): void
     {
         if (\FabricatorForms\Plugin::userCan('settings')) {
-            add_submenu_page(
+            $hook = add_submenu_page(
                 'fabricator-forms',
                 __('FormFabricator Settings', 'formfabricator'),
                 __('Settings', 'formfabricator'),
-                'read',
+                \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'settings',
                 'fabricator-forms-settings',
                 [self::class, 'renderSettingsPage']
             );
+            if ($hook) {
+                add_action('load-' . $hook, [self::class, 'handleSettingsPost']);
+            }
         }
+    }
+
+    /**
+     * Saves a posted settings form on the page's load- hook, before any output, then redirects (Post/Redirect/Get).
+     *
+     * Saving used to run inside the render callback, after headers were sent and without a redirect, so reloading the
+     * page afterwards submitted the form again.
+     *
+     * @return void
+     */
+    public static function handleSettingsPost(): void
+    {
+        if (!isset($_POST['fabricator_settings_nonce']) || !\FabricatorForms\Plugin::userCan('settings')) {
+            return;
+        }
+        if (!wp_verify_nonce(sanitize_key($_POST['fabricator_settings_nonce']), 'fabricator_forms_settings')) {
+            return;
+        }
+        self::$last_save_error = '';
+        self::saveGeneralSettings();
+        set_transient(
+            'fabricator_settings_result_' . get_current_user_id(),
+            self::$last_save_error === '' ? 'saved' : self::$last_save_error,
+            MINUTE_IN_SECONDS
+        );
+        wp_safe_redirect(admin_url('admin.php?page=fabricator-forms-settings'));
+        exit;
     }
 
     /**
@@ -139,20 +170,19 @@ class FormSettings
             wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
-        $saved = false;
-        self::$last_save_error = '';
-
-        if (isset($_POST['fabricator_settings_nonce'])
-            && wp_verify_nonce(sanitize_key($_POST['fabricator_settings_nonce']), 'fabricator_forms_settings')
-        ) {
-            self::saveGeneralSettings();
-            $saved = self::$last_save_error === '';
-        }
+        // Saved by handleSettingsPost() before any output; the outcome survives its redirect in a short per-user transient.
+        $result_key = 'fabricator_settings_result_' . get_current_user_id();
+        $result     = get_transient($result_key);
+        delete_transient($result_key);
+        $saved                 = $result === 'saved';
+        self::$last_save_error = is_string($result) && $result !== 'saved' ? $result : '';
 
         $from_email        = get_option('fabricator_forms_from_email', '');
         $from_name         = get_option('fabricator_forms_from_name', '');
         $recaptcha_site    = get_option('fabricator_forms_recaptcha_site_key', '');
         $recaptcha_secret  = get_option('fabricator_forms_recaptcha_secret_key', '');
+        // Stored comma-separated; shown one entry per line.
+        $trusted_proxies   = str_replace(', ', "\n", (string) get_option('fabricator_forms_trusted_proxies', ''));
         $hover_color       = get_option('fabricator_forms_hover_color', '#1d2327');
         $accent_color      = get_option('fabricator_forms_accent_color', '#f59e0b');
         $border_color      = get_option('fabricator_forms_border_color', '#c9cdd4');
@@ -160,9 +190,7 @@ class FormSettings
         $field_layout_mode = get_option('fabricator_forms_field_layout', 'block');
         $wp_admin_email    = get_option('admin_email');
         $setup_done_early = (bool) get_option('fabricator_forms_seal_setup_done', false);
-        /* Users granted access only via the plugin's own user-control system
-           (not real WP admins) don't see PDF-seal security, recaptcha keys,
-           or the user-access/reset tile — those stay reserved for site admins. */
+        // Plugin-access-only users (not real WP admins) don't see PDF-seal/recaptcha/user-access tiles.
         $is_full_admin = current_user_can('manage_options');
 
         // Advisory notice only — saveGeneralSettings()'s snapshot-hash check is the real guard.
@@ -279,7 +307,7 @@ class FormSettings
                             <strong style="font-size:13px;color:#1d2327;"><?php echo esc_html__('Standard', 'formfabricator'); ?></strong>
                         </span>
                         <span style="font-size:12px;color:#50575e;line-height:1.4;">
-                            <?php echo esc_html__('Stored unencrypted in the database. Compatible with all installations.', 'formfabricator'); ?>
+                            <?php echo esc_html__('Stored unencrypted in the database. Anyone with database access, for example through a backup, can forge seals. Compatible with all installations.', 'formfabricator'); ?>
                         </span>
                     </button>
                     <button type="button" id="fabricator-blocker-secure"
@@ -401,7 +429,6 @@ class FormSettings
 
         <canvas id="fabricator-particle-canvas"></canvas>
         <div class="wrap fabricator-list-wrap">
-            <hr class="wp-header-end" style="display:none">
 
             <form method="post" id="fabricator-settings-form">
                 <?php wp_nonce_field('fabricator_forms_settings', 'fabricator_settings_nonce'); ?>
@@ -415,6 +442,8 @@ class FormSettings
                         </button>
                     </div>
                 </div>
+
+                <?php \FabricatorForms\Utils\Assets::renderNoticeDock(); ?>
 
                 <div class="fabricator-settings-tiles">
 
@@ -496,10 +525,41 @@ class FormSettings
 
                         <div class="fabricator-settings-field">
                             <label for="recaptcha_secret"><?php echo esc_html__('Secret Key', 'formfabricator'); ?></label>
-                            <input type="text" id="recaptcha_secret" name="recaptcha_secret"
-                                   value="<?php echo esc_attr($recaptcha_secret); ?>"
-                                   placeholder="6Le…"
-                                   autocomplete="off" spellcheck="false">
+                            <?php /* Write-only: the saved secret is never echoed back into the page, where screenshots, page source,
+                                     browser extensions and form caches could all read it. Submitting it empty keeps the saved one. */ ?>
+                            <input type="password" id="recaptcha_secret" name="recaptcha_secret"
+                                   value=""
+                                   placeholder="<?php echo (string) $recaptcha_secret !== '' ? esc_attr__('Saved (leave empty to keep)', 'formfabricator') : '6Le…'; ?>"
+                                   autocomplete="new-password" data-lpignore="true"
+                                   data-1p-ignore data-bwignore spellcheck="false">
+                            <?php if ((string) $recaptcha_secret !== '') : ?>
+                            <label class="fabricator-settings-field--inline">
+                                <input type="checkbox" name="recaptcha_secret_clear" value="1">
+                                <?php echo esc_html__('Remove the saved secret key', 'formfabricator'); ?>
+                            </label>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="fabricator-settings-card">
+                        <h2 class="fabricator-settings-card-title">
+                            <i class="fa-solid fa-network-wired"></i> <?php echo esc_html__('Trusted proxies', 'formfabricator'); ?>
+                        </h2>
+                        <div class="fabricator-settings-field">
+                            <label for="trusted_proxies"><?php echo esc_html__('Proxy IP addresses or ranges', 'formfabricator'); ?></label>
+                            <textarea id="trusted_proxies" name="trusted_proxies" rows="3" spellcheck="false" autocomplete="off"
+                                      placeholder="203.0.113.10&#10;198.51.100.0/24"><?php echo esc_textarea($trusted_proxies); ?></textarea>
+                            <p class="fabricator-settings-hint">
+                                <?php
+                                echo esc_html__('Only needed if this site runs behind a proxy, load balancer or CDN (for example Cloudflare). Enter its addresses, one per line.', 'formfabricator')
+                                    . ' ' . esc_html__("For requests from these addresses, the visitor's real address is then read from the X-Forwarded-For header. Leave empty otherwise.", 'formfabricator');
+                                ?>
+                            </p>
+                            <?php if (defined('FABRICATOR_TRUSTED_PROXIES')) : ?>
+                            <p class="fabricator-settings-hint">
+                                <?php echo esc_html__('The FABRICATOR_TRUSTED_PROXIES constant in wp-config.php is set as well; its entries apply in addition to these.', 'formfabricator'); ?>
+                            </p>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -510,7 +570,7 @@ class FormSettings
                         <p class="fabricator-settings-hint">
                             <?php
                             echo esc_html__(
-                                'If you use SEPA IBAN lookups (openiban.com) or the CAPTCHA field (Google reCAPTCHA), your privacy policy needs to disclose that.',
+                                'If you use the CAPTCHA field (Google reCAPTCHA), your privacy policy needs to disclose that.',
                                 'formfabricator'
                             );
                             ?>
@@ -589,14 +649,11 @@ class FormSettings
                     <?php
                     $setup_done       = $setup_done_early;
                     $key_history      = $is_full_admin ? \FabricatorForms\PDF\HashSeal::getHistoryFingerprints() : [];
+                    // Active key isn't in history (retired keys only) — fetched separately so a rotated-away compromised key doesn't look current.
+                    $active_key       = $is_full_admin ? \FabricatorForms\PDF\HashSeal::getActiveKeyInfo() : [];
                     $rotate_nonce     = wp_create_nonce('fabricator_rotate_key');
                     $setup_nonce      = wp_create_nonce('fabricator_seal_setup');
-                    // Boolean only — the plaintext key itself is never serialized into this page's
-                    // inline <script>. It's fetched over AJAX (fabricator_peek_key_download) only
-                    // when the modal actually opens, so it never sits in page source, bfcache, or
-                    // reach of any other admin-page script. Peek, not claim (see
-                    // HashSeal::peekPendingDownload()): rendering the page, or the admin navigating
-                    // away without confirming, must not burn the one-shot key backup.
+                    // Boolean only — the plaintext key is fetched via AJAX only when the modal opens (peek, not claim; see HashSeal::peekPendingDownload()) so it never reaches page source/bfcache.
                     $has_pending_download = ($setup_done && $is_full_admin)
                         && \FabricatorForms\PDF\HashSeal::peekPendingDownload() !== null;
                     $enc_enabled      = \FabricatorForms\PDF\HashSeal::isEncryptionEnabled();
@@ -754,7 +811,7 @@ class FormSettings
                     <i class="fa-solid fa-magnifying-glass"></i> <?php echo esc_html__('PDF keys', 'formfabricator'); ?>
                 </h2>
 
-                <?php if (!empty($key_history)) : ?>
+                <?php if (!empty($key_history) || !empty($active_key)) : ?>
                 <div class="fabricator-key-view-scroll">
                 <table class="fabricator-key-master-table">
                     <thead>
@@ -766,6 +823,24 @@ class FormSettings
                         </tr>
                     </thead>
                     <tbody>
+                    <?php if (!empty($active_key)) : ?>
+                        <tr class="fabricator-key-uuid-row">
+                            <td colspan="4">
+                                <span class="fabricator-key-uuid-lbl"><?php echo esc_html__('UUID:', 'formfabricator'); ?></span>
+                                <code class="fabricator-key-uuid-code"><?php echo esc_html((string) $active_key['uuid']); ?></code>
+                            </td>
+                        </tr>
+                        <tr class="fabricator-key-data-row">
+                            <td><code class="fabricator-key-fp-cell"><?php echo esc_html((string) $active_key['fingerprint']); ?></code></td>
+                            <td>
+                                <span class="fabricator-key-card-badges">
+                                    <span class="fabricator-key-badge fabricator-key-badge--active"><?php echo esc_html__('ACTIVE', 'formfabricator'); ?></span>
+                                </span>
+                            </td>
+                            <td><?php echo esc_html__('in use', 'formfabricator'); ?></td>
+                            <td>—</td>
+                        </tr>
+                    <?php endif; ?>
                     <?php foreach (array_reverse($key_history) as $entry) :
                         $fp_mid    = (string)($entry['fingerprint'] ?? '');
                         $uuid      = (string)($entry['uuid'] ?? '—');
@@ -788,7 +863,8 @@ class FormSettings
                             $badge_lbl = __('COMPROMISED', 'formfabricator');
                         } else {
                             $badge_cls = 'fabricator-key-badge fabricator-key-badge--rotated';
-                            $badge_lbl = __('ROTATED', 'formfabricator') . ($sta === 'initial' ? ' (Initial)' : '');
+                            // Two whole translatable labels, so translators can word and order "initial" freely.
+                            $badge_lbl = $sta === 'initial' ? __('ROTATED (initial key)', 'formfabricator') : __('ROTATED', 'formfabricator');
                         }
                         ?>
                         <tr class="fabricator-key-uuid-row">
@@ -817,7 +893,7 @@ class FormSettings
                 </div><!-- /.fabricator-key-view-scroll -->
                 <?php else : ?>
                 <p class="fabricator-settings-hint" style="margin-top:12px;">
-                    <?php echo esc_html__('No rotations performed yet — no log available.', 'formfabricator'); ?>
+                    <?php echo esc_html__('No key created yet.', 'formfabricator'); ?>
                 </p>
                 <?php endif; ?>
 
@@ -838,7 +914,7 @@ class FormSettings
                 <?php
                 $privacy_disclaimer_sentences = [
                     __(
-                        'Here is an example disclaimer you should add to your privacy policy if you use SEPA IBAN lookups (openiban.com) or the CAPTCHA field (Google reCAPTCHA).',
+                        'Here is an example disclaimer you should add to your privacy policy if you use the CAPTCHA field (Google reCAPTCHA).',
                         'formfabricator'
                     ),
                     __(
@@ -990,6 +1066,9 @@ class FormSettings
                 <p class="fabricator-settings-hint" style="margin-top:12px;text-align:center;">
                     <?php echo esc_html__('You must download the file before you can continue.', 'formfabricator'); ?>
                 </p>
+                <p class="fabricator-settings-hint" style="margin-top:6px;text-align:center;">
+                    <?php echo esc_html__('Note: uninstalling the plugin wipes all seal keys from the server. This file is then the only copy.', 'formfabricator'); ?>
+                </p>
             </div>
         </div>
 
@@ -1128,12 +1207,7 @@ class FormSettings
         </div>
 
         <?php
-        /* Build access data inline so the modal opens instantly.
-           This includes the full site user list and every user's/role's
-           permission matrix — restricted to real WP admins, since the
-           access-management UI itself is admin-only by design (a user with
-           only the plugin's own 'settings' capability must not be able to
-           read other users' permission grants from page source). */
+        // Inlined for instant modal open; restricted to full admins so it can't leak permission grants via page source.
         $access_inline_data = null;
         if ($is_full_admin) {
             global $wp_roles;
@@ -1142,14 +1216,8 @@ class FormSettings
             foreach ($wp_roles->roles as $_slug => $_data) {
                 $access_role_names[$_slug] = translate_user_role($_data['name']);
             }
-            $access_all_users = get_users(['fields' => ['ID', 'display_name', 'user_login']]);
-            $access_user_list = [];
-            foreach ($access_all_users as $_u) {
-                $access_user_list[] = [
-                    'id'   => (int) $_u->ID,
-                    'name' => $_u->display_name ?: $_u->user_login,
-                ];
-            }
+            // No full user list here: get_users() without a limit loaded every account on each Settings render.
+            // The "add user" picker queries handleAccessUserSearch() as the admin types.
             $access_user_overrides = [];
             foreach (($access_option['users'] ?? []) as $_uid => $_perms) {
                 $_ud = get_userdata((int) $_uid);
@@ -1165,7 +1233,6 @@ class FormSettings
                 'roles'          => (object) ($access_option['roles'] ?? []),
                 'role_names'     => $access_role_names,
                 'user_overrides' => $access_user_overrides,
-                'user_list'      => $access_user_list,
             ];
         }
         // Raw DB option, not isEncryptionEnabled() — that also requires the constant, which may not be present yet (the 'masterkey' state we need to detect).
@@ -1196,6 +1263,7 @@ class FormSettings
                 'hasPendingDownload' => $is_full_admin && $has_pending_download,
                 'accessNonce'     => $is_full_admin ? wp_create_nonce('fabricator_access_settings') : '',
                 'accessData'      => $is_full_admin ? $access_inline_data : null,
+                'accessSnapshot'  => $is_full_admin ? self::accessSnapshot() : '',
                 'setupState'      => $setup_state,
             ],
             ]
@@ -1228,6 +1296,14 @@ class FormSettings
             'permPdfLayout'       => __('PDF Layout', 'formfabricator'),
             'permVerifier'        => __('Verifier', 'formfabricator'),
             'permSettings'        => __('Settings', 'formfabricator'),
+            /* Hover text for access-matrix headers: "Forms" alone doesn't suggest it confers outbound mail. */
+            'permListDesc'        => __("View only:\n- See the form list\n- Open a form read-only\nNo creating, editing, deleting, importing or exporting.", 'formfabricator'),
+            // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so this cannot be wrapped via concatenation.
+            'permFormsDesc'       => __("Full control of forms:\n- Create, edit, duplicate and delete forms\n- Set notification recipients (To, CC, BCC and routing rules) - this site then sends mail to any address entered\n- Write rich text (HTML block, consent and mandate texts) with links, formatting, images and SVG; form elements such as input fields are always removed\n- Export a form, including its recipient addresses", 'formfabricator'),
+            'permPdfLayoutDesc'   => __("PDF appearance:\n- Header, logo and title\n- Fonts, colours and margins\n- Which sections are shown or hidden\n- Footer text", 'formfabricator'),
+            'permVerifierDesc'    => __("Document verification:\n- Upload a PDF to the verification page\n- See the result, including the original field values recorded in the document's seal", 'formfabricator'),
+            // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires one unbroken string literal, so this cannot be wrapped via concatenation.
+            'permSettingsDesc'    => __("Plugin settings:\n- General, mail and PDF settings\nThe access matrix, trusted proxies, seal-key rotation and the CAPTCHA keys also require \"manage_options\".", 'formfabricator'),
             'userLabel'           => __('User', 'formfabricator'),
             'roleLabel'           => __('Role', 'formfabricator'),
             'clickToRemove'       => __('Click to remove', 'formfabricator'),
@@ -1270,6 +1346,7 @@ class FormSettings
             get_option('fabricator_forms_border_color', '#c9cdd4'),
             get_option('fabricator_forms_admin_accent', '#2271b1'),
             get_option('fabricator_forms_field_layout', 'block'),
+            get_option('fabricator_forms_trusted_proxies', ''),
         ];
         return md5(wp_json_encode($values));
     }
@@ -1300,36 +1377,94 @@ class FormSettings
             return;
         }
 
-        $from_email_input = sanitize_email(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['fabricator_cfg_a'] ?? '')));
-        if ($from_email_input !== '') {
-            update_option('fabricator_forms_from_email', $from_email_input);
+        // Trusted proxies are validated before anything is written, so an invalid entry refuses the whole save instead of
+        // leaving it half done. Administrators only, like the reCAPTCHA keys below: the list decides whose address a
+        // forwarded header may claim.
+        $proxy_list = null;
+        if (current_user_can('manage_options') && isset($_POST['trusted_proxies'])) {
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- every entry is validated as an IP address or CIDR range in ClientIp::normalizeProxyList(); Cast::stringOrDefault() breaks the sniff's taint trace.
+            [$proxy_list, $proxy_invalid] = \FabricatorForms\Utils\ClientIp::normalizeProxyList(sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['trusted_proxies']))));
+            if ($proxy_invalid !== []) {
+                // translators: %s: comma-separated list of the rejected entries.
+                self::$last_save_error = sprintf(__('Not saved: these trusted proxy entries are not valid IP addresses or CIDR ranges: %s', 'formfabricator'), implode(', ', $proxy_invalid));
+                return;
+            }
         }
-        $from_name_input = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['fabricator_cfg_b'] ?? '')));
-        if ($from_name_input !== '') {
-            update_option('fabricator_forms_from_name', $from_name_input);
+
+        // An emptied field now clears the option (the hint promises "leave blank to use the WordPress admin email");
+        // before, blank was ignored, so a sender once set could never be removed. Only fields present in the POST are
+        // touched, and an invalid address is refused instead of silently clearing the saved one.
+        if (isset($_POST['fabricator_cfg_a'])) {
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_email() below; Cast::stringOrDefault() breaks the sniff's taint trace.
+            $from_email_raw   = trim(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['fabricator_cfg_a'])));
+            $from_email_input = sanitize_email($from_email_raw);
+            if ($from_email_raw === '') {
+                delete_option('fabricator_forms_from_email');
+            } elseif ($from_email_input !== '' && is_email($from_email_input)) {
+                update_option('fabricator_forms_from_email', $from_email_input, false);
+            } else {
+                self::$last_save_error = __('Please enter a valid sender email address, or leave the field blank.', 'formfabricator');
+                return;
+            }
+        }
+        if (isset($_POST['fabricator_cfg_b'])) {
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_text_field() below; Cast::stringOrDefault() breaks the sniff's taint trace.
+            $from_name_input = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['fabricator_cfg_b'])));
+            if ($from_name_input !== '') {
+                update_option('fabricator_forms_from_name', $from_name_input, false);
+            } else {
+                delete_option('fabricator_forms_from_name');
+            }
         }
         // reCAPTCHA keys are hidden from non-full-admins in the UI; enforce that boundary server-side too against a raw POST.
         if (current_user_can('manage_options')) {
-            $site_key = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['recaptcha_site'] ?? '')));
-            update_option('fabricator_forms_recaptcha_site_key', $site_key);
+            // Only when the request carries the field, like the sender fields above: a save without it cleared the saved key.
+            if (isset($_POST['recaptcha_site'])) {
+                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_text_field() below; Cast::stringOrDefault() breaks the sniff's taint trace.
+                $site_key = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['recaptcha_site'])));
+                update_option('fabricator_forms_recaptcha_site_key', $site_key, false);
+            }
+            // Write-only field: empty means "keep the saved secret"; removing it takes the explicit checkbox.
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_text_field() below; Cast::stringOrDefault() breaks the sniff's taint trace.
             $secret_key = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['recaptcha_secret'] ?? '')));
-            update_option('fabricator_forms_recaptcha_secret_key', $secret_key);
+            if (!empty($_POST['recaptcha_secret_clear'])) {
+                update_option('fabricator_forms_recaptcha_secret_key', '', false);
+            } elseif ($secret_key !== '') {
+                update_option('fabricator_forms_recaptcha_secret_key', $secret_key, false);
+            }
+            if ($proxy_list !== null) {
+                update_option('fabricator_forms_trusted_proxies', $proxy_list, false);
+            }
         }
 
-        $hover        = sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['hover_color']    ?? ''))) ?: '#1d2327';
-        $accent       = sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['accent_color']   ?? ''))) ?: '#f59e0b';
-        $border       = sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['border_color']   ?? ''))) ?: '#c9cdd4';
-        $admin_accent = sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['admin_accent']   ?? ''))) ?: '#2271b1';
-        update_option('fabricator_forms_hover_color', $hover);
-        update_option('fabricator_forms_accent_color', $accent);
-        update_option('fabricator_forms_border_color', $border);
-        update_option('fabricator_forms_admin_accent', $admin_accent);
+        // Each colour only when the request carries it, as the comment at the top of this method promises: writing
+        // "?? ''" unconditionally reset the palette to its defaults on any save that left the colour fields out.
+        // autoload=false: none of these options are read on a plain front-end request, so autoloading would bloat
+        // wp_load_alloptions() needlessly.
+        $colours = [
+            'hover_color'  => ['fabricator_forms_hover_color', '#1d2327'],
+            'accent_color' => ['fabricator_forms_accent_color', '#f59e0b'],
+            'border_color' => ['fabricator_forms_border_color', '#c9cdd4'],
+            'admin_accent' => ['fabricator_forms_admin_accent', '#2271b1'],
+        ];
+        foreach ($colours as $field => [$option, $default]) {
+            if (!isset($_POST[$field])) {
+                continue;
+            }
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_hex_color() on the same line; Cast::stringOrDefault() breaks the sniff's taint trace.
+            $colour = sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST[$field]))) ?: $default;
+            update_option($option, $colour, false);
+        }
 
-        $layout_mode = sanitize_key(wp_unslash($_POST['field_layout_mode'] ?? 'block'));
-        update_option(
-            'fabricator_forms_field_layout',
-            $layout_mode === 'inline' ? 'inline' : 'block'
-        );
+        // Same rule: a save without the field kept falling back to "block" and undid an inline layout.
+        if (isset($_POST['field_layout_mode'])) {
+            $layout_mode = sanitize_key(wp_unslash($_POST['field_layout_mode']));
+            update_option(
+                'fabricator_forms_field_layout',
+                $layout_mode === 'inline' ? 'inline' : 'block',
+                false
+            );
+        }
     }
 
     /**
@@ -1358,6 +1493,7 @@ class FormSettings
             'fabricator_forms_pdf_layout',
             'fabricator_forms_field_layout',
             'fabricator_forms_access',
+            'fabricator_forms_trusted_proxies',
         ];
         foreach ($options as $opt) {
             delete_option($opt);
@@ -1365,57 +1501,30 @@ class FormSettings
 
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         if (!empty($_POST['del_forms']) && $_POST['del_forms'] === '1') {
-            $ids = get_posts(
-                [
-                'post_type'      => 'fabricator_form',
-                'posts_per_page' => -1,
-                'fields'         => 'ids',
-                ]
-            );
-            foreach ($ids as $id) {
-                wp_delete_post((int)$id, true);
+            // A page at a time, not posts_per_page => -1: each round deletes what it read, so the next query returns
+            // the ones still left. The counter only stops a runaway loop if a delete is ever refused.
+            for ($round = 0; $round < 1000; $round++) {
+                $ids = get_posts(
+                    [
+                    'post_type'      => 'fabricator_form',
+                    'posts_per_page' => \FabricatorForms\Form\FormModel::QUERY_BATCH,
+                    // Explicit list, as in uninstall.php: get_posts() defaults to 'publish' and 'any' still omits trash and
+                    // auto-draft, so drafts and trashed forms survived a reset that promised to delete all forms.
+                    'post_status'    => ['publish', 'pending', 'draft', 'future', 'private', 'trash', 'auto-draft', 'inherit'],
+                    'fields'         => 'ids',
+                    ]
+                );
+                if (empty($ids)) {
+                    break;
+                }
+                foreach ($ids as $id) {
+                    wp_delete_post((int)$id, true);
+                }
             }
             delete_option('fabricator_form_selects');
         }
 
         wp_send_json_success();
-    }
-
-    /**
-     * AJAX handler to save PDF attachment settings per notification.
-     *
-     * @return void
-     */
-    public static function savePdfSettings(): void
-    {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_forms_admin_nonce',
-            'nonce'
-        );
-
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-        $raw = json_decode(sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['settings'] ?? ''))), true);
-        if (!is_array($raw)) {
-            wp_send_json_error(['message' => __('Invalid data', 'formfabricator')], 400);
-        }
-
-        $saved = get_option('fabricator_forms_pdf_settings', []);
-        if (!is_array($saved)) {
-            $saved = [];
-        }
-
-        // Key format "form_id|template_slug" mirrors the lookup key shouldAttachPdf() builds
-        // when deciding whether to attach a PDF for a given submission
-        foreach ($raw as $key => $value) {
-            if (preg_match('/^\d+\|[\w-]+$/', $key)) {
-                $saved[$key] = ((int)$value === 1) ? 1 : 0;
-            }
-        }
-
-        // autoload=false: see the matching write in FormEditor::ajaxSave().
-        update_option('fabricator_forms_pdf_settings', $saved, false);
-        wp_send_json_success(['saved' => $raw]);
     }
 
     /**
@@ -1434,7 +1543,19 @@ class FormSettings
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         $compromised = !empty($_POST['key_compromised']) && $_POST['key_compromised'] === '1';
 
-        $new_key = \FabricatorForms\PDF\HashSeal::rotateKey($compromised, true);
+        try {
+            $new_key = \FabricatorForms\PDF\HashSeal::rotateKey($compromised, true);
+        } catch (\Exception $e) {
+            // Uncaught, this surfaced as a bare 500 (with a stack trace under WP_DEBUG_DISPLAY).
+            \FabricatorForms\fabricator_log('FabricatorForms FormSettings: seal key rotation failed — ' . $e->getMessage());
+            // Another rotation holds the key history: nothing was changed, and waiting is all it takes.
+            if (str_starts_with($e->getMessage(), 'Lock busy:')) {
+                wp_send_json_error(['message' => __('Another change to the seal key is in progress. Nothing was changed; please try again in a moment.', 'formfabricator')], 409);
+                return;
+            }
+            wp_send_json_error(['message' => __('The seal key could not be rotated. Please check the server log.', 'formfabricator')], 500);
+            return;
+        }
         wp_send_json_success(
             [
             'message'    => __('Key rotated successfully.', 'formfabricator'),
@@ -1457,9 +1578,15 @@ class FormSettings
             'fabricator_seal_setup',
             'nonce'
         );
+        // Setup-only. The setup nonce is issued on every Settings load, so without this a stale or replayed request after
+        // setup would silently switch key encryption off, and every later rotation would store its key in plaintext.
+        if (get_option('fabricator_forms_seal_setup_done', false)) {
+            wp_send_json_error(['message' => __('Seal key setup is already complete.', 'formfabricator')], 409);
+            return;
+        }
         update_option('fabricator_forms_seal_encryption', 'disabled', false);
         update_option('fabricator_forms_seal_setup_done', true, false);
-        \FabricatorForms\PDF\HashSeal::getCurrentKeyId(); // ensure initial key exists
+        \FabricatorForms\PDF\HashSeal::createInitialKey(); // atomic; an existing record is left untouched
         // Peek, not claim — see handleSetupConfirmSecure() for why.
         $dl = \FabricatorForms\PDF\HashSeal::peekPendingDownload();
         if (!$dl) {
@@ -1481,8 +1608,51 @@ class FormSettings
             'fabricator_seal_setup',
             'nonce'
         );
+        // Setup-only, like handleSetupKeepDefault(): the setup nonce is issued on every Settings load, so without this a
+        // stale or replayed request after setup would flip encryption on and hand out a master key nothing uses.
+        if (get_option('fabricator_forms_seal_setup_done', false)) {
+            wp_send_json_error(['message' => __('Seal key setup is already complete.', 'formfabricator')], 409);
+            return;
+        }
         // Commit the encryption choice immediately — the user cannot go back to Standard.
         update_option('fabricator_forms_seal_encryption', 'enabled', false);
+        wp_send_json_success(['define_line' => self::issueMasterKey()]);
+    }
+
+    /**
+     * AJAX: issues a master key for switching a site that was set up in Standard mode to encrypted key storage.
+     *
+     * handleSetupGetMasterKey() refuses once setup is done, which left the "Standard — unencrypted" upgrade button
+     * closing its dialog without a word. Unlike setup, nothing is committed here: handleSetupConfirmSecure() switches
+     * encryption on only once wp-config.php holds the matching key, so an abandoned dialog changes nothing.
+     *
+     * @return void
+     */
+    public static function handleUpgradeGetMasterKey(): void
+    {
+        \FabricatorForms\Utils\AjaxGuard::require(
+            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
+            'fabricator_seal_setup',
+            'nonce'
+        );
+        if (!get_option('fabricator_forms_seal_setup_done', false)) {
+            wp_send_json_error(['message' => __('Please complete the seal key setup first.', 'formfabricator')], 409);
+            return;
+        }
+        if (get_option('fabricator_forms_seal_encryption') === 'enabled') {
+            wp_send_json_error(['message' => __('Key encryption is already enabled.', 'formfabricator')], 409);
+            return;
+        }
+        wp_send_json_success(['define_line' => self::issueMasterKey()]);
+    }
+
+    /**
+     * Generates a master key, remembers only its hash for handleSetupConfirmSecure(), and returns the wp-config.php line.
+     *
+     * @return string The define() line to paste into wp-config.php.
+     */
+    private static function issueMasterKey(): string
+    {
         $master_hex = bin2hex(random_bytes(32));
         // Store only a hash, never the plaintext — a DB-only compromise mustn't yield the key that decrypts every seal key.
         set_transient(
@@ -1490,29 +1660,36 @@ class FormSettings
             hash('sha256', $master_hex),
             600
         );
-        // Invalidate OPcache so the next request (confirm) re-reads wp-config.php from disk.
-        // wp-config.php can live one directory above ABSPATH — same resolution wp-load.php itself uses.
-        if (function_exists('opcache_invalidate')) {
-            $wp_config_path = file_exists(\ABSPATH . 'wp-config.php')
-                ? \ABSPATH . 'wp-config.php'
-                : dirname(\ABSPATH) . '/wp-config.php';
-            if (file_exists($wp_config_path)) {
-                opcache_invalidate($wp_config_path, true);
-            }
-        }
-        wp_send_json_success(
-            [
-            'define_line' => "define('FABRICATOR_SEAL_MASTER_KEY', '" . $master_hex . "');",
-            ]
-        );
+        self::invalidateWpConfigOpcache();
+        return "define('FABRICATOR_SEAL_MASTER_KEY', '" . $master_hex . "');";
     }
 
     /**
-     * AJAX handler that returns the pending plaintext seal key for the download modal, without
-     * consuming it. Delivered in a response body rather than serialized into the Settings page's
-     * inline <script> (as it used to be), so the key is never in page source, bfcache, or reach
-     * of any other admin-page script — it only exists in the modal's own JS scope, for as long as
-     * the modal is open. handleConfirmKeyDownload() is what finally deletes it.
+     * Drops wp-config.php from OPcache so the next request compiles it from disk.
+     *
+     * With opcache.validate_timestamps=0 a cached wp-config.php is never re-read, so the line the admin has just
+     * pasted in stays invisible. Doing this only when the key is issued left a window: any request arriving before
+     * the file was edited cached the old content again, and every confirm attempt then failed. It also runs on a
+     * failed confirm, which is exactly when the cache is known to be stale.
+     *
+     * @return void
+     */
+    private static function invalidateWpConfigOpcache(): void
+    {
+        if (!function_exists('opcache_invalidate')) {
+            return;
+        }
+        // wp-config.php can live one directory above ABSPATH — same resolution wp-load.php itself uses.
+        $wp_config_path = file_exists(\ABSPATH . 'wp-config.php')
+            ? \ABSPATH . 'wp-config.php'
+            : dirname(\ABSPATH) . '/wp-config.php';
+        if (file_exists($wp_config_path)) {
+            opcache_invalidate($wp_config_path, true);
+        }
+    }
+
+    /**
+     * Returns the pending seal key via AJAX response, not serialized into page HTML, so it never sits in page source/bfcache.
      *
      * @return void
      */
@@ -1531,10 +1708,7 @@ class FormSettings
     }
 
     /**
-     * AJAX handler fired once the admin confirms (via the download modal's "I've saved it"
-     * button) that they've actually saved the pending plaintext seal key elsewhere. This is the
-     * only thing that deletes HashSeal's one-shot pending-download transient — page render only
-     * ever peeks at it (see HashSeal::peekPendingDownload()).
+     * Confirms the admin saved the seal key elsewhere — the only call that deletes the one-shot pending-download transient.
      *
      * @return void
      */
@@ -1561,6 +1735,12 @@ class FormSettings
             'fabricator_seal_setup',
             'nonce'
         );
+        // Setup-only. The setup nonce is issued on every Settings load, so without this a stale or replayed request after
+        // setup would silently switch key encryption off, and every later rotation would store its key in plaintext.
+        if (get_option('fabricator_forms_seal_setup_done', false)) {
+            wp_send_json_error(['message' => __('Seal key setup is already complete.', 'formfabricator')], 409);
+            return;
+        }
         delete_option('fabricator_forms_seal_encryption');
         delete_transient('fabricator_setup_master_key_' . get_current_user_id());
         wp_send_json_success();
@@ -1580,6 +1760,9 @@ class FormSettings
         );
 
         if (!defined('FABRICATOR_SEAL_MASTER_KEY') || (string) FABRICATOR_SEAL_MASTER_KEY === '') {
+            // The line may well be in the file while a cached copy of it is what this request read; drop that copy so
+            // the admin's next attempt compiles wp-config.php from disk.
+            self::invalidateWpConfigOpcache();
             wp_send_json_error(
                 [
                 'message' => __('FABRICATOR_SEAL_MASTER_KEY not found. Please check wp-config.php and try again.', 'formfabricator'), // phpcs:ignore Generic.Files.LineLength
@@ -1609,19 +1792,27 @@ class FormSettings
 
         $was_setup_done = (bool) get_option('fabricator_forms_seal_setup_done');
 
+        // Encrypt any keys that were generated before setup completed. First, before anything is switched over: it takes
+        // the seal-key lock and refuses while a rotation holds it, and refusing here leaves the setup exactly as it was, so
+        // confirming again simply works. encryptKey() uses the master key directly, not the "enabled" flag set below.
+        try {
+            \FabricatorForms\PDF\HashSeal::encryptExistingKeys();
+        } catch (\RuntimeException $e) {
+            \FabricatorForms\fabricator_log('FabricatorForms FormSettings: encrypting existing keys failed — ' . $e->getMessage());
+            if (str_starts_with($e->getMessage(), 'Lock busy:')) {
+                wp_send_json_error(['message' => __('Another change to the seal key is in progress. Nothing was changed; please try again in a moment.', 'formfabricator')], 409);
+                return;
+            }
+            throw $e;
+        }
+
         delete_transient('fabricator_setup_master_key_' . get_current_user_id());
         update_option('fabricator_forms_seal_encryption', 'enabled', false);
         update_option('fabricator_forms_seal_setup_done', true, false);
 
-        // Encrypt any keys that were generated before setup completed.
-        \FabricatorForms\PDF\HashSeal::encryptExistingKeys();
-
-        // Ensure active key exists (may have been generated during encryption pass).
-        \FabricatorForms\PDF\HashSeal::getCurrentKeyId();
-        // Peek, not claim: only the download-modal's "I've saved it" confirmation (see
-        // handleConfirmKeyDownload()) should actually delete the one-shot transient — if this
-        // response is lost in transit or the browser dies before the modal renders, the admin
-        // must still be able to reach the key via the next Settings page load.
+        // Creates the first key unless one already exists (the upgrade path, whose key was encrypted in place above).
+        \FabricatorForms\PDF\HashSeal::createInitialKey();
+        // Peek, not claim — only handleConfirmKeyDownload() deletes the one-shot transient, so a lost response still leaves the key reachable next page load.
         $dl = \FabricatorForms\PDF\HashSeal::peekPendingDownload();
 
         if (!$dl) {
@@ -1685,26 +1876,26 @@ class FormSettings
         // Guard: hard-reject only when the exact same payload already exists.
         $incoming_created = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($parsed['created_at'] ?? null));
 
+        // By uuid only, matching HashSeal::addLegacyKey(): the stored active key may be encrypted, so comparing it with the
+        // plaintext import never matched, and a second key filed under an existing uuid made verification ambiguous.
         $active_raw = get_option('fabricator_forms_seal_key');
         if ($active_raw) {
             $active_rec = json_decode((string) $active_raw, true);
             $active_dup = is_array($active_rec)
-                && ($active_rec['uuid'] ?? '') === $uuid
-                && ($active_rec['key']  ?? '') === $key;
+                && strtolower((string) ($active_rec['uuid'] ?? '')) === strtolower($uuid);
             if ($active_dup) {
-                wp_send_json_error(['message' => __('This key already exists as the active key.', 'formfabricator')]); // phpcs:ignore Generic.Files.LineLength
+                wp_send_json_error(['message' => __('A seal key with this UUID is already stored.', 'formfabricator')]); // phpcs:ignore Generic.Files.LineLength
                 return;
             }
         }
 
-        foreach (\FabricatorForms\PDF\HashSeal::getHistory() as $entry) {
-            $history_dup = ($entry['uuid']       ?? '') === $uuid
-                && ($entry['key']       ?? '') === $key
-                && ($entry['retired_at'] ?? '') === $incoming_created;
+        // The raw option, not HashSeal::getHistory(): that decrypts every retired key just to read uuids, which are stored in the clear.
+        foreach ((array) get_option('fabricator_forms_seal_key_history', []) as $entry) {
+            $history_dup = is_array($entry) && strtolower((string) ($entry['uuid'] ?? '')) === strtolower($uuid);
             if ($history_dup) {
                 wp_send_json_error(
                     [
-                    'message' => __('This key already exists in the history (identical entry).', 'formfabricator'), // phpcs:ignore Generic.Files.LineLength
+                    'message' => __('A seal key with this UUID is already stored.', 'formfabricator'), // phpcs:ignore Generic.Files.LineLength
                     ]
                 );
                 return;
@@ -1722,7 +1913,7 @@ class FormSettings
                 'code'    => 'plugin_mismatch',
                 'message' => __('Plugin name does not match.', 'formfabricator'),
                 'text'    => sprintf(
-                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- not HTML: this JSON field is rendered client-side via createTextNode()/textContent (see FormSettings.php JS), never innerHTML, so esc_html() here would corrupt the text (double-encode) instead of protecting anything.
+                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- rendered client-side via textContent, not innerHTML; esc_html() here would double-encode instead of protecting.
                     /* translators: %s: the plugin field value from the uploaded JSON */
                     __('The "plugin" field reads "%s" — this does not appear to be a key from this plugin.', 'formfabricator'), // phpcs:ignore Generic.Files.LineLength
                     $plugin_field
@@ -1746,6 +1937,40 @@ class FormSettings
             true
         );
         wp_send_json_success(['message' => __('Legacy key added successfully.', 'formfabricator')]);
+    }
+
+    /**
+     * AJAX: up to 20 users matching the typed term, for the access modal's "add user" picker.
+     *
+     * @return void
+     */
+    public static function handleAccessUserSearch(): void
+    {
+        // Same gate as handleSaveAccessSettings(): only real WP admins see or edit per-user grants.
+        \FabricatorForms\Utils\AjaxGuard::require(
+            static fn() => current_user_can('manage_options'),
+            'fabricator_access_settings',
+            'nonce'
+        );
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via AjaxGuard::require(); sanitize_text_field() wraps Cast::stringOrDefault(), which hides it from the sniff.
+        $term = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['term'] ?? '')));
+        $args = [
+            'fields'  => ['ID', 'display_name', 'user_login'],
+            'number'  => 20,
+            'orderby' => 'display_name',
+        ];
+        if ($term !== '') {
+            $args['search']         = '*' . $term . '*';
+            $args['search_columns'] = ['user_login', 'user_nicename', 'display_name', 'user_email'];
+        }
+        $users = [];
+        foreach (get_users($args) as $user) {
+            $users[] = [
+                'id'   => (int) $user->ID,
+                'name' => $user->display_name ?: $user->user_login,
+            ];
+        }
+        wp_send_json_success($users);
     }
 
     /**
@@ -1796,7 +2021,7 @@ class FormSettings
 
         // wp_roles() guarantees the global is initialized; a bare `global $wp_roles` doesn't.
         $wp_roles = wp_roles();
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Missing -- each key is sanitize_key()'d and each value passed through self::sanitizePerms() below before use. Nonce verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Missing -- sanitized below; nonce verified via AjaxGuard::require().
         $raw_roles = wp_unslash($_POST['roles'] ?? []);
         $roles = [];
         if (is_array($raw_roles)) {
@@ -1811,7 +2036,7 @@ class FormSettings
             }
         }
 
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Missing -- each key is (int)-cast and validated via get_userdata(), each value passed through self::sanitizePerms() below before use. Nonce verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Missing -- validated/sanitized below; nonce via AjaxGuard::require().
         $raw_users = wp_unslash($_POST['users'] ?? []);
         $users = [];
         if (is_array($raw_users)) {
@@ -1825,8 +2050,39 @@ class FormSettings
             }
         }
 
-        update_option('fabricator_forms_access', ['roles' => $roles, 'users' => $users]);
-        wp_send_json_success();
+        // This replaces the whole matrix with what the browser sent, so two administrators saving at once used to lose
+        // one set of grants silently: a lock alone can't help a write that never reads. The page's snapshot is compared
+        // with what is stored, and the comparison and the write happen under one lock, as for the other settings.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified via AjaxGuard::require().
+        $expected = isset($_POST['snapshot']) ? sanitize_text_field(wp_unslash($_POST['snapshot'])) : '';
+        $saved    = \FabricatorForms\Utils\OptionMutex::run(
+            'fabricator_forms_access',
+            static function () use ($expected, $roles, $users): ?string {
+                if ($expected !== '' && !hash_equals(self::accessSnapshot(), $expected)) {
+                    return null;
+                }
+                // autoload=false: read only by Plugin::userCan(), which never runs for logged-out visitors.
+                update_option('fabricator_forms_access', ['roles' => $roles, 'users' => $users], false);
+                return self::accessSnapshot();
+            }
+        );
+        if ($saved === null) {
+            wp_send_json_error(
+                ['message' => __('Settings were changed elsewhere since this page loaded. Please reload and try again.', 'formfabricator')],
+                409
+            );
+        }
+        wp_send_json_success(['snapshot' => $saved]);
+    }
+
+    /**
+     * Fingerprint of the stored access matrix, for handleSaveAccessSettings()'s changed-elsewhere check.
+     *
+     * @return string
+     */
+    private static function accessSnapshot(): string
+    {
+        return hash('sha256', (string) wp_json_encode(get_option('fabricator_forms_access', ['roles' => [], 'users' => []])));
     }
 
     /**

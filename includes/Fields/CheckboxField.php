@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -36,6 +36,19 @@ class CheckboxField extends BaseField
     public function getStyles(): string
     {
         return self::readFieldAsset('assets/css/fields/CheckboxField.css');
+    }
+
+    /**
+     * Returns false: this field renders a tick box per option, each with its own id, so the
+     * question text names the set through aria-labelledby rather than pointing at one element (see BaseField::wrap()).
+     *
+     * @param array $config Field configuration.
+     * @return bool
+     */
+    public function labelsOwnControl(array $config): bool
+    {
+        unset($config);
+        return false;
     }
 
     /**
@@ -99,7 +112,7 @@ class CheckboxField extends BaseField
         if ($value === null) {
             $defaults = [];
             foreach ($options as $opt) {
-                if (is_array($opt) && !empty($opt['default'])) {
+                if (!empty($opt['default'])) {
                     $defaults[] = $opt['value'] ?? '';
                 }
             }
@@ -121,10 +134,12 @@ class CheckboxField extends BaseField
             $sel_attrs .= ' data-max-selections="' . $max_sel . '"';
         }
 
-        $inner = '<div class="fabricator-checkbox-group' . $layout . '" role="group"' . $sel_attrs . '>';
+        // No role="group" here: BaseField::wrap() marks the field wrapper as the group and names it from the
+        // field's own label, so a second unnamed group inside it would only be announced again with no name.
+        $inner = '<div class="fabricator-checkbox-group' . $layout . '"' . $sel_attrs . '>';
         foreach ($options as $i => $opt) {
-            $opt_val   = is_array($opt) ? ($opt['value'] ?? '') : $opt;
-            $opt_label = is_array($opt) ? ($opt['label'] ?? $opt_val) : $opt;
+            $opt_val   = $opt['value'] ?? '';
+            $opt_label = $opt['label'] ?? $opt_val;
             $id_i      = $field_id . '-' . $i;
             $checked   = in_array((string)$opt_val, array_map('strval', $selected), true) ? ' checked' : '';
             $inner .= '<label class="fabricator-checkbox-label">'
@@ -161,44 +176,16 @@ class CheckboxField extends BaseField
         // Cap value count BEFORE map_deep() walks them; map_deep itself has no limit.
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         $vals = isset($_POST[$field_id])
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce is verified once in FormProcessor::handle() before field extraction runs; value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray() below, WPCS doesn't recognize sanitization via the string-callback form.
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified in FormProcessor::handle(); map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
             ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id]), 200), 'sanitize_text_field')
             : [];
-        $out  = is_array($vals) ? array_values($vals) : [];
+        // Strings only: map_deep() leaves a nested POST array (x[0][]=a) an array, and "(string) $v" in validate() then warned
+        // "Array to string conversion", which WP_DEBUG_DISPLAY printed straight into the JSON response.
+        $out  = is_array($vals) ? array_values(array_filter($vals, 'is_string')) : [];
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
         if (in_array('__other__', $out, true) && isset($_POST[$field_id . '_other'])) {
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce is verified once in FormProcessor::handle() before field extraction runs; capOtherText() unslashes and sanitize_text_field()s the value, WPCS doesn't recognize sanitization/unslashing via the helper method.
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce verified in FormProcessor::handle(); capOtherText() sanitizes/unslashes, WPCS misses the helper form.
             $out['__other_text__'] = self::capOtherText($_POST[$field_id . '_other']);
-        }
-        return $out;
-    }
-
-    /**
-     * Sanitizes a raw checkbox value from a group copy array. Always returns an array — an absent or scalar
-     * value becomes an empty array.
-     *
-     * @param mixed $raw The raw value from the group copy array.
-     */
-    public function extractFromRaw(mixed $raw): mixed
-    {
-        // Same element-count cap as extractValue(), applied per group copy (up to 100 copies).
-        return is_array($raw)
-            ? array_map(static fn($v) => sanitize_text_field(wp_unslash($v)), array_slice(array_values($raw), 0, 200))
-            : [];
-    }
-
-    /**
-     * Like extractFromRaw(), but also captures the group copy's sibling "{child_id}_other" free-text value,
-     * mirroring extractValue().
-     *
-     * @param mixed $raw       The raw value from the group copy array.
-     * @param mixed $other_raw The raw "{child_id}_other" value from the same copy, if any.
-     */
-    public function extractFromRawWithOther(mixed $raw, mixed $other_raw): mixed
-    {
-        $out = $this->extractFromRaw($raw);
-        if (in_array('__other__', $out, true) && $other_raw !== null) {
-            $out['__other_text__'] = self::capOtherText($other_raw);
         }
         return $out;
     }
@@ -212,7 +199,7 @@ class CheckboxField extends BaseField
     private static function selectedOptions(array $value): array
     {
         unset($value['__other_text__']);
-        return array_filter($value, static fn($v) => $v !== '' && $v !== null);
+        return array_filter($value, static fn($v) => is_string($v) && $v !== '');
     }
 
     /**
@@ -249,7 +236,7 @@ class CheckboxField extends BaseField
             return sprintf(__('Please select at most %d option(s).', 'formfabricator'), $max);
         }
         $allowed = array_map(
-            static fn($o) => (string)(is_array($o) ? ($o['value'] ?? '') : $o),
+            static fn($o) => (string)($o['value'] ?? ''),
             $config['options'] ?? []
         );
         foreach ($selected as $v) {
@@ -295,9 +282,9 @@ class CheckboxField extends BaseField
             }
             $found = false;
             foreach ($config['options'] ?? [] as $opt) {
-                $opt_val = is_array($opt) ? ($opt['value'] ?? '') : $opt;
+                $opt_val = $opt['value'] ?? '';
                 if ((string)$opt_val === (string)$v) {
-                    $labels[] = is_array($opt) ? ($opt['label'] ?? (string)$opt_val) : (string)$opt;
+                    $labels[] = (string)($opt['label'] ?? $opt_val);
                     $found    = true;
                     break;
                 }

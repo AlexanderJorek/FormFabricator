@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -36,8 +36,9 @@ abstract class BaseField
     protected static function readFieldAsset(string $relativePath): string
     {
         if (!isset(self::$assetCache[$relativePath])) {
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site (see any field's getStyles()/getClientInit()), never request input.
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site, never request input.
             $path = \FABRICATOR_FORMS_PATH . $relativePath;
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file read, not a remote URL; wp_remote_get() would be wrong here. Not a deferred WP_Filesystem migration.
             $contents = is_readable($path) ? file_get_contents($path) : false;
             self::$assetCache[$relativePath] = $contents !== false ? rtrim($contents, "\r\n") : '';
         }
@@ -158,6 +159,27 @@ abstract class BaseField
     }
 
     /**
+     * Full signature check for validate(): the data-URI prefix, then the same decode and PNG/JPEG magic-byte test
+     * materializeSignature() applies. A bare "data:image/" used to pass the prefix check, and materializeSignature()
+     * then dropped it, so a required signature went out as "[No entry]".
+     *
+     * @param string $value           Submitted data URI.
+     * @param string $expected_format 'png' or 'jpeg' to require that type, '' for either.
+     * @return bool
+     */
+    protected static function isValidSignatureImage(string $value, string $expected_format = ''): bool
+    {
+        if (!self::isSignatureDataUri($value, $expected_format)) {
+            return false;
+        }
+        $file = self::materializeSignature($value);
+        if ($file === []) {
+            return false;
+        }
+        return $expected_format === '' || $file[0]['mime'] === 'image/' . $expected_format;
+    }
+
+    /**
      * Returns the shared client-side validation rule enforcing the "Other" text
      * word limit (the char limit is covered by the native maxlength attribute).
      *
@@ -261,6 +283,16 @@ abstract class BaseField
     }
 
     /**
+     * Must re-read request itself, not just set enctype — else a mapper could bypass validate() via raw data like $_FILES.
+     *
+     * @return bool
+     */
+    public function extractionReadsRequest(): bool
+    {
+        return false;
+    }
+
+    /**
      * Enqueues any front-end scripts required by this field type; override for third-party libraries.
      *
      * @return void
@@ -323,29 +355,6 @@ abstract class BaseField
      * @param mixed  $value    Pre-filled value (for re-displaying on error).
      */
     abstract public function render(array $config, string $field_id, mixed $value = null): string;
-
-    /**
-     * extractValue() counterpart for a field inside a repeatable Group. Mirror extractValue()'s sanitizing.
-     *
-     * @param mixed $raw Raw value already sliced out of the group copy array.
-     */
-    public function extractFromRaw(mixed $raw): mixed
-    {
-        if (is_array($raw)) {
-            return array_map(static fn($v) => sanitize_text_field(wp_unslash($v)), $raw);
-        }
-        return sanitize_text_field(wp_unslash((string)$raw));
-    }
-
-    /**
-     * extractFromRaw() variant for Checkbox/Radio/Select's "Other" option, arriving as a sibling POST key.
-     *
-     * @param mixed $other_raw The "{child_id}_other" sibling value, if any.
-     */
-    public function extractFromRawWithOther(mixed $raw, mixed $other_raw): mixed
-    {
-        return $this->extractFromRaw($raw);
-    }
 
     // Guards against extractValue() reading $_POST/$_FILES without a verified nonce; throws loudly
     // instead of silently accepting unauthenticated input if a future override forgets to check.
@@ -446,6 +455,35 @@ abstract class BaseField
     }
 
     /**
+     * Whether this field renders one control that carries $field_id, so the label can point at it with for="".
+     *
+     * False for a field that renders a set of controls instead — checkboxes, radios, a star rating, or the name and
+     * address fields once their sub-fields are switched on. wrap() then names the whole set rather than emitting a
+     * label pointing at an element that does not exist.
+     *
+     * @param array $config Field configuration, since some fields render either way depending on it.
+     * @return bool
+     */
+    public function labelsOwnControl(array $config): bool
+    {
+        unset($config);
+        return true;
+    }
+
+    /**
+     * Whether validate() should run only after every other field has passed.
+     *
+     * Set true where validating costs something that can't be taken back — a reCAPTCHA token is single-use, so
+     * spending it on a submission that fails elsewhere made every retry fail the CAPTCHA as well.
+     *
+     * @return bool
+     */
+    public function defersValidation(): bool
+    {
+        return false;
+    }
+
+    /**
      * Returns default config values for the builder.
      *
      * @return array
@@ -495,19 +533,13 @@ abstract class BaseField
         return $this->baseGeneralEntries();
     }
 
-    // Config keys always rendered as plain text; anything else keeps the wp_kses_post() default
-    // below. Override plainTextConfigKeys() (not this constant) in a subclass to add its own
-    // field-specific label-like keys — every renderer builds output with esc_html(), so any
-    // key that isn't in this list gets wp_kses_post()'d at save time (entity-encoding "&" etc.)
-    // and then esc_html()'d again at render time, visibly double-encoding it.
+    // Keys rendered as plain text (esc_html()); anything else goes through Utils\HtmlSanitizer::sanitize(), which double-encodes "&" if the renderer also uses esc_html(). Extend via plainTextConfigKeys(), not this constant.
     private const PLAIN_TEXT_CONFIG_KEYS = [
         'label', 'placeholder', 'description', 'custom_class', 'autocomplete', 'validation',
     ];
 
     /**
-     * Returns the config keys this field treats as plain text (sanitize_text_field(), no HTML
-     * allowed) rather than the wp_kses_post() default. Override to add field-specific label-like
-     * keys that are always rendered via esc_html(), never as raw HTML.
+     * Config keys this field treats as plain text (sanitize_text_field()) rather than HTML (Utils\HtmlSanitizer::sanitize()); override to add field-specific label-like keys.
      *
      * @return string[]
      */
@@ -516,14 +548,26 @@ abstract class BaseField
         return self::PLAIN_TEXT_CONFIG_KEYS;
     }
 
-    // Sanitizes a single string config value; override plainTextConfigKeys() to extend the
-    // plain-text allowlist, or override this method entirely for different rules (e.g. HtmlField).
+    /**
+     * Public counterpart to plainTextConfigKeys(); FormEditor needs this for ARRAY-valued config, which bypasses sanitizeConfigValue()'s string path.
+     *
+     * @param string $key Config key to test.
+     * @return bool
+     */
+    public function isPlainTextConfigKey(string $key): bool
+    {
+        return in_array($key, $this->plainTextConfigKeys(), true);
+    }
+
+    // Sanitizes a single string config value; override plainTextConfigKeys() to extend the plain-text allowlist.
+    // Every HTML-capable value follows one shared rule set (Utils\HtmlSanitizer), so no field's text accepts different
+    // markup from another's; until 1.0.7 only the HTML block used it and every other field used wp_kses_post().
     public function sanitizeConfigValue(string $key, string $value): string
     {
         if (in_array($key, $this->plainTextConfigKeys(), true)) {
             return \sanitize_text_field($value);
         }
-        return \wp_kses_post($value);
+        return \FabricatorForms\Utils\HtmlSanitizer::sanitize($value);
     }
 
     /**
@@ -600,6 +644,7 @@ abstract class BaseField
         if ($pad) {
             $b64 .= str_repeat('=', 4 - $pad);
         }
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes binary handed over the array boundary described at the encode site (strict mode). Not obfuscation.
         $binary = base64_decode($b64, true);
         if ($binary === false) {
             return [];
@@ -616,6 +661,7 @@ abstract class BaseField
             'mime'   => $mime,
             'size'   => strlen($binary),
             'sha256' => hash('sha256', $binary),
+            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- carries raw binary across a JSON/array boundary between the field handler and the PDF/mail layer. Not obfuscation.
             'base64' => base64_encode($binary),
         ]];
     }
@@ -654,7 +700,22 @@ abstract class BaseField
         $req_class   = $required ? ' fabricator-required-field' : '';
         $desc_html   = $description !== '' ? '<p class="fabricator-field-description">' . $description . '</p>' : '';
 
-        $label_html = (!$hide_label && $label !== '') ? '<label class="fabricator-label" for="' . esc_attr($field_id) . '">' . $label . $req_attr . '</label>' : '';
+        // A field that renders several controls (a set of checkboxes, radios, stars, or sub-inputs) has no element
+        // carrying $field_id, so <label for> pointed at nothing: the question text was an orphan and the set of
+        // controls had no name. Those fields name the group instead, through a plain element and aria-labelledby.
+        $owns_control = $this->labelsOwnControl($config);
+        $label_id     = $field_id . '-label';
+        $group_attr   = '';
+        if (!$hide_label && $label !== '') {
+            $label_html = $owns_control
+                ? '<label class="fabricator-label" for="' . esc_attr($field_id) . '">' . $label . $req_attr . '</label>'
+                : '<div class="fabricator-label" id="' . esc_attr($label_id) . '">' . $label . $req_attr . '</div>';
+            if (!$owns_control) {
+                $group_attr = ' role="group" aria-labelledby="' . esc_attr($label_id) . '"';
+            }
+        } else {
+            $label_html = '';
+        }
 
         $client_rules  = $this->getClientValidation();
         $validate_attr = !empty($client_rules) ? ' data-validate="' . esc_attr(wp_json_encode(array_column($client_rules, 'rule'))) . '"' : '';
@@ -666,7 +727,7 @@ abstract class BaseField
 
         return '<div class="fabricator-field fabricator-field--' . esc_attr($config['type'] ?? 'text')
             . $req_class . ' ' . esc_attr($extra_class) . $custom_class_attr . '" data-field-id="' . esc_attr($field_id) . '"'
-            . $validate_attr . '>'
+            . $validate_attr . $group_attr . '>'
             . $label_html
             . $desc_html
             . $inner
@@ -701,9 +762,7 @@ abstract class BaseField
             $attrs['aria-required'] = 'true';
         }
 
-        // Builder-configured "Browser autocomplete" section. A field's own $extra may already
-        // suggest a sensible default (e.g. PhoneField passes 'tel') — an explicit admin choice
-        // here takes priority over that default, and turning autofill off entirely wins over both.
+        // An explicit admin autocomplete choice overrides a field's own default (e.g. PhoneField's 'tel'); autocomplete_on === false wins over both.
         if (array_key_exists('autocomplete_on', $config) && $config['autocomplete_on'] === false) {
             $attrs['autocomplete'] = 'off';
         } else {

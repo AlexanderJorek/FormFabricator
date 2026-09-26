@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -71,9 +71,7 @@ class NameField extends BaseField
     ];
 
     /**
-     * Each sub-field's "{key}_label" config value is rendered via esc_html(), never as raw
-     * HTML — without this, wp_kses_post()'s entity-encoding at save time plus esc_html() at
-     * render time double-encodes any "&" in an admin-typed sub-label.
+     * Sub-field labels render via esc_html(), never raw HTML — avoids wp_kses_post()+esc_html() double-encoding "&".
      *
      * @return string[]
      */
@@ -103,13 +101,49 @@ class NameField extends BaseField
     }
 
     /**
-     * Fixed salutation/prefix list; not a class const because it contains non-compile-time __() calls.
+     * Fixed salutation/prefix list, keyed by the value that is submitted; not a class const because of the __() calls.
      *
-     * @return array<int, string>
+     * The keys are the same in every language. The page renders in the site locale, but admin-ajax.php validates in a
+     * logged-in visitor's profile locale, so comparing translated labels rejected every salutation for such a visitor.
+     *
+     * @return array<string, string> Submitted value => label.
      */
     private static function prefixOptions(): array
     {
-        return ['', __('Mr.', 'formfabricator'), __('Ms.', 'formfabricator'), __('Diverse', 'formfabricator'), 'Dr.', 'Prof.', 'Dipl.', 'Ing.'];
+        return [
+            ''        => '',
+            'mr'      => __('Mr.', 'formfabricator'),
+            'ms'      => __('Ms.', 'formfabricator'),
+            'diverse' => __('Diverse', 'formfabricator'),
+            'Dr.'     => 'Dr.',
+            'Prof.'   => 'Prof.',
+            'Dipl.'   => 'Dipl.',
+            'Ing.'    => 'Ing.',
+        ];
+    }
+
+    /**
+     * Whether a submitted salutation is one of the list's values, or one of its labels as a page cached before 1.0.7 posts it.
+     *
+     * @param string $submitted Submitted salutation.
+     * @return bool
+     */
+    private static function isKnownPrefix(string $submitted): bool
+    {
+        $options = self::prefixOptions();
+        return array_key_exists($submitted, $options) || in_array($submitted, $options, true);
+    }
+
+    /**
+     * True only in the simple form, which renders one text input carrying the field id. With the sub-fields switched
+     * on there are several inputs instead, each with its own label, so the question text names the set (BaseField::wrap()).
+     *
+     * @param array $config Field configuration.
+     * @return bool
+     */
+    public function labelsOwnControl(array $config): bool
+    {
+        return empty($config['expanded']);
     }
 
     /**
@@ -144,20 +178,24 @@ class NameField extends BaseField
 
             $req_star = !empty($config[$k . '_required']) ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
             $sub_class = !empty($sf['is_select']) ? ' fabricator-name-sub--prefix' : '';
+            // Every sub-input carries its own id and its label a matching for="", or assistive technology announces
+            // unlabelled boxes. FormRenderer::uniqueIds() rewrites both together on a repeated form.
+            $sub_id    = esc_attr($field_id . '-' . $k);
             $inner .= '<div class="fabricator-name-sub' . $sub_class . '">'
-                . '<label class="fabricator-sub-label">' . $label . $req_star . '</label>';
+                . '<label class="fabricator-sub-label" for="' . $sub_id . '">' . $label . $req_star . '</label>';
             if (!empty($sf['is_select'])) {
                 $cur    = esc_attr((string)($val[$k] ?? ''));
-                $inner .= '<select name="' . esc_attr($field_id) . '[' . $k . ']"'
+                $inner .= '<select id="' . $sub_id . '" name="' . esc_attr($field_id) . '[' . $k . ']"'
                     . ' class="fabricator-input fabricator-name-prefix" aria-label="' . esc_attr($label_raw) . '"'
                     . ' autocomplete="' . $ac . '"' . $req . '>';
-                foreach (self::prefixOptions() as $opt) {
+                foreach (self::prefixOptions() as $opt => $opt_label) {
+                    $opt    = (string) $opt;
                     $inner .= '<option value="' . esc_attr($opt) . '"' . selected($cur, $opt, false) . '>'
-                        . ($opt === '' ? '—' : esc_html($opt)) . '</option>';
+                        . ($opt === '' ? '—' : esc_html($opt_label)) . '</option>';
                 }
                 $inner .= '</select>';
             } else {
-                $inner .= '<input type="text" name="' . esc_attr($field_id) . '[' . $k . ']"'
+                $inner .= '<input type="text" id="' . $sub_id . '" name="' . esc_attr($field_id) . '[' . $k . ']"'
                     . ' class="fabricator-input" placeholder="' . $ph . '"'
                     . ' value="' . esc_attr((string)($val[$k] ?? '')) . '"'
                     . ' autocomplete="' . $ac . '"' . $req . '>';
@@ -197,7 +235,7 @@ class NameField extends BaseField
     public function extractValue(string $field_id): mixed
     {
         self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
         $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : '';
         if (is_array($raw)) {
             // Flatten nested leaves: a direct POST can send name[first][0]=x, which
@@ -241,7 +279,7 @@ class NameField extends BaseField
                 // Not required-enforced ("—" is a valid answer), but a direct POST could submit
                 // an arbitrary string outside the <select> options, so allowlist it here.
                 $submitted = trim((string)(is_array($value) ? ($value[$k] ?? '') : ''));
-                if ($submitted !== '' && !in_array($submitted, self::prefixOptions(), true)) {
+                if ($submitted !== '' && !self::isKnownPrefix($submitted)) {
                     $errors[] = $config[$k . '_label'] ?? self::subfieldLabel($sf['label']);
                 }
                 continue;
@@ -288,6 +326,10 @@ class NameField extends BaseField
                 continue;
             }
             $v = trim((string)($value[$k] ?? ''));
+            if ($k === 'prefix') {
+                // The submitted salutation is a stable key ("mr"); mail and PDF show its label.
+                $v = self::prefixOptions()[$v] ?? $v;
+            }
             if ($v !== '') {
                 $parts[] = $v;
             }

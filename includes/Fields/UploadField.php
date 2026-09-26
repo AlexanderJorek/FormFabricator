@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -34,6 +34,8 @@ class UploadField extends BaseField
         'jsp','jspx','sql','hta','dll','bat','com','sh','bash','py','pl','js',
         'php','php3','php4','php5','php7','pht','phar','cgi',
         'svg','swf','dfxp','rar','exe','htaccess','htpasswd','config','ini',
+        // Markup and script formats an admin could type into the allowed list themselves; each renders or runs when opened.
+        'xhtml','xht','svgz','mhtml','mht','xsl','xslt','shtml','hta','jar','jnlp','lnk',
         'msi','vbs','vbe','ps1','ps1xml','psm1','scr','pif','wsf','wsh','reg','cer',
         'zip','tar','gz','7z',
     ];
@@ -46,10 +48,15 @@ class UploadField extends BaseField
         'text/javascript', 'application/javascript', 'application/java-archive',
         'image/svg+xml', 'application/xml', 'text/xml',
         'application/zip', 'application/x-tar', 'application/gzip', 'application/x-7z-compressed',
+        // Native executables and Windows script hosts, whatever extension they arrive under.
+        'application/x-dosexec', 'application/vnd.microsoft.portable-executable', 'application/x-msdos-program',
+        'application/x-msi', 'application/x-ms-installer', 'application/x-bat', 'text/x-msdos-batch',
+        'application/hta', 'application/x-ms-shortcut', 'application/x-elf', 'application/x-sharedlib',
+        'application/x-pie-executable', 'application/x-mach-binary', 'application/x-shockwave-flash',
     ];
 
-    // Hard ceiling on max_size_mb: mapNormalized() base64-encodes the full upload in memory, so this bounds memory cost.
-    private const MAX_SIZE_MB_HARD_CAP = 100;
+    // ZIP-container document formats that a server's type database may report only as application/zip; see validate().
+    private const ZIP_CONTAINER_EXTS = ['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'];
 
     private const TYPE_GROUPS = [
         'images'    => ['jpg','jpeg','png','gif','bmp','tiff','webp'],
@@ -142,23 +149,27 @@ class UploadField extends BaseField
         if ($accept !== '') {
             $inner .= '<p class="fabricator-field-hint">'
                 // translators: %s: comma-separated list of allowed file extensions.
-                . sprintf(__('Allowed file types: %s', 'formfabricator'), esc_html($accept)) . '</p>';
+                . sprintf(esc_html__('Allowed file types: %s', 'formfabricator'), esc_html($accept)) . '</p>';
         }
         $inner .= '<p class="fabricator-field-hint">'
             // translators: %s: maximum file size in megabytes.
-            . sprintf(__('Maximum file size: %s MB', 'formfabricator'), $max) . '</p>';
+            . sprintf(esc_html__('Maximum file size: %s MB', 'formfabricator'), esc_html((string) $max)) . '</p>';
 
         return $this->wrap($field_id, $config, $inner);
     }
 
     /**
-     * Returns the effective max file size in MB, clamped against self::MAX_SIZE_MB_HARD_CAP.
+     * Returns the effective max file size in MB: the configured size, at most what a submission can hold as its only
+     * upload. mapNormalized() base64-encodes the full upload in memory, and the memory budget bounds that cost.
      *
      * @param array $config Field configuration.
      */
     private static function maxSizeMb(array $config): int
     {
-        return min((int)($config['max_size_mb'] ?? 10), self::MAX_SIZE_MB_HARD_CAP);
+        return min(
+            (int)($config['max_size_mb'] ?? 10),
+            intdiv(\FabricatorForms\Utils\MemoryBudget::largestUploadBytes(), 1024 * 1024)
+        );
     }
 
     /**
@@ -210,6 +221,12 @@ class UploadField extends BaseField
         return true;
     }
 
+    // The value lives in $_FILES, never in $_POST, so it cannot be rebuilt from a parsed fragment.
+    public function extractionReadsRequest(): bool
+    {
+        return true;
+    }
+
     /**
      * Returns the raw $_FILES entry for this upload field.
      *
@@ -218,8 +235,10 @@ class UploadField extends BaseField
     public function extractValue(string $field_id): mixed
     {
         self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; 'name' sanitized below, other keys are PHP-generated.
-        $file = isset($_FILES[$field_id]) ? wp_unslash($_FILES[$field_id]) : null;
+        // No wp_unslash(): wp_magic_quotes() never slashes $_FILES, so unslashing only damaged it. It stripped the
+        // backslashes out of a Windows tmp_name, is_readable() then failed, and validate() skipped the MIME check.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- verified above; 'name' sanitized below, the other keys are PHP-generated and tmp_name is gated by is_uploaded_file().
+        $file = isset($_FILES[$field_id]) ? $_FILES[$field_id] : null;
         if (!is_array($file) || !isset($file['name'])) {
             return $file;
         }
@@ -257,6 +276,9 @@ class UploadField extends BaseField
      */
     public function validate(mixed $value, array $config): bool|string
     {
+        // File names and extensions go into the messages below unescaped, like every other field's validate(): front.js
+        // shows a field error through .textContent only, so escaping here showed a file named "a&b.pdf" as "a&amp;b.pdf".
+        // render() above is the opposite case — it builds HTML, so everything there stays escaped.
         $file = is_array($value) ? $value : null;
 
         if (!empty($config['required'])) {
@@ -271,6 +293,29 @@ class UploadField extends BaseField
             $names     = is_array($file['name']) ? $file['name'] : [$file['name']];
             $tmp_names = is_array($file['tmp_name'] ?? null) ? $file['tmp_name'] : [$file['tmp_name'] ?? ''];
             $sizes     = is_array($file['size'] ?? null) ? $file['size'] : [$file['size'] ?? 0];
+            $errors    = is_array($file['error'] ?? null) ? $file['error'] : [$file['error'] ?? UPLOAD_ERR_OK];
+
+            // A failed upload still populates ['name'] while zeroing ['size']/['tmp_name'], so every check below would otherwise pass silently.
+            foreach ($errors as $i => $code) {
+                $code = (int) $code;
+                if ($code === UPLOAD_ERR_OK || $code === UPLOAD_ERR_NO_FILE) {
+                    continue;
+                }
+                $failed = sanitize_file_name((string) ($names[$i] ?? ''));
+                if ($code === UPLOAD_ERR_INI_SIZE || $code === UPLOAD_ERR_FORM_SIZE) {
+                    // translators: %s: uploaded file name.
+                    return sprintf(__('"%s" is larger than this server accepts.', 'formfabricator'), $failed);
+                }
+                if ($code === UPLOAD_ERR_PARTIAL) {
+                    // translators: %s: uploaded file name.
+                    return sprintf(__('"%s" was only partially uploaded. Please try again.', 'formfabricator'), $failed);
+                }
+                \FabricatorForms\fabricator_log(
+                    "FabricatorForms: Upload failed for {$failed} with PHP error code {$code}"
+                );
+                // translators: %s: uploaded file name.
+                return sprintf(__('"%s" could not be uploaded. Please try again.', 'formfabricator'), $failed);
+            }
 
             // Server-side backstop: a direct POST can send array-keyed files regardless of client-side limits.
             $max_files = empty($config['multiple']) ? 1 : max(1, (int)(ini_get('max_file_uploads') ?: 20));
@@ -285,7 +330,8 @@ class UploadField extends BaseField
             }
 
             $max_bytes = self::maxSizeMb($config) * 1024 * 1024;
-            $finfo     = new \finfo(FILEINFO_MIME_TYPE);
+            // Null without PHP's fileinfo extension: uploads are then refused below, since no file's real type can be read.
+            $finfo     = class_exists('finfo') ? new \finfo(FILEINFO_MIME_TYPE) : null;
             // <input accept> from buildAccept() only constrains the browser picker; enforce the allow-list here too.
             $allowed_exts = array_filter(array_map(
                 static function (string $e): string {
@@ -297,31 +343,58 @@ class UploadField extends BaseField
                 $ext = strtolower(pathinfo((string)$name, PATHINFO_EXTENSION));
                 if (in_array($ext, self::BLOCKED_TYPES, true)) {
                     // translators: %s: rejected file extension.
-                    return sprintf(__('File type ".%s" is not allowed for security reasons.', 'formfabricator'), esc_html($ext));
+                    return sprintf(__('File type ".%s" is not allowed for security reasons.', 'formfabricator'), $ext);
                 }
                 // Fail closed: an empty $allowed_exts means nothing is configured, so nothing should be accepted.
                 if (!in_array($ext, $allowed_exts, true)) {
                     // translators: %s: rejected file extension.
-                    return sprintf(__('File type ".%s" is not permitted for this field.', 'formfabricator'), esc_html($ext));
+                    return sprintf(__('File type ".%s" is not permitted for this field.', 'formfabricator'), $ext);
                 }
                 if ((int)($sizes[$i] ?? 0) > $max_bytes) {
                     return sprintf(
                         // translators: %1$s: file name, %2$d: maximum allowed file size in megabytes.
                         __('"%1$s" exceeds the maximum file size of %2$d MB.', 'formfabricator'),
-                        esc_html((string)$name),
+                        (string) $name,
                         self::maxSizeMb($config)
                     );
                 }
                 $tmp = $tmp_names[$i] ?? '';
-                // MIME check only runs for a real HTTP upload; unit-test stubs skip it since the tmp path isn't readable.
-                if ($tmp && is_readable($tmp)) {
-                    if (!is_uploaded_file($tmp)) {
-                        return __('File upload could not be verified.', 'formfabricator');
-                    }
-                    $real_mime = $finfo->file($tmp) ?: '';
-                    if (in_array($real_mime, self::BLOCKED_MIME_TYPES, true)) {
-                        // translators: %s: rejected file extension.
-                        return sprintf(__('File type ".%s" is not allowed for security reasons.', 'formfabricator'), esc_html($ext));
+                // PHP always gives an accepted upload a temp path. One that is missing or unreadable can't be type-checked
+                // or attached, so the visitor learns which file failed and can retry, instead of the form going out without it.
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $tmp is the temp path PHP itself assigned in $_FILES, not client input; is_uploaded_file() gates it below.
+                if (!is_string($tmp) || $tmp === '' || !is_readable($tmp)) {
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms: uploaded temp file not readable: ' . sanitize_file_name((string) $name)
+                    );
+                    // translators: %s: uploaded file name.
+                    return sprintf(__('"%s" could not be uploaded. Please try again.', 'formfabricator'), (string) $name);
+                }
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- this IS the check that the path came from a genuine HTTP upload.
+                if (!is_uploaded_file($tmp)) {
+                    return __('File upload could not be verified.', 'formfabricator');
+                }
+                if ($finfo === null) {
+                    \FabricatorForms\fabricator_log('FabricatorForms: upload refused, the PHP fileinfo extension is not installed, so the file type cannot be verified.');
+                    // translators: %s: uploaded file name.
+                    return sprintf(__('"%s" could not be uploaded. Please try again.', 'formfabricator'), (string) $name);
+                }
+                $real_mime = $finfo->file($tmp) ?: '';
+                // Office Open XML and OpenDocument files are ZIP containers, and some hosts' type databases report nothing more
+                // specific. For those extensions a ZIP reading is expected, so WordPress's own check below decides instead.
+                $zip_container = in_array($ext, self::ZIP_CONTAINER_EXTS, true)
+                    && in_array($real_mime, ['application/zip', 'application/x-zip-compressed'], true);
+                if (!$zip_container && in_array($real_mime, self::BLOCKED_MIME_TYPES, true)) {
+                    // translators: %s: rejected file extension.
+                    return sprintf(__('File type ".%s" is not allowed for security reasons.', 'formfabricator'), $ext);
+                }
+                // Extension and content must agree, or an .exe renamed to .pdf passes every check above. For an extension
+                // WordPress knows, core's own media-upload test decides; an admin-added extension core doesn't know has
+                // only the blocklist to go on.
+                if (wp_check_filetype((string) $name)['ext'] !== false) {
+                    $checked = wp_check_filetype_and_ext($tmp, (string) $name);
+                    if (empty($checked['ext'])) {
+                        // translators: %s: uploaded file name.
+                        return sprintf(__('The content of "%s" does not match its file type.', 'formfabricator'), (string) $name);
                     }
                 }
             }
@@ -394,16 +467,39 @@ class UploadField extends BaseField
 
         $info_parts   = [];
         $materialized = [];
-        $finfo        = new \finfo(FILEINFO_MIME_TYPE);
+        // validate() already refused uploads without fileinfo; the guard only keeps this path from dying if called directly.
+        $finfo        = class_exists('finfo') ? new \finfo(FILEINFO_MIME_TYPE) : null;
 
         foreach ($files_list as $file) {
             $tmp  = $file['tmp_name'] ?? '';
             $name = sanitize_file_name($file['name'] ?? 'unknown');
-            $mime = sanitize_mime_type(
-                $file['type'] ?? 'application/octet-stream'
-            );
-            $size = (int)($file['size'] ?? 0);
 
+            $binary = false;
+            if (!$tmp || !is_readable($tmp) || !is_uploaded_file($tmp)) {
+                \FabricatorForms\fabricator_log(
+                    "FabricatorForms: Upload file not readable: {$name}"
+                );
+            } else {
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of the uploaded $_FILES tmp_name, not a remote URL; wp_remote_get() would be wrong. Not a deferred WP_Filesystem migration.
+                $binary = file_get_contents($tmp);
+            }
+
+            if ($binary === false) {
+                // Still named, so the recipient can see that a file was submitted and did not arrive.
+                $info_parts[] = sprintf(
+                    // translators: %s: uploaded file name.
+                    __('%s (not attached - unreadable)', 'formfabricator'),
+                    $name
+                );
+                continue;
+            }
+
+            $mime = sanitize_mime_type(
+                ($finfo !== null ? $finfo->file($tmp) : false) ?: 'application/octet-stream'
+            );
+            $size = strlen($binary);
+
+            // Type/size as this plugin verified them, not as the browser reported them — matches the materialized_files record below.
             $info_parts[] = sprintf(
                 '%s (%s, %s KB)',
                 $name,
@@ -411,27 +507,17 @@ class UploadField extends BaseField
                 round($size / 1024, 1)
             );
 
-            if (!$tmp || !is_readable($tmp) || !is_uploaded_file($tmp)) {
-                \FabricatorForms\fabricator_log(
-                    "FabricatorForms: Upload file not readable: {$name}"
-                );
-                continue;
-            }
-
-            $binary = file_get_contents($tmp);
-            if ($binary === false) {
-                continue;
-            }
-
-            $mime  = sanitize_mime_type(
-                $finfo->file($tmp) ?: 'application/octet-stream'
-            );
-
             $materialized[] = [
                 'name'   => $name,
                 'mime'   => $mime,
-                'size'   => strlen($binary),
+                'size'   => $size,
                 'sha256' => hash('sha256', $binary),
+                // False for an image the PDF can't show: a type it can't read (TIFF; see PdfUtils::embeddableImageMime()),
+                // which is then attached like a document, or one too large to decode safely, which a form that makes a PDF
+                // refuses before it gets here (FormProcessor). pdfData() skips both.
+                'pdf_embeddable' => !str_starts_with($mime, 'image/')
+                    || (\FabricatorForms\PDF\PdfUtils::embeddableImageMime($mime) && \FabricatorForms\PDF\PdfUtils::precheckDimensions($binary)),
+                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- carries raw binary across a JSON/array boundary between the field handler and the PDF/mail layer. Not obfuscation.
                 'base64' => base64_encode($binary),
             ];
         }
@@ -458,8 +544,11 @@ class UploadField extends BaseField
 
         foreach ($field['materialized_files'] ?? [] as $file) {
             $mime   = $file['mime'] ?? '';
+            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes binary handed over the array boundary described at the encode site (strict mode). Not obfuscation.
             $binary = !empty($file['base64']) ? base64_decode($file['base64'], true) : false;
-            if ($binary === false || !str_starts_with($mime, 'image/') || $mime === 'image/svg+xml') {
+            if ($binary === false || !str_starts_with($mime, 'image/') || $mime === 'image/svg+xml'
+                || ($file['pdf_embeddable'] ?? true) === false
+            ) {
                 continue;
             }
             $desc->attachImage($binary, (string)($file['name'] ?? 'upload'), $mime);
@@ -531,9 +620,10 @@ class UploadField extends BaseField
                 'text'  => $notice,
             ],
             [
-                'key'   => 'allow_images',
-                'type'  => 'checkbox',
-                'label' => __('Images (jpg, png, gif, bmp, tiff, webp)', 'formfabricator'),
+                'key'        => 'allow_images',
+                'type'       => 'checkbox',
+                'label'      => __('Images (jpg, png, gif, bmp, tiff, webp)', 'formfabricator'),
+                'disclaimer' => __('Images the PDF cannot show (TIFF, and WEBP on servers without WEBP support) appear in it as a filename only, are attached next to it like documents, and cannot be cryptographically verified.', 'formfabricator'),
             ],
             [
                 'key'        => 'allow_documents',

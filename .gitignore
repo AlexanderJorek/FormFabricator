@@ -56,6 +56,10 @@ out/
 .yarn/install-state.gz
 .pnp.*
 
+### Editor settings
+# Local VS Code workspace settings (build.ps1 already keeps them out of the package).
+.vscode/
+
 ### Windows
 # Windows thumbnail cache files
 Thumbs.db

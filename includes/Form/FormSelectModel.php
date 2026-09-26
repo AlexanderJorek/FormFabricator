@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -87,7 +87,6 @@ class FormSelectModel
         if (!self::nonceVerifiedOrCheck($nonce_verified)) {
             return 0;
         }
-        $all   = self::getRaw();
         $title = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($data['title'] ?? null));
         if ($title === '') {
             $title = __('Form Selection', 'formfabricator');
@@ -107,22 +106,30 @@ class FormSelectModel
             ];
         }
 
-        if ($id > 0) {
-            foreach ($all as &$record) {
-                if ((int) ($record['id'] ?? 0) === $id) {
-                    $record['title'] = $title;
-                    $record['items'] = $items;
-                    update_option(self::$option, $all, false);
-                    return $id;
+        // Read and write under one lock, as FormModel and FormEditor do for their shared options: two saves landing
+        // together each rewrote the whole list from what they had read, so the later one dropped the earlier change.
+        return \FabricatorForms\Utils\OptionMutex::run(
+            self::$option,
+            static function () use ($id, $title, $items): int {
+                $all = self::getRaw();
+                if ($id > 0) {
+                    foreach ($all as &$record) {
+                        if ((int) ($record['id'] ?? 0) === $id) {
+                            $record['title'] = $title;
+                            $record['items'] = $items;
+                            update_option(self::$option, $all, false);
+                            return $id;
+                        }
+                    }
+                    unset($record);
                 }
-            }
-            unset($record);
-        }
 
-        $new_id = self::nextId($all);
-        $all[]  = ['id' => $new_id, 'title' => $title, 'items' => $items];
-        update_option(self::$option, $all, false);
-        return $new_id;
+                $new_id = self::nextId($all);
+                $all[]  = ['id' => $new_id, 'title' => $title, 'items' => $items];
+                update_option(self::$option, $all, false);
+                return $new_id;
+            }
+        );
     }
 
     /**
@@ -135,24 +142,30 @@ class FormSelectModel
         if (get_post_type($post_id) !== 'fabricator_form') {
             return;
         }
-        $all     = self::getRaw();
-        $changed = false;
-        foreach ($all as &$record) {
-            $before = count($record['items'] ?? []);
-            $record['items'] = array_values(
-                array_filter(
-                    $record['items'] ?? [],
-                    static fn($item) => (int) ($item['form_id'] ?? 0) !== $post_id
-                )
-            );
-            if (count($record['items']) !== $before) {
-                $changed = true;
+        // Under the same lock as save(): this runs from before_delete_post, which can land while a save is running.
+        \FabricatorForms\Utils\OptionMutex::run(
+            self::$option,
+            static function () use ($post_id): void {
+                $all     = self::getRaw();
+                $changed = false;
+                foreach ($all as &$record) {
+                    $before = count($record['items'] ?? []);
+                    $record['items'] = array_values(
+                        array_filter(
+                            $record['items'] ?? [],
+                            static fn($item) => (int) ($item['form_id'] ?? 0) !== $post_id
+                        )
+                    );
+                    if (count($record['items']) !== $before) {
+                        $changed = true;
+                    }
+                }
+                unset($record);
+                if ($changed) {
+                    update_option(self::$option, $all, false);
+                }
             }
-        }
-        unset($record);
-        if ($changed) {
-            update_option(self::$option, $all, false);
-        }
+        );
     }
 
     /**
@@ -172,13 +185,18 @@ class FormSelectModel
         if (!self::nonceVerifiedOrCheck($nonce_verified)) {
             return;
         }
-        $all = array_values(
-            array_filter(
-                self::getRaw(),
-                static fn($r) => (int) ($r['id'] ?? 0) !== $id
-            )
+        \FabricatorForms\Utils\OptionMutex::run(
+            self::$option,
+            static function () use ($id): void {
+                $all = array_values(
+                    array_filter(
+                        self::getRaw(),
+                        static fn($r) => (int) ($r['id'] ?? 0) !== $id
+                    )
+                );
+                update_option(self::$option, $all, false);
+            }
         );
-        update_option(self::$option, $all, false);
     }
 
     /**

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -29,9 +29,7 @@ defined('ABSPATH') || exit;
 class PageBreakField extends BaseField
 {
     /**
-     * prev_btn/next_btn are rendered via esc_html(), never as raw HTML — without this,
-     * wp_kses_post()'s entity-encoding at save time plus esc_html() at render time
-     * double-encodes any "&" in an admin-typed button label.
+     * prev_btn/next_btn render via esc_html(), never raw HTML — avoids wp_kses_post()+esc_html() double-encoding "&".
      *
      * @return string[]
      */
@@ -86,13 +84,17 @@ class PageBreakField extends BaseField
     }
 
     /**
-     * Returns false because page-break fields have no settings panel in the builder.
+     * Returns true — the builder opens a panel so the Back and Next button labels can be edited.
+     *
+     * It used to return false, which also left those two settings unreachable: the field declared them, the sanitizer
+     * stored them, and only their defaults were ever used. Nesting a page break inside a group is refused through
+     * isPageBreak() instead, which is what that really depended on.
      *
      * @return bool
      */
     public function hasSettingsPanel(): bool
     {
-        return false;
+        return true;
     }
 
     /**

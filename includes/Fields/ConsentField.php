@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -75,7 +75,7 @@ class ConsentField extends BaseField
     {
         $req     = !empty($config['required']) ? ' required aria-required="true"' : '';
         $checked = !empty($value) ? ' checked' : '';
-        $text    = wp_kses_post($config['consent_text'] ?? __('I agree.', 'formfabricator'));
+        $text    = \FabricatorForms\Utils\HtmlSanitizer::sanitize((string) ($config['consent_text'] ?? __('I agree.', 'formfabricator')));
 
         $inner = '<label class="fabricator-consent-label">'
             . '<input type="checkbox" id="' . esc_attr($field_id)
@@ -84,6 +84,16 @@ class ConsentField extends BaseField
             . '</label>';
 
         return $this->wrap($field_id, $config, $inner);
+    }
+
+    /**
+     * Client-side empty check: an unchecked box is empty (the generic fallback reads its value="1" as filled).
+     *
+     * @return array
+     */
+    public function getClientEmptyCheck(): array
+    {
+        return ['fn' => "function(f){return !f.querySelector('input[type=\"checkbox\"]:checked');}"];
     }
 
     /**

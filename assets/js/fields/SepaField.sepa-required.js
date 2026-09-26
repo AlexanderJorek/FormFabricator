@@ -1,4 +1,6 @@
 function (fieldEl) {
+    // Required check disguised as a format rule (so per-sub-input error placement works); must honour FabricatorIgnoreRequired manually since it bypasses validatePage()'s required blocks.
+    if (window.FabricatorIgnoreRequired) return null;
     if (fieldEl.dataset.required !== 'true') return null;
     var missing = false;
     var iban = fieldEl.querySelector('.fabricator-sepa-iban');

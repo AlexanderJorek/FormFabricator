@@ -1,5 +1,8 @@
 function (root) {
     root.querySelectorAll('.fabricator-rating-group').forEach(function (group) {
+        /* Idempotent: front.js re-runs field inits after every successful submit. */
+        if (group._fabricatorRatingInited) return;
+        group._fabricatorRatingInited = true;
         var stars = Array.from(group.querySelectorAll('.fabricator-rating-star'));
         function highlight(val) {
             stars.forEach(function (star) {
@@ -21,6 +24,8 @@ function (root) {
             if (radio) highlight(parseFloat(radio.value));
         });
         group.addEventListener('mouseleave', restoreChecked);
+        /* Arrow keys move between the radios natively, without a click, so the stars follow the change event. */
+        group.addEventListener('change', restoreChecked);
         group.querySelectorAll('.fabricator-rating-zone').forEach(function (zone) {
             var radio = zone.querySelector('input[type="radio"]');
             if (!radio) return;
@@ -30,6 +35,9 @@ function (root) {
                 restoreChecked();
             });
         });
+        /* Dispatched by front.js after form.reset(), so the stars follow the cleared radios. */
+        var ownerForm = group.closest('form');
+        if (ownerForm) ownerForm.addEventListener('fabricator:reset', restoreChecked);
         restoreChecked();
     });
 }

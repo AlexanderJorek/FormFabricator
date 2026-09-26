@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -146,8 +146,10 @@ class PDFLayoutEditor
         if (!empty($_POST['settings'])) {
             /* wp_unslash is required — WordPress's wp_magic_quotes() slashes all $_POST values */
             // json_decode() itself doesn't sanitize — every key read from $raw below is sanitized individually before use.
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-            $raw = json_decode(sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['settings'] ?? ''))), true);
+            // Decoded before sanitizing, as save() does: sanitize_textarea_field() on the raw JSON stripped every <...>
+            // sequence, so formatted header titles never reached the preview and any '<' corrupted the payload.
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require() above; every key read from $raw is sanitized individually below.
+            $raw = json_decode(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['settings'] ?? '')), true);
             if (!is_array($raw)) {
                 \FabricatorForms\fabricator_log('ajaxPreview: settings JSON decode failed — ' . json_last_error_msg());
             }
@@ -189,16 +191,16 @@ class PDFLayoutEditor
 
         $dummy = self::dummyFields();
 
-        // form_id=0 signals to Generator/HashSeal that this is a throwaway layout preview,
-        // not a real submission — it must not be persisted or count toward seal history
-        $path = \FabricatorForms\PDF\Generator::generate($dummy, 0, __('Layout Preview', 'formfabricator'));
+        // Unsealed: form_id 0 alone signalled nothing to Generator/HashSeal, so previews were signed with the production
+        // key and verified as authentic, letting any edit_pdf_layout holder mint "authentic" PDFs with arbitrary text.
+        $path = \FabricatorForms\PDF\Generator::generate($dummy, 0, __('Layout Preview', 'formfabricator'), false);
 
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $path is the return value of PDF\Generator::generate(), an internally-computed temp-file path, not attacker input.
         if (!$path || !file_exists($path)) {
             wp_send_json_error(['message' => __('PDF generation failed.', 'formfabricator')], 500);
         }
 
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $path is the return value of PDF\Generator::generate(), an internally-computed temp-file path, not attacker input.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- internal temp path.
         $data = file_get_contents($path);
         // Delete immediately after reading — no submission data is ever kept on disk (see CLAUDE.md)
         wp_delete_file($path);
@@ -207,6 +209,7 @@ class PDFLayoutEditor
             wp_send_json_error(['message' => __('PDF could not be read.', 'formfabricator')], 500);
         }
 
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- returns the rendered preview PDF to the admin page as base64 over AJAX. Not obfuscation.
         wp_send_json_success(['pdf_b64' => base64_encode($data)]);
     }
 
@@ -236,24 +239,41 @@ class PDFLayoutEditor
         if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             return;
         }
-        // Registered with generic 'read' since real enforcement is userCan('edit_pdf_layout') above and in render() — any new callback here MUST re-check it itself.
+        // A real capability (Plugin::grantAccessCaps() maps it to userCan()), so WordPress refuses the screen itself even if
+        // a future callback forgets its own check.
         $hook = add_submenu_page(
             'fabricator-forms',
             __('FormFabricator PDF Layout', 'formfabricator'),
             __('PDF Layout', 'formfabricator'),
-            'read',
+            \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'edit_pdf_layout',
             'fabricator-forms-pdf-layout',
             [self::class, 'render']
         );
-        add_action(
-            'load-' . $hook,
-            static function (): void {
-                remove_all_actions('admin_notices');
-                remove_all_actions('all_admin_notices');
-                remove_all_actions('user_admin_notices');
-                remove_all_actions('network_admin_notices');
-            }
-        );
+        if ($hook) {
+            add_action('load-' . $hook, [self::class, 'handleLayoutPost']);
+        }
+    }
+
+    /**
+     * Saves a posted layout form on the page's load- hook, before any output, then redirects (Post/Redirect/Get).
+     *
+     * Saving used to run inside render(), after headers were sent and without a redirect, so reloading the page
+     * afterwards submitted the form again.
+     *
+     * @return void
+     */
+    public static function handleLayoutPost(): void
+    {
+        if (!isset($_POST['fabricator_pdf_layout_nonce']) || !\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
+            return;
+        }
+        if (!wp_verify_nonce(sanitize_key($_POST['fabricator_pdf_layout_nonce']), 'fabricator_pdf_layout')) {
+            return;
+        }
+        $save_error = self::save();
+        set_transient('fabricator_pdf_layout_result_' . get_current_user_id(), $save_error === '' ? 'saved' : $save_error, MINUTE_IN_SECONDS);
+        wp_safe_redirect(admin_url('admin.php?page=fabricator-forms-pdf-layout'));
+        exit;
     }
 
     /**
@@ -269,14 +289,12 @@ class PDFLayoutEditor
 
         wp_enqueue_media();
 
-        $saved      = false;
-        $save_error = '';
-        if (isset($_POST['fabricator_pdf_layout_nonce'])
-            && wp_verify_nonce(sanitize_key($_POST['fabricator_pdf_layout_nonce']), 'fabricator_pdf_layout')
-        ) {
-            $save_error = self::save();
-            $saved      = $save_error === '';
-        }
+        // Saved by handleLayoutPost() before any output; the outcome survives its redirect in a short per-user transient.
+        $result_key = 'fabricator_pdf_layout_result_' . get_current_user_id();
+        $result     = get_transient($result_key);
+        delete_transient($result_key);
+        $saved      = $result === 'saved';
+        $save_error = is_string($result) && $result !== 'saved' ? $result : '';
 
         $defs = self::defaults();
         $opts = array_merge($defs, (array) get_option('fabricator_forms_pdf_layout', []));
@@ -352,9 +370,9 @@ class PDFLayoutEditor
         );
         ?>
 <canvas id="fabricator-particle-canvas"></canvas>
-<div class="wrap fabricator-list-wrap">
+<div class="wrap fabricator-list-wrap fabricator-pdf-layout-wrap">
     <div class="fabricator-title-pill"><i class="fa-solid fa-file-pdf"></i> <?php echo esc_html__('PDF Layout', 'formfabricator'); ?></div>
-    <hr class="wp-header-end" style="display:none">
+        <?php \FabricatorForms\Utils\Assets::renderNoticeDock(); ?>
 
         <?php if ($saved) : ?>
         <div class="fabricator-settings-notice fabricator-settings-notice--success">
@@ -452,8 +470,9 @@ class PDFLayoutEditor
                         <label for="font_size_body"><?php echo esc_html__('Base font size:', 'formfabricator'); ?>
                             <span id="font-size-body-val"><?php echo (int) $opts['font_size_body']; ?></span> <?php echo esc_html__('pt', 'formfabricator'); ?>
                         </label>
+                        <?php // Slider range = what the save clamps to, or a stored value outside it was silently changed on the next save. ?>
                         <input type="range" id="font_size_body" name="font_size_body"
-                            min="8" max="14" step="1" value="<?php echo (int) $opts['font_size_body']; ?>">
+                            min="6" max="20" step="1" value="<?php echo (int) $opts['font_size_body']; ?>">
                     </div>
 
                     <div class="fabricator-settings-field">
@@ -461,7 +480,7 @@ class PDFLayoutEditor
                             <span id="title-size-val"><?php echo (int) $opts['title_size']; ?></span> <?php echo esc_html__('pt', 'formfabricator'); ?>
                         </label>
                         <input type="range" id="title_size" name="title_size"
-                            min="12" max="28" step="1" value="<?php echo (int) $opts['title_size']; ?>">
+                            min="10" max="36" step="1" value="<?php echo (int) $opts['title_size']; ?>">
                     </div>
                 </div>
 
@@ -487,7 +506,7 @@ class PDFLayoutEditor
                                 </span> mm
                             </label>
                             <input type="range" id="margin_<?php echo esc_attr($side); ?>"
-                                name="margin_<?php echo esc_attr($side); ?>" min="5" max="40" step="1"
+                                name="margin_<?php echo esc_attr($side); ?>" min="0" max="50" step="1"
                                 <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $side only ever takes the literal values from $margin_sides above; output is (int)-cast regardless. ?>
                                 value="<?php echo (int) $opts['margin_' . $side]; ?>">
                         </div>
@@ -521,6 +540,12 @@ class PDFLayoutEditor
                         </li>
                         <?php endforeach; ?>
                     </ul>
+                    <?php /* Hiding a section is a layout choice, not redaction: the tamper-evidence seal
+                             carries every field's text regardless, or a modified PDF could not be detected. */ ?>
+                    <p class="fabricator-settings-hint fabricator-settings-hint--warn">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <?php echo esc_html__('Hiding a section changes only what is shown. The submitted text is always part of the verification seal and can be reconstructed from the PDF file.', 'formfabricator'); ?>
+                    </p>
                 </div>
 
                 <div class="fabricator-settings-card">
@@ -643,6 +668,7 @@ class PDFLayoutEditor
             ),
             'metadata'           => __('Metadata', 'formfabricator'),
             // Sample-submission labels for the live preview; mirror dummyFields()'s equivalents.
+            'sampleFormName'     => __('Sample form', 'formfabricator'),
             'sampleSignature'    => __('Signature', 'formfabricator'),
             'sampleAttachment'   => __('Attachment', 'formfabricator'),
             'networkError'       => __('Network error', 'formfabricator'),
@@ -661,9 +687,6 @@ class PDFLayoutEditor
                 'noImageSelected'   => __('No image selected', 'formfabricator'),
                 'changeImage'       => __('Change image', 'formfabricator'),
                 'chooseFromLibrary' => __('Choose from media library', 'formfabricator'),
-                'fitContain'        => __('Fit', 'formfabricator'),
-                'fitCover'          => __('Fill', 'formfabricator'),
-                'fitFill'           => __('Stretch', 'formfabricator'),
                 'bold'              => __('Bold', 'formfabricator'),
                 'italic'            => __('Italic', 'formfabricator'),
                 'underline'         => __('Underline', 'formfabricator'),
@@ -711,11 +734,6 @@ class PDFLayoutEditor
     }
 
     /**
-     * Saves PDF layout settings from POST data.
-     *
-     * @return void
-     */
-    /**
      * Optimistic-concurrency snapshot hash of the current fabricator_forms_pdf_layout option.
      *
      * @return string Snapshot hash.
@@ -756,7 +774,7 @@ class PDFLayoutEditor
         $hidden = array_values(
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- callback is an inline closure, not attacker-controlled dispatch.
             array_filter(
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- each value is passed through sanitize_key() via array_map() (WPCS doesn't recognize the string-callback form); callback is the hardcoded 'sanitize_key' string, not attacker-controlled dispatch.
+                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- sanitize_key(), hardcoded.
                 array_map('sanitize_key', explode(',', (string) wp_unslash($_POST['section_hidden'] ?? ''))),
                 fn($s) => isset($labels[$s])
             )
@@ -765,11 +783,32 @@ class PDFLayoutEditor
         // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- decoded JSON is fully validated/sanitized below by self::sanitizeHeaderLayout() before use.
         $header_layout_decoded = json_decode((string) wp_unslash($_POST['header_layout_json'] ?? '{}'), true);
 
+        self::$sideload_denied = false;
+        $header_layout         = self::sanitizeHeaderLayout(
+            is_array($header_layout_decoded) ? $header_layout_decoded : [],
+            true
+        );
+        if (self::$sideload_denied) {
+            // Refused before anything is written, so the page's snapshot stays valid for the corrected save.
+            return __('Images from external URLs can only be imported by users who are allowed to upload files. Choose the image from the Media Library instead.', 'formfabricator');
+        }
+
+        // This form has no logo_url or logo_width input — the logo is placed through the header layout editor — so
+        // reading them from $_POST wiped a configured logo on every save. Kept unless the request actually carries them.
+        $stored_layout = get_option('fabricator_forms_pdf_layout', []);
+        $stored_layout = is_array($stored_layout) ? $stored_layout : [];
+
         update_option(
             'fabricator_forms_pdf_layout',
             [
-            'logo_url'        => esc_url_raw((string) wp_unslash($_POST['logo_url'] ?? '')),
-            'logo_width'      => min(400, max(40, absint(wp_unslash($_POST['logo_width'] ?? 180)))),
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the caller verified the nonce before reaching this write.
+            'logo_url'        => isset($_POST['logo_url'])
+                ? esc_url_raw((string) wp_unslash($_POST['logo_url']))
+                : esc_url_raw((string) ($stored_layout['logo_url'] ?? '')),
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- see above.
+            'logo_width'      => isset($_POST['logo_width'])
+                ? min(400, max(40, absint(wp_unslash($_POST['logo_width']))))
+                : min(400, max(40, (int) ($stored_layout['logo_width'] ?? $defs['logo_width']))),
             'accent_color'    => sanitize_hex_color((string) wp_unslash($_POST['accent_color']    ?? '')) ?: $defs['accent_color'],
             'separator_color' => sanitize_hex_color((string) wp_unslash($_POST['separator_color'] ?? '')) ?: $defs['separator_color'],
             'font_family'     => sanitize_key(wp_unslash($_POST['font_family'] ?? 'dejavusans')),
@@ -781,16 +820,23 @@ class PDFLayoutEditor
             'margin_left'     => min(50, max(0, absint(wp_unslash($_POST['margin_left']   ?? 15)))),
             'margin_right'    => min(50, max(0, absint(wp_unslash($_POST['margin_right']  ?? 15)))),
             'section_hidden'  => $hidden,
-            'header_layout'   => self::sanitizeHeaderLayout(
-                is_array($header_layout_decoded) ? $header_layout_decoded : [],
-                true
-            ),
-            ]
+            'header_layout'   => $header_layout,
+            ],
+            // autoload=false: read only during PDF generation and in this editor, and this is the
+            // deliberately uncapped header-element array — the last thing to put in alloptions.
+            false
         );
 
         delete_transient('fabricator_pdf_template_fingerprints');
         return '';
     }
+
+    /**
+     * Set by resolveImageSrc() when a save needed an external image fetched for a user without upload_files.
+     *
+     * @var bool
+     */
+    private static bool $sideload_denied = false;
 
     /**
      * Resolves an image element's src to a local media-library attachment URL; external URLs are fetched only when $persist is true, via media_sideload_image()'s SSRF-guarded wp_safe_remote_get().
@@ -810,17 +856,22 @@ class PDFLayoutEditor
         if (!$persist || !preg_match('#^https?://#i', $src)) {
             return '';
         }
+        // media_sideload_image() makes an outbound fetch and creates a Media Library attachment, both things core gates on
+        // upload_files; the plugin's edit_pdf_layout grant alone must not be a way around that.
+        if (!current_user_can('upload_files')) {
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms PDFLayoutEditor: refused external header image for user ' . get_current_user_id()
+                . ', who lacks upload_files.'
+            );
+            self::$sideload_denied = true;
+            return '';
+        }
 
         require_once ABSPATH . 'wp-admin/includes/media.php';
         require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/image.php';
 
-        /* Lightest viable sideload: the PDF renderer only ever reads the ORIGINAL file
-           (layout.php resolves attachment_url_to_postid() -> get_attached_file()), so the
-           thumbnail/medium/large/scaled derivatives WordPress would normally generate are pure
-           cost here — several image decodes and re-encodes plus extra files on disk, per image,
-           during a synchronous admin save. Suppressing them for the duration of this one call
-           keeps the attachment (and its media-library entry) while skipping all of that. */
+        // layout.php only ever reads the ORIGINAL file, so suppress the thumbnail/medium/large derivatives — pure decode/encode cost on a synchronous admin save.
         $suppress_sizes = static function (): array {
             return [];
         };
@@ -858,22 +909,14 @@ class PDFLayoutEditor
      */
     private static function sanitizeHeaderLayout(array $raw, bool $persist = false): array
     {
-        /* ACCEPTED RISK (reviewed, deliberate — do not "fix" without asking):
-           the element list is intentionally uncapped, so a save posting N image elements with N
-           distinct external URLs issues N media_sideload_image() fetches. Reaching that state
-           requires the edit_pdf_layout capability and a hand-crafted request; the realistic
-           misuse is someone pasting a lot of URLs, which the picker's hint steers away from, and
-           resolveImageSrc() keeps each fetch as cheap as possible. Judged not worth a cap that
-           would reject or silently truncate a legitimate (if unusual) header layout. */
+        // ACCEPTED RISK, deliberate (don't change without asking): element list is uncapped, so N image URLs means N sideload fetches — requires edit_pdf_layout plus core upload_files, judged acceptable.
         $rows = min(30, max(2, (int) ($raw['rows'] ?? 8)));
         $elements = [];
         foreach ((array) ($raw['elements'] ?? []) as $el) {
             // 'type'/'id' are normally strings but nothing guarantees that; sanitize_key()'s strict type hint throws on an array/object value.
             $el_type = $el['type'] ?? '';
             $type = sanitize_key(is_string($el_type) ? $el_type : '');
-            /* 'html' is deliberately absent: the header builder offers only Title and Image, and
-               layout.php's header renderer handles only those two — an 'html' element was
-               accepted and stored here but then silently never drawn in the PDF. */
+            // 'html' is deliberately absent — layout.php's header renderer only handles 'title'/'image'.
             if (!in_array($type, ['title', 'image'], true)) {
                 continue;
             }
@@ -913,7 +956,6 @@ class PDFLayoutEditor
                     continue;
                 }
                 $item['src'] = $src;
-                $item['fit'] = in_array($el['fit'] ?? '', ['contain', 'cover', 'fill'], true) ? $el['fit'] : 'contain';
             }
             $elements[] = $item;
         }
@@ -1015,10 +1057,11 @@ class PDFLayoutEditor
             imageline($img, $pts[$i], $pts[$i + 1], $pts[$i + 2], $pts[$i + 3], $ink);
         }
         ob_start();
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $img is a GD image resource, not a filesystem path; imagepng() here writes to the output buffer (2-arg form), no file is touched.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $img is a GD resource, not a path; imagepng() here uses the output-buffer 2-arg form, no file touched.
         imagepng($img);
         $raw = ob_get_clean();
         unset($img);
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds a data: URI for inline display; the alternative is writing an HTTP-reachable file. Not obfuscation.
         return base64_encode((string) $raw);
     }
 
@@ -1052,10 +1095,11 @@ class PDFLayoutEditor
         /* Label */
         imagestring($img, 2, 170, 32, 'Attachment', $dark);
         ob_start();
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $img is a GD image resource, not a filesystem path; imagepng() here writes to the output buffer (2-arg form), no file is touched.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $img is a GD resource, not a path; imagepng() here uses the output-buffer 2-arg form, no file touched.
         imagepng($img);
         $raw = ob_get_clean();
         unset($img);
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds a data: URI for inline display; the alternative is writing an HTTP-reachable file. Not obfuscation.
         return base64_encode((string) $raw);
     }
 

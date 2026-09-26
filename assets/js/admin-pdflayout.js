@@ -6,10 +6,7 @@
 (function () {
     'use strict';
 
-    /* Sets icon markup then appends translated text as a TEXT NODE.
-       Concatenating a translated string into innerHTML lets whoever supplies the .mo inject
-       markup — and WordPress loads .mo files from WP_LANG_DIR, which is not limited to reviewed
-       WordPress.org language packs. The icon markup here is a literal; only the text varies. */
+    /* Text as a TEXT NODE, not innerHTML — a .mo (loaded from WP_LANG_DIR, not just reviewed packs) could inject markup. */
     function fabIconThenText(el, iconHtml, text) {
         if (!el) { return; }
         el.innerHTML = iconHtml;
@@ -42,6 +39,19 @@
             .replace(/>/g, '&gt;');
     }
 
+    /* Mirrors layout.php's server-side guard: value lands unquoted in CSS, so non-hex input must be rejected to prevent CSS injection. */
+    function hbColor(value, fallback) {
+        return /^#[0-9a-fA-F]{3,8}$/.test(String(value == null ? '' : value))
+            ? String(value)
+            : fallback;
+    }
+
+    /* Placeholder form name for the preview. Was a hardcoded German literal ("Beispielformular")
+       left over from the pre-rename original, unreachable by any translator. */
+    function sampleFormName() {
+        return I18N.sampleFormName || 'Sample form';
+    }
+
     /* Same msgid as Generator.php's footerHtml() so this preview matches the real PDF, not a hardcoded duplicate. */
         
     var pageOfTpl = I18N.pageOfPage;
@@ -57,12 +67,21 @@
 
     /* particle canvas */
     var canvas = document.getElementById('fabricator-particle-canvas');
-    if (canvas) {
+    /* Decorative only, so skipped for anyone whose system asks for reduced motion (WCAG 2.3.3). */
+    var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (canvas && reduceMotion) {
+        canvas.style.display = 'none';
+    }
+    if (canvas && !reduceMotion) {
         var ctx = canvas.getContext('2d'), mouse = {x:-9999,y:-9999};
         var _ah=getComputedStyle(document.documentElement).getPropertyValue('--fabricator-admin-accent').trim()||'#2271b1';
         var _rgb=function(h){return parseInt(h.slice(1,3),16)+','+parseInt(h.slice(3,5),16)+','+parseInt(h.slice(5,7),16);};
         var DOTS=Math.min(120,Math.max(40,Math.round(innerWidth*innerHeight/26000)));
         var LINK=150,SPEED=1.0,COLOR=_rgb(_ah),particles=[],paused=false,FRAME_MS=1000/30;
+        /* One pending frame at a time: every switch back to this tab used to start another loop alongside the
+           one already running, so the page's CPU use grew over a session. */
+        var rafId=0,timerId=0;
+        function schedule(){ if(rafId||timerId) return; rafId=requestAnimationFrame(function(){rafId=0;draw();}); }
         function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; }
         function rand(a,b){ return a+Math.random()*(b-a); }
         function initP(){
@@ -84,12 +103,12 @@
             }
             ctx.fillStyle='rgba('+COLOR+',0.5)';
             for(var i=0;i<particles.length;i++){ctx.beginPath();ctx.arc(particles[i].x,particles[i].y,particles[i].r,0,Math.PI*2);ctx.fill();}
-            setTimeout(function(){requestAnimationFrame(draw);},FRAME_MS-2);
+            timerId=setTimeout(function(){timerId=0;schedule();},FRAME_MS-2);
         }
         document.addEventListener('mousemove',function(e){mouse.x=e.clientX;mouse.y=e.clientY;});
-        document.addEventListener('visibilitychange',function(){paused=document.hidden;if(!paused)requestAnimationFrame(draw);});
+        document.addEventListener('visibilitychange',function(){paused=document.hidden;if(!paused)schedule();});
         window.addEventListener('resize',function(){resize();initP();});
-        resize();initP();requestAnimationFrame(draw);
+        resize();initP();schedule();
     }
 
     /* helpers */
@@ -193,7 +212,7 @@
             if(slug==='header'){
                 out+='<table style="width:100%;border-collapse:collapse;margin-bottom:10px;"><tr>';
                 out+='<td style="text-align:right;vertical-align:middle;font-size:'+pt(s.title_size)+';'
-                    +'font-weight:bold;color:#1d2327;">Beispielformular</td>';
+                    +'font-weight:bold;color:#1d2327;">'+escHtml(sampleFormName())+'</td>';
                 out+='</tr></table>';
             }
 
@@ -203,16 +222,16 @@
                        / .field-value / .field-separator-thick CSS exactly */
                     if(fieldLayoutMode==='inline'){
                         out+='<div style="margin-bottom:14px;">';
-                        out+='<span style="font-weight:700;font-size:'+pt(s.title_size)+';color:#222;">'+f.label+':</span> ';
-                        out+='<span style="font-size:'+pt(s.font_size_body)+';color:#333;margin-bottom:5px;">'+f.value+'</span>';
-                        out+='<div style="border-bottom:3px solid '+s.accent_color+';margin-top:2px;"></div>';
+                        out+='<span style="font-weight:700;font-size:'+pt(s.title_size)+';color:#222;">'+escHtml(f.label)+':</span> ';
+                        out+='<span style="font-size:'+pt(s.font_size_body)+';color:#333;margin-bottom:5px;">'+escHtml(f.value)+'</span>';
+                        out+='<div style="border-bottom:3px solid '+hbColor(s.accent_color,'#f59e0b')+';margin-top:2px;"></div>';
                         out+='</div>';
                     } else {
                         out+='<div style="margin-bottom:14px;">';
-                        out+='<div style="font-weight:700;font-size:'+pt(s.title_size)+';margin-bottom:4px;color:#222;">'+f.label+'</div>';
-                        out+='<div style="border-bottom:1px solid '+s.separator_color+';margin-bottom:4px;"></div>';
-                        out+='<div style="font-size:'+pt(s.font_size_body)+';margin-bottom:5px;color:#333;">'+f.value+'</div>';
-                        out+='<div style="border-bottom:3px solid '+s.accent_color+';margin-top:2px;"></div>';
+                        out+='<div style="font-weight:700;font-size:'+pt(s.title_size)+';margin-bottom:4px;color:#222;">'+escHtml(f.label)+'</div>';
+                        out+='<div style="border-bottom:1px solid '+hbColor(s.separator_color,'#c9cdd4')+';margin-bottom:4px;"></div>';
+                        out+='<div style="font-size:'+pt(s.font_size_body)+';margin-bottom:5px;color:#333;">'+escHtml(f.value)+'</div>';
+                        out+='<div style="border-bottom:3px solid '+hbColor(s.accent_color,'#f59e0b')+';margin-top:2px;"></div>';
                         out+='</div>';
                     }
                 });
@@ -225,34 +244,34 @@
                 /* Signature */
                 out+='<div style="margin-bottom:14px;">';
                 out+='<div style="font-weight:700;font-size:'+pt(s.title_size)+';margin-bottom:4px;color:#222;">'+escHtml(I18N.sampleSignature||'Signature')+'</div>';
-                out+='<div style="border-bottom:1px solid '+s.separator_color+';margin-bottom:4px;"></div>';
+                out+='<div style="border-bottom:1px solid '+hbColor(s.separator_color,'#c9cdd4')+';margin-bottom:4px;"></div>';
                 out+='<div style="margin:8px 0;"><img src="'+dummySignatureSrc+'" width="300" height="80" style="'+imgStyle+'" alt="'+escHtml(I18N.sampleSignature||'Signature')+'"></div>';
-                out+='<div style="border-bottom:3px solid '+s.accent_color+';margin-top:2px;"></div>';
+                out+='<div style="border-bottom:3px solid '+hbColor(s.accent_color,'#f59e0b')+';margin-top:2px;"></div>';
                 out+='</div>';
                 /* Upload / Anhang */
                 out+='<div style="margin-bottom:14px;">';
                 out+='<div style="font-weight:700;font-size:'+pt(s.title_size)+';margin-bottom:4px;color:#222;">'+escHtml(I18N.sampleAttachment||'Attachment')+'</div>';
-                out+='<div style="border-bottom:1px solid '+s.separator_color+';margin-bottom:4px;"></div>';
+                out+='<div style="border-bottom:1px solid '+hbColor(s.separator_color,'#c9cdd4')+';margin-bottom:4px;"></div>';
                 out+='<div style="font-size:'+pt(s.font_size_body)+';margin-bottom:5px;color:#333;">sample-document.png</div>';
                 out+='<div style="margin:8px 0;"><img src="'+dummyUploadSrc+'" width="300" height="80" style="'+imgStyle+'" alt="'+escHtml(I18N.sampleAttachment||'Attachment')+'"></div>';
-                out+='<div style="border-bottom:3px solid '+s.accent_color+';margin-top:2px;"></div>';
+                out+='<div style="border-bottom:3px solid '+hbColor(s.accent_color,'#f59e0b')+';margin-top:2px;"></div>';
                 out+='</div>';
             }
 
             if(slug==='metadata'){
                 /* Labels mirror layout.php's real metadata block so this preview matches the generated PDF. */
                 out+='<div style="margin:12px 0;padding:8px 10px;background:#f9f9f9;border:1px solid #e0e0e0;border-radius:4px;font-size:'+pt(8)+';color:#555;">';
-                out+='<strong>' + I18N.metadata + '</strong><br>';
-                out+=I18N.created + ' '+new Date().toLocaleString()+'<br>';
-                out+=I18N.formLabel + ' Beispielformular';
+                out+='<strong>' + escHtml(I18N.metadata) + '</strong><br>';
+                out+=escHtml(I18N.created) + ' '+escHtml(new Date().toLocaleString())+'<br>';
+                out+=escHtml(I18N.formLabel) + ' '+escHtml(sampleFormName());
                 out+='</div>';
             }
 
             if(slug==='legal'){
                 /* Same msgids as pdf-templates/layout.php's real legal-notice block. */
                 out+='<p style="font-size:'+pt(7.5)+';color:#666;margin-top:6px;line-height:1.4;">';
-                out+='<strong>' + I18N.legalNotice + '</strong> '
-                    +I18N.legalNoticeBody;
+                out+='<strong>' + escHtml(I18N.legalNotice) + '</strong> '
+                    +escHtml(I18N.legalNoticeBody);
                 out+='</p>';
             }
 
@@ -338,7 +357,10 @@
                always present (page numbers shown even with no user text). */
             var pageNum = idx + 1;
             var userFt  = footerBase || '';
-            var pageNumHtml = pageOfTpl.replace('%1$s', pageNum).replace('%2$s', total);
+            /* Escaped like every other translated string in this file: pageOfPage comes from a .mo and lands in innerHTML. */
+            var pageNumHtml = String(pageOfTpl || '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+                .replace('%1$s', pageNum).replace('%2$s', total);
             var footerHtml;
             if(userFt){
                 var userFtHtml = userFt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
@@ -504,15 +526,41 @@
     var hbProps  = document.getElementById('fabricator-hb-props');
 
     function hbEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-    /* Strips <script>, on*="" handlers and javascript:/vbscript: URIs before the
-       live (unsaved) header-builder preview assigns element html into innerHTML.
-       sanitizeHeaderLayout() is the server-side authority on save; this is just
-       defense-in-depth for the in-browser preview of not-yet-saved content. */
+    /* Interpolated into a style attribute, so coerce to a number instead of escaping it. Same 6..72 clamp as sanitizeHeaderLayout() applies on save. */
+    function hbSize(v){ var n = parseInt(v, 10); if (!isFinite(n)) { n = 14; } return Math.min(72, Math.max(6, n)); }
+    /* Defense-in-depth for the unsaved preview only — sanitizeHeaderLayout() server-side is the authority on save.
+       Parsed into an inert <template> and walked as a DOM against the same allowlist the save-time wp_kses() uses,
+       instead of regex-stripped: "</script >", entity-encoded handlers and a tab inside "javascript:" all slipped
+       past the old patterns. */
+    var HB_PREVIEW_TAGS = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, DEL:1, SUP:1, SUB:1, SPAN:1, BR:1 };
     function hbSanitizePreviewHtml(html){
-        html = String(html||'').replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-        html = html.replace(/[\s\/]+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-        html = html.replace(/\b(href|src)\s*=\s*(["'])\s*(?:javascript|vbscript)\s*:[^"']*\2/gi, '$1=$2#$2');
-        return html;
+        var tpl = document.createElement('template');
+        tpl.innerHTML = String(html || '');
+        (function clean(parent){
+            Array.prototype.slice.call(parent.childNodes).forEach(function(node){
+                if (node.nodeType === 3) { return; }
+                if (node.nodeType !== 1) { node.parentNode.removeChild(node); return; }
+                if (!HB_PREVIEW_TAGS[node.tagName]) {
+                    if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE' || node.tagName === 'TEMPLATE') {
+                        node.parentNode.removeChild(node);
+                        return;
+                    }
+                    /* Any other element: keep its (cleaned) content, drop the element itself, as wp_kses() does. */
+                    clean(node);
+                    while (node.firstChild) { parent.insertBefore(node.firstChild, node); }
+                    parent.removeChild(node);
+                    return;
+                }
+                Array.prototype.slice.call(node.attributes).forEach(function(attr){
+                    /* Only u/span keep style, matching sanitizeHeaderLayout(); every other attribute goes. */
+                    if (!(attr.name === 'style' && (node.tagName === 'U' || node.tagName === 'SPAN'))) {
+                        node.removeAttribute(attr.name);
+                    }
+                });
+                clean(node);
+            });
+        })(tpl.content);
+        return tpl.innerHTML;
     }
     function hbGetEl(id){ return hbLayout.elements.find(function(e){ return e.id===id; }); }
 
@@ -571,14 +619,14 @@
         if(el.type==='image' && el.src){
             inner.innerHTML = '<img src="'+hbEsc(el.src)+'" style="width:100%;height:auto;max-height:100%;display:block;">';
         } else if(el.type==='title'){
-            var tcnt = (el.content||el.text||'{form_title}').replace(/\{form_title\}/g,'Beispielformular');
+            var tcnt = (el.content||el.text||'{form_title}').replace(/\{form_title\}/g,sampleFormName());
             inner.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;padding:2px 4px;box-sizing:border-box;">'
-                +'<span style="width:100%;font-size:'+(el.size||14)+'pt;color:'+hbEsc(el.color||'#1d2327')+';text-align:'+hbEsc(el.align||'left')+';">'
-                +tcnt+'</span></div>';
+                +'<span style="width:100%;font-size:'+hbSize(el.size)+'pt;color:'+hbEsc(el.color||'#1d2327')+';text-align:'+hbEsc(el.align||'left')+';">'
+                +hbSanitizePreviewHtml(tcnt)+'</span></div>';
         } else if(el.type==='html'){
             inner.innerHTML = el.html ? hbSanitizePreviewHtml(el.html) : '<span style="color:#aaa;font-size:10px;padding:4px">[HTML]</span>';
         } else {
-            inner.innerHTML = '<span style="color:#aaa;font-size:10px;padding:4px">['+el.type+']</span>';
+            inner.innerHTML = '<span style="color:#aaa;font-size:10px;padding:4px">['+hbEsc(el.type)+']</span>';
         }
         node.appendChild(inner);
 
@@ -676,7 +724,7 @@
         var rows = Math.max(2, hbLayout.rows||8);
         var w = 8;
         var h = (natW && natH) ? Math.max(1, Math.min(rows, Math.round(natH / natW * w))) : Math.min(4, rows);
-        var el = { id:'e'+(hbNextId++), type:'image', x:0, y:0, w:w, h:h, src:src, fit:'contain' };
+        var el = { id:'e'+(hbNextId++), type:'image', x:0, y:0, w:w, h:h, src:src };
         hbLayout.elements.push(el);
         hbSel=el.id; hbRender(); hbRenderProps();
     }
@@ -705,17 +753,17 @@
         if(!hbProps) return;
         hbSel = null;
         hbProps.innerHTML = '<div class="fabricator-hb-img-picker">'
-            +'<p class="fabricator-hb-img-picker-title"><i class="fa-solid fa-image"></i> ' + I18N.addImage + '</p>'
+            +'<p class="fabricator-hb-img-picker-title"><i class="fa-solid fa-image"></i> ' + hbEsc(I18N.addImage) + '</p>'
             +'<button type="button" class="button button-primary" id="hb-pick-media" style="width:100%">'
-            +'<i class="fa-solid fa-photo-film"></i> ' + I18N.chooseFromLibrary + '</button>'
-            +'<div class="fabricator-hb-img-picker-sep"><span>' + I18N.orLabel + '</span></div>'
-            +'<div class="fabricator-hb-prop-group"><span>' + I18N.externalUrl + '</span>'
+            +'<i class="fa-solid fa-photo-film"></i> ' + hbEsc(I18N.chooseFromLibrary) + '</button>'
+            +'<div class="fabricator-hb-img-picker-sep"><span>' + hbEsc(I18N.orLabel) + '</span></div>'
+            +'<div class="fabricator-hb-prop-group"><span>' + hbEsc(I18N.externalUrl) + '</span>'
             +'<input type="text" id="hb-pick-url" placeholder="https://…" style="margin-bottom:4px">'
             +'<p class="fabricator-hb-img-picker-hint"><i class="fa-solid fa-circle-info"></i> '
             + hbEsc(I18N.externalUrlHint) + '</p>'
-            +'<button type="button" class="button" id="hb-pick-url-confirm" style="width:100%">' + I18N.insert + '</button>'
+            +'<button type="button" class="button" id="hb-pick-url-confirm" style="width:100%">' + hbEsc(I18N.insert) + '</button>'
             +'</div>'
-            +'<button type="button" class="button" id="hb-pick-cancel" style="width:100%;margin-top:8px">' + I18N.cancel + '</button>'
+            +'<button type="button" class="button" id="hb-pick-cancel" style="width:100%;margin-top:8px">' + hbEsc(I18N.cancel) + '</button>'
             +'</div>';
 
         document.getElementById('hb-pick-media').addEventListener('click', function(){
@@ -734,7 +782,15 @@
         });
     }
 
+    /* Document-level listeners added by the current properties render. Aborted when the panel re-renders, instead of
+       each one lingering until its own lazy self-removal and piling up across re-renders. */
+    var hbPropsListeners = null;
+    function hbListenerOpts(){
+        return hbPropsListeners ? { signal: hbPropsListeners.signal } : false;
+    }
     function hbRenderProps(){
+        if (hbPropsListeners) { hbPropsListeners.abort(); }
+        hbPropsListeners = typeof AbortController === 'function' ? new AbortController() : null;
         if(!hbProps) return;
         var el = hbSel ? hbGetEl(hbSel) : null;
         if(!el){ hbProps.innerHTML='<p class="fabricator-hb-empty">'+hbEsc(hbi18n.selectElement)+'<br>'+hbEsc(hbi18n.toEdit)+'</p>'; return; }
@@ -747,14 +803,7 @@
             +'</div></div>';
 
         if(el.type==='image'){
-            /* Image: picker first, then position/size, then fit */
-            h=''; /* reset — image skips the shared X/Y/W/H block above */
-            h+='<div class="fabricator-hb-card"><div class="fabricator-hb-prop-row2">'
-                +'<div class="fabricator-hb-prop-group"><span>X</span><input type="number" data-p="x" value="'+el.x+'" min="0" max="41"></div>'
-                +'<div class="fabricator-hb-prop-group"><span>Y</span><input type="number" data-p="y" value="'+el.y+'" min="0"></div>'
-                +'<div class="fabricator-hb-prop-group"><span>'+hbEsc(hbi18n.width)+'</span><input type="number" data-p="w" value="'+el.w+'" min="1" max="42"></div>'
-                +'<div class="fabricator-hb-prop-group"><span>'+hbEsc(hbi18n.height)+'</span><input type="number" data-p="h" value="'+el.h+'" min="1"></div>'
-                +'</div></div>';
+            /* Image: reuses the shared X/Y/W/H block above, then adds the picker. */
             h+='<div class="fabricator-hb-card fabricator-hb-card--image">'
                 +'<div class="fabricator-hb-img-preview">'
                 +(el.src ? '<img src="'+hbEsc(el.src)+'" style="max-width:100%;max-height:80px;display:block;border-radius:3px;">' : '<span style="color:#aaa;font-size:11px;">'+hbEsc(hbi18n.noImageSelected)+'</span>')
@@ -762,13 +811,6 @@
                 +'<button type="button" class="button" id="hb-media-pick" style="width:100%">'
                 +'<i class="fa-solid fa-upload"></i> '+hbEsc(el.src?hbi18n.changeImage:hbi18n.chooseFromLibrary)+'</button>'
                 +'<input type="text" data-p="src" value="'+hbEsc(el.src||'')+'" placeholder="'+hbEsc(hbi18n.orEnterUrl)+'">'
-                +'</div>';
-            h+='<div class="fabricator-hb-card">'
-                +'<div class="fabricator-hb-fit-btns">'
-                +'<button type="button" class="fabricator-hb-fit-btn'+((!el.fit||el.fit==='contain')?' fabricator-hb-fit-btn--active':'')+'" data-fit="contain">'+hbEsc(hbi18n.fitContain)+'</button>'
-                +'<button type="button" class="fabricator-hb-fit-btn'+(el.fit==='cover'?' fabricator-hb-fit-btn--active':'')+'" data-fit="cover">'+hbEsc(hbi18n.fitCover)+'</button>'
-                +'<button type="button" class="fabricator-hb-fit-btn'+(el.fit==='fill'?' fabricator-hb-fit-btn--active':'')+'" data-fit="fill">'+hbEsc(hbi18n.fitFill)+'</button>'
-                +'</div>'
                 +'</div>';
         } else if(el.type==='title'){
             var _al = (!el.align||el.align==='left') ? ' fabricator-hb-tb-btn--active' : '';
@@ -812,8 +854,8 @@
                 +'</div>';
             h+='<div class="fabricator-hb-prop-group fabricator-hb-prop-group--editor"><span>'+hbEsc(hbi18n.text)+'</span>'
                 +'<div class="fabricator-hb-title-editor" contenteditable="true" spellcheck="false" '
-                +'style="font-size:'+(el.size||14)+'pt;color:'+hbEsc(el.color||'#1d2327')+';text-align:'+hbEsc(el.align||'left')+';">'
-                +(el.content||el.text||'{form_title}')
+                +'style="font-size:'+hbSize(el.size)+'pt;color:'+hbEsc(el.color||'#1d2327')+';text-align:'+hbEsc(el.align||'left')+';">'
+                +hbSanitizePreviewHtml(el.content||el.text||'{form_title}')
                 +'</div></div>'
                 +'</div>';
         } else if(el.type==='html'){
@@ -958,9 +1000,9 @@
             document.addEventListener('mousedown', function hbUlClose(e){
                 if(!ulMenu.contains(e.target) && e.target!==ulChevron){
                     ulMenu.hidden=true;
-                    document.removeEventListener('mousedown', hbUlClose);
+                    document.removeEventListener('mousedown', hbUlClose, hbListenerOpts());
                 }
-            });
+            }, hbListenerOpts());
         }
 
         /* Alignment & other element-level toolbar buttons (data-p on <button>) */
@@ -1029,7 +1071,7 @@
             if(sel&&sel.rangeCount&&titleEd.contains(sel.anchorNode)){
                 hbSyncToolbarState();
             }
-        });
+        }, hbListenerOpts());
 
         /* Color input: per-selection when text is selected, element-level otherwise */
         hbProps.querySelectorAll('input[data-p="color"]').forEach(function(inp){
@@ -1062,17 +1104,6 @@
                 el.y=Math.max(0,el.y);
                 el.w=Math.max(1,Math.min(HB_COLS-el.x,el.w));
                 el.h=Math.max(1,el.h);
-                hbRender();
-            });
-        });
-
-        /* Image fit buttons */
-        hbProps.querySelectorAll('button[data-fit]').forEach(function(btn){
-            btn.addEventListener('click', function(){
-                el.fit=btn.dataset.fit;
-                hbProps.querySelectorAll('button[data-fit]').forEach(function(b){
-                    b.classList.toggle('fabricator-hb-fit-btn--active', b===btn);
-                });
                 hbRender();
             });
         });
@@ -1193,9 +1224,9 @@
                             result += '<img src="'+hbEsc(el.src)
                                 +'" style="width:100%;height:auto;max-height:100%;display:block;">';
                         } else if(el.type==='title'){
-                            var pcnt = (el.content||el.text||'{form_title}').replace(/\{form_title\}/g,'Beispielformular');
+                            var pcnt = (el.content||el.text||'{form_title}').replace(/\{form_title\}/g,sampleFormName());
                             result += '<div style="width:100%;height:100%;display:flex;align-items:center;">'
-                                +'<span style="width:100%;font-size:'+(el.size||14)+'pt;color:'+hbEsc(el.color||'#1d2327')+';text-align:'+hbEsc(el.align||'left')+';">'+pcnt+'</span></div>';
+                                +'<span style="width:100%;font-size:'+hbSize(el.size)+'pt;color:'+hbEsc(el.color||'#1d2327')+';text-align:'+hbEsc(el.align||'left')+';">'+hbSanitizePreviewHtml(pcnt)+'</span></div>';
                         }
                         result += '</div>';
                     });
@@ -1233,8 +1264,9 @@
         var n = document.createElement('div');
         n.className = 'fabricator-settings-notice fabricator-settings-notice--'
             + (isError ? 'error' : 'success');
-        n.innerHTML = '<i class="fa-solid fa-'
-            + (isError ? 'circle-xmark' : 'circle-check') + '"></i> ' + msg;
+        /* msg is server-supplied; same .mo-injection reasoning as fabIconThenText's own comment. */
+        fabIconThenText(n, '<i class="fa-solid fa-'
+            + (isError ? 'circle-xmark' : 'circle-check') + '"></i> ', msg);
         var topbar = document.querySelector('.fabricator-settings-topbar');
         var ref = topbar || form;
         ref.parentNode.insertBefore(n, ref);

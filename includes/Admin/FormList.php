@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -88,9 +88,10 @@ class FormList
             add_menu_page(
                 __('FormFabricator Form List', 'formfabricator'),
                 __('FormFabricator', 'formfabricator'),
-                'read',
+                \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
                 'fabricator-forms',
                 [self::class, 'render'],
+                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds a data: URI for inline display; the alternative is writing an HTTP-reachable file. Not obfuscation.
                 'data:image/svg+xml;base64,' . base64_encode($menuIconSvg),
                 30
             );
@@ -100,7 +101,7 @@ class FormList
                 'fabricator-forms',
                 __('FormFabricator Form List', 'formfabricator'),
                 __('Form List', 'formfabricator'),
-                'read',
+                \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
                 'fabricator-forms',
                 [self::class, 'render']
             );
@@ -134,6 +135,11 @@ class FormList
             'selectedCount'      => __('%d selected', 'formfabricator'),
             'error'              => __('Error', 'formfabricator'),
             'importError'        => __('Import error', 'formfabricator'),
+            // translators: %s is replaced client-side with the imported form's title.
+            'importConfirm'      => __('Import the form "%s"? Its notifications send submissions to:', 'formfabricator'),
+            'importNoRecipients' => __('(no notification recipients)', 'formfabricator'),
+            'importUnnamed'      => __('Unnamed notification', 'formfabricator'),
+            'importNoAddress'    => __('no address', 'formfabricator'),
             'copied'             => __('Copied!', 'formfabricator'),
             'copyShortcode'      => __('Copy shortcode', 'formfabricator'),
             'copy'               => __('Copy', 'formfabricator'),
@@ -152,7 +158,7 @@ class FormList
         <div class="wrap fabricator-list-wrap">
 
             <div class="fabricator-title-pill"><?php esc_html_e('Forms', 'formfabricator'); ?></div>
-            <hr class="wp-header-end" style="display:none">
+            <?php \FabricatorForms\Utils\Assets::renderNoticeDock(); ?>
 
             <div class="fabricator-list-toolbar" id="fabricator-list-toolbar">
                     <!-- Left: select-all + bulk actions -->
@@ -209,83 +215,16 @@ class FormList
                 </a>
             </div>
 
-            <?php if (!empty($forms)) : ?>
-                <div class="fabricator-form-list" id="fabricator-form-list">
-                    <?php foreach ($forms as $form) : ?>
-                        <?php
-                        $edit_url  = admin_url('admin.php?page=fabricator-forms-editor&form_id=' . $form->id);
-                        $shortcode = '[fabricator_form id="' . $form->id . '"]';
-                        $count     = count($form->fields);
-                        /* Minted only for users who can actually perform the action. Each handler
-                           re-checks its own capability, so this is defence in depth rather than
-                           the control itself — but handing a view-only user an export nonce is
-                           what made the capability mismatch above reachable in the first place. */
-                        $can_edit  = \FabricatorForms\Plugin::userCan('edit_forms');
-                        $del_nonce = $can_edit ? wp_create_nonce('fabricator_forms_delete_' . $form->id) : '';
-                        $dup_nonce = $can_edit ? wp_create_nonce('fabricator_forms_duplicate_' . $form->id) : '';
-                        $exp_nonce = $can_edit ? wp_create_nonce('fabricator_forms_export_' . $form->id) : '';
-                        ?>
-                        <div class="fabricator-form-row" data-title="<?php echo esc_attr(strtolower($form->title)); ?>">
-                            <label class="fabricator-row-check-wrap">
-                                <input type="checkbox" class="fabricator-row-check"
-                                       value="<?php echo esc_attr($form->id); ?>"
-                                       data-del-nonce="<?php echo esc_attr($del_nonce); ?>"
-                                       data-dup-nonce="<?php echo esc_attr($dup_nonce); ?>">
-                            </label>
-                            <div class="fabricator-form-row-icon">
-                                <i class="fa-solid fa-table-list"></i>
-                            </div>
-                            <div class="fabricator-form-row-main">
-                                <a href="<?php echo esc_url($edit_url); ?>"
-                                   class="fabricator-form-row-title">
-                                    <?php echo esc_html($form->title); ?>
-                                </a>
-                                <div class="fabricator-form-row-meta">
-                                    <?php // translators: %d: number of fields in the form. ?>
-                                    <span><?php echo esc_html(sprintf(_n('%d Field', '%d Fields', $count, 'formfabricator'), $count)); ?></span>
-                                    <span class="fabricator-meta-sep">&middot;</span>
-                                    <code class="fabricator-form-row-code"><?php echo esc_html($shortcode); ?></code>
-                                </div>
-                            </div>
-                            <div class="fabricator-form-row-actions">
-                                <a href="<?php echo esc_url($edit_url); ?>"
-                                   class="button fabricator-btn-edit">
-                                    <?php esc_html_e('Edit', 'formfabricator'); ?>
-                                </a>
-                                <div class="fabricator-row-menu-wrap">
-                                    <button class="button fabricator-row-menu-btn" title="<?php echo esc_attr__('More actions', 'formfabricator'); ?>">&#8942;</button>
-                                    <div class="fabricator-row-dropdown" hidden>
-                                        <button class="fabricator-dd-item fabricator-copy-shortcode"
-                                                data-code="<?php echo esc_attr($shortcode); ?>">
-                                            <i class="fa-solid fa-clipboard"></i> <?php esc_html_e('Copy shortcode', 'formfabricator'); ?>
-                                        </button>
-                                        <button class="fabricator-dd-item fabricator-duplicate-form"
-                                                data-id="<?php echo esc_attr($form->id); ?>"
-                                                data-nonce="<?php echo esc_attr($dup_nonce); ?>">
-                                            <i class="fa-solid fa-copy"></i> <?php esc_html_e('Duplicate', 'formfabricator'); ?>
-                                        </button>
-                                        <div class="fabricator-dd-sep"></div>
-                                        <button class="fabricator-dd-item fabricator-export-form"
-                                                data-id="<?php echo esc_attr($form->id); ?>"
-                                                data-nonce="<?php echo esc_attr($exp_nonce); ?>">
-                                            <i class="fa-solid fa-file-export"></i> <?php esc_html_e('Export', 'formfabricator'); ?>
-                                        </button>
-                                        <div class="fabricator-dd-sep"></div>
-                                        <button class="fabricator-dd-item fabricator-dd-item--danger fabricator-delete-form"
-                                                data-id="<?php echo esc_attr($form->id); ?>"
-                                                data-nonce="<?php echo esc_attr($del_nonce); ?>">
-                                            <i class="fa-solid fa-trash"></i> <?php esc_html_e('Delete', 'formfabricator'); ?>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                    <div class="fabricator-no-results" id="fabricator-no-results" hidden>
-                        <?php esc_html_e('No forms found.', 'formfabricator'); ?>
-                    </div>
+            <?php // Always rendered, only hidden while empty: an imported or duplicated form is inserted here, and with no container it stayed invisible until the page was reloaded. ?>
+            <div class="fabricator-form-list" id="fabricator-form-list"<?php echo empty($forms) ? ' hidden' : ''; ?>>
+                <?php foreach ($forms as $form) : ?>
+                    <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- renderRow() escapes every dynamic value itself; one template for the page and the AJAX-inserted rows. ?>
+                    <?php echo self::renderRow($form); ?>
+                <?php endforeach; ?>
+                <div class="fabricator-no-results" id="fabricator-no-results" hidden>
+                    <?php esc_html_e('No forms found.', 'formfabricator'); ?>
                 </div>
-            <?php endif; ?>
+            </div>
         </div>
 
         <!-- Export modal -->
@@ -361,9 +300,11 @@ class FormList
         $edit_url  = admin_url('admin.php?page=fabricator-forms-editor&form_id=' . $form->id);
         $shortcode = '[fabricator_form id="' . $form->id . '"]';
         $count     = count($form->fields);
-        $del_nonce = wp_create_nonce('fabricator_forms_delete_' . $form->id);
-        $dup_nonce = wp_create_nonce('fabricator_forms_duplicate_' . $form->id);
-        $exp_nonce = wp_create_nonce('fabricator_forms_export_' . $form->id);
+        // Minted only for users who can actually perform the action; each handler re-checks capability too, but handing a view-only user a nonce is what makes mismatches reachable.
+        $can_edit  = \FabricatorForms\Plugin::userCan('edit_forms');
+        $del_nonce = $can_edit ? wp_create_nonce('fabricator_forms_delete_' . $form->id) : '';
+        $dup_nonce = $can_edit ? wp_create_nonce('fabricator_forms_duplicate_' . $form->id) : '';
+        $exp_nonce = $can_edit ? wp_create_nonce('fabricator_forms_export_' . $form->id) : '';
         ob_start();
         ?>
         <div class="fabricator-form-row" data-title="<?php echo esc_attr(strtolower($form->title)); ?>">
@@ -454,7 +395,9 @@ class FormList
     public static function ajaxBulkDelete(): void
     {
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
         $ids    = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['ids'] ?? '[]'), '[]')), true);
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
         $nonces = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['nonces'] ?? '[]'), '[]')), true);
         if (!is_array($ids) || !is_array($nonces)) {
             wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')], 400);
@@ -487,7 +430,9 @@ class FormList
     public static function ajaxBulkDuplicate(): void
     {
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
         $ids    = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['ids'] ?? '[]'), '[]')), true);
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
         $nonces = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['nonces'] ?? '[]'), '[]')), true);
         if (!is_array($ids) || !is_array($nonces)) {
             wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')], 400);
@@ -519,11 +464,7 @@ class FormList
      */
     public static function ajaxExport(): void
     {
-        /* edit_forms, not view_forms: the export payload carries the full form definition
-           including every notification's to/cc/bcc/from_email/reply_to, routing rules and body —
-           configuration the editor screen already reserves for edit_forms, and which contains
-           third parties' email addresses. Gating export at the lower capability let a view-only
-           user read data the UI never shows them. */
+        // edit_forms, not view_forms: the export payload carries notification to/cc/bcc/from_email/reply_to and third parties' addresses that view-only users never see in the UI.
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
         $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
         $nonce   = sanitize_key($_POST['nonce'] ?? '');
@@ -544,6 +485,7 @@ class FormList
         }
         $json       = (string)wp_json_encode($payload, JSON_UNESCAPED_UNICODE);
         $compressed = gzdeflate($json, 9);
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- deflate+base64url so the form definition survives copy/paste; not obfuscation.
         $string     = rtrim(strtr(base64_encode($compressed), '+/', '-_'), '=');
         wp_send_json_success(['string' => $string]);
     }
@@ -565,15 +507,17 @@ class FormList
             wp_send_json_error(['message' => __('No import string provided.', 'formfabricator')], 400);
         }
         $padded  = $raw . str_repeat('=', (4 - strlen($raw) % 4) % 4);
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the export string produced above (strict mode); re-sanitized before use, not obfuscation.
         $decoded = base64_decode(strtr($padded, '-_', '+/'), true);
         if ($decoded === false) {
             wp_send_json_error(['message' => __('Invalid import string.', 'formfabricator')], 400);
         }
         // Bound the inflated size to prevent a decompression bomb (CERT MEM10-C).
         $max_inflated_size = 5 * 1024 * 1024; // 5 MB is generous for a form export
-        $json = @gzinflate($decoded, $max_inflated_size);
+        // Not-deflate input is the expected failure here (answered with an error below), so its warning is captured, not shown.
+        $json = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => gzinflate($decoded, $max_inflated_size));
         if ($json === false) {
-            $json = @gzdecode($decoded, $max_inflated_size);
+            $json = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => gzdecode($decoded, $max_inflated_size));
         }
         if ($json === false) {
             wp_send_json_error(['message' => __('Decompression failed.', 'formfabricator')], 400);
@@ -592,13 +536,31 @@ class FormList
         }
         // Route imported content through the same sanitizers as ajaxSave() — it's untrusted input.
         $payload_title = $payload['t'];
+        $title         = sanitize_text_field(is_string($payload_title) ? $payload_title : '');
+        $clean_fields  = \FabricatorForms\Admin\FormEditor::sanitizeFields($fields);
+        $notifications = \FabricatorForms\Admin\FormEditor::sanitizeNotifications(
+            is_array($payload['n'] ?? null) ? $payload['n'] : []
+        );
+        $id_error = \FabricatorForms\Admin\FormEditor::fieldIdError($clean_fields);
+        if ($id_error !== '') {
+            wp_send_json_error(['message' => $id_error], 422);
+        }
+        // Step one of two: report where the imported notifications would send submissions, so a pasted string can't
+        // quietly route every future submission to someone else. admin-formlist.js asks, then repeats without preview.
+        if (!empty($_POST['preview'])) {
+            wp_send_json_success(
+                [
+                'preview'    => true,
+                'title'      => $title,
+                'recipients' => self::notificationRecipients($notifications),
+                ]
+            );
+        }
         $result = FormModel::save(
             [
-            'title'         => sanitize_text_field(is_string($payload_title) ? $payload_title : ''),
-            'fields'        => \FabricatorForms\Admin\FormEditor::sanitizeFields($fields),
-            'notifications' => \FabricatorForms\Admin\FormEditor::sanitizeNotifications(
-                is_array($payload['n'] ?? null) ? $payload['n'] : []
-            ),
+            'title'         => $title,
+            'fields'        => $clean_fields,
+            'notifications' => $notifications,
             'settings'      => \FabricatorForms\Admin\FormEditor::sanitizeSettings(
                 is_array($payload['s'] ?? null) ? $payload['s'] : []
             ),
@@ -612,6 +574,43 @@ class FormList
         $new_form = FormModel::get((int) $result);
         $row_html = $new_form ? self::renderRow($new_form) : '';
         wp_send_json_success(['new_id' => $result, 'html' => $row_html]);
+    }
+
+    /**
+     * Every address-bearing value per notification (To/Cc/Bcc/Reply-To, routing rules and fallback), for the import confirmation.
+     *
+     * @param array $notifications Sanitized notifications.
+     * @return array<int, array{name: string, enabled: bool, recipients: string[]}>
+     */
+    private static function notificationRecipients(array $notifications): array
+    {
+        $out = [];
+        foreach ($notifications as $notif) {
+            $values = [
+                $notif['to'] ?? '', $notif['cc'] ?? '', $notif['bcc'] ?? '', $notif['reply_to'] ?? '',
+                $notif['routing_fallback'] ?? '', $notif['routing_fallback_cc'] ?? '', $notif['routing_fallback_bcc'] ?? '',
+            ];
+            foreach ((array) ($notif['routing_rules'] ?? []) as $rule) {
+                $values[] = $rule['email'] ?? '';
+                $values[] = $rule['cc'] ?? '';
+                $values[] = $rule['bcc'] ?? '';
+            }
+            $addresses = [];
+            foreach ($values as $value) {
+                foreach (preg_split('/[;,]+/', (string) $value) ?: [] as $part) {
+                    $part = trim($part);
+                    if ($part !== '' && !in_array($part, $addresses, true)) {
+                        $addresses[] = $part;
+                    }
+                }
+            }
+            $out[] = [
+                'name'       => (string) ($notif['name'] ?? ''),
+                'enabled'    => !empty($notif['enabled']),
+                'recipients' => $addresses,
+            ];
+        }
+        return $out;
     }
 
     /**
@@ -633,16 +632,16 @@ class FormList
             $defaults = $instance->getDefaultConfig();
             $compact  = [];
             foreach ($field as $k => $v) {
-                /* Always keep structural keys; drop others matching the type's default to shrink
-                   the export. 'cols' — the column-span key FormRenderer actually reads — was
-                   spelled 'col' here, so the branch never fired; it only survived export by
-                   falling through to the default-comparison arm, which happens to keep it
-                   because no getDefaultConfig() declares 'cols'. Both spellings are listed so a
-                   type that later does declare a default can't silently strip the layout.
-                   'children' is structural too: a group's children must never be dropped. */
-                if ($k === 'type' || $k === 'id' || $k === 'cols' || $k === 'col' || $k === 'children') {
+                // 'cols' (what FormRenderer reads) is kept structurally so a type that later declares a default can't silently strip the layout; 'children' likewise must never be dropped.
+                // date_format is kept too: its default follows the exporting site's date setting, so stripping it would make
+                // the importing site read the field's stored date bounds in a different format.
+                // Text that matches a default is kept as well: a default that is wording — labels, hints, the SEPA
+                // mandate's legal text — is translated into the exporting site's language, so dropping it let the
+                // importing site fill in its own translation and silently change what the form says.
+                $is_wording = is_string($v) && $v !== '';
+                if ($k === 'type' || $k === 'id' || $k === 'cols' || $k === 'children' || $k === 'date_format') {
                     $compact[$k] = $v;
-                } elseif (!array_key_exists($k, $defaults) || $defaults[$k] !== $v) {
+                } elseif ($is_wording || !array_key_exists($k, $defaults) || $defaults[$k] !== $v) {
                     $compact[$k] = $v;
                 }
             }
@@ -664,6 +663,11 @@ class FormList
             $type     = $field['type'] ?? '';
             $instance = \FabricatorForms\Fields\FieldRegistry::get($type);
             if ($instance) {
+                // An export from before the date format setting has no key, and those fields were DD.MM.YYYY; the importing
+                // site's own default must not reinterpret their stored bounds.
+                if ($type === 'date' && is_array($field) && !array_key_exists('date_format', $field)) {
+                    $field['date_format'] = 'dmy';
+                }
                 $out[] = array_merge($instance->getDefaultConfig(), $field);
             } else {
                 $out[] = $field;

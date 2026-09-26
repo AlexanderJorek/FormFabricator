@@ -48,6 +48,11 @@
     outline: none !important;
     box-shadow: none !important;
 }
+/* Keyboard focus stays visible (WCAG 2.4.7); the reset above only suppresses theme button styling. */
+.fabricator-signature-clear:focus-visible {
+    outline: 2px solid var(--fabricator-accent, #2271b1) !important;
+    outline-offset: 2px;
+}
 .fabricator-signature-clear:hover {
     border-color: var(--fabricator-text-muted);
     color: var(--fabricator-text);

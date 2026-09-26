@@ -11,6 +11,7 @@ function (root) {
         var fmt     = wrap.dataset.format || 'png';
         var drawing  = false;
         var leftArea = false;
+        var drew     = false;
         var lastW = 0;
         function resize() {
             var rect  = canvas.getBoundingClientRect();
@@ -56,11 +57,15 @@ function (root) {
                 ctx.beginPath(); ctx.moveTo(p.x, p.y); leftArea = false;
             } else {
                 ctx.lineTo(p.x, p.y); ctx.stroke();
+                drew = true;
             }
         }
         function end() {
             if (!drawing) return;
             drawing = false;
+            /* A tap that draws nothing left a blank white image behind, which validate() accepts — so a required
+               signature, including the SEPA mandate, could be submitted empty. */
+            if (!drew) return;
             input.value = canvas.toDataURL(fmt === 'jpeg' ? 'image/jpeg' : 'image/png');
         }
         canvas.addEventListener('mousedown',  start, { passive: false });
@@ -75,6 +80,7 @@ function (root) {
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 input.value = '';
+                drew        = false;
             });
         }
         var ownerForm = canvas.closest('form');
@@ -83,6 +89,7 @@ function (root) {
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 input.value = '';
+                drew        = false;
             });
         }
         resize();

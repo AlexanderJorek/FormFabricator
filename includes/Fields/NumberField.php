@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -92,6 +92,32 @@ class NumberField extends BaseField
     }
 
     /**
+     * Server-side step check, which nothing enforced before (the form is novalidate, so the browser skips it too): the
+     * value must lie on min + k·step, or 0 + k·step without a minimum. A non-numeric or non-positive step disables it.
+     * Mirrored in NumberField.number-range.js.
+     *
+     * @param float $num      Submitted number.
+     * @param mixed $step_raw Configured step.
+     * @param mixed $min_raw  Configured minimum.
+     * @return string Error message, or '' when the value is on the grid.
+     */
+    private static function stepError(float $num, mixed $step_raw, mixed $min_raw): string
+    {
+        if (!is_numeric($step_raw) || (float) $step_raw <= 0) {
+            return '';
+        }
+        $step = (float) $step_raw;
+        $base = is_numeric($min_raw) ? (float) $min_raw : 0.0;
+        $k    = ($num - $base) / $step;
+        // Relative tolerance: 0.3 with step 0.1 is 2.9999999999999996 steps in floating point.
+        if (abs($k - round($k)) <= 1e-9 * max(1.0, abs($k))) {
+            return '';
+        }
+        // translators: %s: step size.
+        return sprintf(__('Please enter a value in steps of %s.', 'formfabricator'), (string) $step_raw);
+    }
+
+    /**
      * Validates the submitted value.
      *
      * @param mixed $value  Submitted value.
@@ -111,10 +137,11 @@ class NumberField extends BaseField
         if ($hard !== true) {
             return $hard;
         }
-        if (!is_numeric($value)) {
+        $num = (float)$value;
+        // is_numeric() accepts "1e999", which casts to INF and passes any max check.
+        if (!is_numeric($value) || !is_finite($num)) {
             return __('Please enter a valid number.', 'formfabricator');
         }
-        $num = (float)$value;
         if (($config['min'] ?? '') !== '' && $num < (float)$config['min']) {
             // translators: %s: minimum allowed value.
             return sprintf(__('Minimum value: %s', 'formfabricator'), $config['min']);
@@ -122,6 +149,10 @@ class NumberField extends BaseField
         if (($config['max'] ?? '') !== '' && $num > (float)$config['max']) {
             // translators: %s: maximum allowed value.
             return sprintf(__('Maximum value: %s', 'formfabricator'), $config['max']);
+        }
+        $step_error = self::stepError($num, $config['step'] ?? '', $config['min'] ?? '');
+        if ($step_error !== '') {
+            return $step_error;
         }
         // Builder-configured "Validation rule" (Validation section).
         $is_int = $num === floor($num);

@@ -5,10 +5,7 @@
  */
         (function() {
 
-    /* Sets icon markup then appends translated text as a TEXT NODE.
-       Concatenating a translated string into innerHTML lets whoever supplies the .mo inject
-       markup — and WordPress loads .mo files from WP_LANG_DIR, which is not limited to reviewed
-       WordPress.org language packs. The icon markup here is a literal; only the text varies. */
+    /* Text as a TEXT NODE, not innerHTML — a .mo (loaded from WP_LANG_DIR, not just reviewed packs) could inject markup. */
     function fabIconThenText(el, iconHtml, text) {
         if (!el) { return; }
         el.innerHTML = iconHtml;
@@ -133,6 +130,19 @@
                 }
             }
 
+            /* The list container is hidden while the site has no forms, so the first imported or duplicated row has to
+               reveal it and the toolbar again, or it stayed invisible until the page was reloaded. */
+            function checkFilled() {
+                if (document.querySelectorAll('.fabricator-form-row').length === 0) return;
+                if (emptyState) emptyState.hidden = true;
+                var listEl = document.getElementById('fabricator-form-list');
+                if (listEl) listEl.hidden = false;
+                var tl = document.getElementById('fabricator-toolbar-left');
+                var tc = document.getElementById('fabricator-toolbar-center');
+                if (tl) tl.hidden = false;
+                if (tc) tc.hidden = false;
+            }
+
             function fadeRemoveRow(row, cb) {
                 row.style.transition = 'opacity .2s';
                 row.style.opacity = '0';
@@ -219,6 +229,7 @@
                                 if (list && newRow) {
                                     list.insertBefore(newRow, list.firstChild);
                                     bindRow(newRow);
+                                    checkFilled();
                                 }
                             } else {
                                 alert((data.data && data.data.message) || ffi18n.error);
@@ -455,22 +466,50 @@
             var importSubmit = document.getElementById('fabricator-import-submit');
             var importNonce  = pageData.importNonce;
 
-            function doImport() {
-                var str = importInput ? importInput.value.trim() : '';
-                if (!str) return;
-                importSubmit.disabled = true;
-                fetch(ajaxurl, {
+            function postImport(str, preview) {
+                return fetch(ajaxurl, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                     body: new URLSearchParams({
                         action: 'fabricator_forms_import',
                         string: str,
-                        nonce: importNonce
+                        nonce: importNonce,
+                        preview: preview ? '1' : ''
                     })
                 })
-                .then(function(r) { return r.json(); })
+                .then(function(r) { return r.json(); });
+            }
+
+            /* One line per notification: "• Name: a@example.com, {email-1}". Plain text for confirm(), never markup. */
+            function describeRecipients(list) {
+                return (list || []).map(function(n) {
+                    var addresses = (n.recipients || []).join(', ') || ffi18n.importNoAddress;
+                    return '• ' + (n.name || ffi18n.importUnnamed) + ': ' + addresses;
+                }).join('\n');
+            }
+
+            function doImport() {
+                var str = importInput ? importInput.value.trim() : '';
+                if (!str) return;
+                importSubmit.disabled = true;
+                /* Step one previews where the notifications send submissions, so a pasted string can't reroute them unseen. */
+                postImport(str, true)
+                .then(function(preview) {
+                    if (!preview.success || !preview.data) {
+                        return preview;
+                    }
+                    var list = describeRecipients(preview.data.recipients);
+                    /* Function replacement: a title containing $& or $' would otherwise be expanded by String.replace. */
+                    var msg  = ffi18n.importConfirm.replace('%s', function () { return preview.data.title || ''; })
+                        + '\n\n' + (list || ffi18n.importNoRecipients);
+                    if (!window.confirm(msg)) {
+                        return null;
+                    }
+                    return postImport(str, false);
+                })
                 .then(function(data) {
                     importSubmit.disabled = false;
+                    if (data === null) return;
                     if (data.success && data.data.html) {
                         var tmp = document.createElement('div');
                         tmp.innerHTML = data.data.html.trim();
@@ -479,6 +518,7 @@
                         if (list && newRow) {
                             list.insertBefore(newRow, list.firstChild);
                             bindRow(newRow);
+                            checkFilled();
                         }
                         if (importInput) importInput.value = '';
                     } else {

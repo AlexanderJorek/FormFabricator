@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: FormFabricator 1.0.6\n"
+"Project-Id-Version: FormFabricator 1.0.7\n"
 "Report-Msgid-Bugs-To: https://github.com/AlexanderJorek/FormFabricator/issues\n"
 "POT-Creation-Date: 2026-08-01T00:00:00+00:00\n"
 "PO-Revision-Date: 2026-09-06 14:00+0000\n"
@@ -14,33 +14,33 @@ msgstr ""
 "X-Generator: FormFabricator i18n tooling\n"
 
 #. Plugin Name of the plugin
-#: forge-forms.php
+#: formfabricator.php
 #: includes/Admin/FormList.php:91
 #: includes/Plugin.php:262
 msgid "FormFabricator"
 msgstr "FormFabricator"
 
 #. Plugin URI of the plugin
-#: forge-forms.php
+#: formfabricator.php
 msgid "https://github.com/AlexanderJorek/FormFabricator"
 msgstr ""
 
 #. Description of the plugin
-#: forge-forms.php
+#: formfabricator.php
 msgid "Custom drag-and-drop form builder with PDF generation and email delivery."
 msgstr "Individueller Drag-and-Drop-Formularbuilder mit PDF-Erstellung und E-Mail-Versand."
 
 #. Author of the plugin
-#: forge-forms.php
+#: formfabricator.php
 msgid "Alexander Jorek"
 msgstr ""
 
 #. Author URI of the plugin
-#: forge-forms.php
+#: formfabricator.php
 msgid "https://github.com/AlexanderJorek"
 msgstr ""
 
-#: forge-forms.php:34
+#: formfabricator.php:34
 msgid "Composer autoloader not found. Run <code>composer install</code> in the plugin directory."
 msgstr "Composer-Autoloader nicht gefunden. Führen Sie <code>composer install</code> im Plugin-Verzeichnis aus."
 
@@ -66,6 +66,21 @@ msgstr "Composer-Autoloader nicht gefunden. Führen Sie <code>composer install</
 #: includes/Fields/SignatureField.php:338
 #: includes/Fields/SignatureField.php:363
 #: includes/Fields/SliderField.php:433
+#. translators: %s: uploaded file name.
+#, php-format
+msgid "\"%s\" is larger than this server accepts."
+msgstr "\"%s\" ist größer als dieser Server akzeptiert."
+
+#. translators: %s: uploaded file name.
+#, php-format
+msgid "\"%s\" was only partially uploaded. Please try again."
+msgstr "\"%s\" wurde nur teilweise hochgeladen. Bitte erneut versuchen."
+
+#. translators: %s: uploaded file name.
+#, php-format
+msgid "\"%s\" could not be uploaded. Please try again."
+msgstr "\"%s\" konnte nicht hochgeladen werden. Bitte erneut versuchen."
+
 #: includes/Fields/UploadField.php:572
 #: includes/Fields/UploadField.php:599
 #: includes/Fields/UploadField.php:671
@@ -82,14 +97,6 @@ msgstr "[Sonstiges]"
 msgid "I agree."
 msgstr "Ich stimme zu."
 
-#: includes/Fields/ConsentField.php:154
-msgid "Yes"
-msgstr "Ja"
-
-#: includes/Fields/ConsentField.php:154
-msgid "No"
-msgstr "Nein"
-
 #: includes/Admin/FormEditor.php:73
 msgid "FormFabricator Editor"
 msgstr "FormFabricator Bearbeitung"
@@ -102,6 +109,39 @@ msgstr "Neues Formular"
 #: includes/Admin/FormEditor.php:90
 #: includes/Admin/FormList.php:119
 #: includes/Admin/FormSelectList.php:90
+msgid "View only:\n- See the form list\n- Open a form read-only\nNo creating, editing, deleting, importing or exporting."
+msgstr "Nur ansehen:\n- Formularliste sehen\n- Ein Formular schreibgeschützt öffnen\nKein Anlegen, Bearbeiten, Löschen, Importieren oder Exportieren."
+
+msgid "PDF appearance:\n- Header, logo and title\n- Fonts, colours and margins\n- Which sections are shown or hidden\n- Footer text"
+msgstr "PDF-Darstellung:\n- Kopfbereich, Logo und Titel\n- Schriften, Farben und Ränder\n- Welche Abschnitte sichtbar oder ausgeblendet sind\n- Fußzeilentext"
+
+msgid "Document verification:\n- Upload a PDF to the verification page\n- See the result, including the original field values recorded in the document's seal"
+msgstr "Dokumentenprüfung:\n- Ein PDF auf der Prüfseite hochladen\n- Das Ergebnis sehen, einschließlich der im Siegel des Dokuments festgehaltenen ursprünglichen Feldwerte"
+
+msgid "Plugin settings:\n- General, mail and PDF settings\nThe access matrix, trusted proxies, seal-key rotation and the CAPTCHA keys also require \"manage_options\"."
+msgstr "Plugin-Einstellungen:\n- Allgemeine, E-Mail- und PDF-Einstellungen\nDie Berechtigungsmatrix, die vertrauenswürdigen Proxys, die Siegelschlüssel-Rotation und die CAPTCHA-Schlüssel erfordern zusätzlich \"manage_options\"."
+
+msgid "Hiding a section changes only what is shown. The submitted text is always part of the verification seal and can be reconstructed from the PDF file."
+msgstr "Das Ausblenden eines Abschnitts ändert nur die Anzeige. Der übermittelte Text ist immer Teil des Prüfsiegels und kann aus der PDF-Datei rekonstruiert werden."
+
+msgid "FormFabricator: generated PDFs are not protected by a server rule."
+msgstr "FormFabricator: Erzeugte PDFs sind nicht durch eine Serverregel geschützt."
+
+msgid "This site serves PHP with a web server that reads neither .htaccess nor web.config, so the deny rules this plugin writes have no effect."
+msgstr "Diese Website liefert PHP über einen Webserver aus, der weder .htaccess noch web.config liest; die von diesem Plugin geschriebenen Sperrregeln bleiben daher wirkungslos."
+
+msgid "Generated PDFs contain submitted personal data and are currently reachable by anyone who knows or guesses a file URL. Add a deny rule for this path to your server configuration:"
+msgstr "Erzeugte PDFs enthalten übermittelte personenbezogene Daten und sind derzeit für jeden erreichbar, der eine Datei-URL kennt oder errät. Fügen Sie Ihrer Serverkonfiguration eine Sperrregel für diesen Pfad hinzu:"
+
+msgid "Nginx:"
+msgstr "Nginx:"
+
+msgid "Caddy:"
+msgstr "Caddy:"
+
+msgid "Dismiss this notice for 30 days"
+msgstr "Diesen Hinweis für 30 Tage ausblenden"
+
 #: includes/Admin/FormSettings.php:95
 #: includes/Admin/PDFLayoutEditor.php:222
 msgid "Permission denied."
@@ -570,10 +610,6 @@ msgstr "Wie sollen die Schlüssel gespeichert werden?"
 msgid "Standard"
 msgstr "Standard"
 
-#: includes/Admin/FormSettings.php:191
-msgid "Stored unencrypted in the database. Compatible with all installations."
-msgstr "Unverschlüsselt in der Datenbank gespeichert. Kompatibel mit allen Installationen."
-
 #: includes/Admin/FormSettings.php:200
 #: includes/Admin/FormSettings.php:502
 msgid "Encrypted"
@@ -705,17 +741,17 @@ msgstr "Secret-Key"
 msgid "Privacy Policy Text"
 msgstr "Datenschutzerklärungs-Text"
 
-#: includes/Admin/FormSettings.php:422
-msgid "If you use SEPA IBAN lookups (openiban.com) or the CAPTCHA field (Google reCAPTCHA), your privacy policy needs to disclose that."
-msgstr "Wenn Sie SEPA-IBAN-Abfragen (openiban.com) oder das CAPTCHA-Feld (Google reCAPTCHA) verwenden, muss Ihre Datenschutzerklärung dies offenlegen."
+#: includes/Admin/FormSettings.php:511
+msgid "If you use the CAPTCHA field (Google reCAPTCHA), your privacy policy needs to disclose that."
+msgstr "Wenn Sie das CAPTCHA-Feld (Google reCAPTCHA) verwenden, muss Ihre Datenschutzerklärung dies offenlegen."
 
 #: includes/Admin/FormSettings.php:430
 msgid "Show example text"
 msgstr "Beispieltext anzeigen"
 
-#: includes/Admin/FormSettings.php:778
-msgid "Here is an example disclaimer you should add to your privacy policy if you use SEPA IBAN lookups (openiban.com) or the CAPTCHA field (Google reCAPTCHA)."
-msgstr "Hier ist ein Beispiel-Hinweis, den Sie Ihrer Datenschutzerklärung hinzufügen sollten, falls Sie SEPA-IBAN-Abfragen (openiban.com) oder das CAPTCHA-Feld (Google reCAPTCHA) verwenden."
+#: includes/Admin/FormSettings.php:854
+msgid "Here is an example disclaimer you should add to your privacy policy if you use the CAPTCHA field (Google reCAPTCHA)."
+msgstr "Hier ist ein Beispiel-Hinweis, den Sie Ihrer Datenschutzerklärung hinzufügen sollten, falls Sie das CAPTCHA-Feld (Google reCAPTCHA) verwenden."
 
 #: includes/Admin/FormSettings.php:784
 msgid "This example is provided for convenience only — it is not legal advice, may be incomplete or out of date, and is not a substitute for your own review."
@@ -933,10 +969,6 @@ msgstr "KOMPROMITTIERT"
 msgid "UUID:"
 msgstr "UUID:"
 
-#: includes/Admin/FormSettings.php:738
-msgid "No rotations performed yet — no log available."
-msgstr "Bisher keine Rotationen durchgeführt — kein Protokoll verfügbar."
-
 #: includes/Admin/FormSettings.php:756
 msgid "Confirm reset"
 msgstr "Zurücksetzen bestätigen"
@@ -1124,14 +1156,6 @@ msgstr "UUID hat ungültiges Format."
 #: includes/Admin/FormSettings.php:2488
 msgid "Key value must be exactly 64 hex characters."
 msgstr "Schlüsselwert muss genau 64 Hex-Zeichen lang sein."
-
-#: includes/Admin/FormSettings.php:2502
-msgid "This key already exists as the active key."
-msgstr "Dieser Schlüssel ist bereits als aktiver Schlüssel vorhanden."
-
-#: includes/Admin/FormSettings.php:2514
-msgid "This key already exists in the history (identical entry)."
-msgstr "Dieser Schlüssel ist bereits im Verlauf vorhanden (identischer Eintrag)."
 
 #: includes/Admin/FormSettings.php:2529
 msgid "Plugin name does not match."
@@ -1359,18 +1383,6 @@ msgstr "Kein Bild gewählt"
 #: includes/Admin/PDFLayoutEditor.php:961
 msgid "Change image"
 msgstr "Bild ändern"
-
-#: includes/Admin/PDFLayoutEditor.php:963
-msgid "Fit"
-msgstr "Einpassen"
-
-#: includes/Admin/PDFLayoutEditor.php:964
-msgid "Fill"
-msgstr "Füllen"
-
-#: includes/Admin/PDFLayoutEditor.php:965
-msgid "Stretch"
-msgstr "Strecken"
 
 #: includes/Admin/PDFLayoutEditor.php:966
 msgid "Bold"
@@ -2245,10 +2257,6 @@ msgstr "TT.MM.JJJJ"
 msgid "Open calendar"
 msgstr "Kalender öffnen"
 
-#: includes/Fields/DateField.php:216
-msgid "Please enter a date in DD.MM.YYYY format."
-msgstr "Bitte Datum im Format TT.MM.JJJJ eingeben."
-
 #: includes/Fields/DateField.php:220
 msgid "Please enter a valid date."
 msgstr "Bitte geben Sie ein gültiges Datum ein."
@@ -2272,14 +2280,6 @@ msgstr "Kalender-Icon anzeigen"
 #: includes/Fields/DateField.php:303
 msgid "Pre-fill with today"
 msgstr "Heute vorausfüllen"
-
-#: includes/Fields/DateField.php:308
-msgid "Earliest allowed date (DD.MM.YYYY)"
-msgstr "Frühestes erlaubtes Datum (TT.MM.JJJJ)"
-
-#: includes/Fields/DateField.php:313
-msgid "Latest allowed date (DD.MM.YYYY)"
-msgstr "Spätestes erlaubtes Datum (TT.MM.JJJJ)"
 
 #: includes/Fields/EmailField.php:38
 msgid "Email"
@@ -2573,8 +2573,8 @@ msgid "Custom image"
 msgstr "Eigenes Bild"
 
 #: includes/Fields/RatingField.php:358
-msgid "Square image. For half values the left half is used."
-msgstr "Quadratisches Bild. Bei halben Werten wird die linke Hälfte verwendet."
+msgid "Square image; for half values the left half is used. An image on another site is fetched by every visitor, which hands that site their IP address — pick one from your Media Library instead."
+msgstr "Quadratisches Bild; bei halben Werten wird die linke Hälfte verwendet. Ein Bild auf einer fremden Seite wird von jedem Besucher dort abgerufen, wodurch diese Seite seine IP-Adresse erfährt — wählen Sie stattdessen eines aus Ihrer Mediathek."
 
 #: includes/Fields/SelectField.php:119
 msgid "Dropdown"
@@ -2629,10 +2629,6 @@ msgstr "Gläubiger-Identifikationsnummer:"
 #: includes/Fields/SepaField.php:529
 msgid "Mandate reference:"
 msgstr "Mandatsreferenz:"
-
-#: includes/Fields/SepaField.php:504
-msgid "Your IBAN is sent to a third-party service (openiban.com) to look up the BIC."
-msgstr "Ihre IBAN wird zur Ermittlung der BIC an einen externen Dienst (openiban.com) übermittelt."
 
 #: includes/Fields/SepaField.php:566
 #: includes/Fields/SignatureField.php:263
@@ -3195,6 +3191,12 @@ msgstr "Erlaubte Dateitypen: %s"
 msgid "Maximum file size: %s MB"
 msgstr "Maximale Dateigröße: %s MB"
 
+#. translators: %s: uploaded file name.
+#: includes/Fields/UploadField.php:423
+#, php-format
+msgid "%s (not attached - unreadable)"
+msgstr "%s (nicht angehängt - nicht lesbar)"
+
 #: includes/Fields/UploadField.php:512
 msgid "File"
 msgstr "Datei"
@@ -3319,23 +3321,11 @@ msgstr "Neues Formular hinzufügen"
 msgid "Edit Form"
 msgstr "Formular bearbeiten"
 
-#: includes/Plugin.php:314
-msgid "WARNING: Deleting the plugin will permanently delete all PDF seal keys. Make sure you have backed up your keys. Continue?"
-msgstr "ACHTUNG: Beim Löschen des Plugins werden alle PDF-Siegelschlüssel unwiderruflich gelöscht. Stellen Sie sicher, dass Sie Ihre Schlüssel gesichert haben. Fortfahren?"
-
-#: includes/Plugin.php:302
-msgid "SEPA Direct Debit (OpenIBAN)"
-msgstr "SEPA-Lastschrift (OpenIBAN)"
-
-#: includes/Plugin.php:303
-msgid "If a form on this site uses a SEPA Direct Debit field with live IBAN lookup enabled, the IBAN you type is sent to our server, which then queries the OpenIBAN service (openiban.com) to validate it and determine the corresponding BIC. The request to OpenIBAN is made by our server, not by your browser, so your IP address is not disclosed to OpenIBAN. Only the IBAN itself is transmitted. This processing is carried out for the purpose of verifying the bank account information. Where live lookup is not enabled, no IBAN data leaves this site before you submit the form. For more information on data processing, please refer to OpenIBAN's Privacy Policy."
-msgstr "Wenn ein Formular auf dieser Website ein SEPA-Lastschriftmandat-Feld mit aktivierter Live-IBAN-Abfrage verwendet, wird die von Ihnen eingegebene IBAN an unseren Server gesendet, der anschließend den Dienst OpenIBAN (openiban.com) abfragt, um sie zu validieren und die zugehörige BIC zu ermitteln. Die Anfrage an OpenIBAN erfolgt durch unseren Server, nicht durch Ihren Browser, sodass Ihre IP-Adresse OpenIBAN nicht offengelegt wird. Übertragen wird ausschließlich die IBAN selbst. Diese Verarbeitung erfolgt zum Zweck der Überprüfung der Bankverbindung. Ist die Live-Abfrage nicht aktiviert, verlassen keine IBAN-Daten diese Website, bevor Sie das Formular absenden. Weitere Informationen zur Datenverarbeitung finden Sie in der Datenschutzerklärung von OpenIBAN."
-
-#: includes/Plugin.php:312
+#: includes/Plugin.php:482
 msgid "Google reCAPTCHA"
 msgstr "Google reCAPTCHA"
 
-#: includes/Plugin.php:313
+#: includes/Plugin.php:482
 msgid "To prevent spam and fraudulent form submissions, we use Google reCAPTCHA. Among other things, the IP address, the CAPTCHA response, and other technical information are transmitted to Google and processed there to determine whether the input was made by a human. This may involve the transfer of personal data to the United States. For more information, please see Google's Privacy Policy."
 msgstr "Zur Vermeidung von Spam und missbräuchlichen Formularübermittlungen verwenden wir Google reCAPTCHA. Dabei werden unter anderem die IP-Adresse, die CAPTCHA-Antwort sowie weitere technische Informationen an Google übermittelt und dort verarbeitet, um zu beurteilen, ob die Eingabe durch einen Menschen erfolgt. Hierbei kann eine Übermittlung personenbezogener Daten in die USA stattfinden. Weitere Informationen finden Sie in der Datenschutzerklärung von Google."
 
@@ -3413,15 +3403,7 @@ msgstr "Kontoinhaber ist erforderlich."
 msgid "Please sign."
 msgstr "Bitte unterschreiben."
 
-#: includes/Utils/Assets.php:116
-msgid "Looking up"
-msgstr "Wird gesucht"
-
-#: includes/Utils/Assets.php:117
-msgid "Could not be validated."
-msgstr "Konnte nicht validiert werden."
-
-#: includes/Utils/Assets.php:118
+#: includes/Utils/Assets.php:134
 msgid "This country is not allowed."
 msgstr "Dieses Land ist nicht zugelassen."
 
@@ -3558,16 +3540,8 @@ msgid "Better to add the image to this site's media library first — an externa
 msgstr "Das Bild sollte besser zuerst in die Mediathek dieser Website hochgeladen werden — eine externe URL wird beim Speichern ohnehin in die Mediathek heruntergeladen, und ein langsamer oder nicht erreichbarer Host verzögert dieses Speichern."
 
 #: includes/Fields/CaptchaField.php:174
-msgid "This field sends the visitor's CAPTCHA response and IP address to Google (reCAPTCHA) for verification on every submission. Reflect this third-party data transfer in your site's privacy policy."
-msgstr "Dieses Feld sendet bei jeder Übermittlung die CAPTCHA-Antwort und die IP-Adresse des Besuchers zur Überprüfung an Google (reCAPTCHA). Diese Datenübermittlung an Dritte sollte in Ihrer Datenschutzerklärung berücksichtigt werden."
-
-#: includes/Fields/SepaField.php:933
-msgid "When enabled, the visitor's IBAN is sent to the third-party service openiban.com as soon as it's fully typed — before the form is submitted — to look up the matching BIC. Disable this to have visitors enter the BIC manually instead, keeping IBAN data on your own site until submission."
-msgstr "Wenn aktiviert, wird die IBAN des Besuchers sofort nach vollständiger Eingabe – noch vor dem Absenden des Formulars – an den Drittanbieter-Dienst openiban.com gesendet, um die passende BIC zu ermitteln. Deaktivieren Sie diese Option, damit Besucher die BIC stattdessen manuell eingeben und die IBAN-Daten bis zur Übermittlung auf Ihrer eigenen Website verbleiben."
-
-#: includes/Fields/SepaField.php:931
-msgid "Auto-fill BIC via live IBAN lookup"
-msgstr "BIC automatisch per Live-IBAN-Abfrage ausfüllen"
+msgid "The visitor's browser connects to Google (reCAPTCHA) when the CAPTCHA loads, so Google sees their IP address. Once the rest of the form is valid, this site sends the CAPTCHA answer to Google. Say so in your privacy policy."
+msgstr "Der Browser des Besuchers verbindet sich beim Laden des CAPTCHAs mit Google (reCAPTCHA), sodass Google seine IP-Adresse sieht. Sobald der Rest des Formulars gültig ist, sendet diese Website die CAPTCHA-Antwort an Google. Erwähnen Sie das in Ihrer Datenschutzerklärung."
 
 #: includes/Fields/UploadField.php:542
 msgid "File type \".%s\" is not permitted for this field."
@@ -4474,10 +4448,6 @@ msgstr "Nicht erlaubt"
 msgid "Invalid PDF path"
 msgstr "Ungueltiger PDF-Pfad"
 
-#: includes/Admin/FormSettings.php
-msgid "Invalid data"
-msgstr "Ungueltige Daten"
-
 #: includes/Admin/FormList.php
 msgid "Invalid data."
 msgstr "Ungueltige Daten."
@@ -4617,3 +4587,475 @@ msgstr "Bitte eine gültige Uhrzeit eingeben."
 #: includes/Form/FormRenderer.php:151
 msgid "This form requires JavaScript to be enabled in your browser in order to submit."
 msgstr "Zum Absenden dieses Formulars muss JavaScript in Ihrem Browser aktiviert sein."
+
+#: includes/Admin/PDFLayoutEditor.php:646
+msgid "Sample form"
+msgstr "Beispielformular"
+
+#: includes/Admin/Verificationpage.php
+msgid "Font binary programs do not match the seal"
+msgstr "Font-Binärprogramme stimmen nicht mit dem Siegel überein"
+
+#: includes/Admin/Verificationpage.php
+msgid "All fonts match the seal"
+msgstr "Alle Schriften stimmen mit dem Siegel überein"
+
+#: includes/Admin/Verificationpage.php
+msgid "missing from rebuild"
+msgstr "fehlt im Rekonstrukt"
+
+#: includes/Admin/Verificationpage.php
+msgid "added by rebuild"
+msgstr "vom Rekonstrukt hinzugefügt"
+
+#: includes/Admin/Verificationpage.php
+msgid "Keys differing between seal and rebuild:"
+msgstr "Abweichende Schlüssel zwischen Siegel und Rekonstrukt:"
+
+#: includes/Admin/Verificationpage.php
+msgid "Seal and rebuilt payload are byte-identical (excluding the seal hash itself)."
+msgstr "Siegel und rekonstruierte Nutzdaten sind byte-identisch (ohne den Siegel-Hash selbst)."
+
+#: includes/Admin/Verificationpage.php
+msgid "Key Unreadable"
+msgstr "Schlüssel nicht lesbar"
+
+#: includes/Admin/Verificationpage.php
+msgid "NOT CHECKED — the signing key exists but could not be decrypted"
+msgstr "NICHT GEPRÜFT — der Signaturschlüssel existiert, konnte aber nicht entschlüsselt werden"
+
+#: includes/Admin/FormEditor.php
+msgid "Fallback CC"
+msgstr "Fallback-CC"
+
+#: includes/Admin/FormEditor.php
+msgid "Fallback BCC"
+msgstr "Fallback-BCC"
+
+#: includes/Admin/FormEditor.php
+msgid "→ Cc:"
+msgstr "→ Cc:"
+
+#: includes/Admin/FormEditor.php
+msgid "→ Bcc:"
+msgstr "→ Bcc:"
+
+#: includes/Admin/FormSettings.php
+msgid "Note: uninstalling the plugin wipes all seal keys from the server. This file is then the only copy."
+msgstr "Hinweis: Beim Deinstallieren des Plugins werden alle Siegel-Schlüssel vom Server gelöscht. Diese Datei ist dann die einzige Kopie."
+
+#: includes/Admin/Verificationpage.php
+msgid "Seal-page content stream not found"
+msgstr "Inhalts-Stream der Siegelseite nicht gefunden"
+
+#: includes/Admin/Verificationpage.php
+msgid "Text on the seal page does not match the seal"
+msgstr "Text auf der Siegelseite stimmt nicht mit dem Siegel überein"
+
+#: includes/Admin/Verificationpage.php
+msgid "Seal-page text matches the seal"
+msgstr "Text der Siegelseite stimmt mit dem Siegel überein"
+
+#: includes/Admin/Verificationpage.php
+msgid "Image inventory does not match the seal — %1$d missing, %2$d duplicated"
+msgstr "Bildbestand stimmt nicht mit dem Siegel überein — %1$d fehlend, %2$d doppelt"
+
+#: includes/Admin/FormSettings.php
+msgid "ACTIVE"
+msgstr "AKTIV"
+
+#: includes/Admin/FormSettings.php
+msgid "in use"
+msgstr "in Verwendung"
+
+#: includes/Admin/FormSettings.php
+msgid "No key created yet."
+msgstr "Noch kein Schlüssel erstellt."
+
+msgid "A seal key with this UUID is already stored."
+msgstr "Ein Siegelschlüssel mit dieser UUID ist bereits gespeichert."
+
+msgid "No"
+msgstr "Nein"
+
+#. translators: %d: running number of the notification being added.
+#, php-format
+msgid "Notification %d"
+msgstr "Benachrichtigung %d"
+
+msgid "Remove the saved secret key"
+msgstr "Gespeicherten geheimen Schlüssel entfernen"
+
+msgid "Saved (leave empty to keep)"
+msgstr "Gespeichert (leer lassen, um ihn zu behalten)"
+
+msgid "Seal key setup is already complete."
+msgstr "Die Einrichtung des Siegelschlüssels ist bereits abgeschlossen."
+
+msgid "Yes"
+msgstr "Ja"
+
+#. translators: %d: PDF object number of the stream.
+#, php-format
+msgid "Content stream %d is too large to verify."
+msgstr "Inhaltsstream %d ist zu groß für die Prüfung."
+
+msgid "Content streams do not match the seal."
+msgstr "Die Inhaltsstreams stimmen nicht mit dem Siegel überein."
+
+msgid "No content stream on the last page carries the seal."
+msgstr "Kein Inhaltsstream auf der letzten Seite enthält das Siegel."
+
+msgid "SEAL PAGE"
+msgstr "SIEGELSEITE"
+
+#. translators: %d: PDF object number of the stream.
+#, php-format
+msgid "Stream %d carries a seal marker outside the seal page: injected content."
+msgstr "Stream %d enthält eine Siegelmarkierung außerhalb der Siegelseite: eingeschleuster Inhalt."
+
+msgid "The seal page contains content that is not in the seal."
+msgstr "Die Siegelseite enthält Inhalte, die nicht im Siegel stehen."
+
+#. translators: %d: number of sealed content streams missing from the PDF.
+#, php-format
+msgid "%d sealed content stream is missing from the PDF."
+msgid_plural "%d sealed content streams are missing from the PDF."
+msgstr[0] "%d versiegelter Inhaltsstream fehlt im PDF."
+msgstr[1] "%d versiegelte Inhaltsstreams fehlen im PDF."
+
+msgid "These field IDs cannot be used: %s. A field ID may contain only letters, digits and hyphens, must be unique within the form, and must not be a reserved name such as \"action\"."
+msgstr "Diese Feld-IDs können nicht verwendet werden: %s. Eine Feld-ID darf nur Buchstaben, Ziffern und Bindestriche enthalten, muss innerhalb des Formulars eindeutig sein und darf kein reservierter Name wie „action“ sein."
+
+msgid "Import the form \"%s\"? Its notifications send submissions to:"
+msgstr "Formular „%s“ importieren? Seine Benachrichtigungen senden Übermittlungen an:"
+
+msgid "(no notification recipients)"
+msgstr "(keine Benachrichtigungsempfänger)"
+
+msgid "Unnamed notification"
+msgstr "Unbenannte Benachrichtigung"
+
+msgid "no address"
+msgstr "keine Adresse"
+
+msgid "The selection could not be saved. Please try again."
+msgstr "Die Auswahl konnte nicht gespeichert werden. Bitte versuchen Sie es erneut."
+
+msgid "The selection could not be deleted. Please try again."
+msgstr "Die Auswahl konnte nicht gelöscht werden. Bitte versuchen Sie es erneut."
+
+msgid "%d selection(s) could not be deleted. Please try again."
+msgstr "%d Auswahl(en) konnte(n) nicht gelöscht werden. Bitte versuchen Sie es erneut."
+
+msgid "Please enter a valid sender email address, or leave the field blank."
+msgstr "Bitte geben Sie eine gültige Absender-E-Mail-Adresse ein oder lassen Sie das Feld leer."
+
+msgid "Images from external URLs can only be imported by users who are allowed to upload files. Choose the image from the Media Library instead."
+msgstr "Bilder von externen URLs können nur Benutzer importieren, die Dateien hochladen dürfen. Wählen Sie das Bild stattdessen aus der Mediathek."
+
+msgid "PDF too large (%1$s MB). Maximum for verification is %2$d MB."
+msgstr "PDF zu groß (%1$s MB). Die Prüfung ist auf %2$d MB begrenzt."
+
+msgid "Result was sanitized to empty. Check PHP error log."
+msgstr "Das Ergebnis war nach der Bereinigung leer. Bitte prüfen Sie das PHP-Fehlerprotokoll."
+
+msgid "Image Hashes"
+msgstr "Bild-Hashes"
+
+msgid "Content Streams"
+msgstr "Inhaltsströme"
+
+msgid "%1$d stream(s) in seal · %2$d verifiable in PDF"
+msgstr "%1$d Stream(s) im Siegel · %2$d im PDF prüfbar"
+
+msgid "UNRECOGNISED"
+msgstr "UNBEKANNT"
+
+msgid "not in seal"
+msgstr "nicht im Siegel"
+
+msgid "Creator"
+msgstr "Ersteller"
+
+msgid "(empty)"
+msgstr "(leer)"
+
+msgid "expected:"
+msgstr "erwartet:"
+
+msgid "Not Verifiable"
+msgstr "Nicht prüfbar"
+
+msgid "NOT VERIFIABLE — no key on this site matches this seal; do not treat the document as authentic"
+msgstr "NICHT PRÜFBAR — kein Schlüssel dieser Website passt zu diesem Siegel; behandeln Sie das Dokument nicht als echt"
+
+msgid "NOT VERIFIABLE — signing key could not be decrypted"
+msgstr "NICHT PRÜFBAR — der Signaturschlüssel konnte nicht entschlüsselt werden"
+
+msgid "NOT VERIFIABLE — unknown signing key, do not treat as authentic"
+msgstr "NICHT PRÜFBAR — unbekannter Signaturschlüssel, nicht als echt behandeln"
+
+msgid "MM/DD/YYYY"
+msgstr "MM/TT/JJJJ"
+
+msgid "YYYY-MM-DD"
+msgstr "JJJJ-MM-TT"
+
+msgid "Please enter a date in %s format."
+msgstr "Bitte Datum im Format %s eingeben."
+
+msgid "Date format"
+msgstr "Datumsformat"
+
+msgid "Earliest allowed date (in the date format above)"
+msgstr "Frühestes erlaubtes Datum (im obigen Datumsformat)"
+
+msgid "Latest allowed date (in the date format above)"
+msgstr "Spätestes erlaubtes Datum (im obigen Datumsformat)"
+
+msgid "Please enter a value in steps of %s."
+msgstr "Bitte geben Sie einen Wert in Schritten von %s ein."
+
+msgid "The signature could not be read. Please sign again."
+msgstr "Die Unterschrift konnte nicht gelesen werden. Bitte unterschreiben Sie erneut."
+
+msgid "The content of \"%s\" does not match its file type."
+msgstr "Der Inhalt von „%s“ passt nicht zu seinem Dateityp."
+
+msgid "Your submission could not be delivered. Please try again later."
+msgstr "Ihre Übermittlung konnte nicht zugestellt werden. Bitte versuchen Sie es später erneut."
+
+msgid "Contact forms"
+msgstr "Kontaktformulare"
+
+msgid "AM"
+msgstr "AM"
+
+msgid "PM"
+msgstr "PM"
+
+msgid "Stored unencrypted in the database. Anyone with database access, for example through a backup, can forge seals. Compatible with all installations."
+msgstr "Unverschlüsselt in der Datenbank gespeichert. Wer Zugriff auf die Datenbank hat, etwa über ein Backup, kann Siegel fälschen. Kompatibel mit allen Installationen."
+
+msgid "The seal key could not be rotated. Please check the server log."
+msgstr "Der Siegelschlüssel konnte nicht rotiert werden. Bitte prüfen Sie das Server-Protokoll."
+
+msgid "The PDF seal key cannot be decrypted. Check FABRICATOR_SEAL_MASTER_KEY in wp-config.php, or rotate the PDF key."
+msgstr "Der PDF-Siegelschlüssel kann nicht entschlüsselt werden. Prüfen Sie FABRICATOR_SEAL_MASTER_KEY in der wp-config.php oder rotieren Sie den PDF-Schlüssel."
+
+msgid "The PDF seal key is missing or damaged. Rotate the PDF key to create a new one."
+msgstr "Der PDF-Siegelschlüssel fehlt oder ist beschädigt. Rotieren Sie den PDF-Schlüssel, um einen neuen zu erstellen."
+
+msgid "FormFabricator: forms that attach a sealed PDF cannot be submitted."
+msgstr "FormFabricator: Formulare, die ein versiegeltes PDF anhängen, können nicht abgesendet werden."
+
+msgid "Open settings"
+msgstr "Einstellungen öffnen"
+
+msgid "This form cannot be sent at the moment. Please try again later."
+msgstr "Dieses Formular kann derzeit nicht gesendet werden. Bitte versuchen Sie es später erneut."
+
+msgid "Please complete the seal key setup first."
+msgstr "Bitte schließen Sie zuerst die Einrichtung des Siegelschlüssels ab."
+
+msgid "Key encryption is already enabled."
+msgstr "Die Schlüsselverschlüsselung ist bereits aktiviert."
+
+msgid "A test file placed in this folder could be downloaded from outside, so the deny rules this plugin writes have no effect here, for example because Nginx serves uploaded files in front of Apache."
+msgstr "Eine Testdatei in diesem Ordner konnte von außen heruntergeladen werden. Die Sperrregeln dieses Plugins wirken hier also nicht, zum Beispiel weil Nginx hochgeladene Dateien vor Apache ausliefert."
+
+msgid "Full control of forms:\n- Create, edit, duplicate and delete forms\n- Set notification recipients (To, CC, BCC and routing rules) - this site then sends mail to any address entered\n- Write rich text (HTML block, consent and mandate texts) with links, formatting, images and SVG; form elements such as input fields are always removed\n- Export a form, including its recipient addresses"
+msgstr "Volle Kontrolle über Formulare:\n- Formulare anlegen, bearbeiten, duplizieren und löschen\n- Benachrichtigungsempfänger festlegen (An, CC, BCC und Routing-Regeln) - diese Website versendet dann E-Mails an jede hier eingetragene Adresse\n- Rich-Text (HTML-Block, Einwilligungs- und Mandatstexte) mit Links, Formatierung, Bildern und SVG verfassen; Formularelemente wie Eingabefelder werden immer entfernt\n- Ein Formular exportieren, einschließlich seiner Empfängeradressen"
+
+msgid "Width × Height:"
+msgstr "Breite × Höhe:"
+
+msgid "No content stream hashes in seal (PDF generated before this feature was added)."
+msgstr "Keine Inhaltsstrom-Hashes im Siegel (das PDF wurde vor Einführung dieser Funktion erzeugt)."
+
+msgid "All streams accounted for"
+msgstr "Alle Streams zugeordnet"
+
+msgid "UNDECLARED"
+msgstr "NICHT DEKLARIERT"
+
+msgid "UNUSED"
+msgstr "NICHT VERWENDET"
+
+msgid "No unexpected PDF objects detected."
+msgstr "Keine unerwarteten PDF-Objekte gefunden."
+
+msgid "%s count"
+msgstr "%s-Anzahl"
+
+msgid "%1$d (expected: %2$d)"
+msgstr "%1$d (erwartet: %2$d)"
+
+msgid "INFO"
+msgstr "INFO"
+
+msgid "Seal #%d"
+msgstr "Siegel Nr. %d"
+
+msgid "%1$s (ID: %2$s)"
+msgstr "%1$s (ID: %2$s)"
+
+msgid "The image stream could not be decoded."
+msgstr "Der Bild-Stream konnte nicht dekodiert werden."
+
+msgid "The image exceeds the %d-megapixel verification size limit for this image type and was skipped. This is a size cap, not evidence of tampering."
+msgstr "Das Bild überschreitet die Prüfgrenze von %d Megapixeln für diesen Bildtyp und wurde übersprungen. Das ist eine Größenbegrenzung, kein Hinweis auf Manipulation."
+
+msgid "Invalid dimensions (%1$s×%2$s)"
+msgstr "Ungültige Abmessungen (%1$s×%2$s)"
+
+msgid "The image is a mask."
+msgstr "Das Bild ist eine Maske."
+
+msgid "Unsupported colour space: %s"
+msgstr "Nicht unterstützter Farbraum: %s"
+
+msgid "The image could not be recreated from its stream and counts as a mismatch."
+msgstr "Das Bild konnte nicht aus seinem Stream wiederhergestellt werden und zählt als Abweichung."
+
+msgid "n/a"
+msgstr "k. A."
+
+msgid "Unsupported base colour space for an indexed image: %s"
+msgstr "Nicht unterstützter Basisfarbraum für ein indiziertes Bild: %s"
+
+msgid "Missing in the seal: %s"
+msgstr "Fehlt im Siegel: %s"
+
+msgid "Missing in the rebuilt data: %s"
+msgstr "Fehlt in den rekonstruierten Daten: %s"
+
+msgid "Mismatch at %s"
+msgstr "Abweichung bei %s"
+
+msgid "Type mismatch at %s"
+msgstr "Typabweichung bei %s"
+
+msgid "Seal:"
+msgstr "Siegel:"
+
+msgid "Rebuilt:"
+msgstr "Rekonstruiert:"
+
+msgid "The seal is implausibly large and was rejected."
+msgstr "Das Siegel ist unplausibel groß und wurde abgelehnt."
+
+msgid "The seal could not be base64-decoded."
+msgstr "Das Siegel konnte nicht base64-dekodiert werden."
+
+msgid "The seal data is not valid JSON."
+msgstr "Die Siegeldaten sind kein gültiges JSON."
+
+msgid "The seal check could not be completed."
+msgstr "Die Siegelprüfung konnte nicht abgeschlossen werden."
+
+msgid "ROTATED (initial key)"
+msgstr "ROTIERT (erster Schlüssel)"
+
+msgid "%d byte"
+msgid_plural "%d bytes"
+msgstr[0] "%d Byte"
+msgstr[1] "%d Bytes"
+
+msgid "This form has no active notification, so visitors cannot send it. Add or enable a notification in the notification settings of this form."
+msgstr "Dieses Formular hat keine aktive Benachrichtigung, daher können Besucher es nicht absenden. Fügen Sie in den Benachrichtigungseinstellungen dieses Formulars eine Benachrichtigung hinzu oder aktivieren Sie eine."
+
+msgid "Trusted proxies"
+msgstr "Vertrauenswürdige Proxys"
+
+msgid "Proxy IP addresses or ranges"
+msgstr "IP-Adressen oder -Bereiche der Proxys"
+
+msgid "Only needed if this site runs behind a proxy, load balancer or CDN (for example Cloudflare). Enter its addresses, one per line."
+msgstr "Nur nötig, wenn diese Website hinter einem Proxy, Load Balancer oder CDN (zum Beispiel Cloudflare) läuft. Tragen Sie dessen Adressen ein, eine pro Zeile."
+
+msgid "For requests from these addresses, the visitor's real address is then read from the X-Forwarded-For header. Leave empty otherwise."
+msgstr "Für Anfragen von diesen Adressen wird dann die tatsächliche Adresse des Besuchers aus dem X-Forwarded-For-Header gelesen. Andernfalls leer lassen."
+
+msgid "The FABRICATOR_TRUSTED_PROXIES constant in wp-config.php is set as well; its entries apply in addition to these."
+msgstr "Die Konstante FABRICATOR_TRUSTED_PROXIES in der wp-config.php ist ebenfalls gesetzt; ihre Einträge gelten zusätzlich zu diesen."
+
+msgid "Not saved: these trusted proxy entries are not valid IP addresses or CIDR ranges: %s"
+msgstr "Nicht gespeichert: Diese Einträge für vertrauenswürdige Proxys sind keine gültigen IP-Adressen oder CIDR-Bereiche: %s"
+
+msgid "When you submit a form on this website, your entries are not stored in the website's database. They are processed only while your submission is being handled and are then sent by email, possibly together with a generated PDF document, to the recipients chosen by the website operator. While this happens, uploaded files and the PDF document are written to temporary files on the server, which are deleted once the emails have been sent. To limit spam and abuse, a one-way hash of your IP address is kept for a short time to count how often a form is submitted, and is then deleted automatically. If the website operator checks a PDF document with the plugin's verification tool, the uploaded copy is deleted from the server right after the check, or about 10 minutes after its last use if the check is not completed."
+msgstr "Wenn Sie auf dieser Website ein Formular absenden, werden Ihre Eingaben nicht in der Datenbank der Website gespeichert. Sie werden nur während der Bearbeitung Ihrer Übermittlung verarbeitet und anschließend per E-Mail, gegebenenfalls zusammen mit einem erzeugten PDF-Dokument, an die vom Websitebetreiber festgelegten Empfänger gesendet. Dabei werden hochgeladene Dateien und das PDF-Dokument vorübergehend als Dateien auf dem Server gespeichert und gelöscht, sobald die E-Mails versendet wurden. Zur Begrenzung von Spam und Missbrauch wird ein Einweg-Hash Ihrer IP-Adresse für kurze Zeit gespeichert, um zu zählen, wie oft ein Formular abgesendet wird, und danach automatisch gelöscht. Prüft der Websitebetreiber ein PDF-Dokument mit dem Prüfwerkzeug des Plugins, wird die hochgeladene Kopie direkt nach der Prüfung vom Server gelöscht, oder etwa 10 Minuten nach ihrer letzten Verwendung, falls die Prüfung nicht abgeschlossen wird."
+
+msgid "The attached files are too large in total. Please attach fewer or smaller files."
+msgstr "Die angehängten Dateien sind insgesamt zu groß. Bitte hängen Sie weniger oder kleinere Dateien an."
+
+#, php-format
+msgid "\"%1$s\" has %2$s megapixels (%3$s MB), but images can have at most %4$s megapixels. Please upload a smaller image."
+msgstr "„%1$s“ hat %2$s Megapixel (%3$s MB), Bilder dürfen aber höchstens %4$s Megapixel haben. Bitte laden Sie ein kleineres Bild hoch."
+
+#, php-format
+msgid "All files together are %2$s MB, but with \"%1$s\" they can be at most %3$s MB. Please upload smaller files."
+msgstr "Alle Dateien zusammen sind %2$s MB groß, mit „%1$s“ dürfen es aber höchstens %3$s MB sein. Bitte laden Sie kleinere Dateien hoch."
+
+msgid "Images the PDF cannot show (TIFF, and WEBP on servers without WEBP support) appear in it as a filename only, are attached next to it like documents, and cannot be cryptographically verified."
+msgstr "Bilder, die das PDF nicht darstellen kann (TIFF sowie WEBP auf Servern ohne WEBP-Unterstützung), erscheinen darin nur mit ihrem Dateinamen, werden wie Dokumente daneben angehängt und können nicht kryptografisch geprüft werden."
+
+msgid "These parts are compressed in a way FormFabricator never uses, so they were not unpacked. The file was not created by this site or was changed afterwards."
+msgstr "Diese Teile sind auf eine Weise komprimiert, die FormFabricator nie verwendet, und wurden daher nicht entpackt. Die Datei stammt nicht von dieser Website oder wurde nachträglich verändert."
+
+msgid "These parts are too large to unpack within the memory reserved for this check, so they were not read."
+msgstr "Diese Teile sind zu groß, um im für diese Prüfung reservierten Speicher entpackt zu werden, und wurden daher nicht gelesen."
+
+#, php-format
+msgid "Image in object %1$s (%2$d × %3$d pixels)"
+msgstr "Bild in Objekt %1$s (%2$d × %3$d Pixel)"
+
+#, php-format
+msgid "Image in object %s"
+msgstr "Bild in Objekt %s"
+
+#, php-format
+msgid "Object %1$s (%2$s)"
+msgstr "Objekt %1$s (%2$s)"
+
+#, php-format
+msgid "Object %s"
+msgstr "Objekt %s"
+
+#, php-format
+msgid "… and %d more part."
+msgid_plural "… and %d more parts."
+msgstr[0] "… und %d weiterer Teil."
+msgstr[1] "… und %d weitere Teile."
+
+#: assets/js/admin-formselect.js (via includes/Admin/FormSelectList.php)
+#, php-format
+msgid "Delete %d selection(s)? This cannot be undone."
+msgstr "%d Auswahl(en) löschen? Das lässt sich nicht rückgängig machen."
+
+#: includes/Admin/Verificationpage.php
+msgid "Implausible or missing image dimensions"
+msgstr "Unplausible oder fehlende Bildmaße"
+
+#: includes/Fields/CurrencyField.php
+msgid "Please enter an amount with at most two decimal places."
+msgstr "Bitte geben Sie einen Betrag mit höchstens zwei Nachkommastellen ein."
+
+#: includes/Fields/RatingField.php
+#, php-format
+msgid "%1$s of %2$s"
+msgstr "%1$s von %2$s"
+
+#: includes/Form/FormProcessor.php
+msgid "This form cannot be submitted with the answers given."
+msgstr "Mit diesen Angaben kann das Formular nicht abgeschickt werden."
+
+#: includes/Admin/FormSettings.php
+msgid "Another change to the seal key is in progress. Nothing was changed; please try again in a moment."
+msgstr "Gerade läuft eine andere Änderung am Siegelschlüssel. Es wurde nichts geändert; bitte versuchen Sie es gleich noch einmal."
+
+#: includes/Admin/Verificationpage.php
+#, php-format
+msgid "%s has far more parts than any document this plugin creates and was not read."
+msgstr "%s besteht aus weit mehr Teilen als jedes Dokument, das dieses Plugin erstellt, und wurde nicht gelesen."

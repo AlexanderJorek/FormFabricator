@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -93,9 +93,7 @@ class SliderField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $min    = (float)($config['min']  ?? 0);
-        $max    = (float)($config['max']  ?? 100);
-        $step   = (float)($config['step'] ?? 1);
+        [$min, $max, $step] = self::bounds($config);
         $ranged = !empty($config['ranged']);
 
         if ($ranged) {
@@ -177,8 +175,7 @@ class SliderField extends BaseField
         if ($base !== true) {
             return $base;
         }
-        $min = (float)($config['min'] ?? 0);
-        $max = (float)($config['max'] ?? 100);
+        [$min, $max, $step] = self::bounds($config);
         if (!empty($config['ranged']) && is_array($value)) {
             foreach (['from' => $value['from'] ?? null, 'to' => $value['to'] ?? null] as $v) {
                 if ($v === null || $v === '') {
@@ -188,7 +185,8 @@ class SliderField extends BaseField
                 if ($hard !== true) {
                     return $hard;
                 }
-                if (!is_numeric($v)) {
+                // is_finite(): is_numeric() accepts "1e999", which casts to INF.
+                if (!is_numeric($v) || !is_finite((float)$v)) {
                     return __('Please enter a valid value.', 'formfabricator');
                 }
                 $n = (float)$v;
@@ -200,18 +198,25 @@ class SliderField extends BaseField
                     // translators: %s: maximum allowed value.
                     return sprintf(__('Maximum value: %s', 'formfabricator'), $max);
                 }
+                if (self::offStep($n, $min, $step)) {
+                    // translators: %s: step size.
+                    return sprintf(__('Please enter a value in steps of %s.', 'formfabricator'), $step);
+                }
             }
             $from = $value['from'] ?? null;
             $to   = $value['to']   ?? null;
             if (is_numeric($from) && is_numeric($to) && (float)$from > (float)$to) {
                 return __('The "from" value must not be greater than the "to" value.', 'formfabricator');
             }
+        } elseif (is_array($value)) {
+            // A direct POST can send an array to a single-value slider, which (string) turned into a PHP warning.
+            return __('Please enter a valid value.', 'formfabricator');
         } elseif ($value !== '' && $value !== null) {
             $hard = self::validateTextHardCap((string) $value);
             if ($hard !== true) {
                 return $hard;
             }
-            if (!is_numeric($value)) {
+            if (!is_numeric($value) || !is_finite((float)$value)) {
                 return __('Please enter a valid value.', 'formfabricator');
             }
             $n = (float)$value;
@@ -223,8 +228,51 @@ class SliderField extends BaseField
                 // translators: %s: maximum allowed value.
                 return sprintf(__('Maximum value: %s', 'formfabricator'), $max);
             }
+            if (self::offStep($n, $min, $step)) {
+                // translators: %s: step size.
+                return sprintf(__('Please enter a value in steps of %s.', 'formfabricator'), $step);
+            }
         }
         return true;
+    }
+
+    /**
+     * The slider's effective [min, max, step], shared by render() and validate() so both see the same range. A step of
+     * zero or less, or max not above min, made SliderField.js divide by zero (NaN positions, a frozen thumb).
+     *
+     * @param array $config Field configuration.
+     * @return array{0: float, 1: float, 2: float}
+     */
+    private static function bounds(array $config): array
+    {
+        $min  = (float)($config['min']  ?? 0);
+        $max  = (float)($config['max']  ?? 100);
+        $step = (float)($config['step'] ?? 1);
+        if (!is_finite($step) || $step <= 0) {
+            $step = 1.0;
+        }
+        if (!is_finite($min)) {
+            $min = 0.0;
+        }
+        if (!is_finite($max) || $max <= $min) {
+            $max = $min + $step;
+        }
+        return [$min, $max, $step];
+    }
+
+    /**
+     * Whether $n lies off the grid min + k·step; mirrored in SliderField.slider-range.js.
+     *
+     * @param float $n    Submitted value.
+     * @param float $min  Effective minimum.
+     * @param float $step Effective step (> 0).
+     * @return bool
+     */
+    private static function offStep(float $n, float $min, float $step): bool
+    {
+        $k = ($n - $min) / $step;
+        // Relative tolerance: floating point puts 0.3 at 2.9999999999999996 steps of 0.1.
+        return abs($k - round($k)) > 1e-9 * max(1.0, abs($k));
     }
 
     /**
@@ -248,6 +296,9 @@ class SliderField extends BaseField
     {
         if (!empty($config['ranged']) && is_array($value)) {
             return ($value['from'] ?? '') . ' – ' . ($value['to'] ?? '');
+        }
+        if (is_array($value)) {
+            return __('[No entry]', 'formfabricator');
         }
         return $value !== null && $value !== '' ? (string)$value : __('[No entry]', 'formfabricator');
     }

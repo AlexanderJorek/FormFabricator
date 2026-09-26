@@ -15,18 +15,10 @@
     }
 
     /* ── Field-type init functions ───────────────────────────────────────── */
-    /* Field-specific init logic lives in each field's PHP class via
-       getClientInit(); Assets::enqueueFront() collects them into
-       window.FabricatorFieldInits keyed by field type, so front.js needs no
-       knowledge of specific field types. */
+    /* Populated by Assets::enqueueFront() from each field's getClientInit(); front.js needs no field-type knowledge. */
 
     /* ── Validator registry ───────────────────────────────────────────────── */
-    /* Populated by Assets::enqueueFront() from each field's getClientValidation().
-       Each entry: function(fieldEl) → error string | null.
-       These client-side rules mirror the authoritative checks in each field's
-       PHP validate() (includes/Fields/*.php), which runs again server-side.
-       If a validate() rule changes, update the matching client rule too, or
-       the two will silently drift. */
+    /* Mirrors each field's PHP validate() — keep both in sync or they'll silently drift. */
     var VALIDATORS = window.FabricatorValidators || {};
 
     /* ── Client-side validation ──────────────────────────────────────────── */
@@ -157,7 +149,11 @@
                     p.classList.toggle('fabricator-page-active', i === idx);
                 });
                 if (footer) {
-                    footer.style.display = (idx === pages.length - 1) ? '' : 'none';
+                    /* A class, not style.display: the submit-button conditions write that same property on this
+                       element, and two writers fought — the button appeared on page 1 as soon as the conditions
+                       matched, and on the last page even while they didn't. Now paging and conditions each own
+                       their own switch and the footer shows only when both allow it. */
+                    footer.classList.toggle('fabricator-footer-off-page', idx !== pages.length - 1);
                 }
                 if (idx > furthest) furthest = idx;
                 form.dispatchEvent(new CustomEvent('fabricator:page-change', {
@@ -291,6 +287,12 @@
                 return first.value;
             }
 
+            /* The shape PHP's is_numeric() accepts, so both sides agree on what counts as a number. */
+            function asNumber(v) {
+                var t = (v === null || v === undefined ? '' : v).toString().trim();
+                return /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(t) ? parseFloat(t) : null;
+            }
+
             function testRule(rule) {
                 var val  = getFieldValue(rule.field_id || '');
                 var op   = rule.operator || 'equals';
@@ -303,14 +305,18 @@
                     case 'contains':     return rv !== '' && (isArr
                         ? val.some(function (v) { return v.toLowerCase().indexOf(rv) !== -1; })
                         : str.indexOf(rv) !== -1);
-                    case 'not_contains': return rv === '' || (isArr
+                    /* Empty value = half-configured rule: unsatisfied, matching FormProcessor::evalConditionRule(). */
+                    case 'not_contains': return rv !== '' && (isArr
                         ? val.every(function (v) { return v.toLowerCase().indexOf(rv) === -1; })
                         : str.indexOf(rv) === -1);
                     case 'empty':        return isArr ? val.length === 0 : str === '';
                     case 'not_empty':    return isArr ? val.length > 0   : str !== '';
-                    case 'greater':      { var a = parseFloat(str), b = parseFloat(rv); return !isNaN(a) && !isNaN(b) && a > b; }
-                    case 'less':         { var a2 = parseFloat(str), b2 = parseFloat(rv); return !isNaN(a2) && !isNaN(b2) && a2 < b2; }
-                    default:             return true;
+                    /* asNumber(), not parseFloat(): parseFloat('12abc') is 12 while the server's is_numeric() says no,
+                       which is another way client and server disagreed on whether a field is visible. */
+                    case 'greater':      { var a = asNumber(str), b = asNumber(rv); return a !== null && b !== null && a > b; }
+                    case 'less':         { var a2 = asNumber(str), b2 = asNumber(rv); return a2 !== null && b2 !== null && a2 < b2; }
+                    /* Unsatisfied, like FormProcessor::evalConditionRule(): "true" showed a field the server then treated as hidden and dropped. */
+                    default:             return false;
                 }
             }
 
@@ -434,10 +440,7 @@
 
                 var ajaxUrl = (window.FabricatorForms && window.FabricatorForms.ajaxUrl) || '';
 
-                /* fabricator_nonce/fabricator_submission_token are intentionally never rendered into this
-                   page's HTML (see FormRenderer::render()'s comment) — fetched fresh here, right
-                   before the actual submit, so a full-page cache in front of this page can't hand
-                   two different visitors the same replay-protection token. */
+                /* Nonce/token fetched fresh here, never rendered into HTML, so a full-page cache can't hand two visitors the same replay token. */
                 fetch(ajaxUrl, {
                     method: 'POST',
                     body: new URLSearchParams({ action: 'fabricator_forms_get_token', form_id: form.dataset.formId || '' }),
@@ -489,9 +492,21 @@
                         var scrollTarget = wrap || form;
                         var scrollTop = scrollTarget.getBoundingClientRect().top + window.pageYOffset - 20;
                         window.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' });
+
+                        /* Clear fabricatorSubmitted once the visitor edits the reset form, or a genuinely new entry stays silently blocked until reload. */
+                        if (btn) {
+                            var rearmSubmit = function () {
+                                delete btn.dataset.fabricatorSubmitted;
+                                form.removeEventListener('input', rearmSubmit);
+                                form.removeEventListener('change', rearmSubmit);
+                            };
+                            form.addEventListener('input', rearmSubmit);
+                            form.addEventListener('change', rearmSubmit);
+                        }
                     } else {
                         if (label) label.textContent = origLabel;
                         if (btn) btn.disabled = false;
+                        resetCaptchas(form);
                         var errMsg = (res.data && res.data.message)
                             || i18n.error_server
                             || 'Server error. Please try again.';
@@ -505,8 +520,10 @@
                         var fieldErrors = res.data && res.data.errors;
                         if (fieldErrors) {
                             var firstErrEl = null;
+                            /* A later copy of the same form on the page carries an id suffix (FormRenderer::uniqueIds()). */
+                            var idSuffix = form.dataset.fabricatorIdSuffix || '';
                             Object.keys(fieldErrors).forEach(function (fid) {
-                                var errEl = form.querySelector('#' + CSS.escape(fid) + '-error');
+                                var errEl = form.querySelector('#' + CSS.escape(fid + '-error' + idSuffix));
                                 if (errEl) {
                                     errEl.textContent = fieldErrors[fid];
                                     if (!firstErrEl) firstErrEl = errEl.closest('.fabricator-field');
@@ -518,22 +535,29 @@
                     })
                     .catch(function () {
                         resetSubmitUi();
+                        resetCaptchas(form);
                         showServerError();
                     });
                 })
                 .catch(function () {
                     resetSubmitUi();
+                    resetCaptchas(form);
                     showServerError();
                 });
             });
         });
     }
 
-    /* ── CAPTCHA click-to-activate ───────────────────────────────────────────
-       The reCAPTCHA script (and the connection to Google it triggers) is only
-       requested once the visitor explicitly clicks the placeholder button —
-       not on page load — so the field doesn't load a third-party script
-       before the visitor has interacted with the form. */
+    /* A used or expired token can't be sent again, so every failed submission clears the widget for a fresh one. */
+    function resetCaptchas(form) {
+        if (!window.grecaptcha || !window.grecaptcha.reset) return;
+        form.querySelectorAll('.fabricator-captcha-gate[data-fabricator-captcha-widget]').forEach(function (gate) {
+            try { window.grecaptcha.reset(Number(gate.dataset.fabricatorCaptchaWidget)); } catch (_) { /* widget gone */ }
+        });
+    }
+
+    /* ── CAPTCHA click-to-activate ── */
+    /* reCAPTCHA is fetched only on explicit click, not page load, so the form doesn't load a third-party script unasked. */
     var recaptchaLoading = false;
     var recaptchaCallbacks = [];
     var recaptchaErrorCallbacks = [];
@@ -595,7 +619,11 @@
                     var widget = document.createElement('div');
                     gate.innerHTML = '';
                     gate.appendChild(widget);
-                    window.grecaptcha.render(widget, { sitekey: gate.dataset.sitekey });
+                    /* Kept so a failed submission can reset the widget: its token is single-use and expires
+                       after about two minutes, so without this every retry failed "Please confirm the CAPTCHA". */
+                    gate.dataset.fabricatorCaptchaWidget = String(
+                        window.grecaptcha.render(widget, { sitekey: gate.dataset.sitekey })
+                    );
                 }, function () { showCaptchaBlockedNotice(gate, btn); });
             });
         });
@@ -605,7 +633,7 @@
 
     function init(root) {
         root = root || document;
-        /* Guards the whole boot sequence against running twice on the same root — not all field getClientInit() implementations are safe to re-run. */
+        /* Guards the whole boot sequence against running twice on the document. Field getClientInit() functions must be idempotent anyway (initForms() re-runs them after every successful submit); this keeps the other boot steps from binding twice. */
         if (root === document && window.__fabricatorFrontInited) return;
         if (root === document) window.__fabricatorFrontInited = true;
 
@@ -617,32 +645,26 @@
         initCaptchaGates(root);
     }
 
-    /* Forms that enter the DOM after boot — an AJAX-loaded page-builder section, a lightbox or
-       popup form, an FSE block rendered on demand. Assets::ensureFrontAssets() exists precisely
-       because those placements are supported, and since the submit button now ships disabled
-       (see FormRenderer::render(), which does that so a JS-less visitor can't fire a native POST
-       with an empty nonce), a form that never gets initialized would have a permanently dead
-       button rather than a merely un-enhanced one.
-
-       Each late form is initialized against its OWN wrapper, never against document: several
-       field getClientInit() implementations (DateField, RadioField, RatingField, SliderField)
-       carry no re-entry guard, so re-running them over already-initialized nodes would
-       double-bind listeners. Scoping to the new wrapper means they only ever see new nodes. */
+    /* Scoped to the new wrapper, never document: boots only what arrived, instead of re-running every step over the whole page. */
     function initLateForm(form) {
         if (!form || form.dataset.fabricatorFormsInit) return;
         var scope = (form.closest && form.closest('.fabricator-form-wrap')) || form.parentElement;
         if (scope) init(scope);
     }
 
+    /* childList+subtree on document.body fires on every DOM mutation site-wide, so skip via a cheap property read before querySelectorAll(). */
+    var lateFormObserver = null;
+
     function observeLateForms() {
         if (typeof MutationObserver !== 'function' || !document.body) return;
-        new MutationObserver(function (records) {
+        if (lateFormObserver) return;
+        lateFormObserver = new MutationObserver(function (records) {
             records.forEach(function (record) {
                 Array.prototype.forEach.call(record.addedNodes, function (node) {
                     if (!node || node.nodeType !== 1) return;
                     if (node.classList && node.classList.contains('fabricator-form')) {
                         initLateForm(node);
-                    } else if (node.querySelectorAll) {
+                    } else if (node.firstElementChild && node.querySelectorAll) {
                         Array.prototype.forEach.call(
                             node.querySelectorAll('.fabricator-form'),
                             initLateForm
@@ -650,7 +672,8 @@
                     }
                 });
             });
-        }).observe(document.body, { childList: true, subtree: true });
+        });
+        lateFormObserver.observe(document.body, { childList: true, subtree: true });
     }
 
     /* Explicit escape hatch for integrations that insert forms in ways a MutationObserver on
@@ -658,6 +681,15 @@
     window.FabricatorForms = window.FabricatorForms || {};
     window.FabricatorForms.initForms = function (container) {
         init(container || document);
+    };
+
+    /* Lets a site that inserts every form up front (or one that manages its own late forms via
+       initForms above) stop paying for the observer entirely. */
+    window.FabricatorForms.stopObservingLateForms = function () {
+        if (lateFormObserver) {
+            lateFormObserver.disconnect();
+            lateFormObserver = null;
+        }
     };
 
     function boot() {

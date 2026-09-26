@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -65,29 +65,132 @@ class ClientIp
     }
 
     /**
-     * Checks whether an address is listed in FABRICATOR_TRUSTED_PROXIES.
+     * Reduces an address to the unit one client controls: the /64 for IPv6, the address itself for IPv4.
+     *
+     * A single IPv6 subscriber is routinely handed a whole /64, so keying rate limits on the full
+     * address lets one client rotate through 2^64 buckets and write a fresh row for each.
+     *
+     * @param string $ip Address from resolve().
+     * @return string Rate-limit bucket identifier.
+     */
+    public static function bucket(string $ip): string
+    {
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            return $ip;
+        }
+        $bin = inet_pton($ip);
+        if ($bin === false || strlen($bin) !== 16) {
+            return $ip;
+        }
+        // IPv4-mapped (::ffff:a.b.c.d): its /64 is shared by every IPv4 client, so key on the embedded IPv4.
+        if (strncmp($bin, str_repeat("\0", 10) . "\xff\xff", 12) === 0) {
+            return (string) inet_ntop(substr($bin, 12, 4));
+        }
+        return inet_ntop(substr($bin, 0, 8) . str_repeat("\0", 8)) . '/64';
+    }
+
+    /**
+     * Trusted proxy addresses and CIDR ranges: the FABRICATOR_TRUSTED_PROXIES constant (wp-config.php) and the list an
+     * administrator enters under FormFabricator → Settings. Both apply, so a constant already in place keeps working.
+     *
+     * @return string[]
+     */
+    public static function trustedProxyEntries(): array
+    {
+        $sources = [(string) get_option('fabricator_forms_trusted_proxies', '')];
+        if (defined('FABRICATOR_TRUSTED_PROXIES')) {
+            $sources[] = (string) FABRICATOR_TRUSTED_PROXIES;
+        }
+        $entries = preg_split('/[\s,]+/', implode(',', $sources)) ?: [];
+        return array_values(array_filter($entries, static fn(string $e): bool => $e !== ''));
+    }
+
+    /**
+     * Cleans an administrator-entered proxy list: IP addresses or CIDR ranges, separated by commas, spaces or line breaks.
+     *
+     * @param string $input Raw list.
+     * @return array{0: string, 1: string[]} The valid entries as one comma-separated list, and the entries that were not valid.
+     */
+    public static function normalizeProxyList(string $input): array
+    {
+        $valid   = [];
+        $invalid = [];
+        foreach (preg_split('/[\s,]+/', trim($input)) ?: [] as $entry) {
+            if ($entry === '') {
+                continue;
+            }
+            if (self::isValidProxyEntry($entry)) {
+                $valid[] = $entry;
+            } else {
+                $invalid[] = $entry;
+            }
+        }
+        return [implode(', ', array_values(array_unique($valid))), $invalid];
+    }
+
+    /**
+     * True for an IPv4/IPv6 address, or such an address with a prefix length that fits it.
+     *
+     * @param string $entry One list entry.
+     * @return bool
+     */
+    private static function isValidProxyEntry(string $entry): bool
+    {
+        if (strpos($entry, '/') === false) {
+            return filter_var($entry, FILTER_VALIDATE_IP) !== false;
+        }
+        [$net, $bits] = explode('/', $entry, 2);
+        if ($bits === '' || !ctype_digit($bits) || filter_var($net, FILTER_VALIDATE_IP) === false) {
+            return false;
+        }
+        $max = filter_var($net, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false ? 32 : 128;
+        return (int) $bits <= $max;
+    }
+
+    /**
+     * Checks whether an address is a trusted proxy (see trustedProxyEntries()).
      *
      * @param string $ip Address to check.
      * @return bool True when the site has explicitly marked $ip as a trusted proxy.
      */
     private static function isTrustedProxy(string $ip): bool
     {
-        if (!defined('FABRICATOR_TRUSTED_PROXIES') || (string) FABRICATOR_TRUSTED_PROXIES === '') {
-            return false;
-        }
-        foreach (array_map('trim', explode(',', (string) FABRICATOR_TRUSTED_PROXIES)) as $entry) {
-            if ($entry === '') {
-                continue;
-            }
+        foreach (self::trustedProxyEntries() as $entry) {
             if (strpos($entry, '/') !== false) {
                 if (self::ipInCidr($ip, $entry)) {
                     return true;
                 }
-            } elseif (hash_equals($entry, $ip)) {
+            } elseif (self::sameAddress($entry, $ip)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whether two addresses are the same address, whichever way each one is written.
+     *
+     * One IPv6 address has many spellings ("2001:db8::1" and "2001:0db8:0000:0000:0000:0000:0000:0001" are the same
+     * host). Comparing the text meant a proxy entered in one form never matched the form the server reports, so every
+     * visitor behind it shared a single rate-limit bucket.
+     *
+     * @param string $a First address.
+     * @param string $b Second address.
+     * @return bool
+     */
+    private static function sameAddress(string $a, string $b): bool
+    {
+        // Validated first rather than silencing inet_pton()'s warning, the same way ipInCidr() below does it: an
+        // entry that isn't an address at all falls back to comparing the text it was written as.
+        if (filter_var($a, FILTER_VALIDATE_IP) === false || filter_var($b, FILTER_VALIDATE_IP) === false) {
+            return hash_equals($a, $b);
+        }
+        $packed_a = inet_pton($a);
+        $packed_b = inet_pton($b);
+        if ($packed_a === false || $packed_b === false) {
+            return hash_equals($a, $b);
+        }
+        return strlen($packed_a) === strlen($packed_b) && hash_equals($packed_a, $packed_b);
     }
 
     /**
@@ -106,8 +209,13 @@ class ClientIp
         }
         $maskBits = (int) $maskBits;
 
-        $ipBin     = @inet_pton($ip);
-        $subnetBin = @inet_pton($subnet);
+        // Validated first: inet_pton() warns on malformed input, and a typo in FABRICATOR_TRUSTED_PROXIES
+        // should read as "no match", not as a silenced warning on every request.
+        if (!filter_var($ip, FILTER_VALIDATE_IP) || !filter_var($subnet, FILTER_VALIDATE_IP)) {
+            return false;
+        }
+        $ipBin     = inet_pton($ip);
+        $subnetBin = inet_pton($subnet);
         if ($ipBin === false || $subnetBin === false || strlen($ipBin) !== strlen($subnetBin)) {
             return false;
         }

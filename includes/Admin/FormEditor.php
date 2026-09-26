@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -31,6 +31,19 @@ use FabricatorForms\Fields\FieldRegistry;
  */
 class FormEditor
 {
+    /* Field types that may never be a group child. Mirrors NO_GROUP_TYPES in
+       admin-builder.js; enforced server-side in sanitizeFields(), because a crafted save
+       or an imported form is not the builder. */
+    private const NO_GROUP_TYPES = ['group', 'pagebreak', 'page-header'];
+
+    /**
+     * Keys that may hold a list on any field, whatever its type declares: each has a purpose-built sanitizer in
+     * sanitizeFields(). Any other key holds a list only where the field's own defaults say so.
+     *
+     * @var string[]
+     */
+    private const STRUCTURAL_ARRAY_KEYS = ['conditions', 'children', 'options'];
+
     /**
      * Registers admin hooks for the form editor page.
      *
@@ -129,7 +142,7 @@ class FormEditor
                 'fabricator-forms',
                 __('FormFabricator Editor', 'formfabricator'),
                 __('New Form', 'formfabricator'),
-                'read',
+                \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'edit_forms',
                 'fabricator-forms-editor',
                 [self::class, 'render']
             );
@@ -147,9 +160,7 @@ class FormEditor
             \wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
-        /* The perf overlay is dev tooling that build.ps1 strips from release packages, so its
-           script file must exist before the toolbar button is offered — otherwise a shipped copy
-           running with WP_DEBUG on would render a button backed by a 404. */
+        // build.ps1 strips the perf-overlay script from release packages, so gate the toolbar button on the file existing — else a shipped copy with WP_DEBUG on renders a 404 button.
         $perf_mode   = defined('WP_DEBUG') && WP_DEBUG && current_user_can('manage_options')
             && file_exists(FABRICATOR_FORMS_PATH . 'assets/js/fabricator-perf-debug.js');
         $perf_start  = $perf_mode ? microtime(true) : 0.0;
@@ -198,12 +209,7 @@ class FormEditor
         $data_palette = \wp_json_encode($palette, JSON_HEX_APOS | JSON_HEX_QUOT);
         $ajax_url     = \esc_attr(\admin_url('admin-ajax.php'));
 
-        /* assets/js/admin-builder.js (the drag-and-drop builder) is enqueued by
-           Assets::enqueueAdmin() under the 'fabricator-forms-builder' handle — that
-           enqueue always runs before this render() callback (admin_enqueue_scripts
-           fires before the admin_menu page-render callback), so localizing the
-           already-registered handle here is safe; wp_localize_script() only stores the
-           data, WordPress prints it as part of the enqueued script output later. */
+        // Safe to localize the 'fabricator-forms-builder' handle here: admin_enqueue_scripts (where Assets::enqueueAdmin() registers it) always fires before this render() callback.
         \wp_localize_script('fabricator-forms-builder', 'FabricatorBuilderI18n', self::builderI18n());
         \wp_localize_script(
             'fabricator-forms-editor-lock',
@@ -226,7 +232,8 @@ class FormEditor
                 FABRICATOR_FORMS_URL . 'assets/js/fabricator-perf-debug.js',
                 [],
                 FABRICATOR_FORMS_VERSION,
-                false  /* in <head> so it registers its DOMContentLoaded listener BEFORE admin-builder.js */
+                // $in_footer is moot: this always runs after wp_head, so it's footer either way.
+                false
             );
             \wp_localize_script('fabricator-perf-debug', 'FabricatorPerfData', [
                 'phpRenderMs' => $php_ms,
@@ -241,6 +248,7 @@ class FormEditor
         ?>
         <canvas id="fabricator-particle-canvas"></canvas>
         <div class="wrap fabricator-editor-wrap" style="padding:0;margin:0;">
+        <?php \FabricatorForms\Utils\Assets::renderNoticeDock(); ?>
         <!-- admin-builder.js reads these on load and keeps them updated as the source of
              truth for the form/palette state; ajaxSave() below receives that state back -->
         <div id="fabricator-editor"
@@ -320,7 +328,7 @@ class FormEditor
             $settings_override = [];
             // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
             if (!empty($_POST['settings'])) {
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+                // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
                 $decoded_s = base64_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['settings']))), true);
                 $raw_s = ($decoded_s !== false) ? json_decode($decoded_s, true) : null;
                 if (is_array($raw_s)) {
@@ -332,7 +340,7 @@ class FormEditor
             $fields_override = null;
             // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
             if (!empty($_POST['fields'])) {
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+                // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- verified via AjaxGuard::require(); sniff can't see through the static call.
                 $decoded_f = base64_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['fields']))), true);
                 $raw_f = ($decoded_f !== false) ? json_decode($decoded_f, true) : null;
                 if (is_array($raw_f)) {
@@ -407,7 +415,9 @@ class FormEditor
         $css_url = \FABRICATOR_FORMS_URL . 'assets/css/front.css';
 
         $globals = 'window.FabricatorForms={'
-            . 'ajaxUrl:"",ibanBicUrl:"",'
+            . 'ajaxUrl:"",'
+            // Single source of truth for per-country IBAN length lives in SepaField::IBAN_LEN.
+            . 'ibanLen:' . \wp_json_encode(\FabricatorForms\Fields\SepaField::IBAN_LEN) . ','
             . 'i18n:{submitting:' . \wp_json_encode(__('Sending…', 'formfabricator')) . ',error_server:' . \wp_json_encode(__('Server error.', 'formfabricator')) . '}'
             . '};';
         if (!empty($inits)) {
@@ -538,8 +548,9 @@ class FormEditor
         \FabricatorForms\Utils\AjaxGuard::require('edit_forms', 'fabricator_forms_admin_nonce', 'nonce');
 
         // base64-wrapped so WP's magic-quotes slashing can't corrupt embedded quotes in the raw JSON.
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require(); sniff can't see through the static call.
         $encoded = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['form_data'] ?? '')));
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the export string produced above (strict mode); re-sanitized before use, not obfuscation.
         $json    = base64_decode($encoded, true);
         $raw     = ($json !== false) ? json_decode($json, true) : null;
         if (!is_array($raw)) {
@@ -572,10 +583,15 @@ class FormEditor
         // instead of breaking WP's response entirely.
         try {
             $sanitized_notifications = self::sanitizeNotifications(is_array($raw['notifications'] ?? null) ? $raw['notifications'] : []);
+            $sanitized_fields        = self::sanitizeFields(is_array($raw['fields'] ?? null) ? $raw['fields'] : []);
+            $id_error                = self::fieldIdError($sanitized_fields);
+            if ($id_error !== '') {
+                \wp_send_json_error(['message' => $id_error], 422);
+            }
             $result = FormModel::save(
                 [
                 'title'         => \sanitize_text_field(is_string($raw_title) ? $raw_title : ''),
-                'fields'        => self::sanitizeFields(is_array($raw['fields'] ?? null) ? $raw['fields'] : []),
+                'fields'        => $sanitized_fields,
                 'notifications' => $sanitized_notifications,
                 'settings'      => self::sanitizeSettings(is_array($raw['settings'] ?? null) ? $raw['settings'] : []),
                 ],
@@ -592,34 +608,44 @@ class FormEditor
             wp_set_post_lock($result);
 
             /* Keys are scoped to this form's own notifications, so the narrower 'edit_forms' gate is safe here. */
-            $pdf_settings = \get_option('fabricator_forms_pdf_settings', []);
-            if (!is_array($pdf_settings)) {
-                $pdf_settings = [];
-            }
-            /* Rebuild THIS form's keys rather than only adding: a renamed or deleted notification
-               would otherwise leave its "<form_id>|<slug>" entry behind forever. Other forms'
-               keys are untouched; FormModel::removeFormPdfSettings() handles whole-form deletion. */
-            $prefix = $result . '|';
-            foreach (array_keys($pdf_settings) as $existing_key) {
-                if (strncmp((string) $existing_key, $prefix, strlen($prefix)) === 0) {
-                    unset($pdf_settings[$existing_key]);
+            // Under OptionMutex: every form's flags live in this one option, and an unlocked read-modify-write let a form saved
+            // at the same moment undo this save's attach-PDF flags (or the other way round) without any error.
+            \FabricatorForms\Utils\OptionMutex::run(
+                'fabricator_forms_pdf_settings',
+                static function () use ($result, $sanitized_notifications): void {
+                    $pdf_settings = \get_option('fabricator_forms_pdf_settings', []);
+                    if (!is_array($pdf_settings)) {
+                        $pdf_settings = [];
+                    }
+                    // Rebuild THIS form's keys rather than only adding: a renamed/deleted notification would otherwise leave its "<form_id>|<slug>" entry behind forever.
+                    $prefix = $result . '|';
+                    foreach (array_keys($pdf_settings) as $existing_key) {
+                        if (strncmp((string) $existing_key, $prefix, strlen($prefix)) === 0) {
+                            unset($pdf_settings[$existing_key]);
+                        }
+                    }
+                    foreach ($sanitized_notifications as $notif) {
+                        $slug = $notif['slug'] ?? '';
+                        if ($slug) {
+                            $pdf_settings[$prefix . $slug] = !empty($notif['attach_pdf']) ? 1 : 0;
+                        }
+                    }
+                    // autoload=false: nothing reads this on the front end (shouldAttachPdf() runs only
+                    // during submission handling), and the option grows one key per form x notification.
+                    \update_option('fabricator_forms_pdf_settings', $pdf_settings, false);
                 }
-            }
-            foreach ($sanitized_notifications as $notif) {
-                $slug = $notif['slug'] ?? '';
-                if ($slug) {
-                    $pdf_settings[$prefix . $slug] = !empty($notif['attach_pdf']) ? 1 : 0;
-                }
-            }
-            // autoload=false: nothing reads this on the front end (shouldAttachPdf() runs only
-            // during submission handling), and the option grows one key per form x notification.
-            \update_option('fabricator_forms_pdf_settings', $pdf_settings, false);
+            );
 
             \wp_send_json_success(
                 [
                 'message'  => __('Form saved.', 'formfabricator'),
                 'form_id'  => $result,
                 'snapshot' => FormModel::snapshot((int) $result),
+                // Saved either way; but FormProcessor refuses a form with nowhere to send it, so say so now, not at submit time.
+                'warning'  => \FabricatorForms\Form\MailSender::hasEnabledNotification($sanitized_notifications)
+                    || apply_filters('fabricator_forms_accept_without_notifications', false, (int) $result)
+                    ? ''
+                    : __('This form has no active notification, so visitors cannot send it. Add or enable a notification in the notification settings of this form.', 'formfabricator'),
                 ]
             );
         } catch (\Throwable $e) {
@@ -631,6 +657,65 @@ class FormEditor
                 500
             );
         }
+    }
+
+    /**
+     * Names the form itself posts next to its fields (FormRenderer); a field with one of these IDs would overwrite it.
+     *
+     * @var string[]
+     */
+    private const RESERVED_FIELD_IDS = ['action', 'form_id', 'fabricator_nonce', 'fabricator_submission_token', 'fabricator_hp_field'];
+
+    /**
+     * Returns an error listing the field IDs a form can't use, or '' when every ID is usable.
+     *
+     * The builder's letters/digits/hyphen rule (admin-builder.js) is client-side only, so an imported or hand-crafted
+     * form could carry a duplicate ID, a name the form posts itself ("action"), or characters PHP rewrites in POST keys
+     * ("." and spaces become "_"). That broke the nonce or routing, emptied values, or let one field's input satisfy
+     * another field's required or consent check. Group children share the POST namespace with top-level fields.
+     *
+     * @param array $fields Sanitized fields, as sanitizeFields() returns them.
+     * @return string Translated error message, or ''.
+     */
+    public static function fieldIdError(array $fields): string
+    {
+        $ids      = [];
+        $reserved = array_flip(self::RESERVED_FIELD_IDS);
+        $collect  = static function (array $list) use (&$collect, &$ids, &$reserved): void {
+            foreach ($list as $field) {
+                if (!is_array($field)) {
+                    continue;
+                }
+                $id = (string) ($field['id'] ?? '');
+                if ($id !== '') {
+                    $ids[] = $id;
+                    // SEPA posts its signature under "<id>-sig"; a field with that ID would replace the mandate's signature.
+                    if (($field['type'] ?? '') === 'sepa') {
+                        $reserved[$id . '-sig'] = true;
+                    }
+                }
+                if (!empty($field['children']) && is_array($field['children'])) {
+                    $collect($field['children']);
+                }
+            }
+        };
+        $collect($fields);
+
+        $counts = array_count_values($ids);
+        $bad    = [];
+        foreach ($ids as $id) {
+            if (!preg_match('/^[A-Za-z0-9-]+$/', $id) || isset($reserved[$id]) || $counts[$id] > 1) {
+                $bad[$id] = true;
+            }
+        }
+        if ($bad === []) {
+            return '';
+        }
+        return sprintf(
+            /* translators: %s: comma-separated list of field IDs. */
+            __('These field IDs cannot be used: %s. A field ID may contain only letters, digits and hyphens, must be unique within the form, and must not be a reserved name such as "action".', 'formfabricator'),
+            implode(', ', array_keys($bad))
+        );
     }
 
     /**
@@ -651,42 +736,68 @@ class FormEditor
             if (!is_array($field) || empty($field['id']) || empty($field['type'])) {
                 continue;
             }
+            // Server-side half of admin-builder.js's NO_GROUP_TYPES: prevents nesting that would skip validation on grandchildren.
+            if ($depth > 0 && in_array((string) $field['type'], self::NO_GROUP_TYPES, true)) {
+                continue;
+            }
             // These structural/label keys bypass sanitizeConfigValue() — every field type handles them the same way regardless of its own rules.
             $plaintext_keys = ['id', 'type', 'label', 'placeholder', 'description', 'hint', 'name'];
-            $handler = \FabricatorForms\Fields\FieldRegistry::get((string)($field['type'] ?? ''));
+            $handler  = \FabricatorForms\Fields\FieldRegistry::get((string)($field['type'] ?? ''));
+            $defaults = $handler ? $handler->getDefaultConfig() : [];
             $f = [];
             foreach ($field as $k => $v) {
                 $sk = \sanitize_key($k);
+                // A structural or label key is always text. An array here (a crafted save or import) used to be kept as an
+                // array, and the PDF template's typed label then threw a TypeError on every submission of the form.
+                if (in_array($sk, $plaintext_keys, true) && !is_string($v)) {
+                    $f[$sk] = is_scalar($v) ? \sanitize_text_field((string) $v) : '';
+                    continue;
+                }
+                // Every other key keeps the kind of value its field declares by default: a list where the default is a
+                // list, a single value where it is one. An array under a single-value key (an imported form's "min", say)
+                // reached esc_attr(), esc_url() or trim() when the form was shown and threw a TypeError, taking down
+                // every page that shows the form. The wrong kind is replaced with the field's default and sanitized on.
+                if (array_key_exists($sk, $defaults)) {
+                    if (is_array($defaults[$sk]) !== is_array($v)) {
+                        $v = $defaults[$sk];
+                    }
+                } elseif (is_array($v) && !in_array($sk, self::STRUCTURAL_ARRAY_KEYS, true)) {
+                    continue; // a list under a key no field declares has no reader that expects one
+                }
                 if (is_string($v)) {
                     $f[$sk] = in_array($sk, $plaintext_keys, true)
                         ? \sanitize_text_field($v)
-                        : ($handler ? $handler->sanitizeConfigValue($k, $v) : \wp_kses_post($v));
+                        // $sk, not $k: matching on the raw key would miss e.g. "Mandate_Title" against handlers' lowercased plainTextConfigKeys() and double-encode it as HTML.
+                        : ($handler ? $handler->sanitizeConfigValue($sk, $v) : \FabricatorForms\Utils\HtmlSanitizer::sanitize($v));
                 } elseif (is_bool($v) || is_int($v) || is_float($v)) {
                     $f[$sk] = $v;
                 } elseif (is_array($v)) {
-                    /* 'conditions'/'children' need purpose-built sanitizers — sanitizeArrayValue()'s wp_kses_post()
-                       would entity-encode values and break condition matching against sanitize_text_field()'d options. */
+                    // 'conditions'/'children' need purpose-built sanitizers — sanitizeArrayValue()'s HTML sanitizer would break condition matching against sanitize_text_field()'d options.
                     if ($sk === 'conditions') {
                         $f[$sk] = self::sanitizeConditions($v);
                     } elseif ($sk === 'children') {
                         $f[$sk] = self::sanitizeFields($v, $depth + 1);
                     } else {
-                        $f[$sk] = self::sanitizeArrayValue($v);
+                        // Needs the same plain-text/HTML split sanitizeConfigValue() applies to strings, else the HTML sanitizer double-encodes textContent-rendered values like page_names.
+                        $f[$sk] = self::sanitizeArrayValue(
+                            $v,
+                            0,
+                            $handler ? $handler->isPlainTextConfigKey($sk) : false
+                        );
                     }
                 }
             }
             if (isset($f['options']) && is_array($f['options'])) {
                 $clean_opts = [];
                 foreach ($f['options'] as $opt) {
-                    if (is_array($opt)) {
-                        $clean_opts[] = [
-                            'value'   => \sanitize_text_field($opt['value'] ?? ''),
-                            'label'   => \sanitize_text_field($opt['label'] ?? ''),
-                            'default' => !empty($opt['default']),
-                        ];
-                    } else {
-                        $clean_opts[] = \sanitize_text_field((string)$opt);
+                    if (!is_array($opt)) {
+                        continue;
                     }
+                    $clean_opts[] = [
+                        'value'   => \sanitize_text_field($opt['value'] ?? ''),
+                        'label'   => \sanitize_text_field($opt['label'] ?? ''),
+                        'default' => !empty($opt['default']),
+                    ];
                 }
                 $f['options'] = $clean_opts;
             }
@@ -696,12 +807,7 @@ class FormEditor
     }
 
     /**
-     * Sanitizes a REFERENCE to a field id (condition rules, routing rules).
-     *
-     * Must stay byte-identical to how sanitizeFields() sanitizes the field's own 'id' — a reference
-     * normalized more aggressively than the definition silently stops resolving. sanitize_key() was
-     * wrong here for exactly that reason: it lowercases, so an imported form with a mixed-case field
-     * id kept the id but got conditions that never matched it.
+     * Sanitizes a field-id reference; must match sanitizeFields()'s id sanitization exactly — sanitize_key() lowercases and broke mixed-case ids.
      *
      * @param mixed $raw Raw field-id reference from the builder payload.
      * @return string Sanitized field-id reference.
@@ -740,11 +846,15 @@ class FormEditor
     /**
      * Recursively sanitizes a nested array-valued field config entry (depth-capped against CWE-674).
      *
-     * @param array $value Raw nested array value.
-     * @param int   $depth Current recursion depth (internal use).
+     * @param array $value      Raw nested array value.
+     * @param int   $depth      Current recursion depth (internal use).
+     * @param bool  $plain_text Sanitize string leaves with sanitize_text_field() instead of
+     *                          Utils\HtmlSanitizer::sanitize(); set for config keys the field declares plain text,
+     *                          whose values are rendered through text sinks and would otherwise be
+     *                          entity-encoded at save and shown encoded.
      * @return array Recursively sanitized array.
      */
-    private static function sanitizeArrayValue(array $value, int $depth = 0): array
+    private static function sanitizeArrayValue(array $value, int $depth = 0, bool $plain_text = false): array
     {
         if ($depth > 10) {
             return [];
@@ -753,11 +863,11 @@ class FormEditor
         foreach ($value as $k => $v) {
             $sk = is_string($k) ? \sanitize_key($k) : $k;
             if (is_string($v)) {
-                $clean[$sk] = \wp_kses_post($v);
+                $clean[$sk] = $plain_text ? \sanitize_text_field($v) : \FabricatorForms\Utils\HtmlSanitizer::sanitize($v);
             } elseif (is_bool($v) || is_int($v) || is_float($v)) {
                 $clean[$sk] = $v;
             } elseif (is_array($v)) {
-                $clean[$sk] = self::sanitizeArrayValue($v, $depth + 1);
+                $clean[$sk] = self::sanitizeArrayValue($v, $depth + 1, $plain_text);
             }
         }
         return $clean;
@@ -785,10 +895,10 @@ class FormEditor
                     'field_id' => self::sanitizeFieldRef($rule['field_id'] ?? null),
                     'operator' => \sanitize_key(\FabricatorForms\Utils\Cast::stringOrDefault($rule['operator'] ?? 'equals', 'equals')),
                     'value'    => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['value'] ?? '')),
-                    /* May be a literal address or a {field_id}/{admin_email}
-                       placeholder resolved at send time — sanitize_email()
-                       would strip the braces, so keep it as plain text. */
+                    // May be a literal address or a {field_id}/{admin_email} placeholder resolved at send time — sanitize_email() would strip the braces, so keep as plain text.
                     'email'    => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['email'] ?? '')),
+                    'cc'       => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['cc'] ?? '')),
+                    'bcc'      => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['bcc'] ?? '')),
                 ];
             }
             $clean[] = [
@@ -800,12 +910,16 @@ class FormEditor
                 'routing_rules'    => $routing_rules,
                 'routing_fallback' =>
                     \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['routing_fallback'] ?? '')),
+                'routing_fallback_cc' =>
+                    \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['routing_fallback_cc'] ?? '')),
+                'routing_fallback_bcc' =>
+                    \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['routing_fallback_bcc'] ?? '')),
                 'reply_to'         => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['reply_to']   ?? '')),
                 'subject'          => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['subject']    ?? '')),
                 /* Body is always HTML, authored via the Visual or Code view. */
                 'body'             => self::sanitizeEmailBody(\FabricatorForms\Utils\Cast::stringOrDefault($n['body'] ?? '')),
                 'from_name'        => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['from_name']  ?? '')),
-                'from_email'       => \sanitize_email(\FabricatorForms\Utils\Cast::stringOrDefault($n['from_email']      ?? '')),
+                'from_email'       => self::sanitizeAddressOrPlaceholder(\FabricatorForms\Utils\Cast::stringOrDefault($n['from_email'] ?? '')),
                 'cc'               => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['cc']         ?? '')),
                 'bcc'              => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['bcc']        ?? '')),
                 'attach_pdf'       => !empty($n['attach_pdf']),
@@ -814,6 +928,51 @@ class FormEditor
             ];
         }
         return $clean;
+    }
+
+    /**
+     * A single address, or a single {placeholder} MailSender resolves and validates at send time. sanitize_email() alone
+     * stripped the braces, so the default {admin_email} was saved as the non-address "admin_email".
+     *
+     * @param string $raw Raw sender value from the builder.
+     * @return string Sanitized address or placeholder.
+     */
+    private static function sanitizeAddressOrPlaceholder(string $raw): string
+    {
+        $raw = trim($raw);
+        if (preg_match('/^\{[A-Za-z0-9_-]+\}$/', $raw)) {
+            return $raw;
+        }
+        return \sanitize_email($raw);
+    }
+
+    /**
+     * Removes each <tag>…</tag> element, or a lone opening tag that never closes, in one forward pass.
+     *
+     * @param string   $html HTML to clean.
+     * @param string[] $tags Lowercase tag names.
+     * @return string
+     */
+    private static function stripElements(string $html, array $tags): string
+    {
+        foreach ($tags as $tag) {
+            $out     = '';
+            $offset  = 0;
+            $removed = 0;
+            while (preg_match('/<' . $tag . '\b/i', $html, $m, PREG_OFFSET_CAPTURE, $offset) === 1) {
+                $start = $m[0][1];
+                $out  .= substr($html, $offset, $start - $offset);
+                $close = stripos($html, '</' . $tag, $start);
+                $gt    = strpos($html, '>', $close !== false ? $close : $start);
+                $offset = $gt === false ? strlen($html) : $gt + 1;
+                $removed++;
+            }
+            if ($removed > 0) {
+                $html = $out . substr($html, $offset);
+                \FabricatorForms\fabricator_log('FabricatorForms sanitizeEmailBody [' . $tag . '-tags] removed ' . $removed . ' match(es)');
+            }
+        }
+        return $html;
     }
 
     /**
@@ -840,15 +999,12 @@ class FormEditor
         return [
             'submit_label'      => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($settings['submit_label']    ?? '', __('Submit', 'formfabricator'))),
             'submit_working'    => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($settings['submit_working']   ?? '', __('Sending…', 'formfabricator'))),
-            // sanitize_text_field(), not wp_kses_post(): both delivery paths hand this to a
-            // .textContent sink in front.js (the data-success attribute in FormRenderer::render()
-            // and the JSON message in FormProcessor), so its HTML is never rendered — while
-            // wp_kses_post()'s entity encoding turned an admin's "Thanks & goodbye" into a
-            // literal "Thanks &amp; goodbye". Same defect class that plainTextConfigKeys() fixed
-            // for field config, and consistent with submit_label/submit_working above.
-            'success_message'   => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($settings['success_message'] ?? '', __('Thank you!', 'formfabricator'))),
+            // sanitize_textarea_field(), not wp_kses_post(): both paths render via .textContent (front.css keeps its line breaks), and wp_kses_post() broke plain "&" into "&amp;".
+            'success_message'   => \sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault($settings['success_message'] ?? '', __('Thank you!', 'formfabricator'))),
+            // No 'enabled' flag: having rules is what switches this on, which is also what the builder's badge shows.
+            // A stored flag nothing reads reads like a kill switch that does nothing — how the whole setting came to
+            // be inert in the first place.
             'submit_conditions' => [
-                'enabled' => !empty($settings['submit_conditions']['enabled']),
                 'match'   => in_array($settings['submit_conditions']['match'] ?? '', ['all', 'any'], true)
                     ? $settings['submit_conditions']['match'] : 'all',
                 'rules'   => $rules,
@@ -857,12 +1013,7 @@ class FormEditor
     }
 
     /**
-     * Sanitizes an HTML email body in two layers.
-     *
-     * Layer 1 is a set of targeted regex passes: they reach <style> block *contents*, which
-     * wp_kses never inspects, and they preserve the valid email CSS a bare wp_kses would strip.
-     * Layer 2 is a wp_kses() allow-list applied on top as defense-in-depth -- the regexes are a
-     * supplement to it, not a replacement for it.
+     * Sanitizes an HTML email body in two layers: regex passes reach <style> contents wp_kses skips, then wp_kses() as defense-in-depth.
      *
      * @param string $html Raw HTML body from the notification editor.
      * @return string Sanitized HTML.
@@ -871,23 +1022,25 @@ class FormEditor
     {
         $before = $html;
 
+        // Active/embeddable content has no legitimate use in an email body and some webmail/desktop clients render it,
+        // so whole elements go, not just attributes. A linear scan: the former unrolled-loop regexes backtracked
+        // quadratically over a body with many unclosed openers.
+        $html = self::stripElements($html, ['iframe', 'object']);
+
+        // No regex below scans unboundedly from a point that may never match: each anchors on a fixed token.
         $passes = [
+            // Removing every opening and closing tag neutralizes a script; a whole-element pass after these had nothing left to match.
             'script-open'   => '/<script\b[^>]*>/i',
             'script-close'  => '/<\/script\s*>/i',
-            'script-tags'   => '/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/is',
-            // Active/embeddable content tags have no legitimate use in an email
-            // body and some webmail/desktop clients do render them, so strip
-            // the whole element rather than relying on attribute-level passes.
-            'iframe-tags'   => '/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>|<iframe\b[^>]*\/?>/is',
-            'object-tags'   => '/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/is',
             'embed-tags'    => '/<embed\b[^>]*\/?>/i',
             // Meta refresh is a classic open-redirect/auto-navigate vector in
             // rendered HTML mail and has no legitimate use in a notification body.
             'meta-refresh'  => '/<meta\b[^>]*http-equiv\s*=\s*["\']?\s*refresh[^>]*>/i',
             // HTML5 allows "/" as an attribute boundary (e.g. <img/onerror=...>),
             // not just whitespace — match both so this can't be sidestepped.
+            // Lookbehind rather than a leading [\s\/]+, which restarted over every position of a long whitespace run.
             'event-handlers' =>
-                '/[\s\/]+on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/i',
+                '/(?<=[\s\/])on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/i',
             'js-uris'
                 => '/\b(href|src|action)\s*=\s*(["\'])\s*'
                 . '(?:javascript|vbscript)\s*:[^"\']*\2/i',
@@ -896,28 +1049,22 @@ class FormEditor
             'js-uris-unquoted'
                 => '/\b(href|src|action)\s*=\s*(?!["\'])'
                 . '(?:javascript|vbscript)\s*:[^\s>]*/i',
-            // style="...url('javascript:...')..." is a CSS-vector XSS the
-            // href/src/action pass above doesn't cover.
-            'css-js-uris'
-                => '/(\bstyle\s*=\s*)(["\'])((?:(?!\2).)*(?:javascript|vbscript)\s*:(?:(?!\2).)*)\2/i',
+            // style="...url('javascript:...')..." is handled by the decoded-attribute pass below, which also covers
+            // entity-encoded and comment-split forms; a separate regex here backtracked quadratically on long styles.
         ];
 
         $replacements = [
             'script-open'       => '',
             'script-close'      => '',
-            'script-tags'       => '',
-            'iframe-tags'       => '',
-            'object-tags'       => '',
             'embed-tags'        => '',
             'meta-refresh'      => '',
             'event-handlers'    => '',
             'js-uris-unquoted'  => '$1=""',
-            'css-js-uris'       => '$1$2$2',
         ];
         $replacements['js-uris'] = '$1=$2#$2';
 
         foreach ($passes as $label => $pattern) {
-            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceDyn -- $pattern/$replacements are drawn from the hardcoded $passes/$replacements arrays above, not attacker input; no /e modifier is used anywhere in this codebase.
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceDyn -- $pattern/$replacements come from the hardcoded arrays above, not attacker input.
             $after = preg_replace($pattern, $replacements[$label], $html) ?? $html;
             if ($after !== $html) {
                 // Count-only, no stripped content logged; fabricator_log() is WP_DEBUG-gated, a debug aid not an audit trail.
@@ -956,7 +1103,7 @@ class FormEditor
                 $q       = $quoted ? $m[2] : '';
                 $val     = $quoted ? $m[3] : ($m[4] ?? '');
                 $decoded = html_entity_decode($val, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- hardcoded literal pattern/replacement stripping CSS comments from the decoded attribute value, not attacker-influenced pattern selection; no /e modifier.
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- hardcoded literal pattern stripping CSS comments from the decoded value; no /e modifier.
                 $decoded = preg_replace('#/\*.*?\*/#s', '', $decoded);
                 // Browsers strip ASCII tab/CR/LF before parsing a URL scheme, so "jav\tascript:" still executes — strip these before the keyword check.
                 $decoded = str_replace(["\t", "\n", "\r"], '', (string) $decoded);
@@ -1005,9 +1152,9 @@ class FormEditor
             'head'  => [],
             'body'  => ['style' => true, 'bgcolor' => true],
             'title' => [],
-            'meta'  => ['charset' => true, 'http-equiv' => true, 'content' => true, 'name' => true],
+            // No http-equiv (a refresh redirect) and no <link> (a remote stylesheet is a read-tracking beacon).
+            'meta'  => ['charset' => true, 'content' => true, 'name' => true],
             'style' => ['type' => true, 'media' => true],
-            'link'  => ['rel' => true, 'href' => true, 'type' => true, 'media' => true],
 
             // Layout & content — HTML-email-safe subset.
             'table'    => ['style' => true, 'width' => true, 'height' => true, 'border' => true,
@@ -1081,7 +1228,8 @@ class FormEditor
             'aside'    => ['style' => true, 'class' => true, 'id' => true],
             'nav'      => ['style' => true, 'class' => true, 'id' => true],
             'address'  => ['style' => true, 'class' => true],
-            'form'     => ['style' => true, 'class' => true, 'id' => true, 'action' => true, 'method' => true],
+            // No action/method: a <form> that submits somewhere is a phishing form inside a notification email.
+            'form'     => ['style' => true, 'class' => true, 'id' => true],
             'label'    => ['style' => true, 'class' => true, 'for' => true],
             'input'    => ['style' => true, 'class' => true, 'id' => true, 'type' => true, 'name' => true,
                            'value' => true, 'placeholder' => true, 'checked' => true, 'disabled' => true],
@@ -1092,11 +1240,11 @@ class FormEditor
             'noscript' => [],
         ];
 
-        // Add email-safe CSS properties safecss_filter_attr() would otherwise silently drop.
-        $allow_email_css = static function (array $attrs): array {
+        // Must hook 'safe_style_css' (allowed-property list), not 'safecss_filter_attr_allow_css' (per-declaration bool verdict) — an array-typed callback there throws a TypeError.
+        $allow_email_css = static function (array $allowed_properties): array {
             return array_unique(
                 array_merge(
-                    $attrs,
+                    $allowed_properties,
                     [
                         'overflow', 'border-radius', 'display', 'background-color',
                         'padding', 'margin', 'font-family', 'font-size', 'color',
@@ -1111,9 +1259,13 @@ class FormEditor
                 )
             );
         };
-        \add_filter('safecss_filter_attr_allow_css', $allow_email_css);
-        $html = \wp_kses($html, $allowed_email_tags);
-        \remove_filter('safecss_filter_attr_allow_css', $allow_email_css);
+        // finally: a throw inside wp_kses() (which runs other plugins' filters) must not strand this closure on the global hook for the rest of the request.
+        \add_filter('safe_style_css', $allow_email_css);
+        try {
+            $html = \wp_kses($html, $allowed_email_tags);
+        } finally {
+            \remove_filter('safe_style_css', $allow_email_css);
+        }
 
         $html = $doctype . $html;
 
@@ -1190,11 +1342,7 @@ class FormEditor
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- hardcoded literal pattern stripping CSS comments; no /e modifier.
         $css = (string) preg_replace('#/\*.*?\*/#s', '', $css);
 
-        /* Resolve CSS identifier escapes before any keyword match. A browser reads "@\69 mport",
-           "expr\65 ssion(" and "url(\6a avascript:...)" exactly as their unescaped spellings, so
-           matching only the literal text left four demonstrable bypasses. Decoding first means the
-           patterns below see what the browser will see. Applied to the whole block rather than
-           per-construct because the escape can sit anywhere inside any of them. */
+        // Resolve CSS identifier escapes before any keyword match: a browser reads "@\69 mport"/"expr\65 ssion(" as their unescaped spellings, so matching literal text alone left bypasses.
         $css = self::decodeCssEscapes($css);
 
         // @import pulls a remote stylesheet — a tracking/exfiltration vector in mail, and the
@@ -1271,6 +1419,17 @@ class FormEditor
                 'submitLabel'      => __('Submit', 'formfabricator'),
                 'submitWorking'    => __('Sending…', 'formfabricator'),
                 'successMessage'   => __('Thank you for your submission!', 'formfabricator'),
+
+                /* Builder labels that used to be hard-coded German in admin-builder.js */
+                // translators: %d: running number of the notification being added.
+                'notificationName'    => __('Notification %d', 'formfabricator'),
+                'notificationSubject' => __('New Entry: {form_title}', 'formfabricator'),
+                'segOption'           => __('Option', 'formfabricator'),
+                'segValue'            => __('Value', 'formfabricator'),
+                'segVisual'           => __('Visual', 'formfabricator'),
+                'segCode'             => __('Code', 'formfabricator'),
+                'segNo'               => __('No', 'formfabricator'),
+                'segYes'              => __('Yes', 'formfabricator'),
 
                 /* Unsaved-changes guard modal */
                 'unsavedTitle' => __('Unsaved changes', 'formfabricator'),
@@ -1437,6 +1596,12 @@ class FormEditor
                 'emailPlaceholder'    => __('Email', 'formfabricator'),
                 'fallbackEmail'       => __('Fallback email', 'formfabricator'),
                 'fallbackEmailHint'   => __('Used when no rule matches', 'formfabricator'),
+                'fallbackCc'          => __('Fallback CC', 'formfabricator'),
+                'fallbackBcc'         => __('Fallback BCC', 'formfabricator'),
+                // translators: prefix on a routing rule's CC row, matching the "→ To:" arrow above it.
+                'arrowCc'             => __('→ Cc:', 'formfabricator'),
+                // translators: prefix on a routing rule's BCC row, matching the "→ To:" arrow above it.
+                'arrowBcc'            => __('→ Bcc:', 'formfabricator'),
                 'subject'             => __('Subject', 'formfabricator'),
                 'message'             => __('Message', 'formfabricator'),
                 'attachments'         => __('Attachments', 'formfabricator'),
@@ -1480,10 +1645,7 @@ class FormEditor
                 'networkError'   => __('Network error.', 'formfabricator'),
             ],
 
-            /* SEPA "Länderfilter" country-tag picker (IBAN-capable countries). Reuses the
-               exact same __() msgids as SepaField::ibanCountryOptions() — same list, same
-               English source text — except 'SC' (Seychelles), which that list doesn't
-               contain and is new here. Reusing msgids means these already have translations. */
+            // SEPA "Länderfilter" country-tag picker: reuses SepaField::ibanCountryOptions()'s exact msgids (already translated) except 'SC' (Seychelles), new here.
             'countryNames' => [
                 'AD' => __('Andorra', 'formfabricator'),
                 'AE' => __('United Arab Emirates', 'formfabricator'),
@@ -1563,9 +1725,7 @@ class FormEditor
                 'XK' => __('Kosovo', 'formfabricator'),
             ],
 
-            /* Phone-field "Vorwahlen" (calling code) tag picker. These are dial-code
-               region labels, not ISO country names, so they're a distinct set of new
-               msgids from countryNames above (some cover multiple countries, e.g. +1). */
+            // Phone-field "Vorwahlen" tag picker: dial-code region labels, not ISO country names, so a distinct msgid set from countryNames above (e.g. +1 covers multiple countries).
             'phoneCodes' => [
                 '+1'   => __('USA / Canada', 'formfabricator'),
                 '+7'   => __('Russia', 'formfabricator'),

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -85,7 +85,7 @@ class CurrencyField extends BaseField
         $inner   = '<div class="fabricator-currency-wrap">'
             . '<span class="fabricator-currency-symbol">' . esc_html($symbol) . '</span>'
             . '<input type="number" step="0.01" id="' . esc_attr($field_id) . '" name="' . esc_attr($field_id) . '"'
-            . ' class="fabricator-input fabricator-currency-input" placeholder="0,00"'
+            . ' class="fabricator-input fabricator-currency-input" placeholder="' . esc_attr(number_format_i18n(0, 2)) . '"'
             . ' value="' . esc_attr((string)($value ?? '')) . '"'
             . $min_attr . $max_attr . $req . '>'
             . '</div>';
@@ -112,10 +112,16 @@ class CurrencyField extends BaseField
         if ($hard !== true) {
             return $hard;
         }
-        if (!is_numeric($value)) {
+        $num = (float)$value;
+        // is_numeric() accepts "1e999", which casts to INF and passes any max check.
+        if (!is_numeric($value) || !is_finite($num)) {
             return __('Please enter a valid amount.', 'formfabricator');
         }
-        $num = (float)$value;
+        // The email, the PDF and the seal all record the amount with two decimals, so a third one would be rounded
+        // away and the recorded amount would differ from the one that was entered.
+        if (round($num, 2) !== $num) {
+            return __('Please enter an amount with at most two decimal places.', 'formfabricator');
+        }
         if (($config['min_value'] ?? '') !== '' && $num < (float)$config['min_value']) {
             // translators: %s: minimum allowed value.
             return sprintf(__('Minimum value: %s', 'formfabricator'), $config['min_value']);
@@ -150,7 +156,8 @@ class CurrencyField extends BaseField
             return __('[No entry]', 'formfabricator');
         }
         $symbol = self::CURRENCIES[$config['currency'] ?? 'EUR'] ?? '€';
-        $number = is_numeric($value) ? number_format((float)$value, 2, ',', '.') : (string)$value;
+        // Separators follow the site's WordPress locale (1.234,56 on de_DE, 1,234.56 on en_US), not a hard-coded German format.
+        $number = is_numeric($value) ? number_format_i18n((float)$value, 2) : (string)$value;
         return trim($number . ' ' . $symbol);
     }
 

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -67,7 +67,7 @@ class FormSelectList
                 'fabricator-forms',
                 __('Form Selection', 'formfabricator'),
                 __('Form Selection', 'formfabricator'),
-                'read',
+                \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'edit_forms',
                 'fabricator-forms-select',
                 [self::class, 'render']
             );
@@ -97,7 +97,7 @@ class FormSelectList
 
         <div class="wrap fabricator-list-wrap">
             <div class="fabricator-title-pill"><?php esc_html_e('Form Selection', 'formfabricator'); ?></div>
-            <hr class="wp-header-end" style="display:none">
+            <?php \FabricatorForms\Utils\Assets::renderNoticeDock(); ?>
 
             <?php $noSelects = empty($selects) ? ' hidden' : ''; ?>
             <div class="fabricator-list-toolbar" id="fabricator-fsel-toolbar">
@@ -318,10 +318,12 @@ class FormSelectList
 
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         $id        = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require(); sniff can't see through the static call.
         $title     = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['title'] ?? '')));
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-        $items_raw = json_decode(sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['items'] ?? '[]'))), true);
+        // Decoded raw: sanitize_textarea_field() on the JSON text stripped %xx sequences and "<…" from labels before
+        // decoding. FormSelectModel::save() sanitizes every decoded label/description/form_id individually.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require(); sanitized per item in FormSelectModel::save().
+        $items_raw = json_decode(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['items'] ?? '[]')), true);
         if (!is_array($items_raw)) {
             wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')]);
         }
@@ -378,9 +380,7 @@ class FormSelectList
      */
     public static function shortcode($atts): string
     {
-        /* Deliberately NOT `array $atts` — see FormRenderer::shortcode(): a bare
-           [fabricator_form_select] hands the callback an empty string, and an array type
-           declaration would turn that into a page-fataling TypeError. */
+        // Deliberately NOT `array $atts`: a bare [fabricator_form_select] hands the callback an empty string, and an array type declaration would turn that into a page-fataling TypeError.
         $atts = shortcode_atts(['id' => 0], is_array($atts) ? $atts : []);
         $id   = (int) $atts['id'];
         if ($id <= 0) {
@@ -407,6 +407,13 @@ class FormSelectList
             }
         }
 
+        // Resolved once and shared by both loops below. Each was calling FormModel::get() for the
+        // same item, so a selector at its 200-item cap issued 400 lookups per public page view.
+        $fsel_forms = [];
+        foreach ($fsel->items as $i => $item) {
+            $fsel_forms[$i] = FormModel::get($item['form_id']);
+        }
+
         ob_start();
         $uid = 'fsel-' . $id;
         ?>
@@ -429,7 +436,7 @@ class FormSelectList
 
                 <div class="fsel-options" role="listbox" hidden>
                 <?php foreach ($fsel->items as $i => $item) :
-                    $form  = FormModel::get($item['form_id']);
+                    $form = $fsel_forms[$i] ?? null;
                     if (!$form) {
                         continue;
                     }
@@ -454,7 +461,7 @@ class FormSelectList
 
             <div class="fsel-forms">
                 <?php foreach ($fsel->items as $i => $item) :
-                    $form = FormModel::get($item['form_id']);
+                    $form = $fsel_forms[$i] ?? null;
                     if (!$form) {
                         continue;
                     }
@@ -498,6 +505,12 @@ class FormSelectList
             'preselectDefault' => __('Preselect as default', 'formfabricator'),
             'remove'           => __('Remove', 'formfabricator'),
             'noFormsFound'     => __('No forms found.', 'formfabricator'),
+            'saveFailed'       => __('The selection could not be saved. Please try again.', 'formfabricator'),
+            'deleteFailed'     => __('The selection could not be deleted. Please try again.', 'formfabricator'),
+            // translators: %d is replaced client-side with the number of selections that could not be deleted.
+            'bulkDeleteFailed' => __('%d selection(s) could not be deleted. Please try again.', 'formfabricator'),
+            // translators: %d is replaced client-side with the number of selections about to be deleted.
+            'bulkDeleteConfirm' => __('Delete %d selection(s)? This cannot be undone.', 'formfabricator'),
         ];
         wp_localize_script(
             'fabricator-forms-admin-formselect',

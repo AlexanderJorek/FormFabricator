@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -44,6 +44,19 @@ class SignatureField extends BaseField
     public function getStyles(): string
     {
         return self::readFieldAsset('assets/css/fields/SignatureField.css');
+    }
+
+    /**
+     * Returns false: this field renders a canvas and a hidden input, neither carrying the field id, so the
+     * question text names the set through aria-labelledby rather than pointing at one element (see BaseField::wrap()).
+     *
+     * @param array $config Field configuration.
+     * @return bool
+     */
+    public function labelsOwnControl(array $config): bool
+    {
+        unset($config);
+        return false;
     }
 
     /**
@@ -93,7 +106,8 @@ class SignatureField extends BaseField
     {
         $req       = !empty($config['required']) ? ' data-required="true"' : '';
         $canvas_id = $field_id . '-canvas';
-        $height    = (int)($config['canvas_height'] ?? 160);
+        // Clamped: an unbounded height produced a huge canvas, and a signature data URI to match.
+        $height    = min(600, max(80, (int)($config['canvas_height'] ?? 160)));
         $stroke    = (float)($config['stroke_width'] ?? 2);
         $fmt       = $config['export_format'] ?? 'png';
 
@@ -156,19 +170,25 @@ class SignatureField extends BaseField
      */
     public function validate(mixed $value, array $config): bool|string
     {
-        if (!empty($config['required'])) {
-            $format = ($config['export_format'] ?? 'png') === 'jpeg' ? 'jpeg' : 'png';
-            if (empty($value) || !self::isSignatureDataUri((string)$value, $format)) {
-                $label = $config['label'] ?? __('Signature', 'formfabricator');
-                // translators: %s: field label.
-                return sprintf(__('%s is a required field.', 'formfabricator'), $label);
-            }
-        }
         // A real canvas signature is a few KB; cap well above that so a
         // crafted oversized data URI can't inflate memory/CPU use per
-        // submission (extractValue() has no upper bound of its own).
+        // submission (extractValue() has no upper bound of its own). Checked before anything decodes it.
         if (!empty($value) && strlen((string)$value) > 2 * 1024 * 1024) {
             return __('Signature data is too large.', 'formfabricator');
+        }
+        if (empty($value)) {
+            if (empty($config['required'])) {
+                return true;
+            }
+            $label = $config['label'] ?? __('Signature', 'formfabricator');
+            // translators: %s: field label.
+            return sprintf(__('%s is a required field.', 'formfabricator'), $label);
+        }
+        // Present but not a readable image: "required field" told a visitor who had signed that they hadn't, and an
+        // optional signature that fails here would have been dropped from the mail and PDF without a word.
+        $format = ($config['export_format'] ?? 'png') === 'jpeg' ? 'jpeg' : 'png';
+        if (!self::isValidSignatureImage((string)$value, $format)) {
+            return __('The signature could not be read. Please sign again.', 'formfabricator');
         }
         return true;
     }
@@ -224,6 +244,7 @@ class SignatureField extends BaseField
 
         foreach ($field['materialized_files'] ?? [] as $file) {
             $mime   = $file['mime'] ?? '';
+            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes binary handed over the array boundary described at the encode site (strict mode). Not obfuscation.
             $binary = !empty($file['base64']) ? base64_decode($file['base64'], true) : false;
             if ($binary === false || !str_starts_with($mime, 'image/')) {
                 continue;

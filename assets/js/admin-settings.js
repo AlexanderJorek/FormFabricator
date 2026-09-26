@@ -6,10 +6,7 @@
 (function ($) {
     'use strict';
 
-    /* Sets icon markup then appends translated text as a TEXT NODE.
-       Concatenating a translated string into innerHTML lets whoever supplies the .mo inject
-       markup — and WordPress loads .mo files from WP_LANG_DIR, which is not limited to reviewed
-       WordPress.org language packs. The icon markup here is a literal; only the text varies. */
+    /* Text as a TEXT NODE, not innerHTML — a .mo (loaded from WP_LANG_DIR, not just reviewed packs) could inject markup. */
     function fabIconThenText(el, iconHtml, text) {
         if (!el) { return; }
         el.innerHTML = iconHtml;
@@ -48,10 +45,7 @@ try {
     console.error('[FormFabricator] wpColorPicker init failed', e);
 }
 
-            /* The Security/Miscellaneous cards stay in the DOM (hidden) for
-               non-admins so existing JS bindings don't null-crash. This is
-               UI-only — the real boundary is server-side (manage_options
-               checks in the AJAX handlers) — but re-hide on tamper anyway. */
+            // Cards stay in DOM (hidden) for non-admins so JS bindings don't null-crash; real boundary is server-side manage_options checks.
             if (!DATA.isFullAdmin) {
                 var adminOnlySel = '.fabricator-settings-card--security, ' +
                     '#fabricator-access-tile-btn, #fabricator-reset-tile-btn';
@@ -130,12 +124,12 @@ try {
                     } else {
                         confirmed = false;
                         confirmBtn.disabled = false;
-                        confirmBtn.innerHTML = I18N.errorTryAgain;
+                        confirmBtn.textContent = I18N.errorTryAgain;
                     }
                 }).fail(function () {
                     confirmed = false;
                     confirmBtn.disabled = false;
-                    confirmBtn.innerHTML = I18N.errorTryAgain;
+                    confirmBtn.textContent = I18N.errorTryAgain;
                 });
             });
 
@@ -144,7 +138,7 @@ try {
                 
                 var confirmLabel = I18N.areYouSureCountdown;
                 confirmBtn.disabled = true;
-                confirmBtn.innerHTML = confirmLabel.replace('%d', sec);
+                confirmBtn.textContent = confirmLabel.replace('%d', sec);
                 countdownTimer = setInterval(function () {
                     sec--;
                     if (sec <= 0) {
@@ -152,7 +146,7 @@ try {
                         confirmBtn.disabled = false;
                         fabIconThenText(confirmBtn, '<i class="fa-solid fa-check"></i> ', I18N.yesReset);
                     } else {
-                        confirmBtn.innerHTML = confirmLabel.replace('%d', sec);
+                        confirmBtn.textContent = confirmLabel.replace('%d', sec);
                     }
                 }, 1000);
             }
@@ -161,7 +155,7 @@ try {
                 clearInterval(countdownTimer);
                 confirmed = false;
                 confirmBtn.disabled = false;
-                confirmBtn.innerHTML = I18N.reset;
+                confirmBtn.textContent = I18N.reset;
             }
 
             function closeModal() {
@@ -278,15 +272,16 @@ try {
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                URL.revokeObjectURL(a.href);
+                /* Revoked on the next turn, not immediately: some browsers cancel a download whose object URL is
+                   released in the same task, and this is the only chance to save the key. */
+                var href = a.href;
+                setTimeout(function () { URL.revokeObjectURL(href); }, 60000);
                 dlConfirm.disabled = false;
             };
 
             dlConfirm.onclick = function () {
                 dlOverlay.hidden = true;
-                // Only this confirmation actually deletes the one-shot pending-download
-                // transient server-side — page render only ever peeks at it, so a lost/failed
-                // request here just means the modal reappears on the next page load.
+                // Only this click deletes the one-shot transient server-side; a failed request just reshows the modal next load.
                 var fd = new FormData();
                 fd.append('action', 'fabricator_confirm_key_download');
                 fd.append('nonce', NONCES.confirmDownload || '');
@@ -298,9 +293,7 @@ try {
             };
         }
 
-        /* Show download modal on page load if a key was just auto-generated. The page only
-           carries a boolean flag — the plaintext key itself is fetched here, on demand, so it
-           never appears in page source or bfcache (see FormSettings::handlePeekKeyDownload()). */
+        /* Page carries only a boolean flag; the plaintext key is fetched on demand so it never lands in page source or bfcache. */
         (function () {
             if (!DATA.hasPendingDownload) { return; }
 
@@ -614,7 +607,8 @@ try {
                 upgradeBtn.disabled = true;
                 openMkModal('');
                 var fd = new FormData();
-                fd.append('action', 'fabricator_setup_get_master_key');
+                /* Its own action: the setup one refuses once setup is done, and this dialog then closed without a word. */
+                fd.append('action', 'fabricator_upgrade_get_master_key');
                 fd.append('nonce',  DATA.setupNonce);
                 fetch(ajaxurl, { method: 'POST', body: fd })
                     .then(function (r) { return r.json(); })
@@ -624,12 +618,14 @@ try {
                             mkLine.textContent = data.data.define_line;
                             mkConfirm.disabled = false;
                         } else {
-                            closeMkModal();
+                            mkError.textContent   = (data.data && data.data.message) || I18N.error;
+                            mkError.style.display = 'block';
                         }
                     })
                     .catch(function () {
-                        upgradeBtn.disabled = false;
-                        closeMkModal();
+                        upgradeBtn.disabled   = false;
+                        mkError.textContent   = I18N.networkError;
+                        mkError.style.display = 'block';
                     });
             });
 
@@ -805,12 +801,15 @@ try {
 
         /* ── User-access modal ── */
         (function () {
+            /* slug, column header, hover text. The header alone does not say what a grant confers
+               (edit_forms carries outbound mail to arbitrary addresses), so each one carries a
+               description shown on hover. */
             var CAPS = [
-                ['view_forms',      I18N.permList],
-                ['edit_forms',      I18N.permForms],
-                ['edit_pdf_layout', I18N.permPdfLayout],
-                ['use_verifier',    I18N.permVerifier],
-                ['settings',        I18N.permSettings],
+                ['view_forms',      I18N.permList,      I18N.permListDesc],
+                ['edit_forms',      I18N.permForms,     I18N.permFormsDesc],
+                ['edit_pdf_layout', I18N.permPdfLayout, I18N.permPdfLayoutDesc],
+                ['use_verifier',    I18N.permVerifier,  I18N.permVerifierDesc],
+                ['settings',        I18N.permSettings,  I18N.permSettingsDesc],
             ];
 
             var overlay    = document.getElementById('fabricator-access-overlay');
@@ -830,7 +829,7 @@ try {
             /* roles  = { slug: { view_forms: bool, ... } }
                users  = [{ id, name, perms: { view_forms: bool, ... } }]
                roleNames = { slug: label } */
-            var roles = {}, roleNames = {}, users = [], userList = [];
+            var roles = {}, roleNames = {}, users = [];
 
             document.getElementById('fabricator-access-tile-btn').addEventListener('click', function () {
                 var d    = DATA.accessData || {};
@@ -839,7 +838,6 @@ try {
                 users     = (d.user_overrides || []).map(function (u) {
                     return { id: u.id, name: u.name, perms: u.perms || {} };
                 });
-                userList  = d.user_list  || [];
                 overlay.hidden = false;
                 loading.style.display = 'none';
                 content.style.display = '';
@@ -881,6 +879,12 @@ try {
                         var th = document.createElement('th');
                         th.textContent = cap[1];
                         th.className = 'fabricator-access-th fabricator-access-th--cap';
+                        if (cap[2]) {
+                            /* title, not innerHTML: the text comes from a .mo, which is loaded from
+                               WP_LANG_DIR and is not limited to reviewed language packs. */
+                            th.title = cap[2];
+                            th.classList.add('fabricator-access-th--help');
+                        }
                         head.appendChild(th);
                     });
                 });
@@ -981,9 +985,33 @@ try {
                 dropdown.innerHTML = '';
             }
 
-            function availableUsers() {
+            function availableUsers(list) {
                 var usedIds = users.map(function (u) { return u.id; });
-                return userList.filter(function (u) { return usedIds.indexOf(u.id) === -1; });
+                return list.filter(function (u) { return usedIds.indexOf(u.id) === -1; });
+            }
+
+            /* Asks the server for matching users as the admin types (FormSettings::handleAccessUserSearch()); the page
+               no longer embeds every account on the site. The sequence number drops out-of-order replies. */
+            var searchTimer = null;
+            var searchSeq   = 0;
+            function searchUsers(term) {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(function () {
+                    var seq = ++searchSeq;
+                    var fd  = new FormData();
+                    fd.append('action', 'fabricator_access_user_search');
+                    fd.append('nonce', DATA.accessNonce);
+                    fd.append('term', term || '');
+                    fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
+                        .then(function (r) { return r.json(); })
+                        .then(function (resp) {
+                            if (seq !== searchSeq || document.activeElement !== searchInput) return;
+                            showDropdown(resp && resp.success && Array.isArray(resp.data) ? resp.data : []);
+                        })
+                        .catch(function () {
+                            if (seq === searchSeq) dropdown.hidden = true;
+                        });
+                }, 200);
             }
 
             function positionDropdown() {
@@ -993,10 +1021,8 @@ try {
                 dropdown.style.width = r.width + 'px';
             }
 
-            function showDropdown(term) {
-                var list = availableUsers().filter(function (u) {
-                    return !term || u.name.toLowerCase().indexOf(term.toLowerCase()) !== -1;
-                });
+            function showDropdown(results) {
+                var list = availableUsers(results || []);
                 dropdown.innerHTML = '';
                 if (!list.length) {
                     dropdown.hidden = true;
@@ -1021,8 +1047,8 @@ try {
                         var term = searchInput.value;
                         renderUserSelect();
                         searchInput.value = term;
-                        showDropdown(term);
                         searchInput.focus();
+                        searchUsers(term);
                     });
                     item.appendChild(inlineAdd);
 
@@ -1033,11 +1059,11 @@ try {
             }
 
             searchInput.addEventListener('input', function () {
-                showDropdown(this.value);
+                searchUsers(this.value);
             });
 
             searchInput.addEventListener('focus', function () {
-                if (availableUsers().length) showDropdown(this.value);
+                searchUsers(this.value);
             });
 
             searchInput.addEventListener('blur', function () {
@@ -1064,6 +1090,8 @@ try {
                 jQuery.post(ajaxurl, {
                     action: 'fabricator_save_access_settings',
                     nonce: DATA.accessNonce,
+                    /* What this page loaded, so a save that would overwrite another administrator's is refused. */
+                    snapshot: DATA.accessSnapshot || '',
                     roles: rolesData,
                     users: usersData
                 }, function (resp) {
@@ -1073,13 +1101,17 @@ try {
                         DATA.accessData.user_overrides = users.map(function (u) {
                             return { id: u.id, name: u.name, perms: u.perms || {} };
                         });
+                        /* The saved matrix is the new baseline, or the next save here would be refused as changed elsewhere. */
+                        if (resp.data && resp.data.snapshot) { DATA.accessSnapshot = resp.data.snapshot; }
                         closeModal();
                     } else {
                         showError(I18N.errorSaving);
                     }
-                }).fail(function () {
+                }).fail(function (xhr) {
                     saveBtn.disabled = false;
-                    showError(I18N.errorSaving);
+                    /* A 409 carries its own message (changed elsewhere); anything else is a plain save error. */
+                    var msg = xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message;
+                    showError(msg || I18N.errorSaving);
                 });
             });
 
@@ -1101,8 +1133,12 @@ try {
                 var n = document.createElement('div');
                 n.className = 'fabricator-settings-notice fabricator-settings-notice--'
                     + (isError ? 'error' : 'success');
-                n.innerHTML = '<i class="fa-solid fa-'
-                    + (isError ? 'circle-xmark' : 'circle-check') + '"></i> ' + msg;
+                /* msg is never markup (see callers) — same .mo-injection reasoning as the header note above. */
+                fabIconThenText(
+                    n,
+                    '<i class="fa-solid fa-' + (isError ? 'circle-xmark' : 'circle-check') + '"></i> ',
+                    msg
+                );
                 form.parentNode.insertBefore(n, form);
                 n.scrollIntoView({behavior:'smooth', block:'nearest'});
                 if (!isError) {
@@ -1126,6 +1162,10 @@ try {
                     .then(function(data){
                         if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
                         if (data.success) {
+                            /* The saved state is the new baseline: without this every further save on the same page
+                               was refused as "changed elsewhere". */
+                            var snap = form.querySelector('input[name="fabricator_settings_snapshot"]');
+                            if (snap && data.data && data.data.snapshot) { snap.value = data.data.snapshot; }
                             showNotice(data.data.message, false);
                         } else {
                             showNotice((data.data && data.data.message) || I18N.errorSaving, true);

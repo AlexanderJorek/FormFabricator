@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,28 +24,12 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 /**
- * Works out how much memory this host can spare, and what a given job will cost.
- *
- * Replaces the previous fixed "N slots x M megabytes" arithmetic. That bounded the worst case but
- * did it by guessing both numbers up front, before knowing either the host's capacity or the size
- * of the job — so it simultaneously refused work a large host could easily absorb and admitted
- * work a small host could not. Here the host's capacity is measured and each job is costed from
- * its actual payload, so a small submission reserves little (and many run side by side) while a
- * genuinely huge one is allowed to take the whole budget if nothing else is running.
- *
- * IMPORTANT — what a "reservation" is and is not: raising memory_limit does not allocate anything,
- * and PHP has no cross-process memory semaphore. These figures are advisory bookkeeping shared via
- * wp_options. They bound the work this plugin ADMITS concurrently; they cannot stop a process that
- * has already been admitted from exceeding its own estimate, and they know nothing about memory
- * consumed by the rest of the site. This is a safety rail, not an allocator.
+ * Works out how much memory this host can spare and what a job costs — advisory bookkeeping only (no real allocation or cross-process guarantee), a safety rail, not an allocator.
  */
 class MemoryBudget
 {
     /**
-     * Share of detected host memory the plugin will ever commit to concurrent expensive work.
-     *
-     * The rest is left for PHP-FPM's other workers, the database, the web server and the OS page
-     * cache. Deliberately well under 1.0 — this plugin is a guest on the host, not its owner.
+     * Share of detected host memory the plugin will ever commit — deliberately well under 1.0; the rest goes to PHP-FPM, the DB, the web server and the OS page cache.
      *
      * @var float
      */
@@ -60,66 +44,42 @@ class MemoryBudget
     private const MIN_BUDGET_MB = 512;
 
     /**
-     * Ceiling for the derived budget. A very large host does not mean this plugin should feel
-     * free to commit 200GB to concurrent PDF work; past this point the bottleneck is CPU and
-     * wall-clock time, not memory.
+     * Ceiling for the derived budget — past this, the bottleneck is CPU/wall-clock time, not memory, however large the host.
      *
      * @var int
      */
     private const MAX_BUDGET_MB = 8192;
 
     /**
-     * MARGINAL fixed cost of one job, on top of what an ordinary request already consumes.
-     *
-     * Deliberately not a whole worker's working set. WordPress, the object cache and PHP's own
-     * baseline are already paid for by the host having spawned the process — charging them to the
-     * reservation double-counts, and at the 256MB that figure was originally set to it capped an
-     * ordinary no-upload contact form at 2 concurrent submissions on a 1GB container. 96MB
-     * reflects what mPDF's parser and font subsystem actually add for a typical form.
+     * MARGINAL cost only — charging WP's own baseline here double-counts it; a prior 256MB value throttled a no-upload contact form to 2 concurrent submissions on a 1GB container.
      *
      * @var int
      */
     private const BASE_COST_MB = 96;
 
     /**
-     * Jobs whose marginal cost is at or below this are admitted without a reservation at all.
-     *
-     * A submission with no uploads is no more expensive than any other WordPress request, and
-     * gating those behind shared accounting buys nothing while risking a 429 on an ordinary
-     * contact form. Admission control exists for jobs whose size actually varies.
+     * Jobs at or below this cost are admitted with no reservation — gating a no-upload submission behind shared accounting risks a 429 for nothing.
      *
      * @var int
      */
     private const RESERVATION_THRESHOLD_MB = 128;
 
     /**
-     * Multiplier applied to a job's payload bytes.
-     *
-     * Deliberately pessimistic. An upload is held as raw binary, again base64-encoded into the
-     * mapped submission, again as an mPDF imageVar, and written to a temp file; a PDF being
-     * verified is held raw, then again per decompressed stream, then again as a GD bitmap. Four
-     * concurrent copies of the payload is the realistic ceiling for both paths.
+     * Deliberately pessimistic multiplier: an upload/PDF payload realistically exists in up to four copies at once (raw, base64, imageVar/stream, bitmap).
      *
      * @var int
      */
     private const PAYLOAD_FACTOR = 4;
 
     /**
-     * How long a successful host-capacity detection is cached. Total capacity is a property of the
-     * machine, so it does not need re-reading per request; an hour keeps a container resize from
-     * going unnoticed for long.
+     * How long host-capacity detection is cached — capacity rarely changes, but an hour keeps a container resize from going unnoticed for long.
      *
      * @var int
      */
     private const DETECT_CACHE_TTL = 3600;
 
     /**
-     * The single reservation bucket every expensive path shares.
-     *
-     * Deliberately one bucket, not one per subsystem: there is one host with one pool of RAM, so
-     * a PDF verification running in wp-admin and a large public submission must compete for the
-     * same budget. Separate buckets would each stay within their own limit while together
-     * exceeding what the machine has — which is exactly the failure this replaced.
+     * Deliberately one shared bucket, not one per subsystem — separate buckets could each stay within limit while together exceeding what the host actually has.
      *
      * @var string
      */
@@ -141,21 +101,21 @@ class MemoryBudget
     private static ?int $budget_memo = null;
 
     /**
-     * Reserves this job's estimated memory against the shared budget.
+     * Reserves this job's estimated memory — wraps ConcurrencySlot so a caller can't accidentally open a private budget by typo'ing a bucket name.
      *
-     * Wrapping ConcurrencySlot here (rather than letting each caller name the bucket itself) is
-     * what keeps every expensive path in the same pool — a caller cannot accidentally open a
-     * private budget by typo'ing a bucket name.
-     *
-     * @param int $estimated_bytes From estimateBytes().
-     * @param int $ttl_seconds     How long the reservation survives a caller that dies mid-job.
+     * @param int  $estimated_bytes From estimateBytes().
+     * @param int  $ttl_seconds     How long the reservation survives a caller that dies mid-job.
+     * @param bool $always          Take a slot whatever the size, so the job also counts towards MAX_HOLDERS. For work
+     *                              whose cost doesn't follow its input size — the PDF check parses the whole file — a
+     *                              flood of small jobs would otherwise run in unbounded numbers, since every payload up
+     *                              to 8 MB falls under RESERVATION_THRESHOLD_MB.
      * @return string|false Token for releaseReservation(), or false when the budget can't cover it.
      */
-    public static function reserve(int $estimated_bytes, int $ttl_seconds): string|false
+    public static function reserve(int $estimated_bytes, int $ttl_seconds, bool $always = false): string|false
     {
-        // Small jobs skip accounting entirely (see RESERVATION_THRESHOLD_MB). The sentinel token
-        // is accepted by releaseReservation() as a no-op, so callers need no special case.
-        if ($estimated_bytes <= self::RESERVATION_THRESHOLD_MB * 1024 * 1024) {
+        // Small jobs skip accounting entirely (see RESERVATION_THRESHOLD_MB), unless the caller asks otherwise. The
+        // sentinel token is accepted by releaseReservation() as a no-op, so callers need no special case.
+        if (!$always && $estimated_bytes <= self::RESERVATION_THRESHOLD_MB * 1024 * 1024) {
             return self::UNRESERVED_TOKEN;
         }
         return ConcurrencySlot::reserve(
@@ -168,10 +128,7 @@ class MemoryBudget
     }
 
     /**
-     * Token handed back for jobs below RESERVATION_THRESHOLD_MB, which hold no row.
-     *
-     * Not a valid ConcurrencySlot token (that is 24 hex chars from random_bytes(12)), so it can
-     * never collide with a real reservation.
+     * Sentinel for jobs below RESERVATION_THRESHOLD_MB (no row held) — not a valid ConcurrencySlot token (24 hex chars), so it can't collide with a real one.
      *
      * @var string
      */
@@ -212,10 +169,7 @@ class MemoryBudget
             return self::$budget_memo;
         }
 
-        /* An explicit operator instruction wins outright — including over MAX_BUDGET_MB and
-           SAFETY_FRACTION. Someone who sets this has measured their own host, and clamping their
-           answer with our heuristics would make the escape hatch useless on exactly the large
-           machines that need it. */
+        // An explicit operator override wins outright, even over MAX_BUDGET_MB/SAFETY_FRACTION — it's a measured answer, not a guess to clamp.
         if (defined('FABRICATOR_MEMORY_BUDGET_MB')) {
             $override = (int) constant('FABRICATOR_MEMORY_BUDGET_MB');
             if ($override > 0) {
@@ -228,12 +182,7 @@ class MemoryBudget
         if ($detected !== null) {
             $budget_mb = (int) (($detected * self::SAFETY_FRACTION) / (1024 * 1024));
         } else {
-            /* Nothing probe-able (Windows, open_basedir, a locked-down container). Fall back to
-               PHP's own memory_limit, which is always readable and is a figure the host operator
-               actually chose. Allowing concurrent work to total what a SINGLE request was already
-               permitted is not a regression on any host — one job hitting the limit could always
-               do that much — while still scaling with how the machine is provisioned instead of
-               pinning every such host to the bare floor. */
+            // Nothing probe-able: fall back to PHP's own memory_limit — concurrent work totaling one request's limit isn't a regression, and still scales with the host.
             $php_limit = self::phpMemoryLimitBytes();
             $budget_mb = $php_limit > 0
                 ? (int) ($php_limit / (1024 * 1024))
@@ -259,41 +208,59 @@ class MemoryBudget
     }
 
     /**
-     * Raises memory_limit to $bytes when the current limit is lower.
+     * Raises memory_limit to at least $bytes when the current limit is lower, targeting the job's own estimate.
      *
-     * Unlike the fixed raise this replaces, the target is the job's own estimate, so a small
-     * submission is not handed a multi-gigabyte ceiling it has no use for.
+     * Through wp_raise_memory_limit(), not ini_set(): WordPress.org's Plugin Check rejects ini_set('memory_limit'), and
+     * the core function is the sanctioned way. Its "fabricator_forms_memory_limit" context filter carries the estimate;
+     * core then sets the larger of that and WP_MAX_MEMORY_LIMIT, and never lowers the limit. Nothing is restored
+     * afterwards, since PHP resets ini values at the end of every request.
      *
      * @param int $bytes Target limit in bytes.
-     * @return string|null Previous memory_limit to hand back to restore(), or null if unchanged.
+     * @return void
      */
-    public static function raiseTo(int $bytes): ?string
+    public static function raiseTo(int $bytes): void
     {
         $current = self::phpMemoryLimitBytes();
-        // -1 is unlimited: already above any target, and setting a number would be a downgrade.
+        // -1 is unlimited: already above any target.
         if ($current === -1 || $current >= $bytes) {
-            return null;
+            return;
         }
-        $previous = (string) ini_get('memory_limit');
-        $target_mb = (int) ceil($bytes / (1024 * 1024));
-        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- bounded raise to this job's own reserved estimate, never more than budgetBytes(); restore() puts it back.
-        @ini_set('memory_limit', $target_mb . 'M');
-        return $previous;
+        $target = (int) ceil($bytes / (1024 * 1024)) . 'M';
+        $filter = static fn(): string => $target;
+        add_filter('fabricator_forms_memory_limit', $filter);
+        $raised = wp_raise_memory_limit('fabricator_forms');
+        remove_filter('fabricator_forms_memory_limit', $filter);
+        if ($raised === false || self::phpMemoryLimitBytes() < $bytes) {
+            // Hosts that pin memory_limit (php_admin_value, disable_functions) refuse the raise; the job then
+            // runs under the old limit, which is worth knowing when a large submission later dies of OOM.
+            \FabricatorForms\fabricator_log(
+                'FabricatorForms MemoryBudget: could not raise memory_limit from ' . (string) ini_get('memory_limit')
+                . ' to ' . $target . '; the host does not allow changing it at runtime.'
+            );
+        }
     }
 
     /**
-     * Restores a memory_limit captured by raiseTo(). No-op when it returned null.
+     * The largest total upload whose estimate, with $besides bytes more, still fits the whole budget. Without $besides,
+     * a file above it can never be sent, however long the visitor waits, so upload fields accept nothing larger (104 MB
+     * with the smallest budget).
      *
-     * @param string|null $previous The value raiseTo() returned.
-     * @return void
+     * @param int $besides Memory needed on top of the files, such as a decoded image.
+     * @return int Bytes.
      */
-    public static function restore(?string $previous): void
+    public static function largestUploadBytes(int $besides = 0): int
     {
-        if ($previous === null || $previous === '') {
-            return;
-        }
-        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the value raised above, not a new global change.
-        @ini_set('memory_limit', $previous);
+        return intdiv(max(0, self::budgetBytes() - self::BASE_COST_MB * 1024 * 1024 - $besides), self::PAYLOAD_FACTOR);
+    }
+
+    /**
+     * Whether raiseTo() can raise the memory limit: wp_raise_memory_limit() gives up where the host fixes it.
+     *
+     * @return bool
+     */
+    public static function canRaiseLimit(): bool
+    {
+        return !function_exists('wp_is_ini_value_changeable') || wp_is_ini_value_changeable('memory_limit');
     }
 
     /**
@@ -318,12 +285,7 @@ class MemoryBudget
     }
 
     /**
-     * Best available reading of how much memory this host actually has.
-     *
-     * Tried in descending order of trustworthiness. Every source is optional and every read is
-     * guarded: open_basedir commonly blocks /proc and /sys, Windows has neither, and a shared host
-     * may expose the physical machine's figures rather than the container's. Returning null (so
-     * the caller falls back to the floor) is a normal outcome, not an error.
+     * Best available host-memory reading, tried in descending trustworthiness — null (falling back to the floor) is a normal outcome, not an error.
      *
      * @return int|null Bytes, or null when nothing could be determined.
      */
@@ -383,9 +345,7 @@ class MemoryBudget
     }
 
     /**
-     * Host-level free memory. Last resort: on shared hosting this reports the whole machine, which
-     * over-states what this site may actually use — hence SAFETY_FRACTION and MAX_BUDGET_MB.
-     * MemAvailable (not MemFree) is used because it accounts for reclaimable page cache.
+     * Host-level free memory, last resort; uses MemAvailable not MemFree since it accounts for reclaimable cache.
      *
      * @return int|null
      */
@@ -405,22 +365,19 @@ class MemoryBudget
     }
 
     /**
-     * Reads a small pseudo-file, returning null on anything unexpected.
-     *
-     * WP_Filesystem is deliberately not used: these are kernel pseudo-files, not site content, and
-     * WP_Filesystem may need FTP/SSH credentials that don't exist on a front-end request.
+     * Reads a small kernel pseudo-file — WP_Filesystem is deliberately skipped since it may need credentials unavailable on a front-end request.
      *
      * @param string $path Absolute path to a kernel pseudo-file.
      * @return string|null Trimmed contents, or null if unreadable/empty/implausible.
      */
     private static function readSmallFile(string $path): ?string
     {
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $path is only ever one of the three hardcoded literals in probeCgroupV2()/probeCgroupV1()/probeProcMeminfo(); never request-influenced.
-        if (!@is_readable($path)) {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $path is always one of three hardcoded literals, never request input.
+        if (!Cast::withoutWarnings(static fn(): bool => is_readable($path))) {
             return null;
         }
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_get_contents, PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- see method docblock: kernel pseudo-file, hardcoded path, WP_Filesystem is unavailable on the front-end path this runs on.
-        $raw = @file_get_contents($path, false, null, 0, 65536);
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_get_contents,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- kernel pseudo-file, hardcoded path; see method docblock.
+        $raw = Cast::withoutWarnings(static fn(): string|false => file_get_contents($path, false, null, 0, 65536));
         if ($raw === false) {
             return null;
         }

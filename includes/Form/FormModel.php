@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -30,6 +30,20 @@ defined('ABSPATH') || exit;
  */
 class FormModel
 {
+    /**
+     * Post meta keys holding a form's definition; Plugin::protectFormMeta() hides them from core's custom-field APIs.
+     *
+     * @var string[]
+     */
+    public const META_KEYS = ['fabricator_form_fields', 'fabricator_form_notifications', 'fabricator_form_settings'];
+
+    /**
+     * How many forms one post query reads at a time; the callers page until a short batch comes back.
+     *
+     * @var int
+     */
+    public const QUERY_BATCH = 100;
+
     public int $id            = 0;
     public string $title         = '';
     public array $fields        = [];
@@ -99,7 +113,30 @@ class FormModel
             return new \WP_Error('invalid_nonce', __('Security check failed. Please reload and try again.', 'formfabricator'));
         }
 
+        // The snapshot check and the write that follows have to be one step, or two saves landing at the same moment
+        // both read the same unchanged timestamp, both pass, and the later one silently overwrites the earlier.
         if ($form_id > 0 && $expected_snapshot !== '') {
+            return \FabricatorForms\Utils\OptionMutex::run(
+                'fabricator_form_save_' . $form_id,
+                static fn() => self::writeForm($form_id, $data, $expected_snapshot)
+            );
+        }
+        return self::writeForm($form_id, $data, $expected_snapshot);
+    }
+
+    /**
+     * Writes a form, re-checking the optimistic-concurrency snapshot first. See save(), which gates access.
+     *
+     * @param int    $form_id           Post ID, or 0 for a new form.
+     * @param array  $data              Form data: title, fields, notifications, settings.
+     * @param string $expected_snapshot post_modified_gmt this save was based on; '' skips the check.
+     * @return int|\WP_Error The form's post ID, or an error.
+     */
+    private static function writeForm(int $form_id, array $data, string $expected_snapshot): int|\WP_Error
+    {
+        if ($form_id > 0 && $expected_snapshot !== '') {
+            // Read inside the lock, never from before it: the point is that nothing can change between here and the write.
+            clean_post_cache($form_id);
             $current = get_post($form_id);
             if ($current && $current->post_type === 'fabricator_form' && $current->post_modified_gmt !== $expected_snapshot) {
                 return new \WP_Error(
@@ -112,7 +149,8 @@ class FormModel
         $title = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($data['title'] ?? null, 'Untitled Form'));
 
         $post_data = [
-            'post_title'  => $title,
+            // wp_insert_post()/wp_update_post() unslash the title, just as update_post_meta() does the meta below.
+            'post_title'  => wp_slash($title),
             'post_type'   => 'fabricator_form',
             'post_status' => 'publish',
         ];
@@ -137,9 +175,11 @@ class FormModel
         $fields        = $data['fields']        ?? [];
         $notifications = $data['notifications'] ?? [];
         $settings      = $data['settings']      ?? [];
-        update_post_meta($id, 'fabricator_form_fields', $fields);
-        update_post_meta($id, 'fabricator_form_notifications', $notifications);
-        update_post_meta($id, 'fabricator_form_settings', $settings);
+        // update_post_meta() runs wp_unslash() on what it is given, but this is decoded JSON that was never slashed, so every
+        // save stripped backslashes from email patterns, CSS escapes and HTML. wp_slash() adds exactly what it removes.
+        update_post_meta($id, 'fabricator_form_fields', wp_slash($fields));
+        update_post_meta($id, 'fabricator_form_notifications', wp_slash($notifications));
+        update_post_meta($id, 'fabricator_form_settings', wp_slash($settings));
 
         return $id;
     }
@@ -205,15 +245,25 @@ class FormModel
         if (!\FabricatorForms\Plugin::userCan('view_forms')) {
             return [];
         }
-        $posts = get_posts(
-            [
-            'post_type'      => 'fabricator_form',
-            'posts_per_page' => -1,
-            'post_status'    => 'publish',
-            'orderby'        => 'title',
-            'order'          => 'ASC',
-            ]
-        );
+        // Read a page at a time rather than posts_per_page => -1: an unbounded query loads every form in one go, which
+        // Plugin Check flags and which grows without limit on a site that keeps adding forms.
+        $posts = [];
+        for ($page_offset = 0; $page_offset < 100000; $page_offset += self::QUERY_BATCH) {
+            $batch = get_posts(
+                [
+                'post_type'      => 'fabricator_form',
+                'posts_per_page' => self::QUERY_BATCH,
+                'offset'         => $page_offset,
+                'post_status'    => 'publish',
+                'orderby'        => 'title',
+                'order'          => 'ASC',
+                ]
+            );
+            $posts = array_merge($posts, $batch);
+            if (count($batch) < self::QUERY_BATCH) {
+                break;
+            }
+        }
 
         /* Prime the meta cache so subsequent get_post_meta() calls in decodeMeta() hit the object cache only. */
         update_meta_cache('post', wp_list_pluck($posts, 'ID'));
@@ -242,21 +292,27 @@ class FormModel
         if (get_post_type($post_id) !== 'fabricator_form') {
             return;
         }
-        $saved = get_option('fabricator_forms_pdf_settings', []);
-        if (!is_array($saved) || empty($saved)) {
-            return;
-        }
-        $prefix  = $post_id . '|';
-        $changed = false;
-        foreach (array_keys($saved) as $key) {
-            if (strncmp((string) $key, $prefix, strlen($prefix)) === 0) {
-                unset($saved[$key]);
-                $changed = true;
+        // Under OptionMutex, like FormEditor::ajaxSave(): a form saved at the same moment rewrites this option too.
+        \FabricatorForms\Utils\OptionMutex::run(
+            'fabricator_forms_pdf_settings',
+            static function () use ($post_id): void {
+                $saved = get_option('fabricator_forms_pdf_settings', []);
+                if (!is_array($saved) || empty($saved)) {
+                    return;
+                }
+                $prefix  = $post_id . '|';
+                $changed = false;
+                foreach (array_keys($saved) as $key) {
+                    if (strncmp((string) $key, $prefix, strlen($prefix)) === 0) {
+                        unset($saved[$key]);
+                        $changed = true;
+                    }
+                }
+                if ($changed) {
+                    update_option('fabricator_forms_pdf_settings', $saved, false);
+                }
             }
-        }
-        if ($changed) {
-            update_option('fabricator_forms_pdf_settings', $saved, false);
-        }
+        );
     }
 
     /**

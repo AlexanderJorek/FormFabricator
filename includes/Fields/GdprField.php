@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -29,15 +29,30 @@ defined('ABSPATH') || exit;
 class GdprField extends BaseField
 {
     /**
-     * privacy_policy_text is rendered via esc_html(), never as raw HTML — without this,
-     * wp_kses_post()'s entity-encoding at save time plus esc_html() at render time
-     * double-encodes any "&" in an admin-typed link text.
+     * privacy_policy_text renders via esc_html(), never raw HTML — avoids wp_kses_post()+esc_html() double-encoding "&".
      *
      * @return string[]
      */
     protected function plainTextConfigKeys(): array
     {
         return array_merge(parent::plainTextConfigKeys(), ['privacy_policy_text']);
+    }
+
+    /**
+     * Stores privacy_policy_url as a URL. Through the HTML sanitizer "&" was saved as "&amp;", which esc_url() then
+     * emitted as "&#038;amp;", so a policy link with more than one query parameter pointed at the wrong page.
+     * sanitize_text_field() is no option either: it strips percent-encoded characters out of the URL.
+     *
+     * @param string $key   Config key.
+     * @param string $value Raw value.
+     * @return string Sanitized value.
+     */
+    public function sanitizeConfigValue(string $key, string $value): string
+    {
+        if ($key === 'privacy_policy_url') {
+            return esc_url_raw(trim($value));
+        }
+        return parent::sanitizeConfigValue($key, $value);
     }
 
     /**
@@ -95,35 +110,32 @@ class GdprField extends BaseField
         // GDPR acceptance is always required by law — 'required' config is ignored (see hasRequired())
         $req     = ' required aria-required="true"';
         $checked = !empty($value) ? ' checked' : '';
-        /* trim() + ?: rather than ??: the builder always stores these keys (getDefaultConfig()
-           seeds privacy_policy_url as ''), and ?? only fires on null — so the documented fallback
-           to WordPress's own privacy-policy page was unreachable, leaving the acknowledgment
-           rendered without a link and recorded in the PDF/email with an empty URL. */
-        $configured_url = trim((string) ($config['privacy_policy_url'] ?? ''));
+        // trim()+?: not ??: these keys are always set, so ?? never fires and the WP privacy-policy fallback would be unreachable.
+        $configured_url = trim(wp_specialchars_decode((string) ($config['privacy_policy_url'] ?? ''), ENT_QUOTES)); // decodes "&amp;" saved before 1.0.7
         $policy_url     = esc_url($configured_url !== '' ? $configured_url : (string) get_privacy_policy_url());
         $configured_txt = trim((string) ($config['privacy_policy_text'] ?? ''));
         $policy_text    = esc_html($configured_txt !== '' ? $configured_txt : __('Privacy policy', 'formfabricator'));
 
-        /* The <a> is assembled here rather than inside the translatable string. Markup inside a
-           msgid is alterable by whoever supplies the .mo — and this plugin loads .mo files from
-           WP_LANG_DIR, which is not limited to reviewed WordPress.org language packs — so a
-           translation could rewrite the anchor's attributes. Keeping the tag in PHP means a
-           translation can only move the link within the sentence, never change what it is.
-           Both branches share one msgid, so translators see a single sentence either way. */
+        // <a> built here in PHP, not inside the translatable string — a supplied .mo could otherwise rewrite the anchor's attributes.
         if ($policy_url !== '') {
             // This is a GDPR Art. 13 acknowledgment, not freely-given consent — use ConsentField for that.
             $link = '<a href="' . $policy_url . '" target="_blank" rel="noopener">' . $policy_text . '</a>';
         } else {
             // No URL configured — an href="" link would silently be non-functional; fall back to plain text.
-            \FabricatorForms\fabricator_log(
-                'FabricatorForms GdprField: no privacy_policy_url configured and no'
-                . ' WP privacy policy page is set — rendering acknowledgment text without a link.'
-            );
+            // Logged once a day, not on every page view that renders the form.
+            if (!get_transient('fabricator_gdpr_no_policy_logged')) {
+                set_transient('fabricator_gdpr_no_policy_logged', 1, DAY_IN_SECONDS);
+                \FabricatorForms\fabricator_log(
+                    'FabricatorForms GdprField: no privacy_policy_url configured and no'
+                    . ' WP privacy policy page is set — rendering acknowledgment text without a link.'
+                );
+            }
             $link = $policy_text;
         }
+        // The translation is escaped before the link goes in: it comes from a .mo, which can be loaded from WP_LANG_DIR.
         $text = sprintf(
             // translators: %s: the privacy policy, linked when a URL is configured.
-            __('I have read and acknowledge the %s.', 'formfabricator'),
+            esc_html__('I have read and acknowledge the %s.', 'formfabricator'),
             $link
         );
 
@@ -133,7 +145,18 @@ class GdprField extends BaseField
             . '<span class="fabricator-consent-text">' . $text . '</span>'
             . '</label>';
 
-        return $this->wrap($field_id, $config, $inner);
+        // Required class passed as an extra class, not via 'required' config: front.js enforces it without adding a label asterisk.
+        return $this->wrap($field_id, $config, $inner, 'fabricator-required-field');
+    }
+
+    /**
+     * Client-side empty check: an unchecked box is empty (the generic fallback reads its value="1" as filled).
+     *
+     * @return array
+     */
+    public function getClientEmptyCheck(): array
+    {
+        return ['fn' => "function(f){return !f.querySelector('input[type=\"checkbox\"]:checked');}"];
     }
 
     /**
@@ -168,7 +191,7 @@ class GdprField extends BaseField
         // Same fallback semantics as render() — see the comment there for why ?? is wrong here.
         $configured_txt = trim((string) ($config['privacy_policy_text'] ?? ''));
         $policy_text = wp_strip_all_tags($configured_txt !== '' ? $configured_txt : __('Privacy policy', 'formfabricator'));
-        $configured_url = trim((string) ($config['privacy_policy_url'] ?? ''));
+        $configured_url = trim(wp_specialchars_decode((string) ($config['privacy_policy_url'] ?? ''), ENT_QUOTES)); // decodes "&amp;" saved before 1.0.7
         $policy_url  = $configured_url !== '' ? $configured_url : (string) get_privacy_policy_url();
         return sprintf(
             // translators: %1$s: privacy policy link text, %2$s: privacy policy URL, %3$s: acknowledgment timestamp.

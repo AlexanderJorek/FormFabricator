@@ -10,17 +10,17 @@
         Usage: vendor/bin/phpcs --standard=.phpcs-security.xml
     </description>
 
-    <file>forge-forms.php</file>
+    <file>formfabricator.php</file>
     <file>uninstall.php</file>
     <file>includes</file>
     <!-- Dev tooling lives outside includes/ and was covered by neither ruleset, so it
          inherited zero linting. build.ps1 strips it from the package; it is still code
          in this repository and should hold the same bar. -->
     <file>languages/compile-mo.php</file>
+    <file>languages/make-pot.php</file>
 
     <exclude-pattern>vendor/*</exclude-pattern>
     <exclude-pattern>assets/*</exclude-pattern>
-    <exclude-pattern>includes/PDF/templates/*</exclude-pattern>
 
     <!-- WordPress.Security.* + WordPress.DB.PreparedSQL* from wp-coding-standards/wpcs:
          nonce verification, output escaping, safe redirects, prepared SQL. Pulled from
@@ -73,6 +73,34 @@
     <!-- error_log()/var_dump() left in shipped code, and @-suppressed errors. -->
     <rule ref="WordPress.PHP.DevelopmentFunctions"/>
     <rule ref="WordPress.PHP.NoSilencedErrors"/>
+
+    <!-- ini_set() of options WordPress.org disallows (memory_limit, max_execution_time) is an ERROR in its Plugin Check
+         and blocks approval; "risky" ones such as pcre.backtrack_limit are warnings that need a justification. This
+         ruleset lacked the sniff, which is how ini_set('memory_limit') reached a release candidate. -->
+    <rule ref="WordPress.PHP.IniSet"/>
+
+    <!-- Further sniffs WordPress.org's Plugin Check runs, so a new date(), a deprecated core call, a discouraged PHP
+         function or an enqueue without a version fails build.ps1 here instead of in the WordPress.org review. -->
+    <rule ref="WordPress.DateTime.RestrictedFunctions"/>
+    <rule ref="WordPress.WP.EnqueuedResourceParameters"/>
+    <rule ref="WordPress.PHP.DiscouragedPHPFunctions"/>
+    <rule ref="WordPress.WP.DeprecatedFunctions"/>
+    <rule ref="WordPress.WP.DeprecatedParameters"/>
+    <rule ref="WordPress.WP.DeprecatedClasses"/>
+
+    <!-- Every global the plugin defines or fires (functions, classes, constants, hook names) must carry its prefix; Plugin
+         Check reports a miss as an ERROR. A core hook deliberately re-applied carries a justified phpcs:ignore. -->
+    <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+        <properties>
+            <property name="prefixes" type="array">
+                <element value="fabricator"/>
+                <element value="FabricatorForms"/>
+            </property>
+        </properties>
+        <!-- The languages/ scripts are standalone CLI tools: WordPress never loads them, and build.ps1 strips them
+             from the package, so their top-level variables are no globals of the plugin. -->
+        <exclude-pattern>languages/*</exclude-pattern>
+    </rule>
 
     <!-- Not a security sniff per se, but the table's "WordPress Security Sniffs" row scope
          previously undersold what this ruleset actually covers — WordPress.WP.I18n checks that

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -70,8 +70,14 @@ class CaptchaField extends BaseField
     {
         $site_key = get_option('fabricator_forms_recaptcha_site_key', '');
         if ($site_key === '') {
+            // The setup hint is for whoever can fix it; visitors only learn that the form can't be sent right now. The form
+            // stays blocked for them either way: without a site key there is nothing to verify, and skipping the check
+            // would open the form to spam.
+            $message = \FabricatorForms\Plugin::userCan('settings')
+                ? __('reCAPTCHA: Please enter the site key in the plugin settings.', 'formfabricator')
+                : __('This form cannot be sent at the moment. Please try again later.', 'formfabricator');
             return '<div class="fabricator-field fabricator-field--captcha">'
-                . '<p class="fabricator-notice">' . esc_html(__('reCAPTCHA: Please enter the site key in the plugin settings.', 'formfabricator')) . '</p>'
+                . '<p class="fabricator-notice">' . esc_html($message) . '</p>'
                 . '</div>';
         }
 
@@ -108,6 +114,17 @@ class CaptchaField extends BaseField
      * @param array $config Field configuration.
      * @return bool|string True on valid, error message string on invalid.
      */
+    /**
+     * Checked only after every other field passes: the token is single-use, so a submission that failed elsewhere
+     * used it up and made the retry fail with "Please confirm the CAPTCHA".
+     *
+     * @return bool
+     */
+    public function defersValidation(): bool
+    {
+        return true;
+    }
+
     public function validate(mixed $value, array $config): bool|string
     {
         $secret = get_option('fabricator_forms_recaptcha_secret_key', '');
@@ -115,14 +132,39 @@ class CaptchaField extends BaseField
             return __('Please confirm the CAPTCHA.', 'formfabricator');
         }
 
+        // One siteverify call per token per request. Every Captcha field reads the same g-recaptcha-response, and a
+        // token is single-use, so a second Captcha field on the form asked Google again, failed, and blocked the form.
+        $cache_key = hash('sha256', (string) $value);
+        if (!array_key_exists($cache_key, self::$verified)) {
+            self::$verified[$cache_key] = self::verifyToken((string) $value, (string) $secret);
+        }
+        return self::$verified[$cache_key];
+    }
+
+    /**
+     * siteverify outcomes for this request, keyed by token hash.
+     *
+     * @var array<string, bool|string>
+     */
+    private static array $verified = [];
+
+    /**
+     * Asks Google whether a reCAPTCHA token is valid for this site.
+     *
+     * @param string $token  The g-recaptcha-response value.
+     * @param string $secret The reCAPTCHA secret key.
+     * @return bool|string True when valid, otherwise the message for the visitor.
+     */
+    private static function verifyToken(string $token, string $secret): bool|string
+    {
         $response = wp_remote_post(
             'https://www.google.com/recaptcha/api/siteverify',
             [
             'timeout' => 5,
+            // No 'remoteip': it is optional, and sending every visitor's address to Google isn't needed to verify a token.
             'body'    => [
                 'secret'   => $secret,
-                'response' => sanitize_text_field((string)$value),
-                'remoteip' => sanitize_text_field((string)\FabricatorForms\Utils\ClientIp::resolve()),
+                'response' => sanitize_text_field($token),
             ],
             ]
         );
@@ -225,8 +267,10 @@ class CaptchaField extends BaseField
             [
                 'type'  => 'notice',
                 'level' => 'info',
+                // What the code does, not more: verifyToken() sends no remoteip, and the check runs only once every other
+                // field has passed. The visitor's browser still connects to Google when the CAPTCHA loads.
                 'text'  => __(
-                    "This field sends the visitor's CAPTCHA response and IP address to Google (reCAPTCHA) for verification on every submission. Reflect this third-party data transfer in your site's privacy policy.",
+                    "The visitor's browser connects to Google (reCAPTCHA) when the CAPTCHA loads, so Google sees their IP address. Once the rest of the form is valid, this site sends the CAPTCHA answer to Google. Say so in your privacy policy.",
                     'formfabricator'
                 ),
             ],

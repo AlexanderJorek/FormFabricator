@@ -2,17 +2,17 @@
 <ruleset name="FormFabricator">
     <description>FormFabricator coding standard</description>
 
-    <file>forge-forms.php</file>
+    <file>formfabricator.php</file>
     <file>uninstall.php</file>
     <file>includes</file>
     <!-- Dev tooling lives outside includes/ and was covered by neither ruleset, so it
          inherited zero linting. build.ps1 strips it from the package; it is still code
          in this repository and should hold the same bar. -->
     <file>languages/compile-mo.php</file>
+    <file>languages/make-pot.php</file>
 
     <exclude-pattern>vendor/*</exclude-pattern>
     <exclude-pattern>assets/*</exclude-pattern>
-    <exclude-pattern>includes/PDF/templates/*</exclude-pattern>
 
     <!--
         Every plugin file starts with `defined('ABSPATH') || exit;` before its

@@ -7,6 +7,11 @@
     'use strict';
     var canvas = document.getElementById('fabricator-particle-canvas');
     if (!canvas) return;
+    /* Decorative only, so skipped for anyone whose system asks for reduced motion (WCAG 2.3.3). */
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        canvas.style.display = 'none';
+        return;
+    }
     var ctx = canvas.getContext('2d');
     var mouse = { x: -9999, y: -9999 };
     var _ah = getComputedStyle(document.documentElement).getPropertyValue('--fabricator-admin-accent').trim() || '#2271b1';
@@ -14,6 +19,13 @@
     var DOTS = Math.min(120, Math.max(40, Math.round(window.innerWidth * window.innerHeight / 26000)));
     var LINK = 150, SPEED = 1.0, COLOR = _rgb(_ah);
     var particles = [], paused = false, FRAME_MS = 1000 / 30;
+    /* One pending frame at a time: every switch back to this tab used to start another loop alongside
+       the one already running, so the page's CPU use grew over a session. */
+    var rafId = 0, timerId = 0;
+    function schedule() {
+        if (rafId || timerId) return;
+        rafId = requestAnimationFrame(function () { rafId = 0; draw(); });
+    }
     function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     function rand(a, b) { return a + Math.random() * (b - a); }
     function init() {
@@ -59,13 +71,13 @@
         for (var i = 0; i < particles.length; i++) {
             ctx.beginPath(); ctx.arc(particles[i].x, particles[i].y, particles[i].r, 0, Math.PI * 2); ctx.fill();
         }
-        setTimeout(function () { requestAnimationFrame(draw); }, FRAME_MS - 2);
+        timerId = setTimeout(function () { timerId = 0; schedule(); }, FRAME_MS - 2);
     }
     document.addEventListener('mousemove', function (e) { mouse.x = e.clientX; mouse.y = e.clientY; });
     document.addEventListener('visibilitychange', function () {
         paused = document.hidden;
-        if (!paused) requestAnimationFrame(draw);
+        if (!paused) schedule();
     });
     window.addEventListener('resize', function () { resize(); init(); });
-    resize(); init(); requestAnimationFrame(draw);
+    resize(); init(); schedule();
 }());

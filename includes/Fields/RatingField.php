@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -29,10 +29,7 @@ defined('ABSPATH') || exit;
 class RatingField extends BaseField
 {
     /**
-     * custom_icon_url is esc_url()'d at render, never treated as HTML — without this,
-     * wp_kses_post() entity-encodes "&" at save time, so an icon URL with a query string is
-     * stored as "…?a=1&amp;b=2", re-encoded to "&#038;" inside the CSS url() string, and
-     * resolves to a broken multi-parameter URL.
+     * custom_icon_url is esc_url()'d at render, not HTML — wp_kses_post() would double-encode "&" in a query string into a broken URL.
      *
      * @return string[]
      */
@@ -49,6 +46,19 @@ class RatingField extends BaseField
     public function getStyles(): string
     {
         return self::readFieldAsset('assets/css/fields/RatingField.css');
+    }
+
+    /**
+     * Returns false: this field renders a radio per star, none of them carrying the field id, so the
+     * question text names the set through aria-labelledby rather than pointing at one element (see BaseField::wrap()).
+     *
+     * @param array $config Field configuration.
+     * @return bool
+     */
+    public function labelsOwnControl(array $config): bool
+    {
+        unset($config);
+        return false;
     }
 
     /**
@@ -123,18 +133,14 @@ class RatingField extends BaseField
         $icons     = self::ICONS[$icon_key] ?? self::ICONS['star'];
         $req       = !empty($config['required']) ? ' data-required="true"' : '';
         $custom_url = $custom ? esc_url($config['custom_icon_url'], ['http', 'https']) : '';
-        // esc_url() is for href/src attribute context — it deliberately keeps CSS-meaningful
-        // characters like ';', '(' and ')' as valid URL characters (e.g. in a query string), so
-        // interpolating it unquoted into url(...) lets an edit_forms-capable (not
-        // unfiltered_html) user close the url() and append arbitrary CSS declarations. Quoting
-        // it as a CSS string and escaping backslash/quote closes that off: inside a quoted CSS
-        // string, ';', '(', ')' and whitespace are just literal text, not syntax.
+        // Quoted as a CSS string (not bare url()) — esc_url() leaves ';'/'('/')' valid, which unquoted would let an edit_forms user inject CSS.
         $custom_url_css = $custom_url !== ''
             ? '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $custom_url) . '"'
             : '';
 
-        $inner = '<div class="fabricator-rating-group" role="group"'
-            . ' aria-label="' . esc_attr($config['label'] ?? __('Rating', 'formfabricator')) . '"'
+        // No role="group" here: BaseField::wrap() now marks the field wrapper as the group and names it from the
+        // field's own label, so a second group carrying the same name would only be announced twice.
+        $inner = '<div class="fabricator-rating-group"'
             . ' data-half="' . ($half ? '1' : '0') . '"'
             . $req . '>';
 
@@ -147,6 +153,12 @@ class RatingField extends BaseField
             $checked_full   = ((float)$val === (float)$v_full) ? ' checked' : '';
             $checked_half   = ((float)$val === (float)$v_half) ? ' checked' : '';
             $glyph          = esc_html($icons['filled']);
+            /* Each radio names the rating it sets: the visible star is an image, so without this a screen reader
+               announces an unlabelled choice. */
+            // translators: %1$s: the rating this choice sets, %2$s: the highest rating.
+            $aria_full      = esc_attr(sprintf(__('%1$s of %2$s', 'formfabricator'), (string) $v_full, (string) $max));
+            // translators: %1$s: the rating this choice sets, %2$s: the highest rating.
+            $aria_half      = esc_attr(sprintf(__('%1$s of %2$s', 'formfabricator'), (string) $v_half, (string) $max));
 
             $inner .= '<span class="fabricator-rating-star" data-star="' . $i . '">';
 
@@ -168,18 +180,18 @@ class RatingField extends BaseField
                 $inner .= '<label class="fabricator-rating-zone fabricator-rating-zone-half"'
                     . ' title="' . $v_half . '">'
                     . '<input type="radio" name="' . esc_attr($field_id)
-                    . '" value="' . $v_half . '"' . $checked_half . '>'
+                    . '" value="' . $v_half . '" aria-label="' . $aria_half . '"' . $checked_half . '>'
                     . '</label>';
                 $inner .= '<label class="fabricator-rating-zone fabricator-rating-zone-full"'
                     . ' title="' . $v_full . '">'
                     . '<input type="radio" name="' . esc_attr($field_id)
-                    . '" value="' . $v_full . '"' . $checked_full . '>'
+                    . '" value="' . $v_full . '" aria-label="' . $aria_full . '"' . $checked_full . '>'
                     . '</label>';
             } else {
                 $inner .= '<label class="fabricator-rating-zone fabricator-rating-zone-full fabricator-rating-zone-full--only"'
                     . ' title="' . $v_full . '">'
                     . '<input type="radio" name="' . esc_attr($field_id)
-                    . '" value="' . $v_full . '"' . $checked_full . '>'
+                    . '" value="' . $v_full . '" aria-label="' . $aria_full . '"' . $checked_full . '>'
                     . '</label>';
             }
 
@@ -210,7 +222,8 @@ class RatingField extends BaseField
         if ($hard !== true) {
             return $hard;
         }
-        if (!is_numeric($value)) {
+        // is_finite(): is_numeric() accepts "1e999", which casts to INF.
+        if (!is_numeric($value) || !is_finite((float)$value)) {
             return __('Please select a valid rating.', 'formfabricator');
         }
         $max = (float)($config['max'] ?? 5);
@@ -248,7 +261,8 @@ class RatingField extends BaseField
         if ($value === null || $value === '') {
             return __('[No entry]', 'formfabricator');
         }
-        return $value . ' / ' . (int)($config['max'] ?? 5);
+        // The same 1..20 clamp as render() and validate(), or an out-of-range config printed e.g. "4 / 0".
+        return $value . ' / ' . max(1, min(20, (int)($config['max'] ?? 5)));
     }
 
     /**
@@ -310,7 +324,8 @@ class RatingField extends BaseField
                 'type'       => 'media_upload',
                 'label'      => __('Image', 'formfabricator'),
                 'rebuild'    => true,
-                'hint'       => __('Square image. For half values the left half is used.', 'formfabricator'),
+                // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires one unbroken string literal.
+                'hint'       => __('Square image; for half values the left half is used. An image on another site is fetched by every visitor, which hands that site their IP address — pick one from your Media Library instead.', 'formfabricator'),
                 'depends_on' => ['icon_source' => true],
             ],
             [

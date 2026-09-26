@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -73,9 +73,7 @@ class AddressField extends BaseField
     ];
 
     /**
-     * Each sub-field's "{key}_label" config value is rendered via esc_html(), never as raw
-     * HTML — without this, wp_kses_post()'s entity-encoding at save time plus esc_html() at
-     * render time double-encodes any "&" in an admin-typed sub-label.
+     * Sub-field labels render via esc_html(), never raw HTML — avoids wp_kses_post()+esc_html() double-encoding "&".
      *
      * @return string[]
      */
@@ -107,6 +105,18 @@ class AddressField extends BaseField
     }
 
     /**
+     * True only in the simple form, which renders one text input carrying the field id. With the sub-fields switched
+     * on there are several inputs instead, each with its own label, so the question text names the set (BaseField::wrap()).
+     *
+     * @param array $config Field configuration.
+     * @return bool
+     */
+    public function labelsOwnControl(array $config): bool
+    {
+        return empty($config['expanded']);
+    }
+
+    /**
      * Renders the field HTML.
      *
      * @param array  $config   Field configuration.
@@ -135,9 +145,12 @@ class AddressField extends BaseField
             $ac    = esc_attr($this->autocompleteToken($k));
 
             $req_star = !empty($config[$k . '_required']) ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
+            // Every sub-input carries its own id and its label a matching for="", or assistive technology announces
+            // six unlabelled text boxes. FormRenderer::uniqueIds() rewrites both together on a repeated form.
+            $sub_id = esc_attr($field_id . '-' . $k);
             $inner .= '<div class="fabricator-address-sub">';
-            $inner .= '<label class="fabricator-sub-label">' . $label . $req_star . '</label>';
-            $inner .= '<input type="text"'
+            $inner .= '<label class="fabricator-sub-label" for="' . $sub_id . '">' . $label . $req_star . '</label>';
+            $inner .= '<input type="text" id="' . $sub_id . '"'
                 . ' name="' . esc_attr($field_id) . '[' . esc_attr($k) . ']"'
                 . ' class="fabricator-input" placeholder="' . $ph . '"'
                 . ' value="' . esc_attr((string)($val[$k] ?? '')) . '"'
@@ -181,7 +194,7 @@ class AddressField extends BaseField
     public function extractValue(string $field_id): mixed
     {
         self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); value is unslashed and sanitize_text_field()'d via map_deep()/capRawArray(), WPCS doesn't recognize sanitization via the string-callback form.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
         $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : '';
         if (is_array($raw)) {
             // Flatten nested leaves: a direct POST can send name[first][0]=x, which
@@ -251,7 +264,10 @@ class AddressField extends BaseField
     public function map(mixed $value, array $config): string
     {
         if (!is_array($value)) {
-            return __('[No entry]', 'formfabricator');
+            // Simple mode posts one text input, so the address arrives as a plain string. Returning "[No entry]" for
+            // everything non-array dropped it from the email, the PDF and the seal, and nothing here is stored.
+            $scalar = trim((string) ($value ?? ''));
+            return $scalar !== '' ? $scalar : __('[No entry]', 'formfabricator');
         }
         $sfMap = [];
         foreach (self::SUBFIELDS as $sf) {

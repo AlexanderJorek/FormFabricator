@@ -48,6 +48,8 @@
 
 /* ── Messages ─────────────────────────────────────────────────────────────── */
 .fabricator-form-messages {
+    /* The success message is a multi-line setting shown via textContent; keep its line breaks. */
+    white-space: pre-line;
     padding: 12px 16px;
     border-radius: var(--fabricator-radius);
     margin-bottom: var(--fabricator-gap);
@@ -256,6 +258,11 @@ select.fabricator-input.fabricator-select-native {
     border-top: 1px solid var(--fabricator-border);
     display: flex;
     justify-content: flex-end;
+}
+/* Set by the page navigation on every page but the last. The submit-button conditions use inline display instead,
+   so the two never overwrite each other and the footer shows only when both allow it (front.js: applyPage). */
+.fabricator-form-footer.fabricator-footer-off-page {
+    display: none;
 }
 .fabricator-submit-btn {
     display: inline-flex;

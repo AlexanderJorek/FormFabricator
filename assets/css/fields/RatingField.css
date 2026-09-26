@@ -33,7 +33,23 @@
     display: block;
     cursor: pointer;
 }
-.fabricator-rating-zone input { display: none; }
+/* Not display:none: that took the radios out of the tab order, so the rating could be neither given nor, when
+   required, submitted without a mouse (WCAG 2.1.1). They stay in place, invisible, and cover their own zone. */
+.fabricator-rating-zone input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.fabricator-rating-zone:focus-within {
+    outline: 2px solid var(--fabricator-accent, #2271b1);
+    outline-offset: 1px;
+    border-radius: 2px;
+}
 .fabricator-rating-zone-half { left: 0; width: 50%; }
 .fabricator-rating-zone-full { right: 0; width: 50%; }
 .fabricator-rating-zone-full--only { left: 0; right: 0; width: 100%; }

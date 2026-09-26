@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -29,9 +29,7 @@ defined('ABSPATH') || exit;
 class SepaField extends BaseField
 {
     /**
-     * Adds this field's label-like keys — all rendered via esc_html(), never as raw HTML — to
-     * the base plain-text allowlist. mandate_text/mandate_note are intentionally excluded: their
-     * schema entries say "HTML allowed" and render() passes them through wp_kses_post().
+     * Adds SEPA label-like keys to the plain-text allowlist; mandate_text/mandate_note stay excluded since their schema allows HTML (\FabricatorForms\Utils\HtmlSanitizer::sanitize()).
      *
      * @return string[]
      */
@@ -142,8 +140,8 @@ class SepaField extends BaseField
         $val = is_array($value) ? $value : [];
 
         $mandate_title = esc_html($config['mandate_title'] ?? __('SEPA Direct Debit Mandate', 'formfabricator'));
-        $mandate_text  = wp_kses_post($config['mandate_text'] ?? $this->defaultMandateText());
-        $mandate_note  = wp_kses_post($config['mandate_note'] ?? $this->defaultMandateNote());
+        $mandate_text  = \FabricatorForms\Utils\HtmlSanitizer::sanitize((string) ($config['mandate_text'] ?? $this->defaultMandateText()));
+        $mandate_note  = \FabricatorForms\Utils\HtmlSanitizer::sanitize((string) ($config['mandate_note'] ?? $this->defaultMandateNote()));
         $iban_label    = esc_html($config['iban_label']    ?? __('IBAN:', 'formfabricator'));
         $bic_label     = esc_html($config['bic_label']     ?? __('BIC:', 'formfabricator'));
         $holder_label  = esc_html($config['holder_label']  ?? __('Account holder:', 'formfabricator'));
@@ -183,26 +181,15 @@ class SepaField extends BaseField
             $html .= ' <span class="fabricator-required" aria-hidden="true">*</span>';
         }
         $html .= '</label>';
-        // live_iban_lookup defaults to false (opt-in, GDPR) since enabling it relays the IBAN to openiban.com pre-submission.
-        $live_lookup = isset($config['live_iban_lookup']) && !empty($config['live_iban_lookup']);
         $html .= '<input type="text" id="' . esc_attr($field_id) . '-iban"'
             . ' name="' . esc_attr($field_id) . '[iban]"'
             . ' class="fabricator-input fabricator-sepa-iban"'
             . ' maxlength="42" autocomplete="off"'
             . ' inputmode="text" spellcheck="false"'
             . ' data-placeholder-country="' . $placeholder_cc . '"'
-            . ' data-live-lookup="' . ($live_lookup ? '1' : '0') . '"'
             . $filter_attr
             . ' value="' . $iban_val . '">';
         $html .= '<div class="fabricator-field-hint"></div>';
-        if ($live_lookup) {
-            // GDPR Art. 13 transparency: disclose the live IBAN lookup to the visitor, not just the admin.
-            $html .= '<p class="fabricator-sepa-lookup-notice">'
-                . esc_html__(
-                    'Your IBAN is sent to a third-party service (openiban.com) to look up the BIC.',
-                    'formfabricator'
-                ) . '</p>';
-        }
         $html .= '<div class="fabricator-field-error" id="' . esc_attr($field_id) . '-iban-error" role="alert"></div>';
         $html .= '</div>';
 
@@ -249,7 +236,8 @@ class SepaField extends BaseField
 
         /* ---- Signature ---- */
         $canvas_id     = esc_attr($field_id) . '-sig-canvas';
-        $canvas_height = (int)($config['canvas_height'] ?? 200);
+        // Clamped: an unbounded height produced a huge canvas, and a signature data URI to match.
+        $canvas_height = min(600, max(80, (int)($config['canvas_height'] ?? 200)));
         $stroke_width  = (float)($config['stroke_width'] ?? 2);
         $html .= '<div class="fabricator-sepa-signatures">';
         $html .= '<div class="fabricator-sepa-sig-block">';
@@ -324,11 +312,11 @@ class SepaField extends BaseField
     }
 
     /**
-     * Country code => canonical IBAN length. Mirrors the IBAN_LEN table in this field's client-side JS (used there for input masking/placeholder).
+     * Country code => canonical IBAN length. Public so it can be localized to SepaField.js instead of duplicated there.
      *
      * @var array<string, int>
      */
-    private const IBAN_LEN = [
+    public const IBAN_LEN = [
         'AD' => 24, 'AE' => 23, 'AL' => 28, 'AT' => 20, 'AZ' => 28, 'BA' => 20, 'BE' => 16,
         'BG' => 22, 'BH' => 22, 'BI' => 27, 'BR' => 29, 'BY' => 28, 'CH' => 21, 'CR' => 22,
         'CY' => 28, 'CZ' => 24, 'DE' => 22, 'DJ' => 27, 'DK' => 18, 'DO' => 28, 'EE' => 20,
@@ -336,7 +324,7 @@ class SepaField extends BaseField
         'GE' => 22, 'GI' => 23, 'GL' => 18, 'GR' => 27, 'GT' => 28, 'HR' => 21, 'HU' => 28,
         'IE' => 22, 'IL' => 23, 'IQ' => 23, 'IS' => 26, 'IT' => 27, 'JO' => 30, 'KW' => 30,
         'KZ' => 20, 'LB' => 28, 'LC' => 32, 'LI' => 21, 'LT' => 20, 'LU' => 20, 'LV' => 21,
-        'LY' => 25, 'MC' => 27, 'MD' => 24, 'ME' => 22, 'MK' => 19, 'MN' => 20, 'MR' => 27,
+        'LY' => 25, 'MA' => 28, 'MC' => 27, 'MD' => 24, 'ME' => 22, 'MK' => 19, 'MN' => 20, 'MR' => 27,
         'MT' => 31, 'MU' => 30, 'NI' => 28, 'NL' => 18, 'NO' => 15, 'OM' => 23, 'PK' => 24,
         'PL' => 28, 'PS' => 29, 'PT' => 25, 'QA' => 29, 'RO' => 24, 'RS' => 22, 'RU' => 33,
         'SA' => 24, 'SC' => 31, 'SD' => 18, 'SE' => 24, 'SI' => 19, 'SK' => 24, 'SM' => 27,
@@ -406,8 +394,10 @@ class SepaField extends BaseField
             if (!preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/', $iban_clean)) {
                 return __('Please enter a valid IBAN.', 'formfabricator');
             }
+            // IBAN_LEN lists every SWIFT IBAN Registry participant; a country code absent
+            // from it is not a valid IBAN country at all, not merely one we skip checking.
             $iban_cc = substr($iban_clean, 0, 2);
-            if (isset(self::IBAN_LEN[$iban_cc]) && strlen($iban_clean) !== self::IBAN_LEN[$iban_cc]) {
+            if (!isset(self::IBAN_LEN[$iban_cc]) || strlen($iban_clean) !== self::IBAN_LEN[$iban_cc]) {
                 return __('Please enter a valid IBAN.', 'formfabricator');
             }
             if (!self::ibanChecksumValid($iban_clean)) {
@@ -447,12 +437,17 @@ class SepaField extends BaseField
         if ($holder === '' && $required) {
             return __('Account holder is a required field.', 'formfabricator');
         }
+        // The same hard cap as every other text field; the holder name had none and reached the PDF and email unbounded.
+        $holder_cap = self::validateTextHardCap($holder);
+        if ($holder_cap !== true) {
+            return $holder_cap;
+        }
 
         if ($required && $sig === '') {
             return __('Signature is a required field.', 'formfabricator');
         }
-        if ($sig !== '' && !self::isSignatureDataUri($sig)) {
-            return __('Signature is a required field.', 'formfabricator');
+        if ($sig !== '' && !self::isValidSignatureImage($sig)) {
+            return __('The signature could not be read. Please sign again.', 'formfabricator');
         }
 
         return true;
@@ -577,7 +572,6 @@ class SepaField extends BaseField
             'placeholder_country' => 'DE',
             'country_filter_mode' => 'off',
             'country_filter_list' => [],
-            'live_iban_lookup'    => false,
         ];
     }
 
@@ -590,16 +584,6 @@ class SepaField extends BaseField
     {
         $country_options = $this->ibanCountryOptions();
         return [
-            [
-                'key'        => 'live_iban_lookup',
-                'type'       => 'checkbox',
-                'label'      => __('Auto-fill BIC via live IBAN lookup', 'formfabricator'),
-                'default'    => false,
-                'disclaimer' => __(
-                    "When enabled, the visitor's IBAN is sent to the third-party service openiban.com as soon as it's fully typed — before the form is submitted — to look up the matching BIC. Disable this to have visitors enter the BIC manually instead, keeping IBAN data on your own site until submission.", // phpcs:ignore Generic.Files.LineLength
-                    'formfabricator'
-                ),
-            ],
             [
                 'key'   => 'mandate_title',
                 'type'  => 'text',

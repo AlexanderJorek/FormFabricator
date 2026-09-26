@@ -6,20 +6,16 @@
 (function () {
     'use strict';
 
-    /* Skip-required toggle. */
+    /* Seed from the checkbox's current state, not assumed unchecked — browsers restore form state on reload/back. */
     var cb = document.getElementById('fpt-skip-required');
     if (cb) {
+        window.FabricatorIgnoreRequired = cb.checked;
         cb.addEventListener('change', function () {
             window.FabricatorIgnoreRequired = this.checked;
         });
     }
 
-    /* Fake fetch so preview submissions don't fire real AJAX.
-       Both of front.js's calls have to be intercepted: it first requests a nonce/replay token
-       with a URLSearchParams body, then submits with a FormData body. Intercepting only the
-       latter left the token request to hit the network for real — which, on the blob: document
-       the preview opens in, can never succeed — so every preview submit ended in front.js's
-       catch with "Server error" and the simulated success path was unreachable. */
+    /* Fake fetch so preview submissions don't fire real AJAX — must intercept both the token request and the submit. */
     function bodyAction(body) {
         if (!body || typeof body.get !== 'function') { return null; }
         if (!(body instanceof FormData) && !(body instanceof URLSearchParams)) { return null; }

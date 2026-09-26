@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -36,6 +36,19 @@ class RadioField extends BaseField
     public function getStyles(): string
     {
         return self::readFieldAsset('assets/css/fields/RadioField.css');
+    }
+
+    /**
+     * Returns false: this field renders a radio per option, each with its own id, so the
+     * question text names the set through aria-labelledby rather than pointing at one element (see BaseField::wrap()).
+     *
+     * @param array $config Field configuration.
+     * @return bool
+     */
+    public function labelsOwnControl(array $config): bool
+    {
+        unset($config);
+        return false;
     }
 
     /**
@@ -105,7 +118,7 @@ class RadioField extends BaseField
 
         if ($value === null) {
             foreach ($options as $opt) {
-                if (is_array($opt) && !empty($opt['default'])) {
+                if (!empty($opt['default'])) {
                     $value = $opt['value'] ?? '';
                     break;
                 }
@@ -113,10 +126,11 @@ class RadioField extends BaseField
         }
 
         $layout = !empty($config['layout']) ? ' fabricator-radio-group--horizontal' : '';
-        $inner  = '<div class="fabricator-radio-group' . $layout . '" role="group">';
+        // No role="group" here: see CheckboxField — the field wrapper is the named group.
+        $inner  = '<div class="fabricator-radio-group' . $layout . '">';
         foreach ($options as $i => $opt) {
-            $opt_val   = is_array($opt) ? ($opt['value'] ?? '') : $opt;
-            $opt_label = is_array($opt) ? ($opt['label'] ?? $opt_val) : $opt;
+            $opt_val   = $opt['value'] ?? '';
+            $opt_label = $opt['label'] ?? $opt_val;
             $id_i      = $field_id . '-' . $i;
             $checked   = checked((string)($value ?? ''), (string)$opt_val, false);
             $inner .= '<label class="fabricator-radio-label">'
@@ -161,7 +175,7 @@ class RadioField extends BaseField
         if ($selected === '__other__' && isset($_POST[$field_id . '_other'])) {
             return [
                 'value'          => $selected,
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce verified in FormProcessor::handle(); capOtherText() sanitizes/unslashes.
+                // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce verified in FormProcessor::handle(); capOtherText() sanitizes/unslashes, WPCS misses the helper form.
                 '__other_text__' => self::capOtherText($_POST[$field_id . '_other']),
             ];
         }
@@ -200,31 +214,13 @@ class RadioField extends BaseField
             return self::validateOtherText($other, $config);
         }
         $allowed = array_map(
-            static fn($o) => (string)(is_array($o) ? ($o['value'] ?? '') : $o),
+            static fn($o) => (string)($o['value'] ?? ''),
             $config['options'] ?? []
         );
         if (!in_array((string)$selected, $allowed, true)) {
             return __('Please select a valid option.', 'formfabricator');
         }
         return true;
-    }
-
-    /**
-     * Like extractFromRaw(), but also captures the group copy's sibling "{child_id}_other" free-text value, mirroring extractValue().
-     *
-     * @param mixed $raw       The raw value from the group copy array.
-     * @param mixed $other_raw The raw "{child_id}_other" value from the same copy, if any.
-     */
-    public function extractFromRawWithOther(mixed $raw, mixed $other_raw): mixed
-    {
-        $selected = $this->extractFromRaw($raw);
-        if ($selected === '__other__' && $other_raw !== null) {
-            return [
-                'value'          => $selected,
-                '__other_text__' => self::capOtherText($other_raw),
-            ];
-        }
-        return $selected;
     }
 
     /**
@@ -250,9 +246,9 @@ class RadioField extends BaseField
                 : __('[Other]', 'formfabricator');
         }
         foreach ($config['options'] ?? [] as $opt) {
-            $opt_val = is_array($opt) ? ($opt['value'] ?? '') : $opt;
+            $opt_val = $opt['value'] ?? '';
             if ((string)$opt_val === (string)$value) {
-                return is_array($opt) ? ($opt['label'] ?? (string)$opt_val) : (string)$opt;
+                return (string)($opt['label'] ?? $opt_val);
             }
         }
         return (string)$value;

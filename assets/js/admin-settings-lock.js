@@ -15,7 +15,8 @@
         if (!hbData.fabricator_settings_lock_conflict) { return; }
         var notice = document.getElementById('fabricator-lock-notice');
         var text   = document.getElementById('fabricator-lock-notice-text');
-        var msg    = (data.i18n.lockConflict || '').replace('%s', hbData.fabricator_settings_lock_conflict);
+        /* Function replacement: a user name containing $& or $' would otherwise be expanded by String.replace. */
+        var msg    = (data.i18n.lockConflict || '').replace('%s', function () { return hbData.fabricator_settings_lock_conflict; });
         if (text) { text.textContent = msg; }
         if (notice) { notice.style.display = ''; }
     });

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -44,8 +44,7 @@ class Plugin
 {
     private static bool $initialized = false;
 
-    /* Recurring sweeps: scheduled hourly by scheduleSweeps() AND cleared on deactivation/uninstall.
-       Anything added here starts firing every hour, so one-off events belong in ONE_OFF_CRON_HOOKS. */
+    /* Scheduled hourly by scheduleSweeps() and cleared on deactivation/uninstall; one-off events belong in ONE_OFF_CRON_HOOKS instead. */
     public const CRON_HOOKS = [
         'fabricator_generator_sweep_tmp_dirs',
         'fabricator_rl_sweep_expired',
@@ -54,11 +53,11 @@ class Plugin
         'fabricator_verifier_sweep_tmp_dirs',
     ];
 
-    /* Cron hooks that are scheduled on demand as single events (never by scheduleSweeps()) and so must
-       NOT be added to CRON_HOOKS above -- listing one there would schedule it as a recurring hourly job.
-       They can still be pending when the plugin is deactivated or deleted, so teardown must clear them. */
+    /* Scheduled on demand as single events, not via CRON_HOOKS/scheduleSweeps(); still cleared on deactivation/deletion since they can be left pending. */
     public const ONE_OFF_CRON_HOOKS = [
         'fabricator_verifier_cleanup_files',
+        'fabricator_verifier_sweep_expired', // Utils\VerifierCleanup::HOOK
+        'fabricator_uploads_probe_run',
     ];
 
     /**
@@ -117,12 +116,15 @@ class Plugin
             'Utils/MemoryBudget.php',
             'Utils/AdminLock.php',
             'Utils/Cast.php',
+            'Utils/HtmlSanitizer.php',
+            'Utils/OptionMutex.php',
             'Utils/AjaxGuard.php',
             'Utils/SecureDir.php',
+            'Utils/VerifierCleanup.php',
         ]);
 
         foreach ($files as $file) {
-            // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file is drawn from the hardcoded $files array above (every entry already ends in .php); nothing here is attacker- or request-influenced.
+            // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file comes from the hardcoded $files array above, not user input.
             include_once FABRICATOR_FORMS_PATH . 'includes/' . $file;
         }
 
@@ -138,10 +140,258 @@ class Plugin
                 $adminFiles[] = 'Admin/FieldTestPage.php';
             }
             foreach ($adminFiles as $file) {
-                // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file is drawn from the hardcoded $adminFiles array above (every entry already ends in .php); nothing here is attacker- or request-influenced.
+                // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file comes from the hardcoded $adminFiles array above, not user input.
                 include_once FABRICATOR_FORMS_PATH . 'includes/' . $file;
             }
+        } elseif (wp_doing_cron()) {
+            // wp-cron.php isn't an admin request, so Verificationpage (holding the verifier's cron callbacks) must be loaded explicitly here.
+            // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded path, not request-influenced.
+            include_once FABRICATOR_FORMS_PATH . 'includes/Admin/Verificationpage.php';
         }
+    }
+
+    /* Web servers that serve PHP directly and do not read .htaccess. Nginx behind Apache would
+       report Apache here, so a match means PHP really is being served by the listed server. */
+    private const HTACCESS_BLIND_SERVERS = ['nginx', 'openresty', 'caddy', 'lighttpd'];
+
+    /* Servers known to honour .htaccess or web.config. Anything in neither list is unknown, and
+       is logged rather than warned about. */
+    private const HTACCESS_HONOURING_SERVERS = ['apache', 'litespeed', 'iis'];
+
+    private const UPLOADS_NOTICE_META    = 'fabricator_uploads_notice_dismissed';
+    private const UPLOADS_NOTICE_DISMISS = 'fabricator_dismiss_uploads_notice';
+
+    /**
+     * Records a 30-day dismissal of the unprotected-uploads notice; not permanent since the exposure is still real.
+     *
+     * @return void
+     */
+    public static function maybeDismissUploadsNotice(): void
+    {
+        if (!isset($_GET[self::UPLOADS_NOTICE_DISMISS]) || !current_user_can('manage_options')) {
+            return;
+        }
+        check_admin_referer(self::UPLOADS_NOTICE_DISMISS);
+        update_user_meta(get_current_user_id(), self::UPLOADS_NOTICE_META, time() + (30 * DAY_IN_SECONDS));
+        wp_safe_redirect(remove_query_arg([self::UPLOADS_NOTICE_DISMISS, '_wpnonce']));
+        exit;
+    }
+
+    /**
+     * Warns when the server ignores both deny-rule files (.htaccess/web.config) protecting the plugin's PDF directory.
+     *
+     * @return void
+     */
+    public static function maybeWarnUnprotectedUploads(): void
+    {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        // Stored as an expiry timestamp, so the dismissal lapses rather than silencing the
+        // notice permanently.
+        if ((int) get_user_meta(get_current_user_id(), self::UPLOADS_NOTICE_META, true) > time()) {
+            return;
+        }
+        // A real request first: SERVER_SOFTWARE alone never saw Nginx serving uploads in front of Apache (Plesk, cPanel),
+        // where it reads "Apache" while Nginx hands out the files itself and ignores .htaccess.
+        $exposure = self::uploadsExposure();
+        if ($exposure === 'protected' || ($exposure === '' && !self::serverIgnoresDenyFiles())) {
+            return;
+        }
+
+        // Derived from the uploads URL, not basedir: avoids handing an absolute filesystem path to a rule that matches nothing.
+        $upload_dir = wp_upload_dir();
+        $url_path   = (string) wp_parse_url((string) ($upload_dir['baseurl'] ?? ''), PHP_URL_PATH);
+        if ($url_path === '') {
+            return;
+        }
+        $path = rtrim($url_path, '/') . '/fabricator-secure-pdf/';
+
+        $dismiss = wp_nonce_url(
+            add_query_arg(self::UPLOADS_NOTICE_DISMISS, '1'),
+            self::UPLOADS_NOTICE_DISMISS
+        );
+
+        // fabricator-uploads-notice: a styling hook only; no notice is hidden on this plugin's screens (see admin.css).
+        // Not is-dismissible: that X only hid the notice until the next page load. The "Dismiss for 30 days" link below saves it.
+        echo '<div class="notice notice-warning fabricator-uploads-notice"><p><strong>'
+            . esc_html__('FormFabricator: generated PDFs are not protected by a server rule.', 'formfabricator')
+            . '</strong></p><p>'
+            . ($exposure === 'exposed'
+                ? esc_html__(
+                    'A test file placed in this folder could be downloaded from outside, so the deny rules this plugin writes have no effect here, for example because Nginx serves uploaded files in front of Apache.',
+                    'formfabricator'
+                )
+                : esc_html__(
+                    'This site serves PHP with a web server that reads neither .htaccess nor web.config, so the deny rules this plugin writes have no effect.',
+                    'formfabricator'
+                ))
+            . ' '
+            . esc_html__(
+                'Generated PDFs contain submitted personal data and are currently reachable by anyone who knows or guesses a file URL. Add a deny rule for this path to your server configuration:',
+                'formfabricator'
+            )
+            . '</p><p><code>' . esc_html($path) . '</code></p><p>'
+            . esc_html__('Nginx:', 'formfabricator') . ' <code>'
+            . esc_html('location ^~ ' . $path . ' { deny all; }')
+            . '</code><br>'
+            . esc_html__('Caddy:', 'formfabricator') . ' <code>'
+            . esc_html('respond ' . $path . '* 403')
+            . '</code></p><p><a href="' . esc_url($dismiss) . '">'
+            . esc_html__('Dismiss this notice for 30 days', 'formfabricator')
+            . '</a></p></div>';
+    }
+
+    /**
+     * Transient caching probeUploadsExposure()'s answer.
+     *
+     * @var string
+     */
+    private const UPLOADS_PROBE_TRANSIENT = 'fabricator_uploads_probe';
+
+    /**
+     * One-off cron event that runs the probe in the background.
+     *
+     * @var string
+     */
+    public const UPLOADS_PROBE_HOOK = 'fabricator_uploads_probe_run';
+
+    /**
+     * Whether the PDF folder can be downloaded from, as last probed: 'exposed', 'protected', or '' when unknown.
+     *
+     * An uncached answer is never probed inline, which held the admin page for up to five seconds: the probe is queued
+     * as a one-off cron event (runUploadsProbe()), and until it has answered, the caller falls back to the server check.
+     *
+     * @return string
+     */
+    private static function uploadsExposure(): string
+    {
+        $cached = get_transient(self::UPLOADS_PROBE_TRANSIENT);
+        if (is_string($cached)) {
+            return $cached;
+        }
+        if (!wp_next_scheduled(self::UPLOADS_PROBE_HOOK)) {
+            wp_schedule_single_event(time(), self::UPLOADS_PROBE_HOOK);
+        }
+        return '';
+    }
+
+    /**
+     * Cron callback for the probe queued by uploadsExposure().
+     *
+     * @return void
+     */
+    public static function runUploadsProbe(): void
+    {
+        self::probeUploadsExposure();
+    }
+
+    /**
+     * Places a random file in the protected folder and requests its URL from the site itself, as Site Health does
+     * for its loopback checks. Works whatever serves the files, which a server-name check cannot know.
+     *
+     * @return string 'exposed' when the file's content came back, 'protected' when the server answered 403, '' for
+     *                anything else (no file written, no loopback response, or an answer that proves nothing).
+     */
+    private static function probeUploadsExposure(): string
+    {
+        $upload_dir = wp_upload_dir();
+        $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
+        $safe_url   = rtrim((string) ($upload_dir['baseurl'] ?? ''), '/') . '/fabricator-secure-pdf';
+        Utils\SecureDir::harden($safe_dir);
+
+        $file   = 'probe-' . bin2hex(random_bytes(8)) . '.txt';
+        $token  = bin2hex(random_bytes(16));
+        $result = '';
+        // 0644: the web server must be able to read it, or a refusal would prove nothing.
+        if (Utils\SecureDir::putFile($safe_dir . '/' . $file, $token, 0644)) {
+            $response = wp_remote_get(
+                $safe_url . '/' . $file,
+                [
+                    'timeout'     => 5,
+                    'redirection' => 3,
+                    // Core's own filter for loopback requests; a self-signed local certificate must not block the probe.
+                    // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WP core's own loopback filter, applied as core applies it, so a site's customization of it holds here too.
+                    'sslverify'   => apply_filters('https_local_ssl_verify', false),
+                ]
+            );
+            if (!is_wp_error($response)) {
+                $code = (int) wp_remote_retrieve_response_code($response);
+                if ($code === 200 && trim((string) wp_remote_retrieve_body($response)) === $token) {
+                    $result = 'exposed';
+                } elseif ($code === 403) {
+                    // Only a refusal of this very file counts as protected (the deny rules this plugin writes and suggests
+                    // all answer 403). A WAF or CDN challenge, basic auth, a 404 from another vhost or a 5xx says nothing
+                    // about the folder, and caching one of those as "protected" hid the warning for a day.
+                    $result = 'protected';
+                }
+            }
+            wp_delete_file($safe_dir . '/' . $file);
+        }
+        // A day for a definite answer; an hour when the probe could not run, so a passing hiccup is retried soon.
+        set_transient(self::UPLOADS_PROBE_TRANSIENT, $result, $result === '' ? HOUR_IN_SECONDS : DAY_IN_SECONDS);
+        return $result;
+    }
+
+    /**
+     * Fallback for when the probe cannot run: true when SERVER_SOFTWARE names a server that ignores .htaccess and
+     * web.config.
+     *
+     * @return bool
+     */
+    private static function serverIgnoresDenyFiles(): bool
+    {
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- $_SERVER is never slashed by wp_magic_quotes(); the value is only str_contains()-matched against literal allow-lists and never echoed.
+        $software = strtolower((string) ($_SERVER['SERVER_SOFTWARE'] ?? ''));
+
+        foreach (self::HTACCESS_BLIND_SERVERS as $name) {
+            if (str_contains($software, $name)) {
+                return true;
+            }
+        }
+        // Log rather than warn on an unrecognised server, once a day, to avoid crying wolf on every unknown SAPI.
+        $known_safe = false;
+        foreach (self::HTACCESS_HONOURING_SERVERS as $name) {
+            if (str_contains($software, $name)) {
+                $known_safe = true;
+                break;
+            }
+        }
+        if (!$known_safe && !get_transient('fabricator_unknown_server_logged')) {
+            set_transient('fabricator_unknown_server_logged', true, DAY_IN_SECONDS);
+            fabricator_log(
+                'FabricatorForms: unrecognised SERVER_SOFTWARE "' . $software
+                . '" — cannot tell whether .htaccess/web.config protect the PDF directory. Verify manually.'
+            );
+        }
+        return false;
+    }
+
+    /**
+     * Tells admins when the PDF seal key is unusable. Sealing then fails closed, so every form that attaches a sealed
+     * PDF answers visitors with an error until the key is fixed; without this, only the server log would say why.
+     *
+     * @return void
+     */
+    public static function maybeWarnSealKeyUnusable(): void
+    {
+        // Before setup the key doesn't exist yet by design, and maybeSealSetupRedirect() leads admins to create it.
+        if (!current_user_can('manage_options') || !get_option('fabricator_forms_seal_setup_done', false)) {
+            return;
+        }
+        $problem = PDF\HashSeal::activeKeyProblem();
+        if ($problem === '') {
+            return;
+        }
+        $fix = $problem === 'undecryptable'
+            ? __('The PDF seal key cannot be decrypted. Check FABRICATOR_SEAL_MASTER_KEY in wp-config.php, or rotate the PDF key.', 'formfabricator')
+            : __('The PDF seal key is missing or damaged. Rotate the PDF key to create a new one.', 'formfabricator');
+
+        echo '<div class="notice notice-error"><p><strong>'
+            . esc_html__('FormFabricator: forms that attach a sealed PDF cannot be submitted.', 'formfabricator')
+            . '</strong></p><p>' . esc_html($fix) . ' <a href="' . esc_url(admin_url('admin.php?page=fabricator-forms-settings')) . '">'
+            . esc_html__('Open settings', 'formfabricator')
+            . '</a></p></div>';
     }
 
     /**
@@ -171,6 +421,8 @@ class Plugin
         /* Register CPT */
         add_action('init', [self::class, 'registerCpt']);
         add_filter('map_meta_cap', [self::class, 'mapCreateFormCap'], 10, 2);
+        add_filter('is_protected_meta', [self::class, 'protectFormMeta'], 10, 3);
+        add_filter('user_has_cap', [self::class, 'grantAccessCaps'], 10, 4);
 
         /* Register field types */
         add_action('init', [Fields\FieldRegistry::class, 'registerDefaults']);
@@ -187,30 +439,19 @@ class Plugin
         add_action('wp_ajax_fabricator_forms_get_token', [self::class, 'ajaxGetToken']);
         add_action('wp_ajax_nopriv_fabricator_forms_get_token', [self::class, 'ajaxGetToken']);
 
-        /* IBAN → BIC lookup (proxied through WP to avoid CORS) */
-        add_action('wp_ajax_fabricator_iban_bic', [self::class, 'ajaxIbanBic']);
-        add_action('wp_ajax_nopriv_fabricator_iban_bic', [self::class, 'ajaxIbanBic']);
-
         /* PDF mail hook */
         Form\MailSender::init();
         add_action(
             'fabricator_forms_submission',
             [Form\MailSender::class, 'onSubmission'],
             10,
-            3
+            4
         );
 
-        /* Fallback sweep for temp PDFs the Generator creates — safety net for
-           when a request dies before its own SL_*.pdf/Entry_*.pdf cleanup runs.
-           Registered unconditionally (not inside is_admin()) since generation
-           happens on public form submissions and wp-cron.php requests aren't
-           admin requests either. */
+        // Safety net for temp PDFs left when a request dies before its own SL_*.pdf/Entry_*.pdf cleanup runs; registered unconditionally since generation also happens on public/cron requests.
         add_action('fabricator_generator_sweep_tmp_dirs', [PDF\Generator::class, 'cronSweepTmpDirs']);
 
-        /* Fallback sweep for expired fabricator_rl_* rate-limit rows — without this,
-           every distinct IP+form bucket that ever hits RateLimiter::increment()
-           leaves a permanent wp_options row (GDPR storage-limitation: the key
-           embeds a hash of the visitor's IP). */
+        // Sweeps expired rate-limit rows; without this every IP+form bucket leaves a permanent wp_options row (GDPR storage-limitation — the key embeds a hashed IP).
         add_action('fabricator_rl_sweep_expired', [Utils\RateLimiter::class, 'cronSweepExpired']);
 
         /* Sweeps expired fabricator_su_* single-use-claim rows — same rationale as the sweep above. */
@@ -218,6 +459,20 @@ class Plugin
 
         /* Sweeps expired fabricator_cs_* concurrency-slot rows — same rationale as the sweep above. */
         add_action('fabricator_cs_sweep_expired', [Utils\ConcurrencySlot::class, 'cronSweepExpired']);
+
+        /* Background loopback probe of the protected PDF folder, queued by maybeWarnUnprotectedUploads(). */
+        add_action(self::UPLOADS_PROBE_HOOK, [self::class, 'runUploadsProbe']);
+
+        // Unused verification copies go on the first request of any kind once one is due, at their own one-off event, and
+        // hourly as a backstop. In Utils, since front-end requests never load Verificationpage.
+        add_action('init', [Utils\VerifierCleanup::class, 'maybeSweep']);
+        add_action(Utils\VerifierCleanup::HOOK, [Utils\VerifierCleanup::class, 'sweep']);
+        add_action('fabricator_verifier_sweep_tmp_dirs', [Utils\VerifierCleanup::class, 'sweep']);
+
+        // Registered here, not in Verificationpage::register(), since that runs only under is_admin() (false in wp-cron.php); guarded since the class loads only for admin/cron requests.
+        if (class_exists(Admin\Verificationpage::class)) {
+            add_action('fabricator_verifier_cleanup_files', [Admin\Verificationpage::class, 'cronCleanupFiles']);
+        }
 
         /* Remove deleted forms from all FormSelect lists */
         add_action('before_delete_post', [Form\FormSelectModel::class, 'removeFormId'], 10, 1);
@@ -241,33 +496,32 @@ class Plugin
             }
             add_action('admin_enqueue_scripts', [Utils\Assets::class, 'enqueueAdmin']);
             add_action('admin_init', [self::class, 'maybeSealSetupRedirect']);
+            add_action('admin_notices', [self::class, 'maybeWarnUnprotectedUploads']);
+            add_action('admin_notices', [self::class, 'maybeWarnSealKeyUnusable']);
+            add_action('admin_init', [self::class, 'maybeDismissUploadsNotice']);
             /* Self-heal for sites upgraded in place (no activation hook fires) or whose cron
                array was cleared. Admin-only, so public page loads never pay for the lookup. */
             add_action('admin_init', [self::class, 'scheduleSweeps']);
-            /* Surfaces the openiban.com / reCAPTCHA disclosure in Settings > Privacy. */
+            /* Surfaces the privacy disclosures in Settings > Privacy. */
             add_action('admin_init', [self::class, 'registerPrivacyPolicyContent']);
-            add_filter('plugin_action_links_' . FABRICATOR_FORMS_BASENAME, [self::class, 'addDeleteWarningLink']);
-            add_action('admin_enqueue_scripts', [self::class, 'enqueuePluginDeleteWarning']);
         }
     }
 
     /**
-     * Mints a fresh nonce/token pair; rate-limited per IP+form since there's no nonce yet to verify.
+     * Mints a fresh nonce/token pair. Writes nothing and is not rate-limited, by design.
+     *
+     * It used to count requests per address and form in the options table. Anyone controlling many addresses could then
+     * make it write rows far faster than the hourly sweep removed them — the very growth SingleUseToken::issue() is kept
+     * stateless to prevent. The pair it hands out sends nothing by itself: FormProcessor::handle() checks both and only
+     * then applies its own per-address limit, so the limit that matters sits behind two credentials.
      *
      * @return void
      */
     public static function ajaxGetToken(): void
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- endpoint mints the nonce/token pair itself; rate-limited per IP+form instead (see method docblock).
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- endpoint mints the nonce/token pair itself, so there is nothing to verify yet (see method docblock).
         $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
         if (!$form_id || !Form\FormModel::get($form_id)) {
-            wp_send_json_error();
-            return;
-        }
-
-        $ip  = Utils\ClientIp::resolve();
-        $key = 'token_' . $form_id . '_' . hash_hmac('sha256', $ip, wp_salt('auth'));
-        if (Utils\RateLimiter::increment($key, MINUTE_IN_SECONDS) > 20) {
             wp_send_json_error();
             return;
         }
@@ -275,86 +529,10 @@ class Plugin
         wp_send_json_success(
             [
             'nonce' => wp_create_nonce('fabricator_forms_submit_' . $form_id),
-            /* Replay-protection token, separate from the nonce above (which collides across
-               anonymous visitors). See Utils/SingleUseToken.php and FormProcessor::handle(). */
-            'token' => wp_generate_uuid4(),
-            ]
-        );
-    }
-
-    /**
-     * AJAX handler that proxies IBAN/BIC lookup to openiban.com.
-     *
-     * @return void
-     */
-    public static function ajaxIbanBic(): void
-    {
-        // Checked before the rate-limit increment so a request without a valid nonce can't write wp_options rows at all.
-        if (!check_ajax_referer('fabricator_iban_bic', 'nonce', false)) {
-            wp_send_json_error();
-            return;
-        }
-
-        // Proxied through this WP endpoint to avoid CORS and to rate-limit our own usage of the openiban.com API.
-        $ip  = Utils\ClientIp::resolve();
-        $key = 'iban_' . hash_hmac('sha256', $ip, wp_salt('auth'));
-        if (Utils\RateLimiter::increment($key, MINUTE_IN_SECONDS) > 20) {
-            wp_send_json_error();
-            return;
-        }
-
-        // 15 = shortest valid IBAN (Norway), 34 = longest (ISO 13616); cheap early reject before hitting openiban.com.
-        $iban = preg_replace('/[^A-Z0-9]/', '', strtoupper(sanitize_text_field(wp_unslash($_POST['iban'] ?? ''))));
-        if (strlen($iban) < 15 || strlen($iban) > 34) {
-            wp_send_json_error();
-            return;
-        }
-
-        // Global concurrency cap, not just a per-IP rate limit: the nopriv nonce is identical for
-        // every anonymous visitor for its ~12-24h tick window (that's inherent to how WP nonces
-        // work for logged-out actions, not something this endpoint can change), so a distributed
-        // source can stay under the 20/min-per-IP cap and still occupy a worker per request for
-        // the whole outbound round trip. 4 concurrent × the 5s timeout below bounds the worst
-        // case to a small, fixed slice of any FPM pool; live BIC lookup is inherently low-volume,
-        // so a tight cap costs legitimate visitors nothing.
-        // This job is bounded by worker occupancy, not memory, so it reserves a nominal 1 byte
-        // against a 1-byte-per-holder budget and lets ConcurrencySlot's $max_holders cap (4) be
-        // the binding constraint.
-        $cs_bucket = 'iban_bic';
-        $cs_token  = Utils\ConcurrencySlot::reserve($cs_bucket, 1, 4, 15, 4);
-        if ($cs_token === false) {
-            wp_send_json_error();
-            return;
-        }
-        register_shutdown_function(
-            static function () use ($cs_bucket, $cs_token): void {
-                Utils\ConcurrencySlot::release($cs_bucket, $cs_token);
-            }
-        );
-
-        $url      = 'https://openiban.com/validate/' . rawurlencode($iban) . '?getBIC=true&validateBankCode=true';
-        // 5s, matching CaptchaField's outbound timeout — long enough for a lookup API, short
-        // enough that a stalled upstream can't pin workers for the old 8s each.
-        $response = wp_remote_get($url, ['timeout' => 5]);
-
-        if (is_wp_error($response)) {
-            wp_send_json_error();
-            return;
-        }
-
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        if (!is_array($body)) {
-            wp_send_json_error();
-            return;
-        }
-        $valid = !empty($body['valid']);
-        $bic   = $body['bankData']['bic'] ?? '';
-
-        wp_send_json_success(
-            [
-            'valid'          => $valid,
-            'bic'            => $valid ? sanitize_text_field($bic) : '',
-            'bankCodeFound'  => !empty($body['checkResults']['bankCodeCheck']),
+            /* Replay-protection token, separate from the nonce above (which collides across anonymous
+               visitors). Signed and bound to this form and its issue time, so FormProcessor::handle()
+               accepts only tokens this endpoint issued. See Utils/SingleUseToken.php. */
+            'token' => Utils\SingleUseToken::issue($form_id),
             ]
         );
     }
@@ -397,16 +575,16 @@ class Plugin
     }
 
     /**
-     * Raw privacy-policy paragraphs disclosing the two third-party data flows (openiban.com, Google reCAPTCHA).
+     * Raw privacy-policy paragraphs: what happens to a submission, and the one third-party data flow (Google reCAPTCHA).
      *
-     * @return string[] Two paragraphs: [0] openiban.com, [1] Google reCAPTCHA.
+     * @return string[] [0] form submissions, [1] Google reCAPTCHA.
      */
     private static function privacyPolicyParagraphs(): array
     {
         return [
-            __('SEPA Direct Debit (OpenIBAN)', 'formfabricator') . "\n" . __(
+            __('Contact forms', 'formfabricator') . "\n" . __(
                 // phpcs:ignore Generic.Files.LineLength -- must be a single string literal for WordPress i18n tooling to extract it correctly, see WordPress.WP.I18n.NonSingularStringLiteralText
-                "If a form on this site uses a SEPA Direct Debit field with live IBAN lookup enabled, the IBAN you type is sent to our server, which then queries the OpenIBAN service (openiban.com) to validate it and determine the corresponding BIC. The request to OpenIBAN is made by our server, not by your browser, so your IP address is not disclosed to OpenIBAN. Only the IBAN itself is transmitted. This processing is carried out for the purpose of verifying the bank account information. Where live lookup is not enabled, no IBAN data leaves this site before you submit the form. For more information on data processing, please refer to OpenIBAN's Privacy Policy.",
+                "When you submit a form on this website, your entries are not stored in the website's database. They are processed only while your submission is being handled and are then sent by email, possibly together with a generated PDF document, to the recipients chosen by the website operator. While this happens, uploaded files and the PDF document are written to temporary files on the server, which are deleted once the emails have been sent. To limit spam and abuse, a one-way hash of your IP address is kept for a short time to count how often a form is submitted, and is then deleted automatically. If the website operator checks a PDF document with the plugin's verification tool, the uploaded copy is deleted from the server right after the check, or about 10 minutes after its last use if the check is not completed.",
                 'formfabricator'
             ),
             __('Google reCAPTCHA', 'formfabricator') . "\n" . __(
@@ -504,7 +682,11 @@ class Plugin
             'show_in_menu'        => false,
             'show_in_rest'        => false,
             'supports'            => ['title'],
-            'capability_type'     => 'post',
+            // Own capability type, not 'post': with 'post', any core Editor passed edit_post/delete_post on these
+            // forms and could read, rewrite or delete them over XML-RPC, bypassing fabricator_forms_access. Nobody
+            // holds the *_fabricator_forms primitives, so core's post APIs refuse every user; the plugin's own
+            // screens gate on Plugin::userCan() and write via wp_insert_post()/wp_delete_post(), which check none.
+            'capability_type'     => ['fabricator_form', 'fabricator_forms'],
             // create_posts uses a custom cap so it can be granted to users with the
             // plugin's own 'edit_forms' permission, not just WP admins (see mapCreateFormCap())
             'capabilities'        => ['create_posts' => 'create_fabricator_forms'],
@@ -530,41 +712,52 @@ class Plugin
     }
 
     /**
-     * Adds an inline JS confirmation to the plugin list delete link.
+     * Marks the form-definition meta keys protected, so core's custom-field APIs (XML-RPC custom_fields,
+     * the classic Custom Fields box) neither list nor accept them. A filter rather than renaming the keys
+     * to "_"-prefixed ones, which would need a migration of every stored form.
      *
-     * @param string[] $links Plugin action links array.
-     * @return string[]
+     * @param bool   $protected Core's verdict.
+     * @param string $meta_key  Meta key being checked.
+     * @param string $meta_type Object type ('post', 'user', ...), '' when unspecified.
+     * @return bool
      */
-    public static function addDeleteWarningLink(array $links): array
+    public static function protectFormMeta($protected, $meta_key, $meta_type = ''): bool
     {
-        if (!isset($links['delete'])) {
-            return $links;
+        if (in_array($meta_type, ['', 'post'], true) && in_array($meta_key, Form\FormModel::META_KEYS, true)) {
+            return true;
         }
-        // Wraps core's delete link rather than regex-injecting an inline onclick (which Plugin Check flags); behavior lives in admin-plugin-delete-warning.js.
-        $links['delete'] = '<span class="fabricator-delete-warning" data-fabricator-warning="'
-            . esc_attr(__('WARNING: Deleting the plugin will permanently delete all PDF seal keys. Make sure you have backed up your keys. Continue?', 'formfabricator'))
-            . '">' . $links['delete'] . '</span>';
-        return $links;
+        return (bool) $protected;
     }
 
     /**
-     * Enqueues the plugins-screen delete confirmation handler. Hooked to admin_enqueue_scripts.
+     * Prefix of the capabilities grantAccessCaps() derives from this plugin's access settings.
      *
-     * @param string $hook Current admin page hook suffix.
-     * @return void
+     * @var string
      */
-    public static function enqueuePluginDeleteWarning(string $hook): void
+    public const ACCESS_CAP_PREFIX = 'fabricator_access_';
+
+    /**
+     * Grants "fabricator_access_<cap>" exactly when userCan(<cap>) allows it, so the admin screens can be registered with
+     * a capability WordPress enforces itself. They used 'read', which every Subscriber has, leaving each page callback's
+     * own userCan() check as the only barrier.
+     *
+     * @param array $allcaps Capabilities the user has.
+     * @param array $caps    Primitive capabilities being checked.
+     * @param array $args    Original has_cap() arguments.
+     * @param mixed $user    The WP_User being checked.
+     * @return array
+     */
+    public static function grantAccessCaps(array $allcaps, array $caps, array $args, $user): array
     {
-        if ($hook !== 'plugins.php') {
-            return;
+        foreach ($caps as $cap) {
+            if (!is_string($cap) || !str_starts_with($cap, self::ACCESS_CAP_PREFIX)) {
+                continue;
+            }
+            // userCan() treats user 0 as "the current user", so a logged-out check must not reach it.
+            $allcaps[$cap] = $user instanceof \WP_User && $user->ID > 0
+                && self::userCan(substr($cap, strlen(self::ACCESS_CAP_PREFIX)), (int) $user->ID);
         }
-        wp_enqueue_script(
-            'fabricator-forms-plugin-delete-warning',
-            FABRICATOR_FORMS_URL . 'assets/js/admin-plugin-delete-warning.js',
-            [],
-            FABRICATOR_FORMS_VERSION,
-            true
-        );
+        return $allcaps;
     }
 
     /**

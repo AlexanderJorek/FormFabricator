@@ -1,11 +1,21 @@
 pdfjs-dist 6.2.108
 Source: https://www.npmjs.com/package/pdfjs-dist (npm registry, official Mozilla-published package)
-Build: legacy/build/pdf.mjs + legacy/build/pdf.worker.mjs (the "legacy" build — transpiled/polyfilled
-for older browsers; this project has no fixed minimum browser matrix, so the broader-compat build was
-chosen over the "modern" build, which targets Chrome 110+/Safari 16.4+ only)
+Build: legacy/build/pdf.mjs + legacy/build/pdf.worker.mjs, copied here renamed to pdf.js + pdf.worker.js
+(the "legacy" build — transpiled/polyfilled for older browsers; this project has no fixed minimum browser
+matrix, so the broader-compat build was chosen over the "modern" build, which targets Chrome 110+/Safari
+16.4+ only)
 Vendored: 2026-08-20
 Fetched via: npm pack pdfjs-dist@6.2.108 (verified against the npm registry's published integrity hash
 by npm itself during download)
+Tarball integrity: sha512-YxFb+SQcodN2rnX9Tn3dHYlqfb7NjlzzfONPpJd+AKoKtUjEdevTfbC07d5TcczzOK6261auRkP/M8OBHs9vFQ==
+Re-verified: 2026-09-15, byte-identical to a fresh npm pack of the same version.
+
+SHA-256 of every file in this folder except VERSION. build.ps1 refuses to package when a file is
+missing from this list, or its hash differs. The renamed files keep upstream's bytes, so these equal
+the hashes of legacy/build/pdf.mjs, legacy/build/pdf.worker.mjs and LICENSE in the npm package:
+  842284e0d1d439e60701e3355c2128cd3016ebebf14220e27f512467682aad66  pdf.js
+  b4e582882f5e811f4d1b7b511f68d9a0c3209141e6f68856f01408c5cc155131  pdf.worker.js
+  0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594  LICENSE
 Files intentionally NOT vendored (unused by this plugin — see assets/js/verification.js's
 getDocument() call, which sets no cMapUrl/standardFontDataUrl/wasmUrl): cmaps/, standard_fonts/,
 wasm/, image_decoders/, the sandbox/scripting bundle, and all source maps (*.map).
@@ -13,8 +23,12 @@ wasm/, image_decoders/, the sandbox/scripting bundle, and all source maps (*.map
 Update procedure:
   npm pack pdfjs-dist@<version>
   tar -xzf pdfjs-dist-<version>.tgz package/legacy/build/pdf.mjs package/legacy/build/pdf.worker.mjs package/LICENSE
-  # copy pdf.mjs -> vendor/pdfjs/pdf.mjs, pdf.worker.mjs -> vendor/pdfjs/pdf.worker.mjs, LICENSE -> vendor/pdfjs/LICENSE
-  # update this VERSION file
+  # copy pdf.mjs -> vendor/pdfjs/pdf.js, pdf.worker.mjs -> vendor/pdfjs/pdf.worker.js, LICENSE -> vendor/pdfjs/LICENSE
+  # Renamed to .js on purpose: many servers send .mjs with a MIME type browsers refuse for module scripts.
+  # assets/js/verification.js imports ../../vendor/pdfjs/pdf.js and Utils/Assets.php points the worker at
+  # vendor/pdfjs/pdf.worker.js, so copying under the .mjs names would leave the OLD pdf.js in use, silently.
+  # update this VERSION file: version, dates, "Tarball integrity" (npm pack --json prints it) and the SHA-256
+  # list (Get-FileHash -Algorithm SHA256 vendor/pdfjs/*) — build.ps1 fails until the list matches the new files
 Then re-check that assets/js/verification.js's API usage (getDocument/getPage/getTextContent/
 GlobalWorkerOptions) is still compatible — see CHANGELOG entries between the old and new version for
 any [api-major]/[api-minor] breaking changes.

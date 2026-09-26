@@ -4,13 +4,39 @@
  * @license   GPL-3.0-or-later
  */
 
-/* pdf.js 6.x ships ES modules only, so this loads as a <script type="module"> and imports pdf.mjs directly. */
-import * as pdfjsLib from '../../vendor/pdfjs/pdf.mjs';
+/* pdf.js 6.x ships ES modules only, so this loads as a <script type="module">. The vendored modules are renamed from
+   .mjs to .js: module imports need a JavaScript MIME type, which many servers don't send for .mjs.
+   Imported lazily from the versioned URL the page hands over: a static import resolves relative to this file and
+   drops its ?ver=, so a browser could pair a cached older pdf.js with a freshly fetched worker, which pdf.js refuses
+   to run. Lazy, not top-level await, so the rest of this module still runs before DOMContentLoaded. */
+let _fabricatorPdfjsPromise = null;
+function _fabricatorPdfjs() {
+    if (!_fabricatorPdfjsPromise) {
+        const moduleSrc = (window.FabricatorVerifier && window.FabricatorVerifier.pdfJsModule)
+            || '../../vendor/pdfjs/pdf.js';
+        _fabricatorPdfjsPromise = import(moduleSrc).then(function (lib) {
+            /* Local worker only, no CDN. */
+            const workerSrc = window.FabricatorVerifier && window.FabricatorVerifier.pdfJsWorker;
+            if (!workerSrc) {
+                console.error('[FormFabricator] pdfJsWorker is not set. PDF.js worker may be missing.');
+            } else {
+                lib.GlobalWorkerOptions.workerSrc = workerSrc;
+            }
+            return lib;
+        });
+    }
+    return _fabricatorPdfjsPromise;
+}
 
 /* ── Particle canvas on the PHP-rendered canvas element ── */
 document.addEventListener('DOMContentLoaded', function () {
     var canvas = document.getElementById('fabricator-particle-canvas');
     if (!canvas) { return; }
+    /* Decorative only, so skipped for anyone whose system asks for reduced motion (WCAG 2.3.3). */
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        canvas.style.display = 'none';
+        return;
+    }
 
     var ctx   = canvas.getContext('2d');
     var mouse = { x: -9999, y: -9999 };
@@ -19,6 +45,13 @@ document.addEventListener('DOMContentLoaded', function () {
     var COLOR = _rgb(_ah);
     var LINK  = 150, SPEED = 1.0;
     var particles = [], paused = false, FRAME_MS = 1000 / 30;
+    /* One pending frame at a time: every switch back to this tab used to start another loop alongside
+       the one already running, so the page's CPU use grew over a session. */
+    var rafId = 0, timerId = 0;
+    function schedule() {
+        if (rafId || timerId) return;
+        rafId = requestAnimationFrame(function () { rafId = 0; draw(); });
+    }
 
     function resize() {
         canvas.width  = canvas.offsetWidth  || window.innerWidth;
@@ -72,7 +105,7 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.arc(particles[i].x, particles[i].y, particles[i].r, 0, Math.PI * 2);
             ctx.fill();
         }
-        setTimeout(function () { requestAnimationFrame(draw); }, FRAME_MS - 2);
+        timerId = setTimeout(function () { timerId = 0; schedule(); }, FRAME_MS - 2);
     }
 
     canvas.addEventListener('mousemove', function (e) {
@@ -82,25 +115,15 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     document.addEventListener('visibilitychange', function () {
         paused = document.hidden;
-        if (!paused) requestAnimationFrame(draw);
+        if (!paused) schedule();
     });
     window.addEventListener('resize', resize);
 
     resize();
-    requestAnimationFrame(draw);
+    schedule();
 });
 
 const Y_THRESHOLD = 3;
-
-/* Set PDF.js worker — local file only, no CDN. window.FabricatorVerifier is populated by a classic
-   inline script (wp_localize_script has no module equivalent); safe to read here since module
-   top-level code always runs after classic scripts. */
-const workerSrc = window.FabricatorVerifier && window.FabricatorVerifier.pdfJsWorker;
-if (!workerSrc) {
-    console.error('[FormFabricator] pdfJsWorker is not set. PDF.js worker may be missing.');
-} else {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
-}
 
 /* ── Per-PDF inline progress cards ── */
 
@@ -117,7 +140,7 @@ function _fabricatorCreateProgressCard(name) {
             '<span class="fabricator-vpc__icon"><span class="dashicons dashicons-pdf"></span></span>' +
             '<span class="fabricator-vpc__name"></span>' +
         '</div>' +
-        '<div class="fabricator-vpc__step">' + (i18n.loading || 'Loading…') + '</div>' +
+        '<div class="fabricator-vpc__step"></div>' +
         '<div class="fabricator-vpc__bar-wrap">' +
             '<div class="fabricator-vpc__bar" style="width:0%"></div>' +
         '</div>' +
@@ -125,6 +148,8 @@ function _fabricatorCreateProgressCard(name) {
             '<span class="fabricator-vpc__pct">0 %</span>' +
             '<span class="fabricator-vpc__elapsed"></span>' +
         '</div>';
+    /* Translated strings come from a .mo, which can carry markup: text node, never innerHTML. */
+    card.querySelector('.fabricator-vpc__step').textContent = i18n.loading || 'Loading…';
     // Set via textContent rather than interpolating into the innerHTML string
     // above — doesn't depend on Verificationpage.php's sanitize_file_name()
     // upstream remaining the only source of this value forever.
@@ -235,13 +260,32 @@ function _fabricatorThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestS
         });
 }
 
-/* Called when the server rejects a call as rate-limited despite the gate above
-   (clock drift, network jitter, or a queued PHP worker under load can all
-   delay arrival past the intended slot). Only grows when there's evidence
-   the current gap wasn't enough, and pushes every waiting file out too. */
+// Server still rate-limited us despite the gate (drift/jitter/queueing); grow the gap and push all waiting files out.
 function _fabricatorWidenPushSlotGap() {
     _fabricatorPushSlotGapMs = Math.min(15000, _fabricatorPushSlotGapMs + 2000);
     _fabricatorNextPushSlotAt = Math.max(_fabricatorNextPushSlotAt, Date.now() + _fabricatorPushSlotGapMs);
+}
+
+/* The server deletes an uploaded copy 10 minutes after its last use, and downloading and reading a large PDF sends no
+   request for a long time. While any file is being processed, a request every minute keeps all of this user's copies. */
+var _fabricatorBusyFiles     = 0;
+var _fabricatorKeepAliveTimer = null;
+function _fabricatorKeepAliveStart() {
+    if (_fabricatorBusyFiles++ > 0) { return; }
+    _fabricatorKeepAliveTimer = setInterval(function () {
+        var ajaxUrl = window.FabricatorVerifier && window.FabricatorVerifier.ajaxUrl;
+        if (!ajaxUrl) { return; }
+        var body = new FormData();
+        body.append('action', 'fabricator_verify_progress');
+        body.append('nonce',  (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
+        fetch(ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' }).catch(function () {});
+    }, 60000);
+}
+function _fabricatorKeepAliveStop() {
+    if (--_fabricatorBusyFiles > 0) { return; }
+    _fabricatorBusyFiles = 0;
+    clearInterval(_fabricatorKeepAliveTimer);
+    _fabricatorKeepAliveTimer = null;
 }
 
 window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
@@ -270,18 +314,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
 
     function done() { clearInterval(elapsedTimer); }
 
-    /* Overall bar is carved into non-overlapping bands per phase, in the order
-       they actually occur, so the number only ever climbs:
-         0-2   pdf_loading (start)
-         2-12  downloading (real transferred-byte progress via pdf.js's onProgress)
-         12-40 page-by-page text extraction (client-side, PDF.js)
-         40    queued / rate-limited-retry (before the request has gone out)
-         42    request sent, awaiting server ("text extracted — analyzing")
-         42-95 server's own verification-step progress, remapped via
-               remapServerPct — its raw 5..94 scale would otherwise replay
-               from near-zero and look like the bar jumped backward
-         98    processing the final response
-         100   done / error (terminal) */
+    // Bar is carved into non-overlapping per-phase bands so it only ever climbs; 42-95 remaps the server's raw 5..94 scale to avoid a backward jump.
     function remapServerPct(rawPct) {
         return 42 + Math.round((Math.max(0, Math.min(100, rawPct)) / 100) * 53);
     }
@@ -290,6 +323,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
     // Destroyed in the finally block below — pdf.js keeps decoded pages/worker state alive until .destroy().
     let pdf;
     let loadingTask;
+    _fabricatorKeepAliveStart();
     try {
         var queuedForLoad = _fabricatorActiveLoads >= FABRICATOR_MAX_CONCURRENT_LOADS;
         if (queuedForLoad) {
@@ -341,6 +375,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
             }
             // pdf.js 6.x removed eval()/Function() usage entirely, so CVE-2024-4367's isEvalSupported:false
             // workaround no longer applies (that option no longer exists).
+            const pdfjsLib = await _fabricatorPdfjs();
             loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
             pdf = await loadingTask.promise;
         } finally {
@@ -389,10 +424,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
         formData.append('visualLines', JSON.stringify(allLines));
         formData.append('nonce',       (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
 
-        /* Poll server-side progress only once the request actually goes out
-           (see onRequestStart) — polling during the throttle wait would just
-           spam no-op requests. lastServerPct resets on every (re)start since
-           a 429 retry begins a brand-new server-side run from scratch. */
+        // Poll only once the request goes out (see onRequestStart); lastServerPct resets each (re)start since a 429 retry runs fresh server-side.
         var lastServerPct = 0;
         function startProgressPoll() {
             if (!pdfToken) { return; }
@@ -517,6 +549,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
         done();
         return [];
     } finally {
+        _fabricatorKeepAliveStop();
         // typeof-guarded: pdf.destroy() isn't reliably present on the resolved proxy across pdf.js versions.
         if (loadingTask && typeof loadingTask.destroy === 'function') {
             try { loadingTask.destroy(); } catch (destroyErr) { console.error('[FormFabricator] loadingTask.destroy() failed for', pdfUrl, destroyErr); }

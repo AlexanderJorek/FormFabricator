@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -49,14 +49,14 @@ class GroupField extends BaseField
     }
 
     /**
-     * Expands a group's (possibly repeated) child values into flat, individually labeled entries for the normalized submission map.
+     * Expands a group's child values into flat, individually labeled entries for the normalized submission map.
      *
      * @param string $field_id Group field id (unused; children get their own keys).
      * @param string $label    Group label (unused; children use their own labels).
-     * @param mixed  $value    Per-copy child values, see inline comment below.
+     * @param mixed  $value    Child values keyed by child id, as FormProcessor reads them.
      * @param array  $config   Group field configuration (includes 'children').
      * @param array  $context  Normalization context passed through to child handlers.
-     * @return array Flat map of child_id (or child_id_copy_N) => ['label'=>, 'value'=>].
+     * @return array Flat map of child_id => ['label'=>, 'value'=>].
      */
     public function mapNormalized(
         string $field_id,
@@ -65,60 +65,35 @@ class GroupField extends BaseField
         array $config,
         array $context
     ): array {
-        /* $value is [ copy_index => [ child_id => sanitized_val, ... ], ... ]
-           as assembled by FormProcessor for group fields. */
+        // One set of children per group: the renderer names them like top-level fields, and nothing posts copies.
         if (!is_array($value) || empty($value)) {
             return [];
         }
 
-        $children   = $config['children'] ?? [];
-        // Defense-in-depth cap; this method multiplies work by count(children) per copy.
-        if (count($value) > 100) {
-            $value = array_slice($value, 0, 100, true);
-        }
-        $copy_count = count($value);
-        $mapped     = [];
+        $mapped = [];
+        foreach (($config['children'] ?? []) as $child_cfg) {
+            $child_id    = $child_cfg['id']   ?? '';
+            $child_type  = $child_cfg['type'] ?? '';
+            $child_label = $child_cfg['label'] ?? $child_id;
 
-        foreach ($value as $copy_idx => $copy_data) {
-            if (!is_array($copy_data)) {
+            if (!$child_id || !$child_type) {
                 continue;
             }
-            foreach ($children as $child_cfg) {
-                $child_id    = $child_cfg['id']   ?? '';
-                $child_type  = $child_cfg['type'] ?? '';
-                $child_label = $child_cfg['label'] ?? $child_id;
 
-                if (!$child_id || !$child_type) {
-                    continue;
-                }
+            $handler = \FabricatorForms\Fields\FieldRegistry::get($child_type);
+            if (!$handler) {
+                continue;
+            }
 
-                $handler = \FabricatorForms\Fields\FieldRegistry::get($child_type);
-                if (!$handler) {
-                    continue;
-                }
+            /* A child hidden by its own conditional logic never ran validate(), so skip it
+               before its handler materializes anything (see FieldRegistry::mapSubmission()). */
+            if (isset($context['skip_ids'][$child_id])) {
+                continue;
+            }
 
-                $child_value = $copy_data[$child_id] ?? null;
-
-                /* For repeating groups (multiple copies) suffix key and label
-                   so each copy's entry has a unique key in $mapped. */
-                $map_key   = $copy_count > 1 ? $child_id . '_copy_' . $copy_idx : $child_id;
-                /* A child hidden by its own conditional logic never ran validate(), so skip it
-                   before its handler materializes anything (see FieldRegistry::mapSubmission()). */
-                if (isset($context['skip_ids'][$map_key]) || isset($context['skip_ids'][$child_id])) {
-                    continue;
-                }
-                $map_label = $copy_count > 1 ? $child_label . ' (' . $copy_idx . ')' : $child_label;
-
-                $entries = $handler->mapNormalized(
-                    $map_key,
-                    $map_label,
-                    $child_value,
-                    $child_cfg,
-                    $context
-                );
-                foreach ($entries as $key => $entry) {
-                    $mapped[$key] = $entry;
-                }
+            $entries = $handler->mapNormalized($child_id, $child_label, $value[$child_id] ?? null, $child_cfg, $context);
+            foreach ($entries as $key => $entry) {
+                $mapped[$key] = $entry;
             }
         }
 
@@ -157,7 +132,7 @@ class GroupField extends BaseField
 
     /**
      * Returns true — group fields DO have a settings panel in the builder
-     * (used to configure the child field list and repeat behavior).
+     * (used to configure the child field list).
      *
      * @return bool
      */

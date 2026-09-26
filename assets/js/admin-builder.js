@@ -101,7 +101,7 @@ var state = {
         submit_label:      _i18n.submitLabel   || 'Submit',
         submit_working:    _i18n.submitWorking || 'Sending…',
         success_message:   _i18n.successMessage || 'Thank you for your submission!',
-        submit_conditions: { enabled: false, match: 'all', rules: [] },
+        submit_conditions: { match: 'all', rules: [] },
     },
 };
 var _dirty = false;
@@ -231,7 +231,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var pal = JSON.parse(el.dataset.palette || '[]');
 
             state.fields        = fd.fields        || [];
-            state.notifications = (fd.notifications || []).map(normalizeNotifBodyFields);
+            state.notifications = fd.notifications || [];
             state.formName      = fd.title         || (_i18n.defaultFormName || 'New Form');
             var s = fd.settings;
             if (s) {
@@ -317,6 +317,16 @@ function renderFieldList() {
             list.appendChild(buildFieldRow(state.fields[i], i));
         }
     }
+}
+
+/* For dragend: dragstart hid the source row (display:none), so a drag that ends where it began (or is cancelled) leaves
+   state.fields unchanged and renderFieldList()'s JSON check would skip the rebuild, keeping the row hidden until the next
+   real change. Clearing the cache forces the rebuild; null also skips markDirty(), since nothing moved. */
+function renderFieldListAfterDrag() {
+    if (JSON.stringify(state.fields) === _lastRenderedFieldsJson) {
+        _lastRenderedFieldsJson = null;
+    }
+    renderFieldList();
 }
 
 function buildFieldRow(field, idx) {
@@ -556,7 +566,7 @@ function buildFieldRow(field, idx) {
         hideDropLine();
         var listEl = document.getElementById('fabricator-field-list');
         if (listEl) listEl.classList.remove('fabricator-drag-active');
-        renderFieldList();
+        renderFieldListAfterDrag();
     });
 
     return row;
@@ -676,7 +686,7 @@ function buildGroupRow(field, idx) {
                 var listEl = document.getElementById('fabricator-field-list');
                 if (listEl) listEl.classList.remove('fabricator-drag-active');
                 hideDropLine(); cachedMidpoints = []; rafPending = false;
-                renderFieldList();
+                renderFieldListAfterDrag();
             });
 
             childRow.addEventListener('dragover', function (e) {
@@ -928,7 +938,7 @@ function buildGroupRow(field, idx) {
         clearDropIndicators(); hideDropLine();
         var listEl = document.getElementById('fabricator-field-list');
         if (listEl) listEl.classList.remove('fabricator-drag-active');
-        renderFieldList();
+        renderFieldListAfterDrag();
     });
 
     return row;
@@ -1350,8 +1360,8 @@ function addField(type, targetGroup) {
         var gf = state.fields[ctx.groupIdx];
         if (!gf) return;
         if (!gf.children) gf.children = [];
-        /* Fields with noPanel cannot be nested inside groups */
-        if (pal && pal.noPanel) return;
+        /* A page break separates pages, so it cannot sit inside a group (noPanel used to stand in for this). */
+        if (pal && pal.noNesting) return;
         var childIdx = gf.children.length;
         gf.children.push(field);
         renderFieldList();
@@ -1438,6 +1448,13 @@ function openSettingsModal(idx, ctx) {
     settingsModal._stabBtns[0].classList.add('fabricator-stab-active');   /* "Allgemein" is always first */
     settingsModal._stabPanels[0].classList.add('fabricator-stab-active');
 
+    /* A tab whose settings the renderer would ignore stays out of reach, rather than storing choices nothing reads. */
+    settingsModal._stabBtns.forEach(function (b) {
+        if (b.dataset.stab === 'conditions') {
+            b.hidden = !!(pal && pal.noConditions);
+        }
+    });
+
     var idChip = document.getElementById('fabricator-sp-id-chip');
     if (idChip) {
         idChip.textContent = '{' + field.id + '}';
@@ -1522,10 +1539,22 @@ function buildGeneralTab(idx, field, pal) {
         spCheckbox(panel, 'required', _i18n.requiredField || 'Required field', !!field.required, function (v) { change('required', v); });
     }
 
+    /* The field this panel edits, which for a group child is the child: reading state.fields[idx] took the group's
+       own settings, so its depends_on checks and rebuild refreshes wrote group values into the child. */
+    function editedField() {
+        if (!settingsCtx) return state.fields[idx];
+        var gf = state.fields[settingsCtx.groupIdx];
+        return (gf && gf.children && gf.children[settingsCtx.childIdx]) || field;
+    }
+    function refreshGeneralTab() {
+        var current = editedField();
+        buildGeneralTab(idx, current, findPaletteItem(current.type));
+    }
+
     schema.forEach(function (s) {
         /* depends_on: skip this entry if condition not met */
         if (s.depends_on) {
-            var depField = state.fields[idx];
+            var depField = editedField();
             if (s.depends_on.not !== undefined) {
                 /* {key: 'fieldKey', not: 'value'} — show when field !== value */
                 if (depField[s.depends_on.key] === s.depends_on.not) return;
@@ -1550,7 +1579,7 @@ function buildGeneralTab(idx, field, pal) {
                         if (inp && !inp._rebuildBound) {
                             inp._rebuildBound = true;
                             inp.addEventListener('blur', function () {
-                                buildGeneralTab(idx, state.fields[idx], findPaletteItem(state.fields[idx].type));
+                                refreshGeneralTab();
                             });
                         }
                     }
@@ -1564,7 +1593,7 @@ function buildGeneralTab(idx, field, pal) {
                     function (v) {
                         change(schema_entry.key, v === '' ? '' : (parseFloat(v) || 0));
                         if (schema_entry.rebuild) {
-                            buildGeneralTab(idx, state.fields[idx], findPaletteItem(state.fields[idx].type));
+                            refreshGeneralTab();
                         }
                     }, schema_entry.hint);
             }(s));
@@ -1573,7 +1602,7 @@ function buildGeneralTab(idx, field, pal) {
                 spCheckbox(panel, schema_entry.key, schema_entry.label, !!cur, function (v) {
                     change(schema_entry.key, v);
                     if (schema_entry.rebuild) {
-                        buildGeneralTab(idx, state.fields[idx], findPaletteItem(state.fields[idx].type));
+                        refreshGeneralTab();
                     }
                 }, schema_entry.disclaimer || '');
             }(s));
@@ -1586,11 +1615,11 @@ function buildGeneralTab(idx, field, pal) {
         } else if (s.type === 'bool_seg') {
             (function (schema_entry) {
                 spBoolSeg(panel, schema_entry.key, schema_entry.label, !!cur,
-                    schema_entry.false_label || 'Nein', schema_entry.true_label || 'Ja',
+                    schema_entry.false_label || _i18n.segNo || 'No', schema_entry.true_label || _i18n.segYes || 'Yes',
                     function (v) {
                         change(schema_entry.key, v);
                         if (schema_entry.rebuild) {
-                            buildGeneralTab(idx, state.fields[idx], findPaletteItem(state.fields[idx].type));
+                            refreshGeneralTab();
                         }
                     }, !!schema_entry.swap);
             }(s));
@@ -1624,7 +1653,7 @@ function buildGeneralTab(idx, field, pal) {
                         change(schema_entry.key, iconVal);
                         change(halfKey, halfVal);
                         if (schema_entry.rebuild) {
-                            buildGeneralTab(idx, state.fields[idx], findPaletteItem(state.fields[idx].type));
+                            refreshGeneralTab();
                         }
                     });
             }(s));
@@ -1670,8 +1699,7 @@ function buildGeneralTab(idx, field, pal) {
                     function (v) {
                         change(schema_entry.key, v);
                         if (schema_entry.rebuild) {
-                            buildGeneralTab(idx, state.fields[idx],
-                                findPaletteItem(state.fields[idx].type));
+                            refreshGeneralTab();
                         }
                     }
                 );
@@ -1830,7 +1858,11 @@ function buildAdvancedTab(idx, field) {
         var target = settingsCtx
             ? state.fields[settingsCtx.groupIdx].children[settingsCtx.childIdx]
             : state.fields[idx];
+        var previousId = target.id;
         target.id = slug || generateId(field.type);
+        /* Conditions and routing rules keep pointing at the old id otherwise: the editor then shows a different field
+           selected, and the server reads the rule's value as empty. */
+        renameFieldReferences(previousId, target.id);
         var hintCode = idRow.querySelector('code');
         if (hintCode) hintCode.textContent = '{' + target.id + '}';
         var chip = document.getElementById('fabricator-sp-id-chip');
@@ -2170,8 +2202,8 @@ function buildConditionsTab(idx, field) {
                 if (!rule.value) blank.selected = true;
                 optSel.appendChild(blank);
                 ctrlField.options.forEach(function (opt) {
-                    var val   = (opt && typeof opt === 'object') ? (opt.value || '') : String(opt);
-                    var lbl   = (opt && typeof opt === 'object') ? (opt.label || val)  : val;
+                    var val   = (opt && opt.value) || '';
+                    var lbl   = (opt && opt.label) || val;
                     var o = document.createElement('option');
                     o.value = val; o.textContent = lbl;
                     if (val === rule.value) o.selected = true;
@@ -2224,13 +2256,18 @@ function buildConditionsTab(idx, field) {
     addBtn.innerHTML = '<i class="fa-solid fa-plus"></i> ' + escHtml(_i18n.addCondition || 'Add condition');
     addBtn.addEventListener('click', function () {
         var SKIP = ['group', 'html', 'pagebreak'];
+        /* Excluded by id, as buildRuleRow() does: for a group child, idx is the group's index, so "fi !== idx" excluded
+           only the (already skipped) group and let the child default to itself as its own condition field. */
+        var selfId = settingsCtx
+            ? (state.fields[settingsCtx.groupIdx].children[settingsCtx.childIdx] || {}).id
+            : (state.fields[idx] || {}).id;
         var addable = [];
-        state.fields.forEach(function (f, fi) {
+        state.fields.forEach(function (f) {
             if (SKIP.indexOf(f.type) !== -1) {
                 (f.children || []).forEach(function (c) {
-                    if (c.id && SKIP.indexOf(c.type) === -1) addable.push(c);
+                    if (c.id && c.id !== selfId && SKIP.indexOf(c.type) === -1) addable.push(c);
                 });
-            } else if (fi !== idx && f.id) {
+            } else if (f.id && f.id !== selfId) {
                 addable.push(f);
             }
         });
@@ -2249,8 +2286,13 @@ function spRow(parent, key, label, type, value, onChange, hint) {
     lbl.textContent = label;
     lbl.htmlFor     = 'fabricator-sp-' + key;
     row.appendChild(lbl);
-    var inp = document.createElement('input');
-    inp.type      = type || 'text';
+    /* 'textarea' creates a real <textarea>: <input type="textarea"> falls back to a single-line text input that drops line breaks. */
+    var inp = document.createElement(type === 'textarea' ? 'textarea' : 'input');
+    if (type === 'textarea') {
+        inp.rows = 3;
+    } else {
+        inp.type = type || 'text';
+    }
     inp.id        = 'fabricator-sp-' + key;
     inp.className = 'fabricator-sp-input';
     inp.value     = value !== null && value !== undefined ? String(value) : '';
@@ -2294,7 +2336,7 @@ function spMediaUpload(parent, key, label, value, onChange, hint) {
     btn.addEventListener('click', function () {
         if (typeof wp === 'undefined' || !wp.media) {
             var u = prompt(_i18n.imageUrlPrompt || 'Image URL:');
-            if (u && !/^\s*(javascript|vbscript|data):/i.test(u)) { inp.value = u; onChange(u); updateThumb(); }
+            if (u && !isUnsafeUrl(u, false)) { inp.value = u; onChange(u); updateThumb(); }
             return;
         }
         var frame = wp.media({ title: label, button: { text: _i18n.useButtonLabel || 'Use' }, multiple: false, library: { type: 'image' } });
@@ -2925,7 +2967,7 @@ function spCallingCodeTags(parent, key, label, values, onChange) {
 }
 
 
-/* Options list editor: accepts plain strings from legacy data and normalises them on first render. */
+/* Options list editor */
 function spOptionsList(parent, key, label, values, onChange) {
     var row = document.createElement('div');
     row.className = 'fabricator-sp-row';
@@ -2935,13 +2977,10 @@ function spOptionsList(parent, key, label, values, onChange) {
     titleRow.textContent = label;
     row.appendChild(titleRow);
 
-    /* Normalise: plain strings or {value,label} → {value, label, default} */
+    /* Copies each {value, label, default} so edits don't mutate the field config until onChange. */
     var opts = values.map(function (v) {
-        if (v && typeof v === 'object') {
-            return { value: v.value || '', label: v.label || '', 'default': !!v['default'] };
-        }
-        var str = String(v || '');
-        return { value: str, label: str, 'default': false };
+        v = v || {};
+        return { value: v.value || '', label: v.label || '', 'default': !!v['default'] };
     });
 
     var colHeader = document.createElement('div');
@@ -3276,7 +3315,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
             iframe.contentWindow.focus();
             if (cmd[0] === 'createLink') {
                 var url = window.prompt(_i18n.linkUrlPrompt || 'Enter link URL:', 'https://');
-                if (!url || /^\s*(javascript|vbscript|data):/i.test(url)) return;
+                if (!url || isUnsafeUrl(url, false)) return;
                 doc.execCommand('createLink', false, url);
             } else {
                 doc.execCommand(cmd[0], false, null);
@@ -3417,7 +3456,7 @@ function cleanRichDoc(doc) {
             var val  = attr.value || '';
             if (/^on/.test(name) || name.indexOf('data-darkreader') === 0) {
                 el.removeAttribute(attr.name);
-            } else if ((name === 'href' || name === 'src' || name === 'xlink:href') && /^\s*(javascript|vbscript):/i.test(val)) {
+            } else if (['href', 'src', 'xlink:href', 'action', 'formaction'].indexOf(name) !== -1 && isUnsafeUrl(val, true)) {
                 el.removeAttribute(attr.name);
             }
         });
@@ -3439,24 +3478,6 @@ function sanitizeRichDocFragment(doc) {
     var clone = doc.cloneNode(true);
     cleanRichDoc(clone);
     return clone.body ? clone.body.innerHTML : '';
-}
-
-/* Back-compat: migrates legacy body_html_content/body_text_content into the canonical HTML body field. */
-function normalizeNotifBodyFields(notif) {
-    if (notif.body === undefined) {
-        var legacy = notif.body_html ? (notif.body_html_content || '')
-            : (notif.body_text_content || '');
-        notif.body = /<[a-z][\s\S]*>/i.test(legacy)
-            ? legacy
-            : (function (text) {
-                var div = document.createElement('div');
-                div.textContent = text;
-                return div.innerHTML.replace(/\n/g, '<br>');
-            })(legacy);
-    }
-    delete notif.body_html_content;
-    delete notif.body_text_content;
-    return notif;
 }
 
 /* Rating icon row: select (icon type) + half-values pill in one line */
@@ -3784,8 +3805,8 @@ function renderNotifications() {
         var n = state.notifications.length + 1;
         state.notifications.push({
             slug: 'notification-' + n,
-            name: 'Benachrichtigung ' + n,
-            to: '{admin_email}', subject: 'Formular: {form_title}',
+            name: (_i18n.notificationName || 'Notification %d').replace('%d', n),
+            to: '{admin_email}', subject: _i18n.notificationSubject || 'New Entry: {form_title}',
             body: '{all_fields}',
             from_name: '{site_name}',
             from_email: '{admin_email}', attach_pdf: true, enabled: true,
@@ -3860,6 +3881,15 @@ function createNotifModal() {
             '</div>' +
         '</div>';
     document.body.appendChild(notifModal);
+    /* One listener for the whole modal: recipients, routing rules, subject, body, attachments and sender each wrote
+       straight into state without marking the form unsaved, so leaving the page lost them with no warning. */
+    notifModal.addEventListener('input',  markDirty);
+    notifModal.addEventListener('change', markDirty);
+    notifModal.addEventListener('click', function (e) {
+        if (e.target.closest('.fabricator-cond-add, .fabricator-cond-rm, .fabricator-seg-btn, .fabricator-sp-inline-toggle')) {
+            markDirty();
+        }
+    });
     notifModal.querySelector('.fabricator-modal-close').addEventListener('click', closeNotifModal);
     notifModal.querySelector('#fabricator-notif-done').addEventListener('click', closeNotifModal);
     notifModal.addEventListener('click', function (e) { if (e.target === notifModal) closeNotifModal(); });
@@ -3970,9 +4000,16 @@ function buildNotifRecipientTab(notif) {
     panel.appendChild(modeRow);
 
     if (mode === 'single') {
+        /* Hint shown: To accepts multiple addresses too, same as Cc/Bcc (resolveRecipientList splits on ';'/','). */
         spRow(panel, 'notif-to', _i18n.toEmail || 'To (email)', 'text', notif.to || '', function (v) {
             state.notifications[notifModalIdx].to = v;
-        });
+        }, _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
+        spRow(panel, 'notif-cc', _i18n.ccEmails || 'CC emails', 'text', notif.cc || '',
+            function (v) { state.notifications[notifModalIdx].cc = v; },
+            _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
+        spRow(panel, 'notif-bcc', _i18n.bccEmails || 'BCC emails', 'text', notif.bcc || '',
+            function (v) { state.notifications[notifModalIdx].bcc = v; },
+            _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
     } else {
         /* Routing rules */
         if (!notif.routing_rules) { notif.routing_rules = []; state.notifications[notifModalIdx].routing_rules = []; }
@@ -4042,10 +4079,7 @@ function buildNotifRecipientTab(notif) {
                 content.appendChild(valArea);
 
                 function getCtrl() {
-                    for (var i = 0; i < state.fields.length; i++) {
-                        if (state.fields[i].id === fSel.value) return state.fields[i];
-                    }
-                    return null;
+                    return findFieldById(fSel.value);
                 }
                 function isChoice(f) {
                     return f && CHOICE_TYPES.indexOf(f.type) !== -1 && (f.options || []).length;
@@ -4073,7 +4107,7 @@ function buildNotifRecipientTab(notif) {
                     var cf = getCtrl();
                     var choice = isChoice(cf);
                     if (choice) {
-                        var modePill = mkSeg(['option','value'],['Option','Wert'],
+                        var modePill = mkSeg(['option','value'],[_i18n.segOption || 'Option', _i18n.segValue || 'Value'],
                             rule.use_option ? 'option' : 'value',
                             function (v) {
                                 rule.use_option = (v === 'option');
@@ -4092,8 +4126,8 @@ function buildNotifRecipientTab(notif) {
                         if (!rule.value) blank.selected = true;
                         optSel.appendChild(blank);
                         cf.options.forEach(function (opt) {
-                            var val = (opt && typeof opt === 'object') ? (opt.value || '') : String(opt);
-                            var lbl = (opt && typeof opt === 'object') ? (opt.label || val) : val;
+                            var val = (opt && opt.value) || '';
+                            var lbl = (opt && opt.label) || val;
                             var o = document.createElement('option');
                             o.value = val; o.textContent = lbl;
                             if (val === rule.value) o.selected = true;
@@ -4134,6 +4168,28 @@ function buildNotifRecipientTab(notif) {
                 emailRow.appendChild(emailInp);
                 content.appendChild(emailRow);
 
+                /* Per-rule Cc/Bcc: the whole point of routing is that different enquiries reach
+                   different groups, which only holds if the copy lists travel with the rule
+                   rather than sitting once on the notification. */
+                function copyRow(key, arrowLabel, placeholder) {
+                    var row = document.createElement('div');
+                    row.className = 'fabricator-notif-routing-email-row';
+                    var arrow = document.createElement('span');
+                    arrow.className   = 'fabricator-notif-routing-arrow';
+                    arrow.textContent = arrowLabel;
+                    row.appendChild(arrow);
+                    var inp = document.createElement('input');
+                    inp.type = 'text';
+                    inp.className = 'fabricator-cond-val';
+                    inp.value = rule[key] || '';
+                    inp.placeholder = placeholder;
+                    inp.addEventListener('input', function () { rules[ri][key] = this.value; });
+                    row.appendChild(inp);
+                    content.appendChild(row);
+                }
+                copyRow('cc', _i18n.arrowCc || '→ Cc:', _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
+                copyRow('bcc', _i18n.arrowBcc || '→ Bcc:', _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
+
                 /* Delete */
                 var rm = document.createElement('button');
                 rm.type = 'button'; rm.className = 'fabricator-cond-rm'; rm.title = _i18n.removeRule || 'Remove rule';
@@ -4173,6 +4229,12 @@ function buildNotifRecipientTab(notif) {
         spRow(panel, 'notif-fallback', _i18n.fallbackEmail || 'Fallback email', 'text', notif.routing_fallback || '',
             function (v) { state.notifications[notifModalIdx].routing_fallback = v; },
             _i18n.fallbackEmailHint || 'Used when no rule matches');
+        spRow(panel, 'notif-fallback-cc', _i18n.fallbackCc || 'Fallback CC', 'text', notif.routing_fallback_cc || '',
+            function (v) { state.notifications[notifModalIdx].routing_fallback_cc = v; },
+            _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
+        spRow(panel, 'notif-fallback-bcc', _i18n.fallbackBcc || 'Fallback BCC', 'text', notif.routing_fallback_bcc || '',
+            function (v) { state.notifications[notifModalIdx].routing_fallback_bcc = v; },
+            _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
     }
 
 }
@@ -4194,7 +4256,7 @@ function buildNotifContentTab(notif) {
     var bodyLbl = document.createElement('div');
     bodyLbl.className = 'fabricator-sp-label'; bodyLbl.textContent = _i18n.message || 'Message';
     bodyHdr.appendChild(bodyLbl);
-    var typePill = mkSeg(['text','html'], ['Visuell','Code'], isHtml ? 'html' : 'text', function (v) {
+    var typePill = mkSeg(['text','html'], [_i18n.segVisual || 'Visual', _i18n.segCode || 'Code'], isHtml ? 'html' : 'text', function (v) {
         var notif = state.notifications[notifModalIdx];
         notif.body_html = (v === 'html');
         buildNotifContentTab(notif);
@@ -4243,8 +4305,8 @@ function buildNotifSenderTab(notif) {
     sr('from_name',  _i18n.fromName  || 'Sender name',                  _i18n.defaultSiteNameHint  || '{site_name} for default value');
     sr('from_email', _i18n.fromEmail || 'Sender email address',            _i18n.defaultAdminEmailHint || '{admin_email} for default value');
     sr('reply_to',   _i18n.replyTo   || 'Reply-to email',                  _i18n.emptyMeansSenderEmail || 'Empty = sender email');
-    sr('cc',         _i18n.ccEmails  || 'CC emails',                       _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
-    sr('bcc',        _i18n.bccEmails || 'BCC emails',                      _i18n.separateWithSemicolon || 'Separate multiple with semicolons');
+    /* CC/BCC live on the Recipients tab — they ARE recipients, and in routing mode they belong to
+       the individual rule rather than the notification, which this tab has no concept of. */
 }
 
 /* Submit button preview + settings modal */
@@ -4277,6 +4339,15 @@ function createSubmitModal() {
             '</div>' +
         '</div>';
     document.body.appendChild(submitModal);
+    /* One listener for the whole modal, as the notification modal has: the condition rows write straight into
+       state without marking the form unsaved, so leaving the page lost them with no warning. */
+    submitModal.addEventListener('input',  markDirty);
+    submitModal.addEventListener('change', markDirty);
+    submitModal.addEventListener('click', function (e) {
+        if (e.target.closest('.fabricator-cond-add, .fabricator-cond-rm, .fabricator-seg-btn')) {
+            markDirty();
+        }
+    });
     submitModal.querySelector('.fabricator-modal-close').addEventListener('click', closeSubmitModal);
     submitModal.querySelector('#fabricator-submit-done').addEventListener('click', closeSubmitModal);
     submitModal.addEventListener('click', function (e) { if (e.target === submitModal) closeSubmitModal(); });
@@ -4427,10 +4498,7 @@ function buildSubmitConditionsTab() {
         content.appendChild(valArea);
 
         function smGetField() {
-            for (var i = 0; i < state.fields.length; i++) {
-                if (state.fields[i].id === fSel.value) return state.fields[i];
-            }
-            return null;
+            return findFieldById(fSel.value);
         }
         function smIsChoice(f) {
             return f && CHOICE_TYPES.indexOf(f.type) !== -1 && (f.options || []).length;
@@ -4457,7 +4525,7 @@ function buildSubmitConditionsTab() {
             var cf = smGetField();
             var choice = smIsChoice(cf);
             if (choice) {
-                var modePill = mkSeg(['option','value'],['Option','Wert'],
+                var modePill = mkSeg(['option','value'],[_i18n.segOption || 'Option', _i18n.segValue || 'Value'],
                     rule.use_option ? 'option' : 'value',
                     function (v) {
                         rule.use_option = (v === 'option');
@@ -4476,8 +4544,8 @@ function buildSubmitConditionsTab() {
                 if (!rule.value) blank.selected = true;
                 optSel.appendChild(blank);
                 cf.options.forEach(function (opt) {
-                    var val = (opt && typeof opt === 'object') ? (opt.value || '') : String(opt);
-                    var lbl = (opt && typeof opt === 'object') ? (opt.label || val)  : val;
+                    var val = (opt && opt.value) || '';
+                    var lbl = (opt && opt.label) || val;
                     var o = document.createElement('option');
                     o.value = val; o.textContent = lbl;
                     if (val === rule.value) o.selected = true;
@@ -4607,6 +4675,10 @@ function setSaveStatus(status, state, msg) {
         status.innerHTML = '<i class="fa-solid fa-circle-check"></i> ' + escHtml(_i18n.saved || 'Saved');
         status._fadeTimer = setTimeout(function () { status.classList.add('fabricator-ss--fade'); }, 2200);
         status._clearTimer = setTimeout(function () { status.className = ''; status.innerHTML = ''; }, 2600);
+    } else if (state === 'warn') {
+        /* Saved, but with something the user has to act on — stays until the next save instead of fading. */
+        status.className = 'fabricator-ss--warn';
+        status.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + escHtml((_i18n.saved || 'Saved') + ' – ' + msg);
     } else if (state === 'err') {
         status.className = 'fabricator-ss--err';
         status.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + escHtml(msg || (_i18n.errorGeneric || 'Error'));
@@ -4638,7 +4710,11 @@ function bindSave() {
                 if (data.success && data.data && data.data.snapshot !== undefined) FORM_SNAPSHOT = data.data.snapshot;
                 if (data.success) {
                     markClean();
-                    setSaveStatus(status, 'ok');
+                    if (data.data && data.data.warning) {
+                        setSaveStatus(status, 'warn', data.data.warning);
+                    } else {
+                        setSaveStatus(status, 'ok');
+                    }
                 } else {
                     var msg = (data.data && data.data.message) ? data.data.message : (typeof data.data === 'string' ? data.data : (_i18n.unknownError || 'Unknown error'));
                     setSaveStatus(status, 'err', msg);
@@ -4671,7 +4747,15 @@ function bindPreview() {
             .then(function (r) { return r.json(); })
             .then(function (resp) {
                 if (resp.success && resp.data.html) {
-                    var blob = new Blob([resp.data.html], { type: 'text/html' });
+                    /* allow-scripts without allow-same-origin: blob: URL is same-origin wp-admin, so this denies admin cookies/storage to anything that survives HtmlField::kses(). */
+                    var wrapper = '<!doctype html><html><head><meta charset="utf-8"><title>'
+                        + escHtml(_i18n.previewLabel || 'Preview')
+                        + '</title><style>html,body{margin:0;height:100%}'
+                        + 'iframe{border:0;display:block;width:100%;height:100%}</style></head>'
+                        + '<body><iframe sandbox="allow-scripts allow-forms" srcdoc="'
+                        + escHtml(resp.data.html)
+                        + '"></iframe></body></html>';
+                    var blob = new Blob([wrapper], { type: 'text/html' });
                     var url  = URL.createObjectURL(blob);
                     window.open(url, '_blank');
                     setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
@@ -4690,6 +4774,27 @@ function bindPreview() {
 /* Shared utilities */
 
 /* Segmented pill control: all options shown at once, selected one filled. */
+/* Follows a renamed field id through everything that points at one by id. Free text such as {id} placeholders in
+   subjects and bodies is left alone on purpose: it is the author's own wording, not a stored reference. */
+function renameFieldReferences(oldId, newId) {
+    if (!oldId || !newId || oldId === newId) return;
+    function fixRules(rules) {
+        (rules || []).forEach(function (rule) {
+            if (rule && rule.field_id === oldId) rule.field_id = newId;
+        });
+    }
+    (state.fields || []).forEach(function (f) {
+        if (f.conditions) fixRules(f.conditions.rules);
+        (f.children || []).forEach(function (c) {
+            if (c.conditions) fixRules(c.conditions.rules);
+        });
+    });
+    (state.notifications || []).forEach(function (n) { fixRules(n.routing_rules); });
+    if (state.settings && state.settings.submit_conditions) {
+        fixRules(state.settings.submit_conditions.rules);
+    }
+}
+
 function mkSeg(values, labels, current, onChange) {
     var wrap = document.createElement('div');
     wrap.className = 'fabricator-seg';
@@ -4777,6 +4882,31 @@ function generateId(type) {
     var n = 1;
     while (used[type + '-' + n]) n++;
     return type + '-' + n;
+}
+
+/* Finds a field by id among top-level fields and group children alike. Routing and submit-button rules may target a
+   group child, which a top-level-only lookup never found, so those rules never offered the option dropdown. */
+function findFieldById(id) {
+    for (var i = 0; i < state.fields.length; i++) {
+        var f = state.fields[i];
+        if (f.id === id) return f;
+        var children = f.children || [];
+        for (var j = 0; j < children.length; j++) {
+            if (children[j].id === id) return children[j];
+        }
+    }
+    return null;
+}
+
+/* URL scheme check after removing the characters browsers ignore: a tab inside "javascript:" or a leading control
+   character still runs, so a plain /^\s*javascript:/ test let them through. allowData keeps data: URIs (pasted images in an email body). */
+/* C0 controls, space, DEL and C1 controls, built from char codes so the source stays plain ASCII. */
+var URL_IGNORED_CHARS = new RegExp('[' + String.fromCharCode(0) + '-' + String.fromCharCode(32)
+    + String.fromCharCode(127) + '-' + String.fromCharCode(159) + ']', 'g');
+
+function isUnsafeUrl(url, allowData) {
+    var scheme = String(url || '').replace(URL_IGNORED_CHARS, '').toLowerCase();
+    return allowData ? /^(javascript|vbscript):/.test(scheme) : /^(javascript|vbscript|data):/.test(scheme);
 }
 
 /* Slugify a string for use as an option value */

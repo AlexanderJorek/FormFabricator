@@ -9,7 +9,8 @@ This document covers every non-obvious detail about how the PDF layout editor's 
 | File | Role |
 |------|------|
 | `includes/PDF/templates/layout.php` | PHP: converts saved header JSON → mPDF HTML |
-| `includes/Admin/PDFLayoutEditor.php` | JS: builder canvas + live preview renderer |
+| `assets/js/admin-pdflayout.js` | JS: builder canvas + live preview renderer |
+| `includes/Admin/PDFLayoutEditor.php` | PHP: editor page, save/preview handlers, `sanitizeHeaderLayout()` |
 | `includes/PDF/Generator.php` | Instantiates mPDF, injects HTML, configures margins |
 
 ---
@@ -83,16 +84,20 @@ The same applies in the preview: images use `width:100%; height:auto`, not `heig
 
 ## Preview scaling
 
-The preview renders the header at **builder canvas native size** (42 × 15px = 630px wide) and then CSS-scales the whole container to fit the available paper content width:
+The preview paper has a fixed **992px design width**: A4 (210mm) at mPDF's **120 DPI** (`210 × 120 / 25.4 ≈ 992`). `admin-pdflayout.js` converts at that same resolution everywhere (`mm()`: 120/25.4 px per mm, `pt()`: 120/72 px per pt), and `scaleA4()` shrinks whole sheets with CSS on narrower screens, so nothing inside a sheet measures itself.
+
+The header renders at **builder canvas native size** (42 × 15px = 630px wide) and is then CSS-scaled to the paper's content width:
 
 ```js
-var canvasW  = HB_COLS * HB_CELL;  // 630px
+var canvasW  = HB_COLS * HB_CELL;                                       // 630px
 var marginPx = parseFloat(mm(s.margin_left)) + parseFloat(mm(s.margin_right));
-var paperW   = paper.offsetWidth - marginPx;
-var scale    = paperW / canvasW;   // no Math.min(1, ...) cap — always upscales to fill
+var contentW = Math.max(1, 992 - marginPx);                             // fixed design width
+var scale    = contentW / canvasW;                                      // no Math.min(1, ...) cap
 ```
 
-There is intentionally **no `Math.min(1, scale)` cap**. If the paper content width is wider than 630px (which it is — A4 at 96dpi is 794px, content area ~680px), the canvas upscales. Capping at 1 would leave a gap and break proportional matching with the PDF.
+Do **not** use `paper.offsetWidth` here. It varies with the viewport and with timing (the sheet is CSS-scaled on small screens), and a scale derived from it stops matching the PDF.
+
+There is intentionally **no `Math.min(1, scale)` cap**. With the default 15mm margins the content area is about 850px, wider than the 630px canvas, so the canvas upscales. Capping at 1 would leave a gap and break proportional matching with the PDF.
 
 The scaled container height is:
 
@@ -127,11 +132,11 @@ Builder canvas (JS)
        ▼
 Saved to DB as JSON in fabricator_forms_pdf_layout.header_layout.elements
        │
-       ├─► Preview renderer (JS, PDFLayoutEditor.php ~line 1043)
+       ├─► Preview renderer (JS, assets/js/admin-pdflayout.js, the patched buildPreview())
        │     position:absolute in px within a scaled position:relative container
        │     image: width:100%; height:auto
        │
-       └─► PDF renderer (PHP, layout.php ~line 75)
+       └─► PDF renderer (PHP, layout.php, the 'header' closure)
              position:absolute in mm, page-relative (mPDF behaviour)
              left = margin_left + el.x × cell_mm
              top  = margin_top  + el.y × cell_mm
@@ -148,5 +153,7 @@ Saved to DB as JSON in fabricator_forms_pdf_layout.header_layout.elements
 | `margin_right` | Same effect on `cell_mm` |
 | `margin_top` | Shifts all elements down (added to `abs_top` of every element) |
 | `header_layout.elements` | The element array; each has `{type, x, y, w, h, src/text/size/bold/color/align}` |
+
+Margins are clamped to 0–50mm both when saved (`PDFLayoutEditor::save()`) and again when `layout.php` reads them.
 
 Changing margins changes `cell_mm`, which changes every element's size in mm. The grid ratios are preserved but absolute mm sizes shift. This is intentional — the layout scales with the content area.

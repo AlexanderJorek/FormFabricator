@@ -74,16 +74,7 @@
         var uploadForm    = document.getElementById('pdf-upload-form');
         var uploadOverlay = document.getElementById('fabricator-pdf-upload-overlay');
 
-        /* Shows the "still uploading" indicator, then lets the browser's own real form
-           submission proceed (does NOT preventDefault / intercept it). With several large
-           PDFs the native POST's upload phase is dominated by the visitor's own upload
-           bandwidth and can look hung with no feedback otherwise. Deliberately NOT
-           XHR-driven: swapping the response into the live document via document.write()
-           does not reset the JS global scope, so the response's own <script> tags collide
-           with the still-alive top-level const/let bindings from the original load and throw
-           redeclaration errors. A real native submit sidesteps that via an actual fresh
-           navigation — the only cost is no byte-accurate percentage, just an indeterminate
-           spinner. */
+        /* Deliberately NOT XHR-driven: document.write()-swapping the response would collide with still-alive const/let bindings and throw. */
         // Scope to #wpcontent, not the full viewport (same pattern as admin-settings.js).
         function positionUploadOverlay() {
             if (!uploadOverlay) { return; }

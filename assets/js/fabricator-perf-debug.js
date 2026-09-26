@@ -12,7 +12,17 @@
 'use strict';
 
 var STORAGE_KEY = 'fabricator_perf_active';
-var _active = localStorage.getItem(STORAGE_KEY) === '1';
+/* localStorage throws when storage is disabled, in some privacy modes and in sandboxed frames; a debug toggle must never
+   take the editor down with it. */
+function storageGet(key) {
+    try { return window.localStorage.getItem(key); } catch (e) { return null; }
+}
+function storageSet(key, value) {
+    try {
+        if (value === null) { window.localStorage.removeItem(key); } else { window.localStorage.setItem(key, value); }
+    } catch (e) { /* the toggle just doesn't persist */ }
+}
+var _active = storageGet(STORAGE_KEY) === '1';
 
 /* ── Baseline ────────────────────────────────────────────────────────────── */
 var T0       = performance.now();
@@ -101,9 +111,7 @@ function startFpsMonitor() {
 }
 
 /* ── Field-list render timing ────────────────────────────────────────────── */
-/* The clear + all appendChilds arrive in a single MutationObserver callback,
-   so we can't separate start/end via mutation records alone. Shadow the
-   `innerHTML` setter on this one element instance to capture the clear time. */
+/* Shadow the innerHTML setter on this one element to capture clear time — mutation records alone can't separate it from the appendChilds. */
 
 var _renderClearT = 0;
 
@@ -370,9 +378,7 @@ function tdR(v, col) {
 }
 
 /* ── Long-task observer ──────────────────────────────────────────────────── */
-/* Long tasks go into their own capped array — NOT into _log — to avoid the
-   feedback loop where updatePanel() itself causes a longtask, which triggers
-   another updatePanel(), growing the HTML and making each render slower. */
+/* Separate capped array, not _log — updatePanel() itself can cause a longtask, which would otherwise trigger another updatePanel(). */
 var _ltPanelPending = false;
 if (window.PerformanceObserver) {
     try {
@@ -412,11 +418,7 @@ document.addEventListener('DOMContentLoaded', function () {
             : (_pi18n.toggleShow || 'Show performance overlay');
         perfBtn.style.opacity = isOn ? '1' : '0.45';
         perfBtn.addEventListener('click', function () {
-            if (localStorage.getItem(STORAGE_KEY) === '1') {
-                localStorage.removeItem(STORAGE_KEY);
-            } else {
-                localStorage.setItem(STORAGE_KEY, '1');
-            }
+            storageSet(STORAGE_KEY, storageGet(STORAGE_KEY) === '1' ? null : '1');
             if (window.fabricatorGuardedReload) { window.fabricatorGuardedReload(); } else { location.reload(); }
         });
     }

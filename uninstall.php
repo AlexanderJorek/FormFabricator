@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -41,22 +41,33 @@ function fabricator_uninstall_current_site()
         'fabricator_cs_sweep_expired',
         'fabricator_verifier_sweep_tmp_dirs',
         'fabricator_verifier_cleanup_files',
+        'fabricator_verifier_sweep_expired',
+        'fabricator_uploads_probe_run',
     ];
     foreach ($fabricator_cron_hooks as $fabricator_cron_hook) {
         wp_clear_scheduled_hook($fabricator_cron_hook);
     }
 
         /* Remove all stored forms (CPT posts + meta) */
-    $fabricator_forms = get_posts(
-        [
-        'post_type'      => 'fabricator_form',
-        'posts_per_page' => -1,
-        'post_status'    => 'any',
-        'fields'         => 'ids',
-        ]
-    );
-    foreach ($fabricator_forms as $fabricator_form_id) {
-        wp_delete_post($fabricator_form_id, true);
+    // A page at a time, not posts_per_page => -1: an unbounded query loads every form at once, and each round here
+    // deletes what it read, so the next one returns the rest. The counter only stops a runaway loop if a delete fails.
+    // The plugin's own classes aren't loaded during uninstall, so the batch size is spelled out rather than shared.
+    for ($fabricator_round = 0; $fabricator_round < 1000; $fabricator_round++) {
+        $fabricator_forms = get_posts(
+            [
+            'post_type'      => 'fabricator_form',
+            'posts_per_page' => 100,
+            // Explicit list, not 'any': 'any' silently omits trash/auto-draft, which would survive uninstall.
+            'post_status'    => ['publish', 'pending', 'draft', 'future', 'private', 'trash', 'auto-draft', 'inherit'],
+            'fields'         => 'ids',
+            ]
+        );
+        if (empty($fabricator_forms)) {
+            break;
+        }
+        foreach ($fabricator_forms as $fabricator_form_id) {
+            wp_delete_post($fabricator_form_id, true);
+        }
     }
 
     /* Remove all plugin options — including seal keys and encryption state */
@@ -76,9 +87,12 @@ function fabricator_uninstall_current_site()
         // Seal key data — deleted on uninstall, NOT on reset.
         'fabricator_forms_seal_key',
         'fabricator_forms_seal_key_history',
+        'fabricator_forms_seal_key_damaged',
         'fabricator_forms_seal_encryption',
         'fabricator_forms_seal_setup_done',
         'fabricator_forms_access',
+        'fabricator_forms_trusted_proxies',
+        'fabricator_verifier_sweep_due',
     ];
     foreach ($fabricator_options as $fabricator_option) {
         delete_option($fabricator_option);
@@ -90,6 +104,9 @@ function fabricator_uninstall_current_site()
         'fabricator_host_memory_bytes',
         'fabricator_pdf_dirs_ready',
         'fabricator_pdf_template_fingerprints',
+        'fabricator_unknown_server_logged',
+        'fabricator_gdpr_no_policy_logged',
+        'fabricator_uploads_probe',
     ];
     foreach ($fabricator_transients as $fabricator_transient) {
         delete_transient($fabricator_transient);
@@ -137,8 +154,10 @@ function fabricator_uninstall_current_site()
     );
     wp_cache_delete('alloptions', 'options');
 
-    // Dynamically-named transients (verifier path tokens, progress rows, plaintext master key) — no delete_transient() equivalent for a prefix, so DELETE both the value and _transient_timeout_ rows directly.
-    foreach (['fabricator_pdf_', 'fabricator_vp_', 'fabricator_setup_master_key_'] as $fabricator_prefix) {
+    // No delete_transient() equivalent for a prefix — DELETE both value and _transient_timeout_ rows directly.
+    // fabricator_pdf_ also covers the fabricator_pdf_layout_result_<user> save outcomes; fabricator_settings_result_ is its
+    // settings-page counterpart (both written by the Post/Redirect/Get save handlers).
+    foreach (['fabricator_pdf_', 'fabricator_vp_', 'fabricator_setup_master_key_', 'fabricator_settings_result_', 'fabricator_vbatch_', 'fabricator_vpending_'] as $fabricator_prefix) {
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see fabricator_rl_ cleanup comment above
         $wpdb->query(
             $wpdb->prepare(
@@ -147,6 +166,15 @@ function fabricator_uninstall_current_site()
                 '_transient_timeout_' . $wpdb->esc_like($fabricator_prefix) . '%'
             )
         );
+    }
+
+    // Under a persistent object cache these transients never reach wp_options, so the DELETE above finds nothing. The
+    // per-admin setup hash has a derivable key and is removed here; the fabricator_pdf_ and fabricator_vp_ keys are random
+    // tokens that cannot be enumerated; like the per-user fabricator_vpending_ lists, they expire within 10 minutes.
+    if (wp_using_ext_object_cache()) {
+        foreach (get_users(['capability' => 'manage_options', 'fields' => 'ID']) as $fabricator_admin_id) {
+            delete_transient('fabricator_setup_master_key_' . (int) $fabricator_admin_id);
+        }
     }
 
     // Targeted invalidation, not wp_cache_flush(): flushing the whole object cache would evict every other plugin's entries too.
@@ -172,12 +200,15 @@ function fabricator_uninstall_current_site()
             $fabricator_it    = new RecursiveDirectoryIterator($fabricator_plugin_dir, FilesystemIterator::SKIP_DOTS);
             $fabricator_files = new RecursiveIteratorIterator($fabricator_it, RecursiveIteratorIterator::CHILD_FIRST);
             foreach ($fabricator_files as $fabricator_file) {
-                $fabricator_path = $fabricator_file->getRealPath();
-                if ($fabricator_file->isDir()) {
-                    $fabricator_ok = $wp_filesystem->rmdir($fabricator_path);
-                } else {
+                // getPathname(), not getRealPath(): getRealPath() resolves symlinks, so a link planted in this tree made
+                // uninstall delete its target outside the plugin's directory. A link is removed as the link itself
+                // (the iterator does not descend into linked directories).
+                $fabricator_path = $fabricator_file->getPathname();
+                if ($fabricator_file->isLink() || !$fabricator_file->isDir()) {
                     wp_delete_file($fabricator_path);
-                    $fabricator_ok = !file_exists($fabricator_path);
+                    $fabricator_ok = !file_exists($fabricator_path) && !is_link($fabricator_path);
+                } else {
+                    $fabricator_ok = $wp_filesystem->rmdir($fabricator_path);
                 }
                 if (!$fabricator_ok) {
                     // Standalone script, no plugin logging available — use debug logging.
@@ -214,3 +245,7 @@ if (is_multisite()) {
 } else {
     fabricator_uninstall_current_site();
 }
+
+// Once, outside the per-site loop: user meta lives in the network-wide usermeta table, so running this per site
+// repeated the same delete for every site. The unprotected-uploads notice's 30-day dismissal, stored per user.
+delete_metadata('user', 0, 'fabricator_uploads_notice_dismissed', '', true);

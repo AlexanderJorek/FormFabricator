@@ -970,6 +970,81 @@ window.fabricatorCollapseSections(document.getElementById('fabricator-php-tests'
         });
     }
 
+    /* ── Conditional logic: hidden = never validated or required-checked (real FormRenderer markup) ── */
+    section('JS: conditional logic — hidden fields skip validation and required');
+    var condFixtures = window.FabricatorConditionFixtures || {};
+    run('FabricatorConditionFixtures provided', function () {
+        var types = Object.keys(condFixtures);
+        return types.length
+            ? ok('FabricatorConditionFixtures', types.join(', '))
+            : ko('', '', 'fixtures missing — see FieldTestPage::generateConditionFixtures()');
+    });
+
+    if (typeof vp === 'function' && typeof ic === 'function') {
+        function hiddenByAncestor(el) {
+            while (el) {
+                if (el.dataset && 'conditions' in el.dataset && el.style.display === 'none') { return true; }
+                el = el.parentElement;
+            }
+            return false;
+        }
+
+        /* Renders the fixture, lets initConditions apply the rule for the given country, optionally fills the field, then validates the page. */
+        function validateWithCountry(type, where, country, fill) {
+            var wrap = document.createElement('div');
+            wrap.innerHTML = '<form class="fabricator-form">' + condFixtures[type][where] + '</form>';
+            document.body.appendChild(wrap);
+            var ctrl = wrap.querySelector('[name="country"]');
+            if (ctrl) { ctrl.value = country; }
+            ic(wrap);
+            /* :not() so the text field under test isn't confused with the "country" text control. */
+            var target = wrap.querySelector('.fabricator-field--' + type + ':not([data-field-id="country"])');
+            if (fill && target) {
+                target.querySelectorAll('input, textarea, select').forEach(function (i) {
+                    if (i.type === 'checkbox' || i.type === 'radio') { i.checked = true; } else if (i.type !== 'hidden') { i.value = 'x'; }
+                });
+            }
+            var r = vp(wrap.querySelector('.fabricator-form'));
+            var s = { control: !!ctrl, field: !!target, hidden: !!target && hiddenByAncestor(target), valid: r.valid, hasRequired: r.hasRequired, hasInvalid: r.hasInvalid };
+            document.body.removeChild(wrap);
+            return s;
+        }
+
+        Object.keys(condFixtures).forEach(function (type) {
+            ['direct', 'group'].forEach(function (where) {
+                run(type + ' (' + where + ' condition) unmet → hidden, not validated or required', function () {
+                    var s = validateWithCountry(type, where, 'FR', false);
+                    var inp = 'country="FR", ' + type + ' left empty';
+                    if (!s.control || !s.field || !s.hidden) {
+                        return ko(inp, JSON.stringify(s), 'setup: the field should be hidden by its ' + where + ' condition');
+                    }
+                    return s.valid
+                        ? ok(inp, 'hidden, page valid')
+                        : ko(inp, JSON.stringify(s), 'a hidden field must never be validated or required-checked');
+                });
+                /* The CAPTCHA token only exists once Google's widget has loaded, and the server rejects a missing one; there is no client required check to exercise. */
+                if (type === 'captcha') { return; }
+                run(type + ' (' + where + ' condition) met, empty → visible, required enforced', function () {
+                    var s = validateWithCountry(type, where, 'DE', false);
+                    var inp = 'country="DE", ' + type + ' left empty';
+                    if (!s.control || !s.field || s.hidden) {
+                        return ko(inp, JSON.stringify(s), 'setup: the field should be visible once its condition is met');
+                    }
+                    return (!s.valid && s.hasRequired)
+                        ? ok(inp, 'visible, required error')
+                        : ko(inp, JSON.stringify(s), 'a visible required field left empty must be rejected');
+                });
+                run(type + ' (' + where + ' condition) met, filled → valid', function () {
+                    var s = validateWithCountry(type, where, 'DE', true);
+                    var inp = 'country="DE", ' + type + ' filled';
+                    return (s.field && !s.hidden && s.valid)
+                        ? ok(inp, 'visible, page valid')
+                        : ko(inp, JSON.stringify(s), 'a visible field that is filled in must pass');
+                });
+            });
+        });
+    }
+
     /* ── front.js resilience guards (via FabricatorTestHooks) ── */
     section('JS: front.js — resilience guards');
 
@@ -1064,6 +1139,16 @@ window.fabricatorCollapseSections(document.getElementById('fabricator-php-tests'
                 : ko('message box visible → resetFormsOnBfcacheRestore()', 'still visible', 'a restored page would show a stale success/error message');
         });
     }
+
+    /* "Copy failures" button (FieldTestPage::render()), bound here rather than through an inline onclick attribute. */
+    document.querySelectorAll('[data-fabricator-copy]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (!navigator.clipboard) { return; }
+            navigator.clipboard.writeText(btn.getAttribute('data-fabricator-copy') || '').then(function () {
+                btn.textContent = 'Copied!';
+            });
+        });
+    });
 
     /* ── Render results ──────────────────────────────────────────────────── */
     var container = document.getElementById('fabricator-js-tests');

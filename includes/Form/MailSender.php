@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -71,6 +71,53 @@ class MailSender
     }
 
     /**
+     * Masks every email address inside free text, such as a PHPMailer error ("Invalid address: (to): ...").
+     *
+     * @param string $text Text that may contain email addresses.
+     * @return string
+     */
+    private static function maskEmailsIn(string $text): string
+    {
+        return (string) preg_replace_callback(
+            self::EMAIL_IN_TEXT_RE,
+            static fn(array $m): string => self::maskEmail($m[0]),
+            $text
+        );
+    }
+
+    /**
+     * Replaces every email address inside free text with "[address]".
+     *
+     * @param string $text Text that may contain email addresses.
+     * @return string
+     */
+    private static function redactEmailsIn(string $text): string
+    {
+        return (string) preg_replace(self::EMAIL_IN_TEXT_RE, '[address]', $text);
+    }
+
+    /**
+     * An email address inside free text, such as a PHPMailer error.
+     *
+     * @var string
+     */
+    private const EMAIL_IN_TEXT_RE = '/[^\s<>()";:,]+@[^\s<>()";:,]+/';
+
+    /**
+     * Logs a failure that keeps a submission from being delivered, whether or not WP_DEBUG is on: nothing is stored
+     * locally, so this line is the site owner's only trace of a lost notification. The host keeps this log, outside the
+     * plugin's control, so callers pass no email address, not even a shortened one.
+     *
+     * @param string $message Log line without the class prefix.
+     * @return void
+     */
+    private static function logFailure(string $message): void
+    {
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- deliberate production log of delivery failures; addresses masked, no form data.
+        error_log('FabricatorForms MailSender: ' . self::logSafe($message));
+    }
+
+    /**
      * Registers the wp_mail_failed logger once at class load time.
      *
      * @return void
@@ -80,22 +127,103 @@ class MailSender
         add_action(
             'wp_mail_failed',
             static function (\WP_Error $error): void {
-                \FabricatorForms\fabricator_log(
-                    'FabricatorForms MailSender: wp_mail_failed — ' . $error->get_error_message()
-                );
+                // PHPMailer's message routinely embeds recipient addresses; mask them like every other mail log line in
+                // this class rather than writing personal data to the debug log. Site-wide, so WP_DEBUG-only; this
+                // plugin's own failures are logged unconditionally in onSubmission().
+                \FabricatorForms\fabricator_log('FabricatorForms MailSender: wp_mail_failed — ' . self::maskEmailsIn($error->get_error_message()));
             }
         );
     }
 
     /**
-     * Hooked into fabricator_forms_submission; generates the PDF once and sends one email per enabled notification.
+     * Outcome of the last onSubmission() in this request: null before one runs, true when a notification it had to
+     * deliver was not sent.
      *
-     * @param int       $form_id The form post ID.
-     * @param array     $mapped  Normalized field data from FieldRegistry::mapSubmission().
-     * @param FormModel $form    The form model object.
+     * @var bool|null
      */
-    public static function onSubmission(int $form_id, array $mapped, FormModel $form): void
+    private static ?bool $delivery_failed = null;
+
+    /**
+     * Clears the recorded outcome; FormProcessor calls this right before firing fabricator_forms_submission.
+     *
+     * @return void
+     */
+    public static function resetDeliveryOutcome(): void
     {
+        self::$delivery_failed = null;
+    }
+
+    /**
+     * Whether the last onSubmission() failed to deliver: any email failed, no enabled notification had a usable
+     * recipient, or a notification needed the PDF and it could not be generated. The PDF case is decided before
+     * any email goes out, so that retry never duplicates mail; after a failed email, the retry sends all of them again.
+     *
+     * @return bool
+     */
+    public static function deliveryFailed(): bool
+    {
+        return self::$delivery_failed === true;
+    }
+
+    /**
+     * Whether a notification list has at least one enabled notification, i.e. somewhere a submission is sent.
+     *
+     * @param mixed $notifications A form's notifications (FormModel::$notifications, or the builder's sanitized list).
+     * @return bool
+     */
+    public static function hasEnabledNotification(mixed $notifications): bool
+    {
+        foreach ((array) $notifications as $notif) {
+            if (is_array($notif) && !empty($notif['enabled'])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a submission of the form makes a PDF: some enabled notification attaches it.
+     *
+     * @param int   $form_id       Form ID.
+     * @param mixed $notifications The form's notifications (FormModel::$notifications).
+     * @return bool
+     */
+    public static function attachesPdf(int $form_id, mixed $notifications): bool
+    {
+        foreach ((array) $notifications as $notif) {
+            if (is_array($notif) && !empty($notif['enabled']) && self::notificationAttachesPdf($form_id, $notif)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether one notification attaches the generated PDF, set on the notification or in the form's PDF settings.
+     *
+     * @param int   $form_id Form ID.
+     * @param array $notif   The notification.
+     * @return bool
+     */
+    private static function notificationAttachesPdf(int $form_id, array $notif): bool
+    {
+        return !empty($notif['attach_pdf'])
+            || FormSettings::shouldAttachPdf($form_id, $notif['slug'] ?? '');
+    }
+
+    /**
+     * Hooked into fabricator_forms_submission; resolves every notification, generates the PDF once if one needs it,
+     * then sends one email per enabled notification.
+     *
+     * @param int       $form_id    The form post ID.
+     * @param array     $mapped     Normalized field data from FieldRegistry::mapSubmission().
+     * @param FormModel $form       The form model object.
+     * @param array     $raw_values Flat field_id => submitted value map, for routing comparisons.
+     */
+    public static function onSubmission(int $form_id, array $mapped, FormModel $form, array $raw_values = []): void
+    {
+        self::$delivery_failed = false;
+
         \FabricatorForms\fabricator_log(
             "FabricatorForms MailSender: onSubmission fired for form {$form_id}, "
             . count($form->notifications ?? []) . ' notification(s) configured'
@@ -108,23 +236,14 @@ class MailSender
             return;
         }
 
-        /* ---- Generate PDF once ---- */
-        // No memory reservation/limit raise here: FormProcessor::handle() already holds both for this request.
-        $pdf_path = Generator::generate($mapped, $form_id, $form->title);
-
-        /* ---- Materialize uploads for mail attachment (split by type) ---- */
-        $uploads = self::materializeUploadAttachments($mapped);
-
-        if ($pdf_path === false) {
-            \FabricatorForms\fabricator_log(
-                "FabricatorForms MailSender: PDF generation failed for form {$form_id}"
-            );
-        }
-
         $global_from_email = get_option('fabricator_forms_from_email')
             ?: get_option('admin_email');
         $global_from_name  = get_option('fabricator_forms_from_name')
             ?: get_bloginfo('name');
+
+        /* ---- Pass 1: resolve every notification before anything is generated or sent ---- */
+        $jobs       = [];
+        $unroutable = 0;
 
         foreach ($form->notifications as $notif) {
             if (empty($notif['enabled'])) {
@@ -135,9 +254,21 @@ class MailSender
                 continue;
             }
 
-            $to = ($notif['recipient_mode'] ?? 'single') === 'routing'
-                ? self::resolveRoutedRecipient($notif, $mapped, $form)
-                : self::resolveRecipient(\FabricatorForms\Utils\Cast::stringOrDefault($notif['to'] ?? null), $mapped, $form);
+            // Single mode uses resolveRecipientList() (like Cc/Bcc), since a single-address resolver silently dropped multi-recipient "a@x, b@y" as unroutable.
+            if (($notif['recipient_mode'] ?? 'single') === 'routing') {
+                $routed  = self::resolveRoutedRecipients($notif, $mapped, $form, $raw_values);
+                $to      = $routed['to'];
+                $cc_raw  = $routed['cc'];
+                $bcc_raw = $routed['bcc'];
+            } else {
+                $to = implode(', ', self::resolveRecipientList(
+                    \FabricatorForms\Utils\Cast::stringOrDefault($notif['to'] ?? null),
+                    $mapped,
+                    $form
+                ));
+                $cc_raw  = \FabricatorForms\Utils\Cast::stringOrDefault($notif['cc'] ?? null);
+                $bcc_raw = \FabricatorForms\Utils\Cast::stringOrDefault($notif['bcc'] ?? null);
+            }
             if (empty($to)) {
                 // Don't log $notif['to'] verbatim — in routing mode it's derived from a
                 // submitted field value and could itself be personal data.
@@ -145,11 +276,11 @@ class MailSender
                     'FabricatorForms MailSender: notification ' . self::logSafe($notif['slug'] ?? '?')
                     . ' has no resolvable recipient, skipping'
                 );
+                $unroutable++;
                 continue;
             }
 
-            $should_attach         = !empty($notif['attach_pdf'])
-                || FormSettings::shouldAttachPdf($form_id, $notif['slug'] ?? '');
+            $should_attach         = self::notificationAttachesPdf($form_id, $notif);
             $should_attach_uploads = !empty($notif['attach_uploads']);
 
             // as_html=false: the subject is a header, not markup.
@@ -202,65 +333,52 @@ class MailSender
                 $headers[] = 'Reply-To: ' . str_replace(["\r", "\n"], '', $reply_to);
             }
 
-            // Cc/Bcc were persisted but never emitted as headers; each entry validates like To.
-            foreach (['cc' => 'Cc', 'bcc' => 'Bcc'] as $notif_key => $header_name) {
-                $resolved = self::resolveRecipientList(
-                    \FabricatorForms\Utils\Cast::stringOrDefault($notif[$notif_key] ?? null),
-                    $mapped,
-                    $form
-                );
+            // Cc/Bcc come from the notification in single mode and from the MATCHED ROUTING RULE
+            // in routing mode (see resolveRoutedRecipients); each entry validates like To.
+            foreach (['Cc' => $cc_raw, 'Bcc' => $bcc_raw] as $header_name => $header_raw) {
+                $resolved = self::resolveRecipientList($header_raw, $mapped, $form);
                 if ($resolved !== []) {
                     $headers[] = $header_name . ': ' . implode(', ', $resolved);
                 }
             }
 
-            $attachments = [];
-            if ($should_attach && $pdf_path && file_exists($pdf_path)) {
-                $attachments[] = $pdf_path;
-                /* Non-images can't be embedded in the PDF, so always attach them alongside it. */
-                foreach ($uploads['others'] as $p) {
-                    $attachments[] = $p;
-                }
-                /* Images are embedded in the PDF already; only attach as
-                   separate files when the admin also enables attach_uploads. */
-                if ($should_attach_uploads) {
-                    foreach ($uploads['images'] as $p) {
-                        $attachments[] = $p;
-                    }
-                }
-            } elseif ($should_attach_uploads) {
-                /* No PDF — attach everything once. */
-                foreach (array_merge($uploads['images'], $uploads['others']) as $p) {
-                    $attachments[] = $p;
-                }
-            }
-
-            /* Plain text is derived from the HTML body at send time for clients that don't render HTML. */
-            $altBodySetter = static function ($phpmailer) use ($body): void {
-                $phpmailer->isHTML(true);
-                $phpmailer->Body    = $body;
-                $phpmailer->AltBody = self::htmlToPlainText($body);
-            };
-            add_action('phpmailer_init', $altBodySetter);
-
-            $sent = wp_mail(
-                $to,
-                $subject,
-                $body,
-                $headers,
-                $attachments
-            );
-
-            remove_action('phpmailer_init', $altBodySetter);
-
-            \FabricatorForms\fabricator_log(
-                'FabricatorForms MailSender: wp_mail to ' . self::maskEmail($to) . ' returned '
-                . ($sent ? 'true' : 'false')
-            );
+            $jobs[] = [
+                'slug'           => \FabricatorForms\Utils\Cast::stringOrDefault($notif['slug'] ?? null, '?'),
+                'to'             => $to,
+                'subject'        => $subject,
+                'body'           => $body,
+                'headers'        => $headers,
+                'attach_pdf'     => $should_attach,
+                'attach_uploads' => $should_attach_uploads,
+            ];
         }
 
+        if ($jobs === []) {
+            // Enabled notifications that all failed to route deliver nothing; disabling every notification is a choice.
+            if ($unroutable > 0) {
+                self::logFailure("form {$form_id}: no enabled notification has a usable recipient; nothing sent");
+                self::$delivery_failed = true;
+            }
+            return;
+        }
 
-        /* ---- Clean up PDF and upload temp dir after all emails sent ---- */
+        /* ---- Generate the PDF once, only when a notification attaches it ---- */
+        // No memory reservation/limit raise here: FormProcessor::handle() already holds both for this request.
+        $pdf_path = false;
+        if (in_array(true, array_column($jobs, 'attach_pdf'), true)) {
+            $pdf_path = Generator::generate($mapped, $form_id, $form->title);
+            if ($pdf_path === false) {
+                // Stop before any email: mailing the rest without the PDF would lose it, and a retry would duplicate them.
+                self::logFailure("PDF generation failed for form {$form_id}; no email sent");
+                self::$delivery_failed = true;
+                return;
+            }
+        }
+
+        /* ---- Materialize uploads for mail attachment (split by type) ---- */
+        $uploads = self::materializeUploadAttachments($mapped);
+
+        /* ---- Clean up PDF and upload temp dir once the request ends ---- */
         register_shutdown_function(
             static function () use ($pdf_path, $uploads): void {
                 if ($pdf_path && file_exists($pdf_path)) {
@@ -269,25 +387,170 @@ class MailSender
                         \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp PDF {$pdf_path}");
                     }
                 }
-                $tmp_dir = $uploads['tmp_dir'] ?? '';
-                if ($tmp_dir !== '' && is_dir($tmp_dir)) {
-                    foreach (glob($tmp_dir . '*') ?: [] as $f) {
-                        wp_delete_file($f);
-                        if (file_exists($f)) {
-                            \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp file {$f}");
-                        }
-                    }
-                    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- shutdown-function cleanup, no WP_Filesystem credentials available here.
-                    if (!@rmdir($tmp_dir)) {
-                        \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp dir {$tmp_dir}");
-                    }
+                if (($uploads['tmp_dir'] ?? '') !== '') {
+                    self::removeTempTree($uploads['tmp_dir']);
                 }
             }
         );
+
+        /* ---- Pass 2: send ---- */
+        $sent_count = 0;
+        foreach ($jobs as $job) {
+            $attachments = [];
+            if ($job['attach_pdf'] && $pdf_path && file_exists($pdf_path)) {
+                $attachments[] = $pdf_path;
+                /* Non-images can't be embedded in the PDF, so always attach them alongside it. */
+                foreach ($uploads['others'] as $p) {
+                    $attachments[] = $p;
+                }
+                /* Images are embedded in the PDF already; only attach as
+                   separate files when the admin also enables attach_uploads. */
+                if ($job['attach_uploads']) {
+                    foreach ($uploads['images'] as $p) {
+                        $attachments[] = $p;
+                    }
+                }
+            } elseif ($job['attach_uploads']) {
+                /* No PDF — attach everything once. */
+                foreach (array_merge($uploads['images'], $uploads['others']) as $p) {
+                    $attachments[] = $p;
+                }
+            }
+
+            /* Plain text is derived from the HTML body at send time for clients that don't render HTML. */
+            $body          = $job['body'];
+            $altBodySetter = static function ($phpmailer) use ($body): void {
+                $phpmailer->isHTML(true);
+                $phpmailer->Body    = $body;
+                $phpmailer->AltBody = self::htmlToPlainText($body);
+            };
+            add_action('phpmailer_init', $altBodySetter);
+
+            // Catches this send's own failure reason; the site-wide wp_mail_failed logger in init() stays WP_DEBUG-only.
+            $mail_error   = '';
+            $errorCatcher = static function (\WP_Error $error) use (&$mail_error): void {
+                $mail_error = $error->get_error_message();
+            };
+            add_action('wp_mail_failed', $errorCatcher);
+
+            $sent = wp_mail(
+                $job['to'],
+                $job['subject'],
+                $body,
+                $job['headers'],
+                $attachments
+            );
+
+            remove_action('wp_mail_failed', $errorCatcher);
+            remove_action('phpmailer_init', $altBodySetter);
+
+            if ($sent) {
+                $sent_count++;
+                \FabricatorForms\fabricator_log('FabricatorForms MailSender: wp_mail to ' . self::maskEmail($job['to']) . ' returned true');
+            } else {
+                self::logFailure(
+                    'notification ' . $job['slug'] . " of form {$form_id} was not sent: "
+                    . ($mail_error !== '' ? self::redactEmailsIn($mail_error) : 'wp_mail() returned false without a reason')
+                );
+                \FabricatorForms\fabricator_log('FabricatorForms MailSender: wp_mail to ' . self::maskEmail($job['to']) . ' returned false');
+            }
+        }
+
+        // Any unsent notification fails the submission, not only all of them: otherwise the visitor's confirmation could
+        // go out, "Thank you" appear, and the site owner's copy (consent, mandate, signature) be lost with nothing stored
+        // locally. The retry sends every notification again, so a recipient whose copy already left gets it twice — a
+        // duplicate is recoverable, a lost submission is not.
+        if ($sent_count < count($jobs)) {
+            self::$delivery_failed = true;
+        }
     }
 
     /**
-     * Writes non-image uploaded files to temp paths, preserving filenames, so wp_mail() can attach them.
+     * Removes a MailSender temp directory: its files, its one level of per-file subdirectories, then itself.
+     * Public for Generator::cronSweepTmpDirs(), the backstop when a request dies before its shutdown cleanup.
+     *
+     * @param string $dir Directory created by materializeUploadAttachments().
+     * @return void
+     */
+    public static function removeTempTree(string $dir): void
+    {
+        $dir = rtrim($dir, '/\\');
+        if ($dir === '' || is_link($dir) || !is_dir($dir)) {
+            return;
+        }
+        foreach (glob($dir . DIRECTORY_SEPARATOR . '*') ?: [] as $entry) {
+            if (is_dir($entry) && !is_link($entry)) {
+                foreach (glob($entry . DIRECTORY_SEPARATOR . '*') ?: [] as $f) {
+                    wp_delete_file($f);
+                    if (file_exists($f)) {
+                        \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp file {$f}");
+                    }
+                }
+                self::removeDir($entry);
+                continue;
+            }
+            wp_delete_file($entry);
+            if (file_exists($entry)) {
+                \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp file {$entry}");
+            }
+        }
+        self::removeDir($dir);
+    }
+
+    /**
+     * Removes an emptied directory, logging instead of warning when it can't.
+     *
+     * @param string $dir Directory to remove.
+     * @return void
+     */
+    private static function removeDir(string $dir): void
+    {
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- shutdown/cron cleanup of a plugin-owned temp dir; no WP_Filesystem credentials available here.
+        if (!\FabricatorForms\Utils\Cast::withoutWarnings(static fn() => rmdir($dir))) {
+            \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp dir {$dir}");
+        }
+    }
+
+    /**
+     * Where per-request attachment folders are created.
+     *
+     * The system temp dir, unless WordPress fell back to a folder inside the site: get_temp_dir() returns WP_CONTENT_DIR
+     * when the system temp dir isn't writable, and that folder is web-served without deny rules while these files carry
+     * their original names. The protected PDF folder, which has the deny rules, is used then.
+     *
+     * @return string Directory path with a trailing slash.
+     */
+    public static function tempBaseDir(): string
+    {
+        $temp = trailingslashit(wp_normalize_path(get_temp_dir()));
+        foreach ([ABSPATH, WP_CONTENT_DIR] as $site_dir) {
+            if (str_starts_with($temp, trailingslashit(wp_normalize_path($site_dir)))) {
+                $secure = wp_normalize_path(wp_upload_dir()['basedir']) . '/fabricator-secure-pdf';
+                \FabricatorForms\Utils\SecureDir::harden($secure, [$secure, $secure . '/mail']);
+                return $secure . '/mail/';
+            }
+        }
+        return $temp;
+    }
+
+    /**
+     * Creates a directory readable by the web server user only.
+     *
+     * @param string $dir Directory to create; its parent must exist.
+     * @return bool True when the directory now exists.
+     */
+    private static function makePrivateDir(string $dir): bool
+    {
+        // Native mkdir() with the mode, not wp_mkdir_p() under a umask(): wp_mkdir_p() re-chmods a new directory to its
+        // parent's mode (0777 for a shared /tmp), and umask() is process-wide under a threaded SAPI.
+        // Only this call's own success counts, never "the directory already exists": in the shared temp dir, one that
+        // another local user created first would belong to them, and it is about to hold the upload attachments.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- front-end AJAX submission, no WP_Filesystem credentials; $dir is built from get_temp_dir() and random_bytes(), never request input.
+        return (bool) \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => mkdir($dir, 0700));
+    }
+
+    /**
+     * Writes uploaded files to temp paths under their original filenames, so wp_mail() can attach them.
      *
      * @param array $mapped Normalized submission data.
      * @return array Absolute paths to materialized temp files.
@@ -301,41 +564,49 @@ class MailSender
             return $result;
         }
 
-        /* Use a per-request unique directory so original filenames are
-           preserved for mail clients and concurrent requests can never
-           collide on the same path (wp_unique_filename is not atomic). */
-        $tmp_dir = get_temp_dir() . 'fabricator_' . wp_generate_uuid4() . DIRECTORY_SEPARATOR;
-        // Harden against shared/world-listable system temp dirs, same as Generator.php's PDF temp dir.
-        $prev_umask = umask(0077);
-        try {
-            if (!wp_mkdir_p($tmp_dir)) {
-                \FabricatorForms\fabricator_log("FabricatorForms: could not create temp dir {$tmp_dir}");
-                return $result;
-            }
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- runs during front-end AJAX submission handling, no WP_Filesystem credentials available; mirrors Generator.php.
-            chmod($tmp_dir, 0700);
-        } finally {
-            umask($prev_umask);
+        /* A per-request directory with one subdirectory per file: mail clients see the original filename even
+           when two uploads share one, and concurrent requests never collide on a path (wp_unique_filename()
+           is not atomic). */
+        // random_bytes(), not wp_generate_uuid4(): that draws on mt_rand(), so the name could be predicted and pre-created.
+        $tmp_dir = self::tempBaseDir() . 'fabricator_' . bin2hex(random_bytes(16)) . DIRECTORY_SEPARATOR;
+        if (!self::makePrivateDir($tmp_dir)) {
+            \FabricatorForms\fabricator_log("FabricatorForms: could not create temp dir {$tmp_dir}");
+            return $result;
         }
         $result['tmp_dir'] = $tmp_dir;
 
+        $file_no = 0;
         foreach ($mapped as $field) {
             foreach ($field['materialized_files'] ?? [] as $file) {
                 $b64    = $file['base64'] ?? '';
+                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes binary handed over the array boundary described at the encode site (strict mode). Not obfuscation.
                 $binary = $b64 !== '' ? base64_decode($b64, true) : false;
                 if ($binary === false) {
                     continue;
                 }
                 $mime = $file['mime'] ?? '';
                 $name = sanitize_file_name($file['name'] ?? 'upload');
-                $dest = $tmp_dir . uniqid('', true) . '_' . $name;
-                if (file_put_contents($dest, $binary) === false) {
+                if ($name === '') {
+                    $name = 'upload';
+                }
+                $file_dir = $tmp_dir . 'f' . (++$file_no) . DIRECTORY_SEPARATOR;
+                if (!self::makePrivateDir($file_dir)) {
+                    \FabricatorForms\fabricator_log("FabricatorForms: could not create temp dir {$file_dir}");
+                    continue;
+                }
+                $dest = $file_dir . $name;
+                // Same helper the directory hardening uses: WP_Filesystem where the host's
+                // transport is 'direct', a direct write (justified once, in SecureDir) elsewhere.
+                if (!\FabricatorForms\Utils\SecureDir::putFile($dest, $binary, 0600)) {
                     \FabricatorForms\fabricator_log(
                         "FabricatorForms: failed to write temp file {$dest}"
                     );
                     continue;
                 }
-                if (str_starts_with($mime, 'image/')) {
+                // Images the PDF shows go out as files only where uploads are attached, so a notification that sends
+                // just the PDF carries no copies of them (FormProcessor refuses one too large to show). Everything
+                // else, including images of a type the PDF can't read, such as TIFF, goes next to the PDF.
+                if (\FabricatorForms\PDF\PdfUtils::embeddableImageMime($mime)) {
                     $result['images'][] = $dest;
                 } else {
                     $result['others'][] = $dest;
@@ -395,26 +666,26 @@ class MailSender
      * Resolves the recipient for a notification in "routing" mode. Walks routing_rules in order and returns
      * the email of the first matching rule, falling back to routing_fallback when none match.
      *
-     * @param array     $notif  Notification config (routing_rules, routing_fallback).
-     * @param array     $mapped Mapped submission data.
-     * @param FormModel $form   The form model instance (for option labels).
-     * @return string Resolved email, or empty string when none apply.
+     * @param array     $notif      Notification config (routing_rules, routing_fallback).
+     * @param array     $mapped     Mapped submission data.
+     * @param FormModel $form       The form model instance (for option labels).
+     * @param array     $raw_values Flat field_id => submitted value map.
+     * @return array{to: string, cc: string, bcc: string} Resolved recipients; empty strings when none apply.
      */
-    private static function resolveRoutedRecipient(
+    private static function resolveRoutedRecipients(
         array $notif,
         array $mapped,
-        FormModel $form
-    ): string {
+        FormModel $form,
+        array $raw_values = []
+    ): array {
+        $empty = ['to' => '', 'cc' => '', 'bcc' => ''];
+
         foreach ((array) ($notif['routing_rules'] ?? []) as $rule) {
             $field_id = $rule['field_id'] ?? '';
-            $email    = self::replacePlaceholders(
-                (string) ($rule['email'] ?? ''),
-                $mapped,
-                $form,
-                false
-            );
-            $email = sanitize_email(trim($email));
-            if ($field_id === '' || !is_email($email)) {
+            /* Multi-address, like every other recipient field: a rule that routes to a whole team
+               is the common case (see routing_fallback below and the To field in single mode). */
+            $to = self::resolveRecipientList((string) ($rule['email'] ?? ''), $mapped, $form);
+            if ($field_id === '' || $to === []) {
                 continue;
             }
             $actual   = (string) ($mapped[$field_id]['value'] ?? '');
@@ -427,19 +698,30 @@ class MailSender
                 $field_id,
                 (string) ($rule['value'] ?? '')
             );
-            if (self::ruleMatches($actual, $operator, $expected)) {
-                return $email;
+            $raw = array_key_exists($field_id, $raw_values) ? $raw_values[$field_id] : null;
+            if (self::ruleMatches($actual, $operator, $expected, $raw)) {
+                // Cc/Bcc travel with the matched rule, not the notification, so routing can send different groups to different copy lists.
+                return [
+                    'to'  => implode(', ', $to),
+                    'cc'  => (string) ($rule['cc'] ?? ''),
+                    'bcc' => (string) ($rule['bcc'] ?? ''),
+                ];
             }
         }
 
-        $fallback = self::replacePlaceholders(
+        $fallback = self::resolveRecipientList(
             (string) ($notif['routing_fallback'] ?? ''),
             $mapped,
-            $form,
-            false
+            $form
         );
-        $fallback = sanitize_email(trim($fallback));
-        return is_email($fallback) ? $fallback : '';
+        if ($fallback === []) {
+            return $empty;
+        }
+        return [
+            'to'  => implode(', ', $fallback),
+            'cc'  => (string) ($notif['routing_fallback_cc'] ?? ''),
+            'bcc' => (string) ($notif['routing_fallback_bcc'] ?? ''),
+        ];
     }
 
     /**
@@ -455,19 +737,21 @@ class MailSender
         string $field_id,
         string $raw
     ): string {
+        // Children too: a group's choice fields are mapped by their own id, so a rule on one found nothing here and
+        // then compared the stored option value against the displayed label.
         foreach ((array) ($form->fields ?? []) as $field_cfg) {
-            if (($field_cfg['id'] ?? '') !== $field_id) {
-                continue;
-            }
-            foreach ((array) ($field_cfg['options'] ?? []) as $opt) {
-                $opt_val = is_array($opt) ? ($opt['value'] ?? '') : $opt;
-                if ((string) $opt_val === $raw) {
-                    return is_array($opt)
-                        ? (string) ($opt['label'] ?? $raw)
-                        : (string) $opt;
+            $candidates = array_merge([$field_cfg], (array) ($field_cfg['children'] ?? []));
+            foreach ($candidates as $candidate) {
+                if (!is_array($candidate) || ($candidate['id'] ?? '') !== $field_id) {
+                    continue;
                 }
+                foreach ((array) ($candidate['options'] ?? []) as $opt) {
+                    if ((string) ($opt['value'] ?? '') === $raw) {
+                        return (string) ($opt['label'] ?? $raw);
+                    }
+                }
+                return $raw;
             }
-            break;
         }
         return $raw;
     }
@@ -475,15 +759,17 @@ class MailSender
     /**
      * Evaluates a single routing-rule comparison against a submitted value.
      *
-     * @param string $actual   The submitted field value.
+     * @param string $actual   The field's display value, as it appears in the email and PDF.
      * @param string $operator One of the supported comparison operators.
      * @param string $expected The rule's comparison value.
+     * @param mixed  $raw      The value as submitted, or null when it isn't available.
      * @return bool Whether the rule matches.
      */
     private static function ruleMatches(
         string $actual,
         string $operator,
-        string $expected
+        string $expected,
+        mixed $raw = null
     ): bool {
         switch ($operator) {
             case 'not_equals':
@@ -491,21 +777,77 @@ class MailSender
             case 'contains':
                 return $expected !== '' && mb_stripos($actual, $expected) !== false;
             case 'not_contains':
-                return $expected === '' || mb_stripos($actual, $expected) === false;
+                // Empty value = half-configured routing rule: unsatisfied, or it would route every submission.
+                return $expected !== '' && mb_stripos($actual, $expected) === false;
             case 'empty':
-                return trim($actual) === '';
+                return self::valueIsEmpty($actual, $raw);
             case 'not_empty':
-                return trim($actual) !== '';
+                return !self::valueIsEmpty($actual, $raw);
             case 'greater':
-                return is_numeric($actual) && is_numeric($expected)
-                && (float) $actual > (float) $expected;
+                $number = self::numericValue($actual, $raw);
+                return $number !== null && is_numeric($expected) && $number > (float) $expected;
             case 'less':
-                return is_numeric($actual) && is_numeric($expected)
-                && (float) $actual < (float) $expected;
+                $number = self::numericValue($actual, $raw);
+                return $number !== null && is_numeric($expected) && $number < (float) $expected;
             case 'equals':
             default:
                 return mb_strtolower($actual) === mb_strtolower($expected);
         }
+    }
+
+    /**
+     * Whether a field was left blank, judged on the value as submitted.
+     *
+     * The display value can't answer this: a blank field reads "[No entry]", and a visitor can type that text into a
+     * text field. Only when the submitted value isn't available does the display value decide, as a last resort.
+     *
+     * @param string $display The field's display value.
+     * @param mixed  $raw     The value as submitted, or null when it isn't available.
+     * @return bool
+     */
+    private static function valueIsEmpty(string $display, mixed $raw): bool
+    {
+        if ($raw === null) {
+            return trim($display) === '';
+        }
+        if (is_array($raw)) {
+            foreach ($raw as $item) {
+                if (is_scalar($item) && trim((string) $item) !== '') {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return trim((string) $raw) === '';
+    }
+
+    /**
+     * The number behind a field value, for the greater/less operators.
+     *
+     * Prefers the value as submitted. The display value is formatted for people ("1.234,56 €" on de_DE), which
+     * is_numeric() rejects, so it is read back through the site's own number format when needed.
+     *
+     * @param string $display The field's display value.
+     * @param mixed  $raw     The value as submitted, or null when it isn't available.
+     * @return float|null Null when neither holds a number.
+     */
+    private static function numericValue(string $display, mixed $raw): ?float
+    {
+        if (is_numeric($raw)) {
+            return (float) $raw;
+        }
+        $display = trim($display);
+        if (is_numeric($display)) {
+            return (float) $display;
+        }
+        global $wp_locale;
+        $decimal   = is_object($wp_locale) ? (string) ($wp_locale->number_format['decimal_point'] ?? '.') : '.';
+        $thousands = is_object($wp_locale) ? (string) ($wp_locale->number_format['thousands_sep'] ?? ',') : ',';
+        $plain     = str_replace([$thousands, ' ', "\xc2\xa0"], '', $display);
+        if ($decimal !== '') {
+            $plain = str_replace($decimal, '.', $plain);
+        }
+        return preg_match('/-?\d+(?:\.\d+)?/', $plain, $m) === 1 ? (float) $m[0] : null;
     }
 
     /**
@@ -607,7 +949,39 @@ class MailSender
             $tokens['{all_fields}'] = $all;
         }
 
-        return strtr($text, $tokens);
+        $filled = strtr($text, $tokens);
+        return $as_html ? self::restrictLinkProtocols($filled) : $filled;
+    }
+
+    /**
+     * Keeps every href/src in a finished HTML body to a harmless protocol.
+     *
+     * The body is sanitized when the author saves it, but placeholders are filled in afterwards and escaped as text
+     * only. A visitor's answer landing inside href="{field}" therefore brought its own scheme into the email, where
+     * esc_html() means nothing. Checked once here, on the finished body.
+     *
+     * @param string $html Email body with placeholders already filled in.
+     * @return string
+     */
+    private static function restrictLinkProtocols(string $html): string
+    {
+        $checked = preg_replace_callback(
+            '/\s(href|src)\s*=\s*(["\'])((?:(?!\2).)*)\2/is',
+            static function (array $m): string {
+                $value = html_entity_decode($m[3], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $safe  = wp_kses_bad_protocol($value, ['http', 'https', 'mailto', 'cid']);
+                if (trim($safe) !== trim($value)) {
+                    \FabricatorForms\fabricator_log(
+                        'FabricatorForms MailSender: dropped a link in an email body whose protocol is not allowed.'
+                    );
+                    return ' ' . $m[1] . '=' . $m[2] . $m[2];
+                }
+                return $m[0];
+            },
+            $html
+        );
+        // PCRE gave up (backtrack/JIT limit): the body goes out as it is rather than empty, as everywhere else here.
+        return $checked === null ? $html : $checked;
     }
 
     /**

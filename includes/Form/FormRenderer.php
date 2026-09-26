@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -86,6 +86,22 @@ class FormRenderer
         $submit_working = $form->settings['submit_working'] ?? __('Sending…', 'formfabricator');
         $success_msg    = $form->settings['success_message'] ?? __('Thank you!', 'formfabricator');
 
+        /* "Show button when … conditions match": the same data-conditions contract the fields use, so front.js shows
+           and hides the footer with them. FormProcessor re-checks the rules, since a hidden button stops nobody. */
+        $submit_cond      = (array) ($form->settings['submit_conditions'] ?? []);
+        $submit_cond_attr = '';
+        if (!empty($submit_cond['rules'])) {
+            $submit_cond_attr = ' data-conditions="' . esc_attr(
+                (string) wp_json_encode(
+                    [
+                        'action' => 'show',
+                        'match'  => ($submit_cond['match'] ?? 'all') === 'any' ? 'any' : 'all',
+                        'rules'  => array_values((array) $submit_cond['rules']),
+                    ]
+                )
+            ) . '"';
+        }
+
         // Backstop for Assets::enqueueFront(), which misses widgets/page-builders/FSE embeds; idempotent.
         \FabricatorForms\Utils\Assets::ensureFrontAssets();
 
@@ -102,12 +118,15 @@ class FormRenderer
             }
         }
 
-        // Only emit the IBAN-lookup nonce for forms that actually use live lookup (checks group children too).
-        if (self::hasLiveIbanLookup($form->fields)) {
-            \FabricatorForms\Utils\Assets::markSepaLiveLookup();
-        }
         $has_upload = self::anyFieldHandler($seen_handlers, static fn($h) => $h->needsMultipartEncoding());
         $has_pages  = self::anyFieldHandler($seen_handlers, static fn($h) => $h->isPageBreak());
+
+        // Two forms on one page repeated every id, so a label could focus the other form's input. Every form after
+        // the first on the page gets a suffix on its ids (uniqueIds()), which front.js reads back.
+        // Counted per page, not per form id: a form selection renders several *different* forms, and two of them
+        // using the same field id ("email", say) collided while each was only its own first copy.
+        self::$render_count++;
+        $id_suffix = self::$render_count > 1 ? '--' . self::$render_count : '';
 
         ob_start();
         ?>
@@ -122,6 +141,7 @@ class FormRenderer
                 novalidate
                 data-form-id="<?php echo esc_attr($form_id); ?>"
                 <?php echo $has_pages ? 'data-has-pages="true"' : ''; ?>
+                <?php echo $id_suffix !== '' ? 'data-fabricator-id-suffix="' . esc_attr($id_suffix) . '"' : ''; ?>
             >
                 <input type="hidden" name="action"     value="fabricator_forms_submit">
                 <input type="hidden" name="form_id"    value="<?php echo esc_attr($form_id); ?>">
@@ -135,11 +155,9 @@ class FormRenderer
                 <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- renderFields() returns pre-escaped HTML; each field handler escapes its own output internally. ?>
                 <?php echo self::renderFields($form->fields); ?>
 
-                <div class="fabricator-form-footer">
-                    <?php // The form only ever submits via JS (which fetches a fresh nonce/token right before
-                    // submit); disabled by default so a JS-disabled/blocked visitor can't trigger a native
-                    // POST with an empty nonce field and get a raw JSON error instead of the form's own UI.
-                    // front.js removes this once it has attached its submit handler. ?>
+                <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_attr()'d at assignment above. ?>
+                <div class="fabricator-form-footer"<?php echo $submit_cond_attr; ?>>
+                    <?php // Disabled by default: prevents a JS-disabled visitor from POSTing with no nonce; front.js enables it once ready. ?>
                     <button type="submit" class="fabricator-submit-btn" disabled
                             data-working="<?php echo esc_attr($submit_working); ?>"
                             data-success="<?php echo esc_attr($success_msg); ?>">
@@ -155,28 +173,65 @@ class FormRenderer
             </form>
         </div>
         <?php
-        return ob_get_clean();
+        $html = (string) ob_get_clean();
+        return $id_suffix === '' ? $html : self::uniqueIds($html, $id_suffix);
     }
 
     /**
-     * True when any field (or group child) is a SEPA field with live IBAN lookup enabled.
+     * How many forms have been rendered during this request, whichever form each one was.
      *
-     * @param array $fields Field config arrays, possibly containing group containers.
+     * @var int
      */
-    private static function hasLiveIbanLookup(array $fields): bool
+    private static int $render_count = 0;
+
+    /**
+     * Appends $suffix to every id in $html and to each reference to one of those ids (label for, form, list, headers,
+     * aria-* id lists, in-page #links), so a repeated copy of a form points only at itself. Field classes are left
+     * untouched, and names too: they are what the server reads, and each copy is its own <form>.
+     *
+     * @param string $html   Rendered form markup.
+     * @param string $suffix Suffix such as "--2".
+     * @return string
+     */
+    private static function uniqueIds(string $html, string $suffix): string
     {
-        foreach ($fields as $f) {
-            if (!is_array($f)) {
-                continue;
-            }
-            if (($f['type'] ?? '') === 'sepa' && !empty($f['live_iban_lookup'])) {
-                return true;
-            }
-            if (!empty($f['children']) && is_array($f['children']) && self::hasLiveIbanLookup($f['children'])) {
-                return true;
-            }
+        if (!preg_match_all('/\sid\s*=\s*(["\'])(.*?)\1/i', $html, $m)) {
+            return $html;
         }
-        return false;
+        $ids  = array_flip($m[2]);
+        $html = (string) preg_replace_callback(
+            '/(\s(?:id|for|form|list|headers|aria-(?:describedby|labelledby|controls|owns|activedescendant|errormessage|details|flowto))\s*=\s*)(["\'])(.*?)\2/i',
+            static function (array $a) use ($ids, $suffix): string {
+                // Space-separated id lists (aria-describedby="a b") are suffixed reference by reference.
+                $refs = preg_split('/(\s+)/', $a[3], -1, PREG_SPLIT_DELIM_CAPTURE);
+                foreach ($refs as $i => $ref) {
+                    if ($ref !== '' && isset($ids[$ref])) {
+                        $refs[$i] = $ref . $suffix;
+                    }
+                }
+                return $a[1] . $a[2] . implode('', $refs) . $a[2];
+            },
+            $html
+        );
+        return (string) preg_replace_callback(
+            '/(\shref\s*=\s*)(["\'])#(.*?)\2/i',
+            static fn(array $a): string => $a[1] . $a[2] . '#' . (isset($ids[$a[3]]) ? $a[3] . $suffix : $a[3]) . $a[2],
+            $html
+        );
+    }
+
+    /**
+     * Returns the data-conditions attribute for a field, or '' when it has no condition rules.
+     *
+     * @param array|null $field_cfg Field configuration, or null.
+     * @return string Ready-to-print attribute, including its leading space, or ''.
+     */
+    private static function conditionAttr(?array $field_cfg): string
+    {
+        if (!$field_cfg || empty($field_cfg['conditions']['rules'])) {
+            return '';
+        }
+        return ' data-conditions="' . esc_attr((string) wp_json_encode($field_cfg['conditions'])) . '"';
     }
 
     /**
@@ -255,9 +310,7 @@ class FormRenderer
                 continue;
             }
 
-            $cond_attr = !empty($field_cfg['conditions']['rules'])
-                ? ' data-conditions="' . esc_attr(wp_json_encode($field_cfg['conditions'])) . '"'
-                : '';
+            $cond_attr = self::conditionAttr($field_cfg);
 
             if ($cols === 6) {
                 $next      = $fields[$i + 1] ?? null;
@@ -273,12 +326,8 @@ class FormRenderer
 
                 if ($next_handler) {
                     // Each field's condition goes on its own column, not the shared row, so the pair toggles independently.
-                    $col_a_cond = !empty($field_cfg['conditions']['rules'])
-                        ? ' data-conditions="' . esc_attr(wp_json_encode($field_cfg['conditions'])) . '"'
-                        : '';
-                    $col_b_cond = !empty($next['conditions']['rules'])
-                        ? ' data-conditions="' . esc_attr(wp_json_encode($next['conditions'])) . '"'
-                        : '';
+                    $col_a_cond = self::conditionAttr($field_cfg);
+                    $col_b_cond = self::conditionAttr($next);
                     $col_a  = '<div class="fabricator-col fabricator-col-6"' . $col_a_cond . '>';
                     $col_a .= $handler->render($field_cfg, $field_id) . '</div>';
                     $col_b  = '<div class="fabricator-col fabricator-col-6"' . $col_b_cond . '>';

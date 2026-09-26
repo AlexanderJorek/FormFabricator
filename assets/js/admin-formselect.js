@@ -66,10 +66,7 @@
                 if (isEmpty) { syncBulkBar(); }
             }
 
-            /* Also encodes ' (not just &,<,>,"), matching admin-builder.js's escHtml() so two
-               helpers of the same name can't offer different guarantees — every current call
-               site interpolates into a double-quoted attribute, but a future single-quoted one
-               would silently be unprotected. */
+            /* Also encodes ' (not just &,<,>,"), matching admin-builder.js's escHtml() to keep both same-named helpers' guarantees identical. */
             function escHtml(str) {
                 return String(str)
                     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -262,7 +259,10 @@
                     items: JSON.stringify(items),
                 }, function (data) {
                     saveBtn.disabled = false;
-                    if (!data.success) { return; }
+                    if (!data.success) {
+                        window.alert((data.data && data.data.message) || fseli18n.saveFailed);
+                        return;
+                    }
 
                     /* update local data cache */
                     var idx = fselData.findIndex(function (r) { return r.id === data.data.id; });
@@ -314,7 +314,10 @@
                 post('fabricator_fsel_delete', { nonce: pendingDelNonce, id: pendingDelId },
                 function (data) {
                     delConfirm.disabled = false;
-                    if (!data.success) { return; }
+                    if (!data.success) {
+                        window.alert((data.data && data.data.message) || fseli18n.deleteFailed);
+                        return;
+                    }
                     var row = list.querySelector('.fabricator-form-row[data-id="' + pendingDelId + '"]');
                     if (row) { row.remove(); }
                     fselData = fselData.filter(function (r) { return r.id !== pendingDelId; });
@@ -455,9 +458,12 @@
                         }
                     }
 
+                    /* pointercancel too: a touch drag the browser takes over (scroll, gesture) fires no pointerup,
+                       which left the row a floating ghost and the listeners attached. */
                     function onUp() {
                         document.removeEventListener('pointermove', onMove);
                         document.removeEventListener('pointerup', onUp);
+                        document.removeEventListener('pointercancel', onUp);
 
                         /* restore item to placeholder position */
                         ghost.style.cssText = '';
@@ -468,13 +474,16 @@
 
                     document.addEventListener('pointermove', onMove);
                     document.addEventListener('pointerup', onUp);
+                    document.addEventListener('pointercancel', onUp);
                 });
             }());
 
             /* ── live search ── */
-            var searchInput = document.getElementById('fabricator-fsel-form-search');
-            if (searchInput) {
-                searchInput.addEventListener('input', function () {
+            /* Its own name: a second "var searchInput" here re-bound the modal's form-search variable above, so the modal
+               read, cleared and focused this list search instead and never filtered. */
+            var listSearchInput = document.getElementById('fabricator-fsel-form-search');
+            if (listSearchInput) {
+                listSearchInput.addEventListener('input', function () {
                     var q = this.value.toLowerCase().trim();
                     list.querySelectorAll('.fabricator-form-row').forEach(function (row) {
                         row.hidden = q !== '' && row.dataset.title.indexOf(q) === -1;
@@ -528,8 +537,22 @@
                     if (bulkAction !== 'delete') { return; }
                     var checked = Array.from(getChecked());
                     if (checked.length === 0) { return; }
-                    var remaining = checked.length;
-                    checked.forEach(function (cb) {
+                    /* Deleting a selection can't be undone, and single-row delete asks too. */
+                    if (!window.confirm(fseli18n.bulkDeleteConfirm.replace('%d', String(checked.length)))) { return; }
+                    var failed = 0;
+                    bulkApply.disabled = true;
+                    /* One request at a time: firing every delete at once sent one unthrottled admin-ajax request per row. */
+                    (function next(i) {
+                        if (i >= checked.length) {
+                            bulkApply.disabled = false;
+                            syncEmpty();
+                            syncBulkBar();
+                            if (failed > 0) {
+                                window.alert(fseli18n.bulkDeleteFailed.replace('%d', String(failed)));
+                            }
+                            return;
+                        }
+                        var cb = checked[i];
                         post('fabricator_fsel_delete', { nonce: cb.dataset.delNonce, id: cb.value },
                         function (data) {
                             if (data.success) {
@@ -538,11 +561,12 @@
                                 fselData = fselData.filter(function (r) {
                                     return r.id !== parseInt(cb.value, 10);
                                 });
+                            } else {
+                                failed++;
                             }
-                            remaining--;
-                            if (remaining === 0) { syncEmpty(); }
+                            next(i + 1);
                         });
-                    });
+                    }(0));
                 });
             }
 

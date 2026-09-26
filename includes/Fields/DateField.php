@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,6 +28,18 @@ defined('ABSPATH') || exit;
  */
 class DateField extends BaseField
 {
+    /**
+     * Supported date formats: key => pattern capturing three parts, and the order of those parts (d/m/y).
+     * Mirrored in DateField.js and DateField.date-format.js.
+     *
+     * @var array<string, array{re: string, order: string}>
+     */
+    private const FORMATS = [
+        'dmy' => ['re' => '/^(\d{2})\.(\d{2})\.(\d{4})$/', 'order' => 'dmy'],
+        'mdy' => ['re' => '#^(\d{2})/(\d{2})/(\d{4})$#', 'order' => 'mdy'],
+        'ymd' => ['re' => '/^(\d{4})-(\d{2})-(\d{2})$/', 'order' => 'ymd'],
+    ];
+
     /**
      * Returns field-specific CSS styles.
      *
@@ -84,6 +96,107 @@ class DateField extends BaseField
     }
 
     /**
+     * The field's format key. A field saved before the setting existed has none and keeps DD.MM.YYYY.
+     *
+     * @param array $config Field configuration.
+     * @return string One of the FORMATS keys.
+     */
+    private static function formatKey(array $config): string
+    {
+        $key = (string) ($config['date_format'] ?? 'dmy');
+        return isset(self::FORMATS[$key]) ? $key : 'dmy';
+    }
+
+    /**
+     * Translated, human-readable pattern for a format key ("TT.MM.JJJJ" in German).
+     *
+     * @param string $key One of the FORMATS keys.
+     * @return string
+     */
+    private static function formatLabel(string $key): string
+    {
+        return match ($key) {
+            'mdy'   => __('MM/DD/YYYY', 'formfabricator'),
+            'ymd'   => __('YYYY-MM-DD', 'formfabricator'),
+            default => __('DD.MM.YYYY', 'formfabricator'),
+        };
+    }
+
+    /**
+     * Default format for new fields, read from the site's own date format (Settings > General): whichever of day,
+     * month and year appears first decides the order, so "j. F Y" gives DD.MM.YYYY and "F j, Y" gives MM/DD/YYYY.
+     *
+     * @return string One of the FORMATS keys.
+     */
+    private static function siteDefaultFormat(): string
+    {
+        // Backslash-escaped characters are literals in a PHP date format, not placeholders.
+        $pattern = (string) preg_replace('/\\\\./', '', (string) get_option('date_format', 'd.m.Y'));
+        $day     = strcspn($pattern, 'dj');
+        $month   = strcspn($pattern, 'mnFM');
+        $year    = strcspn($pattern, 'Yy');
+        if ($year < $month && $year < $day) {
+            return 'ymd';
+        }
+        return $month < $day ? 'mdy' : 'dmy';
+    }
+
+    /**
+     * Parses a date written in the given format.
+     *
+     * @param string $value Trimmed input.
+     * @param string $key   One of the FORMATS keys.
+     * @return array{0: int, 1: int, 2: int}|null [year, month, day] when well-formed, else null.
+     */
+    private static function parseDate(string $value, string $key): ?array
+    {
+        $format = self::FORMATS[$key];
+        if (!preg_match($format['re'], $value, $m)) {
+            return null;
+        }
+        $parts = array_combine(str_split($format['order']), [(int) $m[1], (int) $m[2], (int) $m[3]]);
+        return [$parts['y'], $parts['m'], $parts['d']];
+    }
+
+    /**
+     * Parses a stored min/max date, in the field's own format or in any of the others.
+     *
+     * The bounds are written in whatever format the field had when they were entered. Reading them in the current
+     * format only meant that changing the format silently dropped them, so every date passed again.
+     *
+     * @param string $value Trimmed bound, as stored.
+     * @param string $key   The field's current format, tried first.
+     * @return array{0: int, 1: int, 2: int}|null [year, month, day] when well-formed, else null.
+     */
+    private static function parseBound(string $value, string $key): ?array
+    {
+        foreach (array_merge([$key], array_keys(self::FORMATS)) as $candidate) {
+            $parts = self::parseDate($value, $candidate);
+            if ($parts !== null) {
+                return $parts;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Writes a parsed date back in the given format, so a message names the bound the way the field reads dates.
+     *
+     * @param array{0: int, 1: int, 2: int} $ymd [year, month, day].
+     * @param string                        $key One of the FORMATS keys.
+     * @return string
+     */
+    private static function formatDate(array $ymd, string $key): string
+    {
+        [$y, $m, $d] = $ymd;
+        return match ($key) {
+            'mdy'   => sprintf('%02d/%02d/%04d', $m, $d, $y),
+            'ymd'   => sprintf('%04d-%02d-%02d', $y, $m, $d),
+            default => sprintf('%02d.%02d.%04d', $d, $m, $y),
+        };
+    }
+
+    /**
      * Renders the field HTML.
      *
      * @param array  $config   Field configuration.
@@ -96,12 +209,16 @@ class DateField extends BaseField
         $req      = !empty($config['required']) ? ' required aria-required="true"' : '';
         $prefill  = !empty($config['prefill_today']) ? ' data-prefill-today="true"' : '';
         $picker   = !empty($config['show_picker']);
+        $key      = self::formatKey($config);
+        $label    = self::formatLabel($key);
 
         $inner = '<div class="fabricator-date-wrap">'
             . '<input type="text" id="' . esc_attr($field_id) . '"'
             . ' name="' . esc_attr($field_id) . '"'
             . ' class="fabricator-input fabricator-date-text"'
-            . ' placeholder="' . esc_attr__('DD.MM.YYYY', 'formfabricator') . '"'
+            . ' placeholder="' . esc_attr($label) . '"'
+            . ' data-date-format="' . esc_attr($key) . '"'
+            . ' data-date-label="' . esc_attr($label) . '"'
             . ' maxlength="10"'
             // Not always a birthdate; "bday" would wrongly signal browsers to autofill one here.
             . ' autocomplete="off"'
@@ -146,35 +263,32 @@ class DateField extends BaseField
             }
             return true;
         }
-        $v = trim((string)$value);
-        if (!preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $v)) {
-            return __('Please enter a date in DD.MM.YYYY format.', 'formfabricator');
+        $key   = self::formatKey($config);
+        $parts = self::parseDate(trim((string)$value), $key);
+        if ($parts === null) {
+            // translators: %s: expected date pattern, e.g. DD.MM.YYYY.
+            return sprintf(__('Please enter a date in %s format.', 'formfabricator'), self::formatLabel($key));
         }
-        [$d, $m, $y] = explode('.', $v);
-        if (!checkdate((int)$m, (int)$d, (int)$y)) {
+        [$y, $m, $d] = $parts;
+        if (!checkdate($m, $d, $y)) {
             return __('Please enter a valid date.', 'formfabricator');
         }
         // Compare as YYYYMMDD strings so chronological order matches string order
-        $ymd = sprintf('%04d%02d%02d', (int)$y, (int)$m, (int)$d);
+        $ymd = sprintf('%04d%02d%02d', $y, $m, $d);
 
+        // The bounds are written in whatever format the field had when they were entered; parseBound() reads them all.
         $minDate = trim((string)($config['min_date'] ?? ''));
-        if ($minDate !== '' && preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $minDate)) {
-            [$minD, $minM, $minY] = explode('.', $minDate);
-            $minYmd = sprintf('%04d%02d%02d', (int)$minY, (int)$minM, (int)$minD);
-            if ($ymd < $minYmd) {
-                // translators: %s: minimum allowed date.
-                return sprintf(__('Please enter a date on or after %s.', 'formfabricator'), $minDate);
-            }
+        $min     = $minDate !== '' ? self::parseBound($minDate, $key) : null;
+        if ($min !== null && $ymd < sprintf('%04d%02d%02d', $min[0], $min[1], $min[2])) {
+            // translators: %s: minimum allowed date.
+            return sprintf(__('Please enter a date on or after %s.', 'formfabricator'), self::formatDate($min, $key));
         }
 
         $maxDate = trim((string)($config['max_date'] ?? ''));
-        if ($maxDate !== '' && preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $maxDate)) {
-            [$maxD, $maxM, $maxY] = explode('.', $maxDate);
-            $maxYmd = sprintf('%04d%02d%02d', (int)$maxY, (int)$maxM, (int)$maxD);
-            if ($ymd > $maxYmd) {
-                // translators: %s: maximum allowed date.
-                return sprintf(__('Please enter a date on or before %s.', 'formfabricator'), $maxDate);
-            }
+        $max     = $maxDate !== '' ? self::parseBound($maxDate, $key) : null;
+        if ($max !== null && $ymd > sprintf('%04d%02d%02d', $max[0], $max[1], $max[2])) {
+            // translators: %s: maximum allowed date.
+            return sprintf(__('Please enter a date on or before %s.', 'formfabricator'), self::formatDate($max, $key));
         }
 
         return true;
@@ -207,6 +321,7 @@ class DateField extends BaseField
             [
             'show_picker'   => true,
             'prefill_today' => false,
+            'date_format'   => self::siteDefaultFormat(),
             'min_date'      => '',
             'max_date'      => '',
             ]
@@ -227,6 +342,18 @@ class DateField extends BaseField
                 'label' => __('Description', 'formfabricator'),
             ],
             [
+                'key'     => 'date_format',
+                'type'    => 'select',
+                'label'   => __('Date format', 'formfabricator'),
+                // Shown for a field saved before this setting existed, which has no value and keeps DD.MM.YYYY.
+                'default' => 'dmy',
+                'options' => [
+                    ['value' => 'dmy', 'label' => self::formatLabel('dmy')],
+                    ['value' => 'mdy', 'label' => self::formatLabel('mdy')],
+                    ['value' => 'ymd', 'label' => self::formatLabel('ymd')],
+                ],
+            ],
+            [
                 'key'   => 'show_picker',
                 'type'  => 'checkbox',
                 'label' => __('Show calendar icon', 'formfabricator'),
@@ -239,12 +366,12 @@ class DateField extends BaseField
             [
                 'key'   => 'min_date',
                 'type'  => 'text',
-                'label' => __('Earliest allowed date (DD.MM.YYYY)', 'formfabricator'),
+                'label' => __('Earliest allowed date (in the date format above)', 'formfabricator'),
             ],
             [
                 'key'   => 'max_date',
                 'type'  => 'text',
-                'label' => __('Latest allowed date (DD.MM.YYYY)', 'formfabricator'),
+                'label' => __('Latest allowed date (in the date format above)', 'formfabricator'),
             ],
         ];
     }

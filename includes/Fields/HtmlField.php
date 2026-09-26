@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -94,7 +94,7 @@ class HtmlField extends BaseField
     }
 
     /**
-     * Already passed through self::kses() at save/render time, so MailSender injects it as-is.
+     * Already passed through Utils\HtmlSanitizer::sanitize() at save/render time, so MailSender injects it as-is.
      *
      * @return bool
      */
@@ -103,122 +103,12 @@ class HtmlField extends BaseField
         return true;
     }
 
-    /**
-     * Renders the field HTML.
-     *
-     * @param array  $config   Field configuration.
-     * @param string $field_id Unique field identifier.
-     * @param mixed  $value    Current field value.
-     * @return string Rendered HTML.
-     */
-    public function sanitizeConfigValue(string $key, string $value): string
-    {
-        return $key === 'html_content' ? self::kses($value) : \wp_kses_post($value);
-    }
-
-    /**
-     * wp_kses_post()'s allowlist plus form-elements and inline SVG; single source of truth with Generator.php.
-     *
-     * @return array wp_kses()-compatible allowed-tags array.
-     */
-    private static function allowedTags(): array
-    {
-        $base  = \wp_kses_allowed_html('post');
-        $extra = [
-            'input'    => ['type'=>true,'name'=>true,'id'=>true,'value'=>true,
-                           'placeholder'=>true,'checked'=>true,'disabled'=>true,
-                           'readonly'=>true,'required'=>true,'min'=>true,'max'=>true,
-                           'step'=>true,'pattern'=>true,'autocomplete'=>true,
-                           'accept'=>true,'multiple'=>true,'class'=>true],
-            'select'   => ['name'=>true,'id'=>true,'multiple'=>true,'disabled'=>true,
-                           'required'=>true,'class'=>true],
-            'option'   => ['value'=>true,'selected'=>true,'disabled'=>true],
-            'optgroup' => ['label'=>true,'disabled'=>true],
-            'source'   => ['src'=>true,'type'=>true,'media'=>true,'srcset'=>true,'sizes'=>true],
-            'track'    => ['kind'=>true,'src'=>true,'srclang'=>true,'label'=>true,'default'=>true],
-            'canvas'   => ['id'=>true,'width'=>true,'height'=>true,'class'=>true],
-            'svg'      => ['xmlns'=>true,'width'=>true,'height'=>true,'viewbox'=>true,
-                           'class'=>true,'fill'=>true,'stroke'=>true,
-                           'stroke-width'=>true,'aria-hidden'=>true],
-            'circle'   => ['cx'=>true,'cy'=>true,'r'=>true,'fill'=>true,'stroke'=>true,
-                           'stroke-width'=>true,'class'=>true],
-            'rect'     => ['x'=>true,'y'=>true,'width'=>true,'height'=>true,'rx'=>true,'ry'=>true,
-                           'fill'=>true,'stroke'=>true,'stroke-width'=>true,'class'=>true],
-            'path'     => ['d'=>true,'fill'=>true,'stroke'=>true,'stroke-width'=>true,
-                           'fill-rule'=>true,'clip-rule'=>true,'class'=>true],
-            'line'     => ['x1'=>true,'y1'=>true,'x2'=>true,'y2'=>true,'stroke'=>true,
-                           'stroke-width'=>true,'class'=>true],
-            'polyline' => ['points'=>true,'fill'=>true,'stroke'=>true,'stroke-width'=>true,'class'=>true],
-            'polygon'  => ['points'=>true,'fill'=>true,'stroke'=>true,'stroke-width'=>true,'class'=>true],
-            'ellipse'  => ['cx'=>true,'cy'=>true,'rx'=>true,'ry'=>true,'fill'=>true,
-                           'stroke'=>true,'class'=>true],
-            'g'        => ['fill'=>true,'stroke'=>true,'transform'=>true,'class'=>true,
-                           'opacity'=>true,'fill-opacity'=>true,'stroke-opacity'=>true],
-            'defs'     => [],
-            'use'      => ['href'=>true,'xlink:href'=>true,'x'=>true,'y'=>true,'width'=>true,'height'=>true],
-            'text'     => ['x'=>true,'y'=>true,'fill'=>true,'font-size'=>true,'text-anchor'=>true,
-                           'class'=>true,'transform'=>true],
-        ];
-        return array_merge($base, $extra);
-    }
-
-    /**
-     * Public accessor for self::kses()'s allowlist, so Generator.php's PDF pass matches what already ran here.
-     *
-     * @return array wp_kses()-compatible allowed-tags array.
-     */
-    public static function trustedPdfAllowedTags(): array
-    {
-        return self::allowedTags();
-    }
-
-    /**
-     * Strips only <script> tags; allows all other HTML elements and attributes.
-     * Applied on both save and render so the stored value round-trips cleanly.
-     */
-    private static function kses(string $html): string
-    {
-        $html = preg_replace('#<script\b[^>]*+>[\s\S]*?</script>#i', '', $html);
-
-        $html = \wp_kses($html, self::allowedTags());
-        // <use href> may only reference an in-document fragment; anything else is stripped.
-        $html = preg_replace_callback(
-            '/<use\b[^>]*>/i',
-            static function ($m) {
-                return preg_replace('/\s(?:xlink:)?href\s*=\s*(["\'])(?!#)[^"\']*\1/i', '', $m[0]);
-            },
-            $html
-        );
-        // <source>/<track> may point at remote media, but only http(s)/relative — not javascript:/data:/file:.
-        $html = preg_replace_callback(
-            '/<(source|track)\b[^>]*>/i',
-            static function ($m) {
-                return preg_replace_callback(
-                    '/\ssrc\s*=\s*(["\'])([^"\']*)\1/i',
-                    static function ($sm) {
-                        $val = html_entity_decode($sm[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                        if (preg_match('#^\s*(?:javascript|vbscript|data|file)\s*:#i', $val)) {
-                            return '';
-                        }
-                        return $sm[0];
-                    },
-                    $m[0]
-                );
-            },
-            $html
-        );
-        // Renames a colliding name="fabricator_hp_field" so it can't trip the anti-bot honeypot.
-        $html = preg_replace(
-            '/(\sname\s*=\s*)(["\'])fabricator_hp_field\2/i',
-            '$1$2fabricator_hp_field_renamed$2',
-            $html
-        );
-        return $html;
-    }
+    /* No sanitizeConfigValue() override: BaseField's sends every non-plain-text key, html_content included, through
+       Utils\HtmlSanitizer::sanitize(), the one rule set every HTML-capable text in a form shares. */
 
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $html = self::kses($config['html_content'] ?? '');
+        $html = \FabricatorForms\Utils\HtmlSanitizer::sanitize($config['html_content'] ?? '');
         return '<div class="fabricator-field fabricator-field--html" data-field-id="'
             . esc_attr($field_id) . '">'
             . $html
@@ -246,7 +136,7 @@ class HtmlField extends BaseField
         if (!($config['show_in_output'] ?? true)) {
             return [];
         }
-        $html = self::kses($config['html_content'] ?? '');
+        $html = \FabricatorForms\Utils\HtmlSanitizer::sanitize($config['html_content'] ?? '');
         if ($html === '') {
             return [];
         }
@@ -291,7 +181,7 @@ class HtmlField extends BaseField
     /**
      * Strips remote <img src>/CSS url() refs before mPDF fetches them server-side, keeping same-origin/data: only.
      *
-     * @param string $html Already wp_kses()-sanitized HTML (self::kses() output).
+     * @param string $html Already wp_kses()-sanitized HTML (\FabricatorForms\Utils\HtmlSanitizer::sanitize() output).
      * @return string HTML with disallowed remote resource references stripped.
      */
     private static function stripRemoteResourcesForPdf(string $html): string
@@ -308,6 +198,15 @@ class HtmlField extends BaseField
             }
             // Scheme-less: only relative paths with no ../ traversal or absolute-path escape allowed.
             if (!preg_match('#^([a-z][a-z0-9+.\-]*:)?//#i', $url) && !preg_match('#^[a-z][a-z0-9+.\-]*:#i', $url)) {
+                // A relative reference is made of URL characters and nothing else. Treating whatever could not be
+                // parsed as a harmless relative path failed open: wp_kses re-encodes the quotes of url("…") inside a
+                // double-quoted style attribute, so "&quot;http://169.254.169.254/&quot;" arrived here looking like a
+                // path while mPDF decodes the entities again before fetching it.
+                // No quote or bracket characters either: mPDF strips those around a CSS url() value, so a decoded
+                // "'http://host/'" would become a remote URL again after this check had passed it as a path.
+                if (preg_match('#^[A-Za-z0-9._~!$&*+,;=:@/?%\#-]+$#', $url) !== 1) {
+                    return false;
+                }
                 $decoded_path = rawurldecode($url);
                 $is_absolute  = str_starts_with($decoded_path, '/')
                     || str_starts_with($decoded_path, chr(92))
@@ -316,14 +215,35 @@ class HtmlField extends BaseField
                 return !$is_absolute && !$has_traversal;
             }
             $host = wp_parse_url($url, PHP_URL_HOST);
-            return $host !== null && $home_host !== '' && strcasecmp($host, $home_host) === 0;
+            if ($host === null || $home_host === '' || strcasecmp($host, $home_host) !== 0) {
+                return false;
+            }
+            // Host alone let http://own-host:6379/ through, so mPDF could be steered at internal ports on this
+            // machine. Only web schemes, and only the site's own port (or the scheme default when it sets none).
+            $scheme = strtolower((string) wp_parse_url($url, PHP_URL_SCHEME));
+            if (!in_array($scheme, ['', 'http', 'https'], true)) {
+                return false;
+            }
+            $port      = wp_parse_url($url, PHP_URL_PORT);
+            $home_port = wp_parse_url(home_url(), PHP_URL_PORT);
+            if ($port === null || $port === $home_port) {
+                return true;
+            }
+            if ($home_port !== null) {
+                return false;
+            }
+            if ($scheme === 'https') {
+                return $port === 443;
+            }
+            return $scheme === 'http' ? $port === 80 : in_array($port, [80, 443], true);
         };
 
         $html = preg_replace_callback(
             '/<img\b[^>]*>/i',
             static function ($m) use ($is_allowed) {
+                // (?:(?!\1).)*, not [^"']*: a src="…'…" matched neither quote style, so it kept its remote URL.
                 return preg_replace_callback(
-                    '/\ssrc\s*=\s*(["\'])([^"\']*)\1/i',
+                    '/\ssrc\s*=\s*(["\'])((?:(?!\1).)*)\1/is',
                     static function ($sm) use ($is_allowed) {
                         return $is_allowed($sm[2]) ? $sm[0] : '';
                     },
@@ -336,10 +256,16 @@ class HtmlField extends BaseField
         $html = preg_replace_callback(
             '/\bstyle\s*=\s*(["\'])((?:(?!\1).)*)\1/is',
             static function ($m) use ($is_allowed) {
+                // One branch per quoting style: the single optional-quote form skipped url("…'…") and kept it.
+                // The unquoted branch runs to the closing parenthesis and no sooner — excluding "(" there let
+                // url(http://host/x(y) match nothing at all, so it passed through untouched and mPDF fetched it.
+                // The parenthesis itself is optional so an unterminated url( is read and refused as well: every
+                // url( in the declaration has to come back out either checked or replaced.
                 $style = preg_replace_callback(
-                    '/url\(\s*(["\']?)([^"\')]+)\1\s*\)/i',
+                    '/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^"\')]*))\s*\)?/i',
                     static function ($um) use ($is_allowed) {
-                        return $is_allowed($um[2]) ? $um[0] : 'none';
+                        $url = ($um[1] ?? '') . ($um[2] ?? '') . ($um[3] ?? '');
+                        return $is_allowed($url) ? $um[0] : 'none';
                     },
                     $m[2]
                 );

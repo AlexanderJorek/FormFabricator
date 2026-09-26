@@ -11,7 +11,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -147,7 +147,7 @@ class FieldTestPage
     private static function expectError(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h): bool|string
     {
         $r = $h->validate($value, $config);
-        self::$lastIn  = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : (string)$value;
+        self::$lastIn  = is_array($value) ? wp_json_encode($value, JSON_UNESCAPED_UNICODE) : (string)$value;
         self::$lastOut = is_string($r) ? $r : var_export($r, true);
         return (is_string($r) && $r !== '') ? true : 'expected error string, got ' . var_export($r, true);
     }
@@ -155,7 +155,7 @@ class FieldTestPage
     private static function expectOk(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h): bool|string
     {
         $r = $h->validate($value, $config);
-        self::$lastIn  = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : (string)$value;
+        self::$lastIn  = is_array($value) ? wp_json_encode($value, JSON_UNESCAPED_UNICODE) : (string)$value;
         self::$lastOut = $r === true ? 'valid' : var_export($r, true);
         return $r === true ? true : 'expected true, got ' . var_export($r, true);
     }
@@ -163,15 +163,38 @@ class FieldTestPage
     private static function expectMap(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h, string $expected): bool|string
     {
         $r = $h->map($value, $config);
-        self::$lastIn  = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : var_export($value, true);
+        self::$lastIn  = is_array($value) ? wp_json_encode($value, JSON_UNESCAPED_UNICODE) : var_export($value, true);
         self::$lastOut = $r;
         return $r === $expected ? true : 'expected ' . var_export($expected, true) . ', got ' . var_export($r, true);
+    }
+
+    /**
+     * Asserts an explicit UTC consent timestamp (GDPR Art. 7(1)); matches pattern+date, not current_time('mysql') (site-local, and second-boundary flaky).
+     *
+     * @param mixed  $value  Submitted value.
+     * @param array  $config Field configuration.
+     * @param object $h      Field handler under test.
+     * @return bool|string True, or a failure description.
+     */
+    private static function expectUtcStamp(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h): bool|string
+    {
+        $r = $h->map($value, $config);
+        self::$lastIn  = var_export($value, true);
+        self::$lastOut = $r;
+        if (!preg_match('/(\d{4}-\d{2}-\d{2}) \d{2}:\d{2}:\d{2} UTC/', $r, $m)) {
+            return 'no explicit UTC timestamp in: ' . $r;
+        }
+        // Tolerate a run that straddles UTC midnight.
+        if (!in_array($m[1], [gmdate('Y-m-d'), gmdate('Y-m-d', time() - 60)], true)) {
+            return 'timestamp date ' . $m[1] . ' is not today (UTC): ' . $r;
+        }
+        return true;
     }
 
     private static function expectMapContains(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h, string ...$needles): bool|string
     {
         $r = $h->map($value, $config);
-        self::$lastIn  = is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : var_export($value, true);
+        self::$lastIn  = is_array($value) ? wp_json_encode($value, JSON_UNESCAPED_UNICODE) : var_export($value, true);
         self::$lastOut = $r;
         foreach ($needles as $needle) {
             if (!str_contains($r, $needle)) {
@@ -390,6 +413,11 @@ class FieldTestPage
             $c = array_merge($cfg, ['expanded'=>true,'prefix_enabled'=>true,'prefix_required'=>true,'fname_enabled'=>false,'lname_enabled'=>false,'mname_enabled'=>false]);
             return self::expectOk([], $c, $h);
         });
+        // Salutations post a stable key, so validation doesn't depend on the locale the request runs in.
+        $prefix_only = array_merge($cfg, ['expanded'=>true,'prefix_enabled'=>true,'fname_enabled'=>false,'lname_enabled'=>false,'mname_enabled'=>false]);
+        self::run('validate prefix key accepted', fn() => self::expectOk(['prefix'=>'ms'], $prefix_only, $h));
+        self::run('validate unknown prefix rejected', fn() => self::expectError(['prefix'=>'Sir'], $prefix_only, $h));
+        self::run('map prefix key shows its label', fn() => self::expectMapContains(['prefix'=>'mr'], $prefix_only, $h, __('Mr.', 'formfabricator')));
     }
 
     private static function testPhone(): void
@@ -497,7 +525,8 @@ class FieldTestPage
         self::run('validate partial required exp err', function () use ($h, $exp) {
             return self::expectError(['street'=>'Hauptstr. 1','city'=>'','zip'=>'10115'], $exp, $h);
         });
-        self::run('map non-array → Kein Eintrag', fn() => self::expectMapContains('not-array', $cfg, $h, __('[No entry]', 'formfabricator')));
+        self::run('map simple keeps the typed address', fn() => self::expectMapContains('Hauptstr. 1, Berlin', $cfg, $h, 'Hauptstr. 1, Berlin'));
+        self::run('map empty → Kein Eintrag', fn() => self::expectMapContains('', $cfg, $h, __('[No entry]', 'formfabricator')));
         self::run('map array has Straße', fn() => self::expectMapContains(['street'=>'Hauptstr. 1','city'=>'Berlin','zip'=>'10115'], $exp, $h, 'Hauptstr'));
         self::run('map array has Stadt', fn() => self::expectMapContains(['street'=>'Hauptstr. 1','city'=>'Berlin','zip'=>'10115'], $exp, $h, 'Berlin'));
         $expFull = array_merge($exp, [
@@ -543,7 +572,8 @@ class FieldTestPage
     {
         self::section('date');
         $h   = new \FabricatorForms\Fields\DateField();
-        $cfg = array_merge($h->getDefaultConfig(), ['type'=>'date','label'=>'Datum']);
+        // Pinned: the default date_format follows this site's date setting, and the cases below are written as DD.MM.YYYY.
+        $cfg = array_merge($h->getDefaultConfig(), ['type'=>'date','label'=>'Datum','date_format'=>'dmy']);
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
         self::run('render basic', fn() => self::renderBasic($h, $cfg));
@@ -563,6 +593,14 @@ class FieldTestPage
         self::run('validate wrong format (ISO)', fn() => self::expectError('2026-07-10', array_merge($cfg, ['required'=>true]), $h));
         self::run('validate wrong format (text)', fn() => self::expectError('not-a-date', array_merge($cfg, ['required'=>true]), $h));
         self::run('validate invalid calendar date', fn() => self::expectError('31.02.2026', $cfg, $h));
+        self::run('validate MM/DD/YYYY format', fn() => self::expectOk('07/10/2026', array_merge($cfg, ['date_format'=>'mdy']), $h));
+        self::run('validate YYYY-MM-DD format', fn() => self::expectOk('2026-07-10', array_merge($cfg, ['date_format'=>'ymd']), $h));
+        self::run('validate DD.MM.YYYY rejected in YYYY-MM-DD field', fn() => self::expectError('10.07.2026', array_merge($cfg, ['date_format'=>'ymd']), $h));
+        self::run('validate config without date_format keeps DD.MM.YYYY', function () use ($h, $cfg) {
+            $legacy = $cfg;
+            unset($legacy['date_format']);
+            return self::expectOk('10.07.2026', $legacy, $h);
+        });
         self::run('map non-empty returns value', fn() => self::expectMap('10.07.2026', $cfg, $h, '10.07.2026'));
         self::run('map empty → Kein Eintrag', fn() => self::expectMapContains('', $cfg, $h, __('[No entry]', 'formfabricator')));
         self::run('validate before min_date → error', function () use ($h, $cfg) {
@@ -605,9 +643,12 @@ class FieldTestPage
         });
         self::run('validate required empty', fn() => self::expectError('', array_merge($cfg, ['required'=>true]), $h));
         self::run('validate optional empty', fn() => self::expectOk('', $cfg, $h));
-        // TimeField has no format validation — any non-empty value passes
-        self::run('validate any non-empty', fn() => self::expectOk('14:30', $cfg, $h));
-        self::run('validate string passes', fn() => self::expectOk('not-a-time', $cfg, $h));
+        // TimeField DOES validate format: a direct POST can bypass the <input type="time"> constraint, and an unchecked value flows into the email and sealed PDF.
+        self::run('validate HH:MM', fn() => self::expectOk('14:30', $cfg, $h));
+        self::run('validate HH:MM:SS', fn() => self::expectOk('14:30:45', $cfg, $h));
+        self::run('validate rejects non-time', fn() => self::expectError('not-a-time', $cfg, $h));
+        self::run('validate rejects out-of-range hour', fn() => self::expectError('24:00', $cfg, $h));
+        self::run('validate rejects out-of-range minute', fn() => self::expectError('12:60', $cfg, $h));
         self::run('map non-empty', fn() => self::expectMap('14:30', $cfg, $h, '14:30'));
         self::run('map empty → Kein Eintrag', fn() => self::expectMapContains('', $cfg, $h, __('[No entry]', 'formfabricator')));
     }
@@ -675,8 +716,9 @@ class FieldTestPage
         });
         self::run('validate required empty', fn() => self::expectError('', array_merge($cfg, ['required'=>true]), $h));
         self::run('validate optional empty', fn() => self::expectOk('', $cfg, $h));
-        // SelectField has no server-side option-list validation — any value passes
-        self::run('validate any value passes', fn() => self::expectOk('a', $cfg, $h));
+        // SelectField::validate() checks the value against the configured options.
+        self::run('validate listed option passes', fn() => self::expectOk('a', $cfg, $h));
+        self::run('validate unlisted option rejected', fn() => self::expectError('zzz', $cfg, $h));
         self::run('render other_max_length chars → maxlength attr', function () use ($h, $cfg) {
             $c = array_merge($cfg, ['other_option'=>true,'other_max_type'=>'chars','other_max_length'=>'20']);
             return self::contains($h->render($c, 'f1'), 'maxlength="20"');
@@ -737,8 +779,9 @@ class FieldTestPage
             return str_contains($m[0], "checked='checked'") ? true : 'default option "y" not checked';
         });
         self::run('validate required empty', fn() => self::expectError('', array_merge($cfg, ['required'=>true]), $h));
-        // RadioField has no server-side option-list validation — any value passes
-        self::run('validate any value passes', fn() => self::expectOk('x', $cfg, $h));
+        // RadioField::validate() checks the value against the configured options.
+        self::run('validate listed option passes', fn() => self::expectOk('x', $cfg, $h));
+        self::run('validate unlisted option rejected', fn() => self::expectError('zzz', $cfg, $h));
         self::run('render other_max_length chars → maxlength attr', function () use ($h, $cfg) {
             $c = array_merge($cfg, ['other_option'=>true,'other_max_type'=>'chars','other_max_length'=>'20']);
             return self::contains($h->render($c, 'f1'), 'maxlength="20"');
@@ -872,7 +915,17 @@ class FieldTestPage
         self::run('validate blocked ext php', fn() => self::expectError(['name'=>'evil.php','tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'text/plain'], $cfg, $h));
         self::run('validate blocked ext js', fn() => self::expectError(['name'=>'evil.js','tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'text/plain'], $cfg, $h));
         self::run('validate blocked ext exe', fn() => self::expectError(['name'=>'evil.exe','tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'application/octet-stream'], $cfg, $h));
-        self::run('validate allowed ext pdf', fn() => self::expectOk(['name'=>'doc.pdf','tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'application/pdf'], $cfg, $h));
+        // An allowed extension gets past the type checks. The stub temp path can't be read, so the file is refused by name
+        // for the visitor to retry; it used to pass silently and the form went out without it.
+        self::run('validate allowed ext pdf, unreadable temp file refused by name', function () use ($h, $cfg) {
+            $r = $h->validate(['name'=>'doc.pdf','tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'application/pdf'], $cfg);
+            self::$lastIn  = 'doc.pdf, tmp_name=/tmp/x (unreadable)';
+            self::$lastOut = is_string($r) ? $r : var_export($r, true);
+            // translators: %s: uploaded file name.
+            $expected = sprintf(__('"%s" could not be uploaded. Please try again.', 'formfabricator'), 'doc.pdf');
+            return $r === $expected ? true : 'expected the retry message naming doc.pdf';
+        });
+        self::run('validate empty temp path refused', fn() => self::expectError(['name'=>'doc.pdf','tmp_name'=>'','error'=>0,'size'=>100,'type'=>'application/pdf'], $cfg, $h));
         self::run('map string value', fn() => self::expectMap('file.pdf', $cfg, $h, 'file.pdf'));
         self::run('map empty → Kein Eintrag', fn() => self::expectMapContains('', $cfg, $h, __('[No entry]', 'formfabricator')));
     }
@@ -883,7 +936,9 @@ class FieldTestPage
         $h   = new \FabricatorForms\Fields\SignatureField();
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'signature','label'=>'Unterschrift','export_format'=>'png']);
 
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- carries raw binary across a JSON/array boundary between the field handler and the PDF/mail layer. Not obfuscation.
         $validPng = 'data:image/png;base64,'.base64_encode("\x89PNG\r\n\x1a\n".str_repeat("\x00", 100));
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- carries raw binary across a JSON/array boundary between the field handler and the PDF/mail layer. Not obfuscation.
         $validJpg = 'data:image/jpeg;base64,'.base64_encode("\xff\xd8\xff".str_repeat("\x00", 100));
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
@@ -1027,7 +1082,7 @@ class FieldTestPage
         self::run('validate optional empty', fn() => self::expectOk('', $cfg, $h));
         self::run('map checked → includes consent text', fn() => self::expectMapContains('1', $cfg, $h, 'Ich stimme zu'));
         self::run('map checked → includes timestamp (demonstrable per Art. 7(1))', function () use ($h, $cfg) {
-            return self::expectMapContains('1', $cfg, $h, current_time('mysql'));
+            return self::expectUtcStamp('1', $cfg, $h);
         });
         self::run('map unchecked → Not agreed', fn() => self::expectMap('', $cfg, $h, __('Not agreed', 'formfabricator')));
         self::run('map 0 → Not agreed', fn() => self::expectMap('0', $cfg, $h, __('Not agreed', 'formfabricator')));
@@ -1052,6 +1107,13 @@ class FieldTestPage
         self::run('render policy URL in link', fn() => self::contains($h->render($cfg, 'f1'), 'example.com/privacy'));
         self::run('render policy text', fn() => self::contains($h->render($cfg, 'f1'), 'Datenschutz'));
         self::run('render always required attr', fn() => self::contains($h->render($cfg, 'f1'), 'required'));
+        self::run('render always carries fabricator-required-field (client required check)', function () use ($h, $cfg) {
+            return self::contains($h->render(array_merge($cfg, ['required'=>false]), 'f1'), 'fabricator-required-field');
+        });
+        self::run('client empty check: unchecked box counts as empty', function () use ($h) {
+            $fn = (string) ($h->getClientEmptyCheck()['fn'] ?? '');
+            return self::contains($fn, ':checked', 'checkbox :checked empty check');
+        });
         self::run('render checked attr for truthy value', fn() => self::contains($h->render($cfg, 'f1', '1'), 'checked'));
         self::run('render default privacy_policy_url falls back to get_privacy_policy_url()', function () use ($h) {
             $c = $h->getDefaultConfig();
@@ -1070,7 +1132,7 @@ class FieldTestPage
         self::run('validate unchecked required=false → error', fn() => self::expectError('', array_merge($cfg, ['required'=>false]), $h));
         self::run('map checked → includes policy text', fn() => self::expectMapContains('1', $cfg, $h, 'Datenschutz'));
         self::run('map checked → includes timestamp (demonstrable per Art. 7(1))', function () use ($h, $cfg) {
-            return self::expectMapContains('1', $cfg, $h, current_time('mysql'));
+            return self::expectUtcStamp('1', $cfg, $h);
         });
         self::run('map unchecked → Privacy notice not acknowledged', fn() => self::expectMap('', $cfg, $h, __('Privacy notice not acknowledged', 'formfabricator')));
     }
@@ -1097,8 +1159,12 @@ class FieldTestPage
         self::run('sanitize strips <script>', function () use ($h) {
             return !str_contains($h->sanitizeConfigValue('html_content', '<p>OK</p><script>evil()</script>'), '<script') ? true : 'script not stripped';
         });
-        self::run('sanitize preserves <input>', function () use ($h) {
-            return str_contains($h->sanitizeConfigValue('html_content', '<input type="text" name="x">'), '<input') ? true : 'input stripped';
+        // Form controls are removed from every rich text: nothing reads them, so their only use there is a fake form.
+        self::run('sanitize strips <input>', function () use ($h) {
+            return !str_contains($h->sanitizeConfigValue('html_content', '<input type="password" name="x">'), '<input') ? true : 'input kept';
+        });
+        self::run('sanitize strips <form>', function () use ($h) {
+            return !str_contains($h->sanitizeConfigValue('html_content', '<form action="https://example.com/"><p>x</p></form>'), '<form') ? true : 'form kept';
         });
         self::run('sanitize preserves <canvas>', function () use ($h) {
             return str_contains($h->sanitizeConfigValue('html_content', '<canvas id="c"></canvas>'), '<canvas') ? true : 'canvas stripped';
@@ -1106,8 +1172,8 @@ class FieldTestPage
         self::run('sanitize preserves <svg>', function () use ($h) {
             return str_contains($h->sanitizeConfigValue('html_content', '<svg><circle cx="10" cy="10" r="5"/></svg>'), '<svg') ? true : 'svg stripped';
         });
-        self::run('sanitize preserves <select>', function () use ($h) {
-            return str_contains($h->sanitizeConfigValue('html_content', '<select><option value="a">A</option></select>'), '<select') ? true : 'select stripped';
+        self::run('sanitize strips <select>', function () use ($h) {
+            return !str_contains($h->sanitizeConfigValue('html_content', '<select><option value="a">A</option></select>'), '<select') ? true : 'select kept';
         });
         self::run('sanitize preserves <source>', function () use ($h) {
             return str_contains($h->sanitizeConfigValue('html_content', '<source src="a.mp4" type="video/mp4">'), '<source') ? true : 'source stripped';
@@ -1121,7 +1187,7 @@ class FieldTestPage
             }
             return !str_contains($out, 'evil.com') ? true : 'external href was not stripped';
         });
-        self::run('sanitize other key uses plain wp_kses_post (strips <script>)', function () use ($h) {
+        self::run('sanitize plain-text key (label) strips <script>', function () use ($h) {
             return !str_contains($h->sanitizeConfigValue('label', '<p>ok</p><script>evil()</script>'), '<script')
                 ? true : 'script not stripped for non-html_content key';
         });
@@ -1139,15 +1205,6 @@ class FieldTestPage
             self::$lastOut = var_export($r, true);
             return (isset($r['f1']) && $r['f1']['label'] === 'Block' && str_contains($r['f1']['value'], 'Hi'))
                 ? true : 'unexpected result: ' . var_export($r, true);
-        });
-        self::run('mapNormalized show_in_output omitted (legacy saved config) → still included', function () use ($h) {
-            // Legacy configs lack this key entirely; mapNormalized()'s `?? true` must default to enabled.
-            $c = array_merge($h->getDefaultConfig(), ['type'=>'html','label'=>'Block','html_content'=>'<p>Hi</p>']);
-            unset($c['show_in_output']);
-            $r = $h->mapNormalized('f1', 'Block', '', $c, []);
-            self::$lastIn  = 'show_in_output key absent';
-            self::$lastOut = var_export($r, true);
-            return isset($r['f1']) ? true : 'expected the entry to still be included by default';
         });
         self::run('mapNormalized show_in_output=false → []', function () use ($h) {
             $c = array_merge($h->getDefaultConfig(), ['type'=>'html','label'=>'Block','html_content'=>'<p>Hi</p>','show_in_output'=>false]);
@@ -1175,30 +1232,17 @@ class FieldTestPage
             $r = $h->mapNormalized('f1', 'Group', [], $cfg, []);
             return $r === [] ? true : 'expected [], got: '.var_export($r, true);
         });
-        self::run('mapNormalized populated single copy', function () use ($h) {
+        self::run('mapNormalized populated', function () use ($h) {
             $children = [['id'=>'child_text','type'=>'text','label'=>'Kind']];
             $c        = array_merge($h->getDefaultConfig(), ['type'=>'group','label'=>'Gruppe','children'=>$children]);
-            $value    = [0 => ['child_text' => 'Hallo']];
+            $value    = ['child_text' => 'Hallo'];
             $r        = $h->mapNormalized('grp1', 'Gruppe', $value, $c, []);
-            self::$lastIn  = json_encode($value);
-            self::$lastOut = json_encode($r);
+            self::$lastIn  = wp_json_encode($value);
+            self::$lastOut = wp_json_encode($r);
             if (!isset($r['child_text'])) {
                 return 'expected key "child_text" (single copy, no suffix), got: ' . var_export($r, true);
             }
             return $r['child_text']['value'] === 'Hallo' ? true : 'unexpected value: ' . var_export($r['child_text'], true);
-        });
-        self::run('mapNormalized populated multiple copies suffixes keys', function () use ($h) {
-            $children = [['id'=>'child_text','type'=>'text','label'=>'Kind']];
-            $c        = array_merge($h->getDefaultConfig(), ['type'=>'group','label'=>'Gruppe','children'=>$children]);
-            $value    = [0 => ['child_text' => 'Erste'], 1 => ['child_text' => 'Zweite']];
-            $r        = $h->mapNormalized('grp1', 'Gruppe', $value, $c, []);
-            self::$lastIn  = json_encode($value);
-            self::$lastOut = json_encode($r);
-            if (!isset($r['child_text_copy_0']) || !isset($r['child_text_copy_1'])) {
-                return 'expected suffixed keys child_text_copy_0/1, got: ' . var_export($r, true);
-            }
-            return ($r['child_text_copy_0']['value'] === 'Erste' && $r['child_text_copy_1']['value'] === 'Zweite')
-                ? true : 'unexpected values: ' . var_export($r, true);
         });
     }
 
@@ -1210,7 +1254,12 @@ class FieldTestPage
 
         self::run('schema integrity', fn() => self::schemaIntegrity($h));
         self::run('isPageBreak=true', fn() => $h->isPageBreak() ? true : 'expected true');
-        self::run('hasSettingsPanel=false', fn() => !$h->hasSettingsPanel() ? true : 'expected false');
+        self::run('hasSettingsPanel=true', fn() => $h->hasSettingsPanel() ? true : 'expected true');
+        self::run('button labels are editable', function () use ($h) {
+            $keys = array_column($h->getGeneralSchema(), 'key');
+            return in_array('prev_btn', $keys, true) && in_array('next_btn', $keys, true)
+                ? true : 'prev_btn/next_btn missing from the schema the panel builds from';
+        });
         self::run('hasRequired=false', fn() => !$h->hasRequired() ? true : 'expected false');
         self::run('skipValidation=true', fn() => $h->skipValidation() ? true : 'expected true');
         self::run('includeInEmailSummary=false', fn() => !$h->includeInEmailSummary() ? true : 'expected false');
@@ -1256,7 +1305,7 @@ class FieldTestPage
         });
         self::run('render contains container class', function () use ($h, $cfg) {
             $html = $h->render($cfg, 'f1');
-            self::$lastIn  = json_encode($cfg);
+            self::$lastIn  = wp_json_encode($cfg);
             self::$lastOut = $html;
             return str_contains($html, 'fabricator-page-header') ? true : 'container class missing';
         });
@@ -1271,7 +1320,7 @@ class FieldTestPage
         self::run('render page_names serialized only when show_names=true', function () use ($h, $cfg) {
             $c    = array_merge($cfg, ['show_names'=>true,'page_names'=>['Kontakt','Adresse']]);
             $html = $h->render($c, 'f1');
-            self::$lastIn  = json_encode($c);
+            self::$lastIn  = wp_json_encode($c);
             self::$lastOut = $html;
             return str_contains($html, 'Kontakt') && str_contains($html, 'Adresse')
                 ? true : 'page names missing from data-names';
@@ -1284,7 +1333,7 @@ class FieldTestPage
         self::run('render escapes page name HTML', function () use ($h, $cfg) {
             $c    = array_merge($cfg, ['show_names'=>true,'page_names'=>['<script>alert(1)</script>']]);
             $html = $h->render($c, 'f1');
-            self::$lastIn  = json_encode($c);
+            self::$lastIn  = wp_json_encode($c);
             self::$lastOut = $html;
             return !str_contains($html, '<script>') ? true : 'unescaped script tag in output';
         });
@@ -1311,7 +1360,7 @@ class FieldTestPage
         self::run('map excludes fields not selected in post_field', function () use ($h, $cfg) {
             $value = ['post_title'=>'My Page','post_id'=>'42','post_url'=>'https://example.com','post_author'=>'Admin'];
             $r     = $h->map($value, $cfg);
-            self::$lastIn  = json_encode($value);
+            self::$lastIn  = wp_json_encode($value);
             self::$lastOut = $r;
             if (str_contains($r, '42') || str_contains($r, 'example.com') || str_contains($r, 'Admin')) {
                 return 'unselected post_field values leaked into output: ' . $r;
@@ -1424,6 +1473,115 @@ class FieldTestPage
         self::run('map valid data contains holder', fn() => self::expectMapContains($validData, $cfg, $h, 'Mustermann'));
     }
 
+    // ── conditional logic ────────────────────────────────────────────────────
+
+    /**
+     * Calls a private static FormProcessor/FormRenderer method, so the condition handling of the real submit and render paths is tested directly.
+     *
+     * @param string $class   Fully qualified class name.
+     * @param string $method  Method name.
+     * @param mixed  ...$args Method arguments.
+     * @return mixed Whatever the method returns.
+     */
+    private static function callPrivate(string $class, string $method, mixed ...$args): mixed
+    {
+        return (new \ReflectionMethod($class, $method))->invoke(null, ...$args);
+    }
+
+    /**
+     * For an unmet (country=FR) and a met (country=DE) condition, asserts the server hides and drops the field exactly
+     * while unmet, and that the browser receives the rule.
+     *
+     * @param array  $fields  Top-level form fields containing the field under test.
+     * @param array  $ruleCfg Config carrying the condition: the field itself, or its group.
+     * @param string $leafId  Id of the field under test.
+     * @param string $attr    data-conditions attribute rendered for $ruleCfg.
+     * @return bool|string True, or a failure description.
+     */
+    private static function expectHiddenOnlyWhileUnmet(array $fields, array $ruleCfg, string $leafId, string $attr): bool|string
+    {
+        $proc = \FabricatorForms\Form\FormProcessor::class;
+        $seen = [];
+        foreach (['FR' => true, 'DE' => false] as $country => $expectHidden) {
+            $flat    = ['country' => $country];
+            $hidden  = self::callPrivate($proc, 'isHiddenByConditions', $ruleCfg, $flat);
+            $dropped = in_array($leafId, self::callPrivate($proc, 'collectHiddenIds', $fields, $flat), true);
+            $seen[]  = 'country=' . $country . ': ' . ($hidden ? 'hidden' : 'visible') . ($dropped ? ', dropped' : '');
+            if ($hidden !== $expectHidden || $dropped !== $expectHidden) {
+                self::$lastIn  = $leafId;
+                self::$lastOut = implode(' | ', $seen);
+                return 'expected ' . ($expectHidden ? 'hidden and dropped (not validated, not required-checked)' : 'visible and kept (validated)')
+                    . ' for country=' . $country;
+            }
+        }
+        self::$lastIn  = $leafId . ' (shown when country=DE)';
+        self::$lastOut = implode(' | ', $seen) . ($attr !== '' ? ' | rule sent to browser' : '');
+        return $attr !== '' ? true : 'no data-conditions rendered: the browser would validate the field while it is hidden';
+    }
+
+    private static function testConditionalLogic(): void
+    {
+        self::section('conditional logic — hidden = never validated or required-checked');
+        $cond = ['action'=>'show','match'=>'all','rules'=>[['field_id'=>'country','operator'=>'equals','value'=>'DE']]];
+        $rend = \FabricatorForms\Form\FormRenderer::class;
+        $grp  = new \FabricatorForms\Fields\GroupField();
+
+        self::run('validation-less types are exactly html, page-header, pagebreak', function () {
+            $skip = [];
+            foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
+                if ((new $class())->skipValidation()) {
+                    $skip[] = $type;
+                }
+            }
+            sort($skip);
+            self::$lastIn  = 'skipValidation() across FieldRegistry';
+            self::$lastOut = implode(', ', $skip);
+            return $skip === ['html', 'page-header', 'pagebreak'] ? true : 'unexpected set: ' . self::$lastOut;
+        });
+
+        // Every type, CAPTCHA/Consent/GDPR included: no type may opt out of its conditions.
+        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
+            $h = new $class();
+            if ($h->isGroupContainer() || $h->isPageBreak()) {
+                continue;
+            }
+            $field = ['id'=>'f_' . $type,'type'=>$type,'label'=>$type,'required'=>true];
+            $own   = $field + ['conditions'=>$cond];
+
+            self::run($type . ': own condition', function () use ($own, $rend) {
+                return self::expectHiddenOnlyWhileUnmet([$own], $own, $own['id'], self::callPrivate($rend, 'conditionAttr', $own));
+            });
+            self::run($type . ': inside a conditional group', function () use ($field, $cond, $grp) {
+                $group = ['id'=>'g_' . $field['type'],'type'=>'group','conditions'=>$cond,'children'=>[$field]];
+                return self::expectHiddenOnlyWhileUnmet([$group], $group, $field['id'], $grp->rowCondAttr($group));
+            });
+            self::run($type . ': own condition inside a visible group', function () use ($own, $rend) {
+                $group = ['id'=>'g_' . $own['type'],'type'=>'group','children'=>[$own]];
+                return self::expectHiddenOnlyWhileUnmet([$group], $own, $own['id'], self::callPrivate($rend, 'conditionAttr', $own));
+            });
+        }
+
+        self::run('hidden group → every child dropped', function () use ($cond) {
+            $fields = [[
+                'id'=>'g1','type'=>'group','conditions'=>$cond,
+                'children'=>[['id'=>'c_consent','type'=>'consent','required'=>true], ['id'=>'c_gdpr','type'=>'gdpr']],
+            ]];
+            $ids      = self::callPrivate(\FabricatorForms\Form\FormProcessor::class, 'collectHiddenIds', $fields, ['country'=>'FR']);
+            $expected = ['g1', 'c_consent', 'c_gdpr'];
+            self::$lastIn  = 'country=FR';
+            self::$lastOut = implode(', ', $ids);
+            return $ids === $expected ? true : 'expected ' . implode(', ', $expected);
+        });
+
+        // Once the condition is met the field is visible, so validate() and its required check run as for any other field.
+        $captcha = new \FabricatorForms\Fields\CaptchaField();
+        $consent = new \FabricatorForms\Fields\ConsentField();
+        $gdpr    = new \FabricatorForms\Fields\GdprField();
+        self::run('visible captcha, empty token → error', fn() => self::expectError('', $captcha->getDefaultConfig(), $captcha));
+        self::run('visible required consent, unchecked → error', fn() => self::expectError('', array_merge($consent->getDefaultConfig(), ['required'=>true]), $consent));
+        self::run('visible gdpr, unchecked → error', fn() => self::expectError('', $gdpr->getDefaultConfig(), $gdpr));
+    }
+
     private static function testRegistryCoverage(): void
     {
         self::section('FieldRegistry coverage');
@@ -1463,7 +1621,7 @@ class FieldTestPage
 
             $entry = $handler->getClientEmptyCheck();
             if (!empty($entry['fn'])) {
-                $emptyChecks[] = json_encode($type) . ':' . trim($entry['fn']);
+                $emptyChecks[] = wp_json_encode($type) . ':' . trim($entry['fn']);
             }
 
             foreach ($handler->getClientValidation() as $vEntry) {
@@ -1471,22 +1629,24 @@ class FieldTestPage
                 $fn = $vEntry['fn'] ?? '';
                 if ($rule !== '' && $fn !== '' && !isset($seenRules[$rule])) {
                     $seenRules[$rule] = true;
-                    $pairs[] = json_encode($rule) . ':' . trim($fn);
+                    $pairs[] = wp_json_encode($rule) . ':' . trim($fn);
                 }
             }
 
             $fn = $handler->getClientInit();
             if ($fn !== '') {
-                $inits[] = json_encode($type) . ':' . trim($fn);
+                $inits[] = wp_json_encode($type) . ':' . trim($fn);
             }
 
             if ($handler->skipValidation()) {
-                $skip[] = json_encode($type);
+                $skip[] = wp_json_encode($type);
             }
         }
 
         $js = "window.__FABRICATOR_TEST__=true;\n";
-        $js .= "window.FabricatorForms={ajaxUrl:''};\n";
+        // Single source of truth for per-country IBAN length lives in SepaField::IBAN_LEN.
+        $js .= 'window.FabricatorForms={ajaxUrl:\'\',ibanLen:'
+            . \wp_json_encode(\FabricatorForms\Fields\SepaField::IBAN_LEN) . "};\n";
         $js .= 'window.FabricatorValidators=' . (!empty($pairs)
             ? '{' . implode(',', $pairs) . '}'
             : '{}') . ";\n";
@@ -1503,6 +1663,32 @@ class FieldTestPage
         return $js;
     }
 
+    /**
+     * Real FormRenderer markup for the JS conditional-logic tests: a "country" text control plus one field of each type
+     * below, conditioned directly and via a group (shown only when country equals DE).
+     */
+    private static function generateConditionFixtures(): string
+    {
+        $cond    = ['action'=>'show','match'=>'all','rules'=>[['field_id'=>'country','operator'=>'equals','value'=>'DE']]];
+        $control = ['id'=>'country','type'=>'text','label'=>'Country'];
+        // GDPR has no 'required' here, as the builder saves it: it is mandatory by type, not by config.
+        $fields = [
+            'text'    => ['id'=>'f_text','type'=>'text','label'=>'Text','required'=>true],
+            'consent' => ['id'=>'f_consent','type'=>'consent','label'=>'Consent','required'=>true,'consent_text'=>'I agree.'],
+            'gdpr'    => ['id'=>'f_gdpr','type'=>'gdpr','label'=>'Privacy','privacy_policy_url'=>'https://example.com/privacy'],
+            'captcha' => ['id'=>'f_captcha','type'=>'captcha','label'=>'CAPTCHA','required'=>true],
+        ];
+        $fixtures = [];
+        foreach ($fields as $type => $field) {
+            $group = ['id'=>'g_' . $type,'type'=>'group','label'=>'Group','conditions'=>$cond,'children'=>[$field]];
+            $fixtures[$type] = [
+                'direct' => self::callPrivate(\FabricatorForms\Form\FormRenderer::class, 'renderFields', [$control, $field + ['conditions'=>$cond]]),
+                'group'  => self::callPrivate(\FabricatorForms\Form\FormRenderer::class, 'renderFields', [$control, $group]),
+            ];
+        }
+        return 'window.FabricatorConditionFixtures=' . wp_json_encode($fixtures) . ";\n";
+    }
+
     private static function renderJsTests(): void
     {
         echo '<div id="fabricator-js-tests" style="color:#555;font-style:italic;">Running JS tests…</div>';
@@ -1511,7 +1697,7 @@ class FieldTestPage
         // own script-dependency system, rather than relying on raw echo/output order.
         wp_register_script('fabricator-fieldtest-globals', false, [], FABRICATOR_FORMS_VERSION, true);
         wp_enqueue_script('fabricator-fieldtest-globals');
-        wp_add_inline_script('fabricator-fieldtest-globals', self::generateFrontGlobals());
+        wp_add_inline_script('fabricator-fieldtest-globals', self::generateFrontGlobals() . self::generateConditionFixtures());
 
         wp_enqueue_script(
             'fabricator-fieldtest-front',
@@ -1539,7 +1725,7 @@ class FieldTestPage
     public static function render(): void
     {
         if (!current_user_can('manage_options')) {
-            wp_die('Unauthorized', '', ['response' => 403]);
+            wp_die(esc_html__('Unauthorized', 'formfabricator'), '', ['response' => 403]);
         }
 
         // reset
@@ -1579,6 +1765,7 @@ class FieldTestPage
         self::testPostData();
         self::testWebsite();
         self::testSepa();
+        self::testConditionalLogic();
         self::testRegistryCoverage();
 
         $total    = self::$pass + self::$fail;
@@ -1586,7 +1773,7 @@ class FieldTestPage
 
 
         echo '<div class="wrap fabricator-list-wrap">';
-        echo '<hr class="wp-header-end" style="display:none">';
+        \FabricatorForms\Utils\Assets::renderNoticeDock();
 
         $phpBadge = '<span class="fabricator-tab-badge ' . ($allOk ? 'fabricator-tab-badge--pass' : 'fabricator-tab-badge--fail') . '">'
             . ($allOk
@@ -1605,11 +1792,10 @@ class FieldTestPage
         // PHP panel
         echo '<div id="fabricator-panel-php" class="fabricator-test-panel active">';
         if (!$allOk) {
-            $copyText = esc_js(implode("\n", self::$failLines));
+            $copyText = implode("\n", self::$failLines);
             echo '<div style="margin-bottom:10px;">';
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $copyText is already esc_js()'d above; this is a JS string literal context, not HTML.
-            echo '<button onclick="navigator.clipboard.writeText(\'' . $copyText . '\')'
-                . '.then(function(){this.textContent=\'Copied!\';}.bind(this))"'
+            // No inline onclick: admin-fieldtest.js binds [data-fabricator-copy], so no script runs from an attribute.
+            echo '<button type="button" class="fabricator-copy-failures" data-fabricator-copy="' . esc_attr($copyText) . '"'
                 . ' style="cursor:pointer;padding:6px 14px;font-size:13px;">'
                 . '<i class="fa-regular fa-clipboard" aria-hidden="true"></i> Copy failures</button>';
             echo '</div>';

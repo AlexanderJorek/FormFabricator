@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -87,10 +87,27 @@ class PostDataField extends BaseField
                 . ' id="' . esc_attr($field_id . '_' . $key) . '"'
                 . ' value="' . esc_attr($val) . '">';
         }
-        // extractValue() needs this to re-derive values server-side, where global $post is unset.
+        // extractValue() needs the ID to re-derive values server-side, where global $post is unset. The signature binds it
+        // to this field, so a visitor can't swap in another post for the one the mail and PDF record. Static per post,
+        // so it survives full-page caching.
+        $source_id = (int) ($post?->ID ?? 0);
         $out .= '<input type="hidden" name="' . esc_attr($field_id) . '[_source_post_id]"'
-            . ' value="' . esc_attr((string)($post?->ID ?? '')) . '">';
+            . ' value="' . esc_attr($source_id ? (string) $source_id : '') . '">';
+        $out .= '<input type="hidden" name="' . esc_attr($field_id) . '[_source_sig]"'
+            . ' value="' . esc_attr($source_id ? self::sourceSignature($field_id, $source_id) : '') . '">';
         return $out;
+    }
+
+    /**
+     * HMAC binding a rendered post ID to this field.
+     *
+     * @param string $field_id Field ID.
+     * @param int    $post_id  Post the form was rendered on.
+     * @return string Hex HMAC-SHA256.
+     */
+    private static function sourceSignature(string $field_id, int $post_id): string
+    {
+        return hash_hmac('sha256', 'fabricator_postdata|' . $field_id . '|' . $post_id, wp_salt('nonce'));
     }
 
     /**
@@ -112,19 +129,24 @@ class PostDataField extends BaseField
     }
 
     /**
-     * Regenerates post metadata server-side; only _source_post_id is trusted from $_POST, and
-     * only after validation via get_post() (global $post is unset during admin-ajax.php).
+     * Regenerates post metadata server-side; only _source_post_id is taken from $_POST, and only when its
+     * _source_sig verifies and get_post() finds it public (global $post is unset during admin-ajax.php).
      *
      * @param string $field_id The field element ID.
      */
     public function extractValue(string $field_id): mixed
     {
         self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via assertRequestNonceVerified(); the only value actually used from this array (_source_post_id) is unslashed and absint()'d below before use.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; only _source_post_id is used, unslashed and absint()'d below.
         $submitted   = isset($_POST[$field_id]) ? wp_unslash($_POST[$field_id]) : null;
-        $source_id   = is_array($submitted) && isset($submitted['_source_post_id'])
+        $source_id   = is_array($submitted) && isset($submitted['_source_post_id']) && is_scalar($submitted['_source_post_id'])
             ? absint($submitted['_source_post_id'])
             : 0;
+        $signature   = is_array($submitted) && is_string($submitted['_source_sig'] ?? null) ? $submitted['_source_sig'] : '';
+        // Only an ID this site rendered for this field counts; a swapped one records no post rather than a chosen one.
+        if ($source_id && !hash_equals(self::sourceSignature($field_id, $source_id), $signature)) {
+            $source_id = 0;
+        }
         $post = $source_id ? get_post($source_id) : null;
         // Client-submitted post ID; reject non-public posts so drafts/private data can't leak into output.
         if ($post && ($post->post_status !== 'publish' || $post->post_password !== '')) {

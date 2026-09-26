@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -39,9 +39,7 @@ class Assets
     private static bool $front_assets_done = false;
 
     /**
-     * wp_enqueue_scripts handler: fast path that loads front-end assets early when the shortcode is detectable in post_content.
-     *
-     * FormRenderer::render() calls ensureFrontAssets() as the authoritative fallback for cases this misses (widgets, page builders, FSE, etc).
+     * wp_enqueue_scripts fast path: loads assets when the shortcode is detectable in post_content; FormRenderer::render() is the authoritative fallback for widgets/page builders/FSE.
      *
      * @return void
      */
@@ -51,15 +49,10 @@ class Assets
             return;
         }
         self::ensureFrontAssets();
-        if (self::pageHasSepaLiveLookup()) {
-            self::markSepaLiveLookup();
-        }
     }
 
     /**
-     * Enqueues the front-end CSS/JS a rendered form needs. Safe to call more than once.
-     *
-     * The late-call path (from FormRenderer::render()) still works because WordPress prints late-enqueued styles in wp_footer via print_late_styles().
+     * Enqueues the front-end CSS/JS a rendered form needs (safe to call more than once); a late call from FormRenderer::render() still works since WP prints late-enqueued styles in wp_footer.
      *
      * @return void
      */
@@ -105,9 +98,9 @@ class Assets
             'FabricatorForms',
             [
             'ajaxUrl'      => \admin_url('admin-ajax.php'),
-            'ibanBicUrl'   => \admin_url('admin-ajax.php'),
-            // Deliberately empty; markSepaLiveLookup() fills it only for pages with a live-lookup SEPA field.
-            'ibanBicNonce' => '',
+            // Single source of truth for per-country IBAN length lives in SepaField::IBAN_LEN;
+            // localized here rather than duplicated in SepaField.js.
+            'ibanLen'      => \FabricatorForms\Fields\SepaField::IBAN_LEN,
             'i18n'         => [
                 'submitting'              => __('Sending…', 'formfabricator'),
                 'error_server'            => __('Server error. Please try again.', 'formfabricator'),
@@ -141,8 +134,6 @@ class Assets
                 'sepa_bic_required'       => __('BIC is required.', 'formfabricator'),
                 'sepa_holder_required'    => __('Account holder is required.', 'formfabricator'),
                 'sepa_sig_required'       => __('Please sign.', 'formfabricator'),
-                'sepa_looking_up'         => __('Looking up', 'formfabricator'),
-                'sepa_iban_unvalidated'   => __('Could not be validated.', 'formfabricator'),
                 'sepa_country_blocked'    => __('This country is not allowed.', 'formfabricator'),
                 // Phone field
                 'phone_invalid'           => __('Please enter a valid phone number.', 'formfabricator'),
@@ -166,12 +157,14 @@ class Assets
                 'website_invalid_url'     => __('Please enter a valid URL (e.g. https://example.com).', 'formfabricator'),
                 // Currency field
                 'currency_invalid_amount' => __('Please enter a valid amount.', 'formfabricator'),
+                'currency_decimals'       => __('Please enter an amount with at most two decimal places.', 'formfabricator'),
                 // translators: %s: minimum allowed value (substituted client-side).
                 'currency_min'            => __('Minimum value: %s', 'formfabricator'),
                 // translators: %s: maximum allowed value (substituted client-side).
                 'currency_max'            => __('Maximum value: %s', 'formfabricator'),
                 // Date field
-                'date_invalid_format'     => __('Please enter a date in DD.MM.YYYY format.', 'formfabricator'),
+                // translators: %s: expected date pattern, e.g. DD.MM.YYYY (substituted client-side).
+                'date_invalid_format'     => __('Please enter a date in %s format.', 'formfabricator'),
                 'date_invalid_date'       => __('Please enter a valid date.', 'formfabricator'),
                 // Email field
                 'email_invalid'           => __('Please enter a valid email address.', 'formfabricator'),
@@ -184,6 +177,11 @@ class Assets
                 'number_not_integer'      => __('Please enter a whole number.', 'formfabricator'),
                 'number_not_positive'     => __('Please enter a positive number.', 'formfabricator'),
                 'number_not_positive_int' => __('Please enter a positive whole number.', 'formfabricator'),
+                // translators: %s: step size (substituted client-side).
+                'number_step'             => __('Please enter a value in steps of %s.', 'formfabricator'),
+                // Time field (12-hour hint)
+                'time_am'                 => __('AM', 'formfabricator'),
+                'time_pm'                 => __('PM', 'formfabricator'),
             ],
             ]
         );
@@ -300,36 +298,6 @@ class Assets
             [],
             FABRICATOR_FORMS_VERSION,
             true
-        );
-    }
-
-    /**
-     * Guard so the IBAN-lookup nonce is only ever emitted once per request.
-     *
-     * @var bool
-     */
-    private static bool $sepa_nonce_done = false;
-
-    /**
-     * Emits the IBAN-lookup nonce, for forms whose SEPA field has live lookup enabled.
-     *
-     * Attached as an 'after' inline script so it can't be clobbered regardless of print order; SepaField.js reads it at lookup time, not parse time.
-     *
-     * @return void
-     */
-    public static function markSepaLiveLookup(): void
-    {
-        if (self::$sepa_nonce_done) {
-            return;
-        }
-        self::$sepa_nonce_done = true;
-        self::ensureFrontAssets();
-
-        \wp_add_inline_script(
-            'fabricator-forms-front',
-            'window.FabricatorForms=window.FabricatorForms||{};window.FabricatorForms.ibanBicNonce='
-            . \wp_json_encode(\wp_create_nonce('fabricator_iban_bic')) . ';',
-            'after'
         );
     }
 
@@ -536,9 +504,7 @@ class Assets
                 'FabricatorVerifyPage',
                 ['i18n' => ['remove' => __('Remove', 'formfabricator')]]
             );
-            /* pdf.js 6.x is ES-modules only, so verification.js registers as a script module and
-               imports pdf.mjs itself. wp_localize_script has no module equivalent, so FabricatorVerifier
-               data is injected via a separate src-less classic script instead. */
+            // pdf.js 6.x is ES-modules only; wp_localize_script has no module equivalent, so data is injected via a separate src-less classic script.
             \wp_register_script('fabricator-verifier-data', false, [], FABRICATOR_FORMS_VERSION, true);
             \wp_enqueue_script('fabricator-verifier-data');
             \wp_enqueue_script_module(
@@ -547,13 +513,28 @@ class Assets
                 [],
                 FABRICATOR_FORMS_VERSION
             );
+            // Enqueued modules are printed by WP_Script_Modules' printers, which older supported WordPress releases hook only
+            // on front-end actions. Attach them to the admin footer when core hasn't, and never twice.
+            $modules = \wp_script_modules();
+            foreach (['print_import_map', 'print_enqueued_script_modules', 'print_script_module_preloads'] as $printer) {
+                if (method_exists($modules, $printer)
+                    && \has_action('admin_print_footer_scripts', [$modules, $printer]) === false
+                ) {
+                    \add_action('admin_print_footer_scripts', [$modules, $printer]);
+                }
+            }
             \wp_localize_script(
                 'fabricator-verifier-data',
                 'FabricatorVerifier',
                 [
                 'ajaxUrl'     => \admin_url('admin-ajax.php'),
                 'nonce'       => \wp_create_nonce('fabricator_verifier_nonce'),
-                'pdfJsWorker' => FABRICATOR_FORMS_URL . 'vendor/pdfjs/pdf.worker.mjs',
+                // .js, not pdf.js's own .mjs name: many servers have no MIME type for .mjs, and module workers refuse to run
+                // anything not served as JavaScript.
+                // Both carry the plugin version: a static import from verification.js would resolve without one, so a
+                // browser could pair a cached older library with a freshly fetched worker, which pdf.js refuses to run.
+                'pdfJsModule' => FABRICATOR_FORMS_URL . 'vendor/pdfjs/pdf.js?ver=' . FABRICATOR_FORMS_VERSION,
+                'pdfJsWorker' => FABRICATOR_FORMS_URL . 'vendor/pdfjs/pdf.worker.js?ver=' . FABRICATOR_FORMS_VERSION,
                 'i18n'        => [
                     'loading'          => __('Loading…', 'formfabricator'),
                     'pdf_loading'      => __('Loading PDF…', 'formfabricator'),
@@ -590,6 +571,13 @@ class Assets
      */
     private static function addAdminCssVars(): void
     {
+        // Guarded here, not in callers: the verification hook reaches this twice, and this holds regardless of how hook branches are rearranged.
+        static $emitted = false;
+        if ($emitted) {
+            return;
+        }
+        $emitted = true;
+
         $hover        = \get_option('fabricator_forms_hover_color', '#1d2327');
         $admin_accent = \get_option('fabricator_forms_admin_accent', '#2271b1');
         if (!preg_match('/^#[0-9a-fA-F]{6}$/', $hover)) {
@@ -653,61 +641,12 @@ class Assets
     }
 
     /**
-     * True when the current post embeds a form with a live-IBAN-lookup SEPA field — the only case needing ibanBicNonce.
+     * Prints the notice-collection container. Call exactly once per page — core clones notices into every .wp-header-end it finds.
      *
-     * @return bool True when a live-lookup SEPA field is present on the page.
+     * @return void
      */
-    private static function pageHasSepaLiveLookup(): bool
+    public static function renderNoticeDock(): void
     {
-        global $post;
-        if (!$post || !\is_a($post, 'WP_Post')) {
-            return false;
-        }
-        $content = (string)$post->post_content;
-        if (!\has_shortcode($content, 'fabricator_form') && !\has_shortcode($content, 'fabricator_form_select')) {
-            return false;
-        }
-
-        $form_ids = [];
-        if (\preg_match_all('/\[fabricator_form\b([^\]]*)\]/', $content, $matches)) {
-            foreach ($matches[1] as $atts_str) {
-                $atts = \shortcode_parse_atts($atts_str);
-                $id   = (int)($atts['id'] ?? 0);
-                if ($id) {
-                    $form_ids[] = $id;
-                }
-            }
-        }
-        if (\preg_match_all('/\[fabricator_form_select\b([^\]]*)\]/', $content, $matches)) {
-            foreach ($matches[1] as $atts_str) {
-                $atts    = \shortcode_parse_atts($atts_str);
-                $fsel_id = (int)($atts['id'] ?? 0);
-                if (!$fsel_id) {
-                    continue;
-                }
-                $fsel = \FabricatorForms\Form\FormSelectModel::get($fsel_id);
-                if (!$fsel) {
-                    continue;
-                }
-                foreach ($fsel->items as $item) {
-                    if (!empty($item['form_id'])) {
-                        $form_ids[] = (int)$item['form_id'];
-                    }
-                }
-            }
-        }
-
-        foreach (array_unique($form_ids) as $form_id) {
-            $form = \FabricatorForms\Form\FormModel::get($form_id);
-            if (!$form) {
-                continue;
-            }
-            foreach ($form->fields as $field) {
-                if (($field['type'] ?? '') === 'sepa' && !empty($field['live_iban_lookup'])) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        echo '<div class="fabricator-notice-dock"><hr class="wp-header-end" style="display:none"></div>';
     }
 }

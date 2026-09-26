@@ -1,7 +1,0 @@
-{
-    "intelephense.environment.includePaths": [
-        "vendor/php-stubs/wordpress-stubs/wordpress-stubs.php",
-        ".vscode/wordpress-constants-stub.php"
-    ],
-    "intelephense.files.maxSize": 8000000
-}

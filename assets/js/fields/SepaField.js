@@ -1,14 +1,7 @@
 function (root) {
-    var IBAN_LEN = {
-        AD:24,AE:23,AL:28,AT:20,AZ:28,BA:20,BE:16,BG:22,BH:22,BI:27,BR:29,BY:28,
-        CH:21,CR:22,CY:28,CZ:24,DE:22,DJ:27,DK:18,DO:28,EE:20,EG:29,ES:24,FI:18,
-        FK:18,FO:18,FR:27,GB:22,GE:22,GI:23,GL:18,GR:27,GT:28,HR:21,HU:28,IE:22,
-        IL:23,IQ:23,IS:26,IT:27,JO:30,KW:30,KZ:20,LB:28,LC:32,LI:21,LT:20,LU:20,
-        LV:21,LY:25,MC:27,MD:24,ME:22,MK:19,MN:20,MR:27,MT:31,MU:30,NI:28,NL:18,
-        NO:15,OM:23,PK:24,PL:28,PS:29,PT:25,QA:29,RO:24,RS:22,RU:33,SA:24,SC:31,
-        SD:18,SE:24,SI:19,SK:24,SM:27,SO:23,ST:25,SV:28,TL:23,TN:24,TR:26,UA:29,
-        VA:22,VG:24,XK:20,YE:30
-    };
+    // Single source of truth is PHP SepaField::IBAN_LEN, localized into window.FabricatorForms.ibanLen
+    // (see Utils/Assets.php, Admin/FormEditor.php, Admin/FieldTestPage.php) — no separate copy here.
+    var IBAN_LEN = (window.FabricatorForms && window.FabricatorForms.ibanLen) || {};
     function ibanTemplate(cc) {
         var len = IBAN_LEN[cc];
         if (!len) return cc + '__ …';
@@ -41,11 +34,7 @@ function (root) {
         var noticeEl = input.parentNode.querySelector('.fabricator-field-hint');
         function showError(msg)       { if (errorEl)  errorEl.textContent  = msg; }
         function showIbanNotice(msg)  { if (noticeEl) noticeEl.textContent = msg; }
-        function getBicInput() {
-            var field = input.closest('.fabricator-field--sepa');
-            return field ? field.querySelector('.fabricator-sepa-bic') : null;
-        }
-        // Mirrors PHP SepaField::ibanChecksumValid() — runs client-side regardless of live_iban_lookup so validation still works when the opt-in openiban.com lookup is disabled.
+        // Mirrors PHP SepaField::ibanChecksumValid().
         function ibanChecksumValid(iban) {
             var rearranged = iban.substring(4) + iban.substring(0, 4);
             var numeric = '';
@@ -58,60 +47,6 @@ function (root) {
                 remainder = Number(String(remainder) + numeric.substring(pos, pos + 7)) % 97;
             }
             return remainder === 1;
-        }
-        var bicManuallyEntered = false;
-        function lookupBic(iban) {
-            if (bicManuallyEntered) return;
-            if (input.dataset.liveLookup === '0') return;
-            var bicInput = getBicInput();
-            if (!bicInput) return;
-            var ajaxUrl = (window.FabricatorForms && window.FabricatorForms.ajaxUrl) || '';
-            if (!ajaxUrl) return;
-            bicInput.value    = '';
-            bicInput.disabled = true;
-            var dots = 0;
-            var dotTimer = setInterval(function () {
-                dots = (dots + 1) % 4;
-                var _i18nLu = window.FabricatorForms && window.FabricatorForms.i18n;
-                bicInput.placeholder = ((_i18nLu && _i18nLu.sepa_looking_up) || 'Looking up') + '.'.repeat(dots);
-            }, 400);
-            var body = new FormData();
-            body.append('action', 'fabricator_iban_bic');
-            body.append('iban', iban);
-            body.append('nonce', (window.FabricatorForms && window.FabricatorForms.ibanBicNonce) || '');
-            fetch(ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' })
-                .then(function (r) { return r.json(); })
-                .then(function (res) {
-                    clearInterval(dotTimer);
-                    bicInput.disabled    = false;
-                    bicInput.placeholder = 'XXXXXXXXXXX';
-                    var d = res.data || {};
-                    if (!d.valid) {
-                        input._fabricatorIbanValid   = false;
-                        input._fabricatorIbanInvalid = true;
-                        var _i18nIi = window.FabricatorForms && window.FabricatorForms.i18n;
-                        showError((_i18nIi && _i18nIi.sepa_iban_invalid) || 'Invalid IBAN (check digit incorrect).');
-                    } else {
-                        input._fabricatorIbanValid   = true;
-                        input._fabricatorIbanInvalid = false;
-                        showError('');
-                        if (d.bic && !bicManuallyEntered) {
-                            bicInput.value = d.bic;
-                        } else if (!d.bankCodeFound) {
-                            var _i18nUv = window.FabricatorForms && window.FabricatorForms.i18n;
-                            showIbanNotice((_i18nUv && _i18nUv.sepa_iban_unvalidated) || 'Could not be validated.');
-                        }
-                    }
-                })
-                .catch(function () {
-                    clearInterval(dotTimer);
-                    bicInput.disabled    = false;
-                    bicInput.placeholder = 'XXXXXXXXXXX';
-                });
-        }
-        var bicEl = getBicInput();
-        if (bicEl) {
-            bicEl.addEventListener('input', function () { bicManuallyEntered = !!this.value; });
         }
         function getRaw() { return input.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase(); }
         input.addEventListener('input', function () {
@@ -144,7 +79,6 @@ function (root) {
                     var _i18nCk = window.FabricatorForms && window.FabricatorForms.i18n;
                     showError((_i18nCk && _i18nCk.sepa_iban_invalid) || 'Invalid IBAN (check digit incorrect).');
                 }
-                lookupBic(raw);
             }
         });
         input.addEventListener('keydown', function (e) {
@@ -165,9 +99,7 @@ function (root) {
             this.value = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
         });
     });
-    /* Signature canvas init — self-contained so SepaField has no dependency
-       on SignatureField being registered. Sets data-fabricator-file-count so
-       front.js can include SEPA signatures in the total file count. */
+    // Self-contained so SepaField has no dependency on SignatureField; sets data-fabricator-file-count for front.js's total file count.
     var sepaSigSel = '.fabricator-sepa-mandate .fabricator-signature-wrap';
     root.querySelectorAll(sepaSigSel).forEach(function (wrap) {
         if (wrap._fabricatorCanvasInited) return;
@@ -180,6 +112,8 @@ function (root) {
         var stroke = parseFloat(wrap.dataset.stroke || '2');
         var fmt    = wrap.dataset.format || 'png';
         var drawing = false;
+        var drew    = false;
+        var lastW   = 0;
         function resize() {
             var rect  = canvas.getBoundingClientRect();
             var ratio = window.devicePixelRatio || 1;
@@ -187,6 +121,11 @@ function (root) {
             var fallH = parseFloat(canvas.getAttribute('height') || '160');
             var cssH  = rect.height || canvas.offsetHeight || fallH;
             if (!cssW || !cssH) return;
+            /* Resizing a canvas clears it, while the hidden input still holds the signature: without redrawing, a mobile
+               address bar collapsing or a rotation showed an empty pad yet submitted the old signature. Snapshot and
+               redraw, as SignatureField.js does. */
+            var snap = lastW ? canvas.toDataURL() : null;
+            lastW = cssW;
             canvas.width  = Math.round(cssW * ratio);
             canvas.height = Math.round(cssH * ratio);
             ctx.scale(ratio, ratio);
@@ -196,6 +135,11 @@ function (root) {
             ctx.lineWidth   = stroke;
             ctx.lineCap     = 'round';
             ctx.lineJoin    = 'round';
+            if (snap && snap !== 'data:,' && input.value) {
+                var img = new Image();
+                img.onload = function () { ctx.drawImage(img, 0, 0, cssW, cssH); };
+                img.src = snap;
+            }
         }
         function pos(e) {
             var rect = canvas.getBoundingClientRect();
@@ -215,10 +159,14 @@ function (root) {
             var p = pos(e);
             ctx.lineTo(p.x, p.y);
             ctx.stroke();
+            drew = true;
         }
         function end() {
             if (!drawing) return;
             drawing = false;
+            /* A tap that draws nothing left a blank white image behind, which validate() accepts — so the mandate
+               could be submitted with an empty signature. Same guard as SignatureField.js. */
+            if (!drew) return;
             var mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
             input.value = canvas.toDataURL(mime);
         }
@@ -233,6 +181,7 @@ function (root) {
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 input.value = '';
+                drew        = false;
                 wrap.dataset.fabricatorFileCount = '0';
             });
         }
@@ -242,6 +191,7 @@ function (root) {
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 input.value = '';
+                drew        = false;
             });
         }
         resize();

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -212,6 +212,10 @@ class FieldRegistry
                     'advancedSchema' => $obj->getAdvancedSchema(),
                     'noPanel'        => !$obj->hasSettingsPanel(),
                     'noRequired'     => !$obj->hasRequired(),
+                    // A page break separates pages, so it can neither sit inside a group nor be shown conditionally:
+                    // FormRenderer calls renderBreak() for it and never emits a data-conditions attribute.
+                    'noNesting'      => $obj->isPageBreak(),
+                    'noConditions'   => $obj->isPageBreak(),
                 ];
             }
             if ($items) {
@@ -244,9 +248,14 @@ class FieldRegistry
     /**
      * Maps raw form submission values to a normalized array for PDF/email.
      *
-     * @param array $fields     Form field configuration array.
-     * @param array $raw_values Raw submitted POST values.
-     * @param array $files      Uploaded files ($_FILES).
+     * @param array    $fields     Form field configuration array.
+     * @param array    $raw_values Raw submitted POST values.
+     * @param array    $files      Uploaded files ($_FILES).
+     * @param string[] $skip_ids   Ids of fields hidden by their conditions (a hidden group's children included), from
+     *                             FormProcessor::collectHiddenIds(). Passed in rather than removed from the result
+     *                             afterwards, because mapping is what reads a field's value: a hidden upload skipped
+     *                             here is never read from $_FILES or base64-encoded, and a hidden signature is never
+     *                             decoded. They were never validated either, so nothing of theirs may reach the output.
      * @return array Normalized mapped values.
      */
     public static function mapSubmission(
@@ -256,12 +265,7 @@ class FieldRegistry
         array $skip_ids = []
     ): array {
         $mapped  = [];
-        /* $skip_ids are fields hidden by conditional logic. They MUST be skipped here rather than
-           unset from the result afterwards: a hidden field never runs validate(), so an upload in
-           one would previously have been read into memory and base64-encoded by
-           UploadField::mapNormalized() with no extension, MIME or max_size_mb check having run at
-           all, and SignatureField/SepaField's 2MB data-URI caps never executing — the work was
-           done, and its result was only then thrown away. */
+        // Skip hidden fields here, not after: unset afterward would let an upload be read/encoded before validate() ever runs.
         $skip    = array_flip($skip_ids);
         $context = ['files' => $files, 'raw_values' => $raw_values, 'skip_ids' => $skip];
 

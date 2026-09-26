@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -128,6 +128,10 @@ class PhoneField extends BaseField
                 if (!str_starts_with($v, '+')) {
                     return __('Please enter the number with international prefix (+...).', 'formfabricator');
                 }
+                // The rest must be a number, as in 'any' mode: an allow-list otherwise accepted "+49" followed by anything.
+                if (!preg_match('/^\+[0-9]{7,15}$/', $v)) {
+                    return __('Please enter a valid phone number.', 'formfabricator');
+                }
                 $digits = substr($v, 1);
                 $list   = (array)($config['phone_country_list'] ?? []); /* e.g. ['+49', '+43'] */
                 $cmode  = $config['phone_country_mode'] ?? 'allow';
@@ -142,6 +146,10 @@ class PhoneField extends BaseField
                 );
                 foreach ($sorted as $entry) {
                     $code = ltrim((string)$entry, '+');
+                    // An empty or non-numeric entry is a prefix of every number (or of none): skip it.
+                    if ($code === '' || !ctype_digit($code)) {
+                        continue;
+                    }
                     if (str_starts_with($digits, $code)) {
                         $in = true;
                         break;

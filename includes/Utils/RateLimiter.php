@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.6
+ * @version   1.0.7
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,6 +24,13 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 // Atomic window-based rate-limit counter backed by wp_options, avoiding the TOCTOU race a read-then-write would have.
+//
+// The statements below are MySQL/MariaDB (INSERT ... ON DUPLICATE KEY UPDATE, SUBSTRING_INDEX), as are the ones in
+// ConcurrencySlot, OptionMutex, SingleUseToken and HashSeal::createInitialKey(). That is deliberate: the whole point
+// of each is that the database, not PHP, decides the winner of a race, and the Options and Transients APIs offer no
+// way to do that. A site on another engine — SQLite, as WordPress Playground uses — cannot run them, so the plugin
+// states MySQL as a requirement rather than silently falling back to a check-then-write that these classes exist to
+// avoid. See readme.txt ("Requirements").
 class RateLimiter
 {
     /**
@@ -43,7 +50,7 @@ class RateLimiter
         $new_expiry = $now + $window_seconds;
 
         // Read back via SELECT rather than LAST_INSERT_ID(), which broke behind a connection pooler.
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic upsert can't be expressed via Options/Transients API without losing atomicity; never cached.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic upsert; Options/Transients API can't do this without losing atomicity. Never cached.
         $wpdb->query(
             $wpdb->prepare(
                 "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)

@@ -1,5 +1,8 @@
 function (root) {
     root.querySelectorAll('.fabricator-upload-zone').forEach(function (zone) {
+        /* Idempotent: front.js re-runs field inits after every successful submit, which stacked drop/change/reset listeners. */
+        if (zone._fabricatorUploadInited) return;
+        zone._fabricatorUploadInited = true;
         var input    = zone.querySelector('.fabricator-upload-input');
         var errEl    = zone.parentNode
             ? zone.parentNode.querySelector('.fabricator-upload-error') : null;
@@ -98,12 +101,24 @@ function (root) {
             if (!multiple && allowed.length > 1) {
                 allowed = [allowed[0]];
             }
+            /* The browser has already put the new selection in the input, so a rejected one has to be cleared:
+               it used to stay behind and be submitted while the chips still showed the previous selection. */
+            function clearInput() {
+                try {
+                    input.files = new DataTransfer().files;
+                } catch (e) { /* DataTransfer not supported */ }
+                renderChips(input.files);
+            }
             if (!allowed.length) {
                 var _i18nA = window.FabricatorForms && window.FabricatorForms.i18n;
+                clearInput();
                 showError((_i18nA && _i18nA.upload_no_types) || 'No allowed file types in selection.');
                 return;
             }
-            if (!checkLimit(allowed)) return;
+            if (!checkLimit(allowed)) {
+                clearInput();
+                return;
+            }
             try {
                 var dt = new DataTransfer();
                 allowed.forEach(function (f) { dt.items.add(f); });
