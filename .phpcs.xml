@@ -10,9 +10,12 @@
          in this repository and should hold the same bar. -->
     <file>languages/compile-mo.php</file>
     <file>languages/make-pot.php</file>
+    <file>tests</file>
 
     <exclude-pattern>vendor/*</exclude-pattern>
     <exclude-pattern>assets/*</exclude-pattern>
+    <!-- The Node test suite; phpcs would read it as PHP-style JS, as it would assets/. -->
+    <exclude-pattern>tests/js/*.js</exclude-pattern>
 
     <!--
         Every plugin file starts with `defined('ABSPATH') || exit;` before its

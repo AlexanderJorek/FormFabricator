@@ -13,11 +13,13 @@
 
 .PARAMETER SkipAudit
     Skips `composer audit`, which needs network access to the advisory database, for an offline build.
+    Offline also means the test database is not downloaded: when it is not set up yet, the WordPress
+    integration suite is skipped with a warning instead.
 
 .PARAMETER Setup
-    Installs/refreshes the working tree's dev dependencies (composer install) and stops without
-    building. This is the first thing to run on a fresh clone, and the way to catch vendor/ up
-    after a pull that changed composer.lock.
+    Installs/refreshes the working tree's dev dependencies (composer install) and the test database
+    for the integration suite (build-testdb.ps1), and stops without building. This is the first thing
+    to run on a fresh clone, and the way to catch vendor/ up after a pull that changed composer.lock.
 
 .EXAMPLE
     ./build.ps1
@@ -59,9 +61,9 @@ function Assert-Tool {
 
 function Install-DevDependencies {
     # --ignore-platform-req=ext-gd/ext-fileinfo for the reason the staged --no-dev install further
-    # down passes them: this dev machine's CLI php.ini leaves both off, while every WordPress host
-    # has them. Nothing that runs here needs either -- phpcs, make-pot and php -l are pure PHP --
-    # and the extensions stay declared in composer.json, so a host still has to provide them.
+    # down passes them: a CLI php.ini can leave both off, while every WordPress host has them.
+    # Installing needs neither; the phpunit release gate does, and checks for them itself with a
+    # message naming the php.ini. The extensions stay declared in composer.json for hosts.
     Write-Host "Installing dev dependencies (composer install)..." -ForegroundColor Cyan
     Push-Location $root
     $previousErrorActionPreference = $ErrorActionPreference
@@ -96,8 +98,11 @@ function Get-StalePackages {
     return $stale
 }
 
+. (Join-Path $root 'build-testdb.ps1') # the throwaway MariaDB for the integration suite
+
 Assert-Tool 'php' 'Install PHP 8.1 or newer and put it on PATH -- the release gates run php -l, phpcs and languages/make-pot.php.'
 Assert-Tool 'composer' 'Install Composer from https://getcomposer.org/download/, then open a new shell so PATH is picked up.'
+Assert-Tool 'npm' 'Install Node.js 22.13 or newer (it includes npm) from https://nodejs.org/ -- the JS test suite (tests/js/) is a release gate.'
 
 $installedJson = Join-Path $root 'vendor\composer\installed.json'
 $devToolsReady = (Test-Path (Join-Path $root 'vendor\autoload.php')) -and
@@ -105,6 +110,8 @@ $devToolsReady = (Test-Path (Join-Path $root 'vendor\autoload.php')) -and
                  (Test-Path $installedJson)
 if ($Setup) {
     Install-DevDependencies
+    if (-not (Initialize-TestDatabase)) { throw 'The test database could not be set up.' }
+    Write-Host "  Test database ready in $TestDbHome" -ForegroundColor Green
     Write-Host ""
     Write-Host "Dev environment ready. Run this script again (or build.cmd) to produce a release." -ForegroundColor Green
     exit 0
@@ -125,8 +132,13 @@ if (-not $devToolsReady) {
 
 # ---- Release gates (NIST SSDF PW.4/PW.7): the checks CLAUDE.md documents, enforced before anything is staged, so a tree
 # that fails them never produces an archive. Native tools write progress to stderr, so only their exit codes count.
+# Each gate prints its name as it starts and "ok"/"FAILED" with its duration when it ends: the tools' own output is
+# captured (shown only on failure), so without this line a build run from build.cmd sat on "Running release gates..."
+# for minutes with no sign of progress. -Quiet is for gates run in a loop that report as one line (php -l).
 function Invoke-ReleaseGate {
-    param([string]$Name, [scriptblock]$Command)
+    param([string]$Name, [scriptblock]$Command, [switch]$Quiet)
+    if (-not $Quiet) { Write-Host "  $Name ... " -NoNewline }
+    $timer = [Diagnostics.Stopwatch]::StartNew()
     $previousPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
@@ -136,20 +148,39 @@ function Invoke-ReleaseGate {
         $ErrorActionPreference = $previousPreference
     }
     if ($code -ne 0) {
+        if (-not $Quiet) { Write-Host 'FAILED' -ForegroundColor Red }
         $output | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
         throw "Release gate failed: $Name (exit code $code)"
     }
+    if (-not $Quiet) { Write-Host ('ok ({0})' -f (Format-GateTime $timer.Elapsed)) -ForegroundColor Green }
+}
+
+function Format-GateTime {
+    param([TimeSpan]$Elapsed)
+    if ($Elapsed.TotalSeconds -lt 60) { return '{0:N0} s' -f [Math]::Max(1, $Elapsed.TotalSeconds) }
+    return '{0}:{1:00} min' -f [int][Math]::Floor($Elapsed.TotalMinutes), $Elapsed.Seconds
 }
 
 Write-Host "Running release gates..." -ForegroundColor Cyan
 Push-Location $root
 try {
+    # Matched against the path relative to the repository, never the absolute one: this repository lives under a
+    # directory called .git (C:\.git\FormFabricator), so an absolute-path match excluded every file and the gate
+    # checked nothing — make-pot.php prunes '.git' the same way for the same reason.
     $phpSources = Get-ChildItem -Path $root -Recurse -File -Filter '*.php' | Where-Object {
-        $_.FullName -notmatch '[\\/](vendor|build|node_modules|\.git)[\\/]'
+        $_.FullName.Substring($root.Length + 1) -notmatch '(^|[\\/])(vendor|build|node_modules|\.git)[\\/]'
     }
-    foreach ($phpSource in $phpSources) {
-        Invoke-ReleaseGate "php -l $($phpSource.FullName.Substring($root.Length + 1))" { php -l $phpSource.FullName }
+    Write-Host "  php -l ($(@($phpSources).Count) files) ... " -NoNewline
+    $lintTimer = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        foreach ($phpSource in $phpSources) {
+            Invoke-ReleaseGate "php -l $($phpSource.FullName.Substring($root.Length + 1))" { php -l $phpSource.FullName } -Quiet
+        }
+    } catch {
+        Write-Host 'FAILED' -ForegroundColor Red
+        throw
     }
+    Write-Host ('ok ({0})' -f (Format-GateTime $lintTimer.Elapsed)) -ForegroundColor Green
     # .phpcs.xml (picked up from the working directory) is the day-to-day PSR gate; errors fail, warnings don't.
     Invoke-ReleaseGate 'phpcs (.phpcs.xml)' { & (Join-Path $root 'vendor\bin\phpcs.bat') -q --runtime-set ignore_warnings_on_exit 1 }
     # .phpcs-security.xml: its ERRORS fail the release, as WordPress.org's Plugin Check rejects the same ones. Warnings
@@ -157,6 +188,47 @@ try {
     $securityRuleset = Join-Path $root '.phpcs-security.xml'
     Invoke-ReleaseGate 'phpcs (.phpcs-security.xml, errors only)' { & (Join-Path $root 'vendor\bin\phpcs.bat') -q -n "--standard=$securityRuleset" }
     Invoke-ReleaseGate 'make-pot --check (languages/formfabricator.pot is current)' { php (Join-Path $root 'languages\make-pot.php') --check }
+    # The unit and perf suites (tests/, phpunit.xml.dist). Perf holds the pathological-PDF shapes from CLAUDE.md
+    # ("Scanning untrusted PDF bytes"), so a scan that turns quadratic stops the release. The integration suite follows
+    # after the JS suite below.
+    $missingExtensions = @('gd', 'fileinfo') | Where-Object { -not ((php -r "echo extension_loaded('$_') ? 1 : 0;") -eq '1') }
+    if ($missingExtensions.Count -gt 0) {
+        throw "Release gate failed: the tests need PHP's $($missingExtensions -join ' and ') extension(s), which every WordPress host has. Enable them in $((php -r 'echo php_ini_loaded_file();'))."
+    }
+    Invoke-ReleaseGate 'phpunit (unit + perf suites)' { & (Join-Path $root 'vendor\bin\phpunit.bat') --testsuite unit,perf --no-progress }
+    # The JS suite (tests/js/): the real front.js in jsdom, against the globals Assets hands it, and checked case by case
+    # against the server's condition logic. npm ci installs exactly what package-lock.json pins (the counterpart of the
+    # composer.lock check above); --prefer-offline keeps a build working from npm's cache without the network.
+    Invoke-ReleaseGate 'npm ci (JS test dependencies)' { npm ci --prefer-offline --no-audit --no-fund }
+    Invoke-ReleaseGate 'npm test (JS suite)' { npm test }
+    # The WordPress integration suite (tests/Integration, phpunit-integration.xml.dist): real WordPress from vendor/
+    # against a throwaway MariaDB that exists only for this step (build-testdb.ps1), once as a single site and once as a
+    # multisite network. Offline, without a database set up yet, it is skipped rather than downloaded.
+    if (-not (Initialize-TestDatabase -Offline:$SkipAudit)) {
+        Write-Host "  integration suite SKIPPED: no test database yet, and -SkipAudit (offline) does not download one." -ForegroundColor Yellow
+        Write-Host "  Run a full build or build.ps1 -Setup once to set it up." -ForegroundColor Yellow
+    } else {
+        $testDbEnv = @('WP_TESTS_DB_HOST', 'WP_TESTS_DB_NAME', 'WP_TESTS_DB_USER', 'WP_TESTS_DB_PASSWORD', 'WP_MULTISITE', 'PHP_INI_SCAN_DIR')
+        $savedEnv  = @{}
+        foreach ($name in $testDbEnv) { $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+        $testDb = Start-TestDatabase -IniDir (Get-MysqliIniDir)
+        try {
+            $env:WP_TESTS_DB_HOST     = "127.0.0.1:$($testDb.Port)"
+            $env:WP_TESTS_DB_NAME     = 'wordpress_test'
+            $env:WP_TESTS_DB_USER     = 'root'
+            $env:WP_TESTS_DB_PASSWORD = $TestDbRootPw
+            # Through PHP_INI_SCAN_DIR, not -d: WordPress installs the test site in a child PHP process, which needs it too.
+            if ($testDb.IniDir) { $env:PHP_INI_SCAN_DIR = $testDb.IniDir }
+            $integrationConfig = Join-Path $root 'phpunit-integration.xml.dist'
+            $env:WP_MULTISITE = '0'
+            Invoke-ReleaseGate 'phpunit integration (single site)' { & (Join-Path $root 'vendor\bin\phpunit.bat') -c $integrationConfig --no-progress }
+            $env:WP_MULTISITE = '1'
+            Invoke-ReleaseGate 'phpunit integration (multisite)' { & (Join-Path $root 'vendor\bin\phpunit.bat') -c $integrationConfig --no-progress }
+        } finally {
+            foreach ($name in $testDbEnv) { [Environment]::SetEnvironmentVariable($name, $savedEnv[$name], 'Process') }
+            Stop-TestDatabase $testDb
+        }
+    }
     if ($SkipAudit) {
         Write-Host "  composer audit skipped (-SkipAudit)" -ForegroundColor Yellow
     } else {
@@ -172,7 +244,7 @@ if (Test-Path $buildDir) { Remove-Item -Recurse -Force $buildDir }
 New-Item -ItemType Directory -Path $stageDir | Out-Null
 
 Write-Host "Copying plugin files..." -ForegroundColor Cyan
-$exclude = @('.git', '.claude', '.vscode', '.gitignore', 'build', 'node_modules', 'vendor', '.phpcs.xml', '.phpcs-security.xml', 'build.ps1', 'build.cmd', 'CLAUDE.md', 'TESTING.md')
+$exclude = @('.git', '.claude', '.vscode', '.gitignore', '.gitattributes', '.github', 'build', 'node_modules', 'vendor', '.phpcs.xml', '.phpcs-security.xml', 'build.ps1', 'build-testdb.ps1', 'build.cmd', 'CLAUDE.md', 'TESTING.md', 'tests', 'phpunit.xml.dist', 'phpunit-integration.xml.dist', '.phpunit.cache', 'package.json', 'package-lock.json')
 Get-ChildItem -Path $root -Force | Where-Object { $exclude -notcontains $_.Name } | ForEach-Object {
     Copy-Item -Path $_.FullName -Destination $stageDir -Recurse -Force
 }
@@ -180,20 +252,15 @@ Get-ChildItem -Path $root -Force | Where-Object { $exclude -notcontains $_.Name 
 # Dev-only files that live inside otherwise-shipped folders (not excludable by top-level name
 # above) — remove them individually from the staged copy.
 #
-# The field-test harness and the example field are development tooling: _ExampleField.php is a
-# template that is deliberately absent from FieldRegistry::FIELD_MAP and therefore never loaded,
-# and FieldTestPage.php (with its JS/CSS) only registers under WP_DEBUG. Shipping them added
-# ~4,200 lines of unreachable code to the package, which WordPress.org's guidelines ask plugins
-# not to include and which enlarges the review surface for no user-facing benefit.
+# The example field is development tooling: _ExampleField.php is a template that is deliberately
+# absent from FieldRegistry::FIELD_MAP and therefore never loaded. Shipping unreachable code is
+# something WordPress.org's guidelines ask plugins not to do, and it enlarges the review surface
+# for no user-facing benefit. (The tests live in tests/, excluded above by top-level name.)
 $nestedExclude = @(
     'includes/PDF/templates/HEADER-RENDERING.md',
     'languages/compile-mo.php',
     'languages/make-pot.php',
     'includes/Fields/_ExampleField.php',
-    'includes/Admin/FieldTestPage.php',
-    'assets/js/admin-fieldtest.js',
-    'assets/js/admin-fieldtest-tabs.js',
-    'assets/css/admin-fieldtest.css',
     'assets/js/fabricator-perf-debug.js',
     'assets/js/fields/ExampleField.clientInitClickHandler.js',
     'assets/js/fields/ExampleField.clientValidationZip.js',
@@ -459,7 +526,7 @@ if ($unexpected.Count -gt 0) {
 
 # Dev/test material anywhere in the plugin's own tree; vendor/ is upstream's business and
 # is pruned separately above.
-$devPattern = '(?i)(^|/)(tests?|testpdfs|fixtures|__tests__|[.]github|node_modules|[.]git|[.]vscode|[.]claude)(/|$)'
+$devPattern = '(?i)(^|/)(tests?|testpdfs|fixtures|__tests__|[.]github|node_modules|[.]git|[.]vscode|[.]claude|phpunit(-[a-z]+)?[.]xml([.]dist)?|[.]phpunit[.]cache|package(-lock)?[.]json)(/|$)'
 $devLeaks   = @($ownFiles | Where-Object { $_.Rel -match $devPattern })
 if ($devLeaks.Count -gt 0) {
     $violations += "dev/test material in package: $(($devLeaks | Select-Object -First 5 | ForEach-Object { $_.Rel }) -join ', ')"

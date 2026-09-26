@@ -11,8 +11,10 @@ rem  is read, never written - so the release build starts from a double-click
 rem  in Explorer, or from `build` in cmd or PowerShell.
 rem
 rem  On a fresh clone there is nothing to install first: vendor/ is gitignored,
-rem  and build.ps1 runs `composer install` itself when the dev tools are absent.
-rem  Menu item 3 (or `build -Setup`) does that on its own, without building.
+rem  and build.ps1 runs `composer install` itself when the dev tools are absent,
+rem  and downloads the integration suite's test database (build-testdb.ps1) the
+rem  first time it needs it. Menu item 3 (or `build -Setup`) does both on its
+rem  own, without building.
 rem
 rem  Usage
 rem    build                menu: full build / offline build / dev setup / quit
@@ -81,7 +83,7 @@ echo   FormFabricator - release build
 echo   =============================
 echo     1  Full release build   (all gates, including composer audit)
 echo     2  Offline build        (-SkipAudit: no network advisory check)
-echo     3  Set up dev tools     (composer install - first run on a new clone)
+echo     3  Set up dev tools     (composer install + test database - first run)
 echo     Q  Quit
 echo.
 rem choice.exe rather than `set /p`: it accepts only the keys named in /c, so a

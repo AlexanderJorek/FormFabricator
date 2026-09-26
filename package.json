@@ -1,0 +1,15 @@
+{
+  "name": "formfabricator-dev",
+  "private": true,
+  "description": "Dev-only tooling for FormFabricator: the JS test suite (tests/js/). Nothing here ships; build.ps1 excludes it.",
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "test": "php tests/js/build-fixture.php && node --test \"tests/js/**/*.test.js\""
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

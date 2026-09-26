@@ -133,12 +133,6 @@ class Plugin
                 'Admin/FormList.php', 'Admin/FormEditor.php', 'Admin/FormSettings.php',
                 'Admin/PDFLayoutEditor.php', 'Admin/Verificationpage.php',
             ];
-            // Dev-only test harness, off in production; file_exists() since build.ps1 strips it from the shipped package.
-            if (defined('WP_DEBUG') && WP_DEBUG
-                && file_exists(FABRICATOR_FORMS_PATH . 'includes/Admin/FieldTestPage.php')
-            ) {
-                $adminFiles[] = 'Admin/FieldTestPage.php';
-            }
             foreach ($adminFiles as $file) {
                 // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file comes from the hardcoded $adminFiles array above, not user input.
                 include_once FABRICATOR_FORMS_PATH . 'includes/' . $file;
@@ -490,10 +484,6 @@ class Plugin
             Admin\FormSettings::init();
             Admin\PDFLayoutEditor::init();
             Admin\Verificationpage::register();
-            // class_exists(): the harness is absent from release builds (see load()).
-            if (defined('WP_DEBUG') && WP_DEBUG && class_exists(Admin\FieldTestPage::class)) {
-                Admin\FieldTestPage::register();
-            }
             add_action('admin_enqueue_scripts', [Utils\Assets::class, 'enqueueAdmin']);
             add_action('admin_init', [self::class, 'maybeSealSetupRedirect']);
             add_action('admin_notices', [self::class, 'maybeWarnUnprotectedUploads']);

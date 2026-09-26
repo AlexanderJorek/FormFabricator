@@ -93,10 +93,34 @@ class Assets
             true
         );
 
-        \wp_localize_script(
-            'fabricator-forms-front',
-            'FabricatorForms',
-            [
+        \wp_localize_script('fabricator-forms-front', 'FabricatorForms', self::frontLocalization());
+
+        $assets = self::frontFieldAssets();
+        // Built entirely from this plugin's own field-class string literals (never request input).
+        if ($assets['css'] !== '') {
+            \wp_add_inline_style('fabricator-forms-front', $assets['css']);
+        }
+        foreach ($assets['globals'] as $name => $literal) {
+            \wp_add_inline_script('fabricator-forms-front', 'window.' . $name . '=' . $literal . ';', 'before');
+        }
+
+        /* Form-select shortcode assets — enqueued here when detectable so they reach <head>;
+           FormSelectList::shortcode() calls ensureFormSelectAssets() as the same fallback. */
+        if (self::pageHasFormSelect()) {
+            self::ensureFormSelectAssets();
+        }
+    }
+
+    /**
+     * The FabricatorForms object front.js reads (AJAX URL, IBAN lengths, messages), as wp_localize_script() receives it.
+     *
+     * Public so the JS test suite (tests/js/) runs front.js against exactly what a page gets.
+     *
+     * @return array<string, mixed>
+     */
+    public static function frontLocalization(): array
+    {
+        return [
             'ajaxUrl'      => \admin_url('admin-ajax.php'),
             // Single source of truth for per-country IBAN length lives in SepaField::IBAN_LEN;
             // localized here rather than duplicated in SepaField.js.
@@ -183,11 +207,21 @@ class Assets
                 'time_am'                 => __('AM', 'formfabricator'),
                 'time_pm'                 => __('PM', 'formfabricator'),
             ],
-            ]
-        );
+        ];
+    }
 
-        /* Single pass over all field classes — collect CSS, empty-checks,
-         * validators, inits, and skip-validation flags without re-instantiating. */
+    /**
+     * Every field type's CSS and client-side JS, as ensureFrontAssets() inlines it into a page with a form.
+     *
+     * One pass over all field classes collects CSS, empty-checks, validators, inits and skip-validation flags without
+     * re-instantiating. 'globals' maps each window.* name to its JS literal, in the order front.js expects them defined,
+     * and leaves out a global no field contributes to. Public so the JS test suite (tests/js/) runs against exactly
+     * this output instead of a copy of the loop.
+     *
+     * @return array{css: string, globals: array<string, string>}
+     */
+    public static function frontFieldAssets(): array
+    {
         $fieldCss    = [];
         $emptyChecks = [];
         $pairs       = [];
@@ -227,44 +261,21 @@ class Assets
             }
         }
 
-        // Built entirely from this plugin's own field-class string literals (never request input).
-        if (!empty($fieldCss)) {
-            \wp_add_inline_style('fabricator-forms-front', implode("\n", $fieldCss));
-        }
+        $globals = [];
         if (!empty($emptyChecks)) {
-            \wp_add_inline_script(
-                'fabricator-forms-front',
-                'window.FabricatorEmptyChecks={' . implode(',', $emptyChecks) . '};',
-                'before'
-            );
+            $globals['FabricatorEmptyChecks'] = '{' . implode(',', $emptyChecks) . '}';
         }
         if (!empty($pairs)) {
-            \wp_add_inline_script(
-                'fabricator-forms-front',
-                'window.FabricatorValidators={' . implode(',', $pairs) . '};',
-                'before'
-            );
+            $globals['FabricatorValidators'] = '{' . implode(',', $pairs) . '}';
         }
         if (!empty($inits)) {
-            \wp_add_inline_script(
-                'fabricator-forms-front',
-                'window.FabricatorFieldInits={' . implode(',', $inits) . '};',
-                'before'
-            );
+            $globals['FabricatorFieldInits'] = '{' . implode(',', $inits) . '}';
         }
         if (!empty($skip)) {
-            \wp_add_inline_script(
-                'fabricator-forms-front',
-                'window.FabricatorSkipValidation=[' . implode(',', $skip) . '];',
-                'before'
-            );
+            $globals['FabricatorSkipValidation'] = '[' . implode(',', $skip) . ']';
         }
 
-        /* Form-select shortcode assets — enqueued here when detectable so they reach <head>;
-           FormSelectList::shortcode() calls ensureFormSelectAssets() as the same fallback. */
-        if (self::pageHasFormSelect()) {
-            self::ensureFormSelectAssets();
-        }
+        return ['css' => implode("\n", $fieldCss), 'globals' => $globals];
     }
 
     /**
@@ -465,16 +476,6 @@ class Assets
                     . '});});';
                 \wp_add_inline_script('wp-color-picker', $picker_js);
             }
-        }
-
-        // Field test harness (dev-only, WP_DEBUG-gated — see Plugin.php::load()); build.ps1 strips it from releases so this hook never fires there.
-        if (str_contains($hook, 'fabricator-field-tests')) {
-            \wp_enqueue_style(
-                'fabricator-forms-admin-fieldtest',
-                FABRICATOR_FORMS_URL . 'assets/css/admin-fieldtest.css',
-                [],
-                FABRICATOR_FORMS_VERSION
-            );
         }
 
         /* Verification page */

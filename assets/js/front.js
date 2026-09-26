@@ -591,7 +591,7 @@
         };
         document.head.appendChild(s);
     }
-    /* Extracted so FieldTestPage's JS test suite can drive it without a real blocked request. */
+    /* Extracted so the JS test suite (tests/js/resilience.test.js) can drive it without a real blocked request. */
     function showCaptchaBlockedNotice(gate, btn) {
         var i18n = (window.FabricatorForms && window.FabricatorForms.i18n) || {};
         btn.disabled = false;
@@ -719,7 +719,7 @@
         resetFormsOnBfcacheRestore();
     });
 
-    /* ── Test hook (WP_DEBUG only) ────────────────────────────────────────── */
+    /* ── Test hook: set only by the Node test suite (tests/js/support/page.js), never on a real page ── */
     if (window.__FABRICATOR_TEST__) {
         window.FabricatorTestHooks = {
             validatePage:               validatePage,

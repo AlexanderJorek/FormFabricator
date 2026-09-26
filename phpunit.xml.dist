@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Test suites, cheapest first:
+      unit         : pure PHP plus Brain Monkey stubs; no WordPress, no database.
+      perf         : the pathological-PDF shapes from CLAUDE.md ("Scanning untrusted PDF bytes"): scaling and peak memory.
+      integration  : real WordPress + MySQL (wp-phpunit); runs in CI, see .github/workflows/tests.yml.
+    Run: composer test  (the unit and perf suites)
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache"
+         failOnWarning="true"
+         failOnRisky="true"
+         beStrictAboutOutputDuringTests="true">
+    <testsuites>
+        <testsuite name="unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="perf">
+            <directory>tests/Perf</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <!-- The perf shapes build files of tens of MB and the zip-bomb cases inflate to ~200 MB on purpose. -->
+        <ini name="memory_limit" value="1024M"/>
+        <ini name="error_reporting" value="-1"/>
+    </php>
+    <source>
+        <include>
+            <directory>includes</directory>
+        </include>
+    </source>
+</phpunit>

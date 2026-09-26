@@ -72,3 +72,10 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+### PHPUnit
+# Result cache (test order, defects); local to each checkout.
+.phpunit.cache/
+
+### JS tests
+# Written by tests/js/build-fixture.php on every `npm test`.
+tests/js/.generated/

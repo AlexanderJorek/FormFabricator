@@ -3,7 +3,8 @@ function (fieldEl) {
     if (!inp || inp.value.trim() === '') return null;
     var val = parseFloat(inp.value);
     var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-    /* isFinite, not isNaN: "1e999" parses to Infinity, which NumberField::validate() rejects. */
+    /* Defensive only: browsers empty a number input holding "1e999", so it arrives here as "" and
+       NumberField::validate() rejects it on the server. isFinite also covers NaN. */
     if (!isFinite(val)) return (_i18n && _i18n.number_invalid) || 'Please enter a valid number.';
     var min = inp.getAttribute('min');
     var max = inp.getAttribute('max');

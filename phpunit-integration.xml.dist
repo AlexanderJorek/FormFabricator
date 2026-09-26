@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Integration suite: real WordPress and a real database (every table in it is dropped and recreated).
+    Needs MySQL or MariaDB; configure it with WP_TESTS_DB_HOST / _NAME / _USER / _PASSWORD (defaults: 127.0.0.1,
+    wordpress_test, root, root). Runs in CI; locally: composer test:integration. Set WP_MULTISITE=1 for multisite.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/Integration/bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache"
+         failOnWarning="true"
+         failOnRisky="true">
+    <testsuites>
+        <testsuite name="integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <ini name="memory_limit" value="1024M"/>
+        <ini name="error_reporting" value="-1"/>
+    </php>
+</phpunit>

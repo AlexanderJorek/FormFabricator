@@ -289,14 +289,14 @@ $potPath   = $root . '/languages/formfabricator.pot';
 // Mirrors build.ps1's $nestedExclude: these files are stripped from the release package, so
 // their strings can never reach translate.wordpress.org and must not appear here either.
 $notShipped = [
-    'includes/Admin/FieldTestPage.php',
     'includes/Fields/_ExampleField.php',
     'languages/compile-mo.php',
     'languages/make-pot.php',
 ];
 // '.git' is pruned by name; note this repository itself lives under a directory called .git, so
 // the match is against the relative path only, never the absolute one.
-$skipDirs = ['vendor', 'build', 'node_modules', '.git', '.claude', '.vscode'];
+// 'tests': the test suites call __() too, but never ship (build.ps1 excludes tests/).
+$skipDirs = ['vendor', 'build', 'node_modules', '.git', '.claude', '.vscode', 'tests'];
 
 $entries  = [];
 $warnings = ['nonliteral' => [], 'domain' => [], 'comment' => [], 'catalogue' => []];

@@ -3379,7 +3379,12 @@ final class Verificationpage
                         }
                         if ($type === 'XObject' && $image_missmatch === false) {
                             $raw_has_image_subtype ??= preg_match('/\/Subtype\s*\/Image/i', $pdf_raw) === 1;
-                            if ($raw_has_image_subtype) {
+                            // Every PDF draws the background grid, an SVG mPDF writes as a Form XObject, so a document
+                            // without images still has an XObject. The content-stream check above holds every Form
+                            // XObject stream to the seal (changed, added or duplicated ones are "not in seal"), so one
+                            // it passed is sealed. Only when the seal lists content streams, or nothing was compared.
+                            $form_xobjects_sealed = !empty($allowed_content_hashes) && $content_stream_mismatch === false;
+                            if ($raw_has_image_subtype || $form_xobjects_sealed) {
                                 continue;
                             }
                         }

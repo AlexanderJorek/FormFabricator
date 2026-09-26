@@ -79,6 +79,58 @@ After all findings: one paragraph of strategic recommendations for long-term NIS
 - `.phpcs-security.xml` — dedicated ruleset for the WordPress-Security and CWE-Top-25 parts of the table above (`wp-coding-standards/wpcs`'s security sniffs incl. `WordPress.PHP.IniSet` + `pheromone/phpcs-security-audit`, both installed as dev dependencies). Run: `vendor/bin/phpcs --standard=.phpcs-security.xml`. Its **errors** are a release gate in `build.ps1` (`-n`, errors only): WordPress.org's Plugin Check rejects the same ones. Expect warning noise — the security-audit sniffs flag *any* filesystem/callback call with a non-literal argument as a heuristic, not proof of a real issue — so treat its warnings as review material to triage, not a pass/fail gate; use targeted `phpcs:ignore` comments with a justification (matching the existing convention in this codebase) for confirmed false positives rather than restructuring sound code to satisfy the sniff. A `phpcs:ignore` applies only to the next line, and Plugin Check does not know this ruleset's `customSanitizingFunctions`, so lines using `Cast::stringOrDefault()` still need their own ignore.
 - No installable linter exists for OWASP ASVS or GDPR/data-protection-by-design — both are checklist/compliance frameworks, not code-pattern standards. Evaluate those manually per the table above.
 
+### Tests
+
+`composer test` runs the PHPUnit `unit` and `perf` suites (`phpunit.xml.dist`, `tests/`); `build.ps1` runs the same as
+a release gate and `.github/workflows/tests.yml` runs it on PHP 8.1–8.4 with the phpcs gates. Neither suite loads
+WordPress: WordPress functions are stubbed per test with Brain Monkey, and `tests/Support/FakeWordPress.php` is an
+in-memory options/transients/cron/`$wpdb` for stateful helpers (HashSeal, OptionMutex, VerifierCleanup).
+
+- Test the real code. Where the logic is a private step of a large class, call it through `Support\Reflect` rather
+  than copying the regex into the test — a copied oracle keeps passing after the production code changes.
+- Tests that pin a rewrite keep the old implementation as a reference oracle and compare on seeded random input
+  (`StreamScanTest`, `ObjectIndexTest`, `VerifierScansTest`). Seed with `mt_srand()` so a failing case reproduces.
+- Anything that needs real WordPress (wp_kses, wp_mail, capabilities, uninstall, multisite) belongs in the
+  `integration` suite, not in more stubs.
+- The PHP 8.1 CI job skips `perf` (`memory_reset_peak_usage()` is 8.2+).
+
+`composer test:integration` runs the integration suite (`phpunit-integration.xml.dist`, `tests/Integration/`): real
+WordPress from `vendor/roots/wordpress-no-content`, the core test library `wp-phpunit/wp-phpunit`, and a MySQL/MariaDB
+database whose tables it recreates (`WP_TESTS_DB_HOST`/`_NAME`/`_USER`/`_PASSWORD`, defaults `127.0.0.1`,
+`wordpress_test`, `root`, `root`). `WP_MULTISITE=1` runs it as a network. `build.ps1` runs it as a release gate,
+single site and multisite, against a throwaway portable MariaDB that `build-testdb.ps1` downloads once (pinned
+SHA-256), keeps in `%LOCALAPPDATA%\FormFabricator	est-db` (about 100 MB) and starts only for that step; CI runs it
+against a MySQL 8 service. An offline build (`-SkipAudit`) without that database yet skips the suite with a warning.
+
+- WordPress's test library assumes PHPUnit 9. Extend `Integration\TestCase` or `Integration\AjaxTestCase`, never
+  `WP_UnitTestCase` directly: `Support\PhpUnit10Compat` replaces the one method that breaks on PHPUnit 10. Polyfills
+  stay on 2.x, the last line that supports PHPUnit 10.
+- Submissions go through the real AJAX action: `AjaxTestCase::submit()` posts with a nonce and a fresh one-time token
+  as front.js does; mail lands in WordPress's MockPHPMailer (`sentMail()`).
+- mPDF fetches URLs with its own curl, invisible to `pre_http_request`; `Support\RequestRecorder` is a local HTTP
+  server that logs what reaches it. It answers at once — a silent listener leaves mPDF waiting forever.
+- `uninstall.php` declares a global function, so `UninstallTest` must stay the only test that includes it.
+- `Fields\FieldBehaviourTest` is the former WP_DEBUG field test page, ported check for check.
+- Locally: PHP needs `mysqli` in the child process that installs WordPress too, so enable it through `php.ini` or
+  `PHP_INI_SCAN_DIR`, not `-d` — the build does the latter when `php.ini` does not load it.
+
+`npm test` runs the JS suite (`tests/js/`, Node's built-in `node:test` + jsdom; dev-only, nothing ships):
+`tests/js/build-fixture.php` first writes what the PHP side hands front.js — `Assets::frontLocalization()`,
+`Assets::frontFieldAssets()` and real `FormRenderer` markup — then each test loads the real `assets/js/front.js` into
+a fresh jsdom page. Also a release gate in `build.ps1` and a CI job.
+
+- `Assets::frontFieldAssets()` is the one assembly of the per-field JS; production and the
+  JS test fixture both call it. Don't rebuild the globals elsewhere.
+- `condition-parity.test.js` checks front.js's condition logic against `FormProcessor::evalConditionRule()` on every
+  case the fixture lists. A change to either side must keep them agreeing; add new edge values to the fixture.
+- jsdom lacks `CSS.escape()`; `support/page.js` supplies the spec algorithm only when it is missing. Browser APIs
+  jsdom does not have (canvas drawing, layout) are out of reach here and belong to the E2E tier.
+- A bug fix that TESTING.md lists as a manual regression check gets a test that reproduces it instead, where the
+  bug can be reproduced without a browser.
+- TESTING.md holds only what needs a person. When a test takes over an item, remove it there and add the test to
+  its "What is automated" table; keep an item's manual remainder (the part no test reaches) rather than dropping
+  the whole item. Section numbers stay fixed — tests cite them.
+
 ### JS Assets
 
 Static files in `assets/js/` served directly — no build step unless explicitly added.
@@ -111,7 +163,9 @@ So, in `PdfUtils` and the verifier:
   later offset too — latch it and stop rather than searching again.
 - Before claiming a scan is fixed, measure it: feed it the pathological shapes (many objects with no
   streams, many tiny streams, a file of bare `stream` keywords, no `endstream` at all) and assert
-  both wall time and peak memory. `scratchpad/streams_test.php` and `objects_test.php` do this.
+  both wall time and peak memory. `tests/Perf/PdfScanPerfTest.php` does this — add the new shape there, and
+  check it fails against the unfixed code (time is asserted as a growth exponent, so it needs a shape where the
+  quadratic version really is quadratic; see `tests/Support/Measure.php`).
 
 The tools for this, in `PdfUtils`:
 

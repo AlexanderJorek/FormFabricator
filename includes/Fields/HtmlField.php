@@ -260,16 +260,19 @@ class HtmlField extends BaseField
                 // The unquoted branch runs to the closing parenthesis and no sooner — excluding "(" there let
                 // url(http://host/x(y) match nothing at all, so it passed through untouched and mPDF fetched it.
                 // The parenthesis itself is optional so an unterminated url( is read and refused as well: every
-                // url( in the declaration has to come back out either checked or replaced.
+                // url( in the declaration has to come back out either checked or replaced. A quote that does not
+                // open the URL belongs to it, so the unquoted branch runs through it: stopping there left the rest
+                // of the URL behind as stray text after "none".
                 $style = preg_replace_callback(
-                    '/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^"\')]*))\s*\)?/i',
+                    '/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)]*))\s*\)?/i',
                     static function ($um) use ($is_allowed) {
                         $url = ($um[1] ?? '') . ($um[2] ?? '') . ($um[3] ?? '');
                         return $is_allowed($url) ? $um[0] : 'none';
                     },
                     $m[2]
                 );
-                return ' style=' . $m[1] . $style . $m[1];
+                // The match starts at "style", so the whitespace before it is still in place.
+                return 'style=' . $m[1] . $style . $m[1];
             },
             $html
         );

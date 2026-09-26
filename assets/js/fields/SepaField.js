@@ -1,6 +1,6 @@
 function (root) {
     // Single source of truth is PHP SepaField::IBAN_LEN, localized into window.FabricatorForms.ibanLen
-    // (see Utils/Assets.php, Admin/FormEditor.php, Admin/FieldTestPage.php) — no separate copy here.
+    // (see Utils/Assets.php, Admin/FormEditor.php) — no separate copy here.
     var IBAN_LEN = (window.FabricatorForms && window.FabricatorForms.ibanLen) || {};
     function ibanTemplate(cc) {
         var len = IBAN_LEN[cc];
