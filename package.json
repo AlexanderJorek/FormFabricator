@@ -10,6 +10,7 @@
     "test": "php tests/js/build-fixture.php && node --test \"tests/js/**/*.test.js\""
   },
   "devDependencies": {
+    "altcha": "3.3.0",
     "jsdom": "^29.1.1"
   }
 }

@@ -2,7 +2,7 @@
 <!--
     Test suites, cheapest first:
       unit         : pure PHP plus Brain Monkey stubs; no WordPress, no database.
-      perf         : the pathological-PDF shapes from CLAUDE.md ("Scanning untrusted PDF bytes"): scaling and peak memory.
+      perf         : the pathological-PDF shapes from CONTRIBUTING.md ("Scanning untrusted PDF bytes"): scaling and peak memory.
       integration  : real WordPress + MySQL (wp-phpunit); runs in CI, see .github/workflows/tests.yml.
     Run: composer test  (the unit and perf suites)
 -->

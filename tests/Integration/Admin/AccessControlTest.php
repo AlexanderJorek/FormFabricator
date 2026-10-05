@@ -54,6 +54,36 @@ final class AccessControlTest extends TestCase
         }
     }
 
+    public function testAUserAllowedOnlyTheVerifierStillGetsTheMenu(): void
+    {
+        // The top-level menu was registered for view_forms only, so this user's verifier page had no menu entry at all.
+        // Registered, WordPress points the menu at the first page the user may open (wp-admin/includes/menu.php).
+        $GLOBALS['menu']    = [];
+        $GLOBALS['submenu'] = [];
+        $editor = self::factory()->user->create(['role' => 'editor']);
+        update_option('fabricator_forms_access', ['roles' => ['editor' => ['use_verifier' => true]]]);
+        wp_set_current_user($editor);
+        set_current_screen('dashboard');
+
+        Admin\FormList::menu();
+        Admin\Verificationpage::menu();
+
+        self::assertContains('fabricator-forms', array_column($GLOBALS['menu'], 2), 'the top-level menu is registered');
+        $subs = array_column($GLOBALS['submenu']['fabricator-forms'] ?? [], 1);
+        self::assertContains(Plugin::ACCESS_CAP_PREFIX . 'use_verifier', $subs, 'with the verifier page this user may open');
+    }
+
+    public function testCreatingFormsIsAnsweredForTheUserAskedAbout(): void
+    {
+        // map_meta_cap passes the user being checked; the filter used the current user instead.
+        $editor = self::factory()->user->create(['role' => 'editor']);
+        update_option('fabricator_forms_access', ['roles' => ['editor' => ['edit_forms' => true]]]);
+        wp_set_current_user(self::factory()->user->create(['role' => 'subscriber']));
+
+        self::assertTrue(user_can($editor, 'create_fabricator_forms'));
+        self::assertFalse(current_user_can('create_fabricator_forms'));
+    }
+
     public function testASubscriberHoldsNoAccessCapability(): void
     {
         $subscriber = self::factory()->user->create(['role' => 'subscriber']);

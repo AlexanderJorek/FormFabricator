@@ -4,7 +4,7 @@ namespace FabricatorForms\Tests\Support;
 
 /**
  * Just enough $wpdb for OptionMutex: its lock is an "INSERT IGNORE" row in the options table, broken when stale by a
- * "DELETE … CAST(option_value AS UNSIGNED) < now", and released by a plain "DELETE". Any other query fails the test,
+ * "DELETE … CAST(option_value AS UNSIGNED) < now", and released by a "DELETE" of its own value. Any other query fails the test,
  * so a helper that starts issuing new SQL shows up here instead of silently passing.
  */
 final class FakeWpdb
@@ -51,10 +51,12 @@ final class FakeWpdb
             }
             return $this->rows_affected = $stale ? 1 : 0;
         }
-        if ($query === 'DELETE FROM wp_options WHERE option_name = %s') {
-            $existed = array_key_exists($name, $this->wp->options);
-            unset($this->wp->options[$name]);
-            return $this->rows_affected = $existed ? 1 : 0;
+        if ($query === 'DELETE FROM wp_options WHERE option_name = %s AND option_value = %s') {
+            $owned = array_key_exists($name, $this->wp->options) && unserialize($this->wp->options[$name]) === (string) $args[1];
+            if ($owned) {
+                unset($this->wp->options[$name]);
+            }
+            return $this->rows_affected = $owned ? 1 : 0;
         }
         throw new \LogicException('FakeWpdb: unexpected query ' . $query);
     }

@@ -12,7 +12,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 /**
  * Email routing rules: "is empty" judges the submitted value (not the "[No entry]" display text), "greater"/"less" read
  * the number out of a formatted amount, text comparisons ignore case, and option labels are found inside groups.
- * (TESTING.md §3, routing rules — 1.0.7.)
+ * (TESTING.md §3, routing rules.)
  */
 final class RoutingRulesTest extends TestCase
 {
@@ -72,6 +72,25 @@ final class RoutingRulesTest extends TestCase
     public function testRuleMatches(string $display, string $operator, string $value, mixed $raw, bool $expected): void
     {
         self::assertSame($expected, Reflect::call(MailSender::class, 'ruleMatches', $display, $operator, $value, $raw));
+    }
+
+    public function testAMultiChoiceAnswerEqualsEachOptionChosen(): void
+    {
+        // Compared as the joined text "Eins, Zwei", a rule for "eins" stopped matching once a second box was ticked.
+        $match = static fn(string $op, string $option): bool => Reflect::call(
+            MailSender::class,
+            'ruleMatches',
+            'Eins, Zwei',
+            $op,
+            ucfirst($option),
+            ['eins', 'zwei', '__other_text__' => 'eins'],
+            $option
+        );
+        self::assertTrue($match('equals', 'eins'));
+        self::assertTrue($match('equals', 'zwei'));
+        self::assertFalse($match('equals', 'drei'));
+        self::assertTrue($match('not_equals', 'drei'));
+        self::assertFalse($match('not_equals', 'zwei'));
     }
 
     public function testWithoutASubmittedValueTheDisplayTextDecides(): void

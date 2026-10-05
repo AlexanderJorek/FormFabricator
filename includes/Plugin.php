@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -22,6 +22,19 @@
 namespace FabricatorForms;
 
 defined('ABSPATH') || exit;
+
+/**
+ * A visitor's file name as a log line may record it: a short hash and the extension, never the name, which often holds a
+ * person's name (GDPR Art. 5(1)(c)). The hash still lets an admin match two lines about the same file.
+ *
+ * @param string $name File name as uploaded.
+ * @return string E.g. "file #3f9a1c2e.pdf".
+ */
+function fabricator_log_file(string $name): string
+{
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    return 'file #' . substr(hash('sha256', $name), 0, 8) . (preg_match('/^[a-z0-9]{1,10}$/', $ext) === 1 ? '.' . $ext : '');
+}
 
 /**
  * Logs a debug message when WP_DEBUG is enabled.
@@ -53,9 +66,8 @@ class Plugin
         'fabricator_verifier_sweep_tmp_dirs',
     ];
 
-    /* Scheduled on demand as single events, not via CRON_HOOKS/scheduleSweeps(); still cleared on deactivation/deletion since they can be left pending. */
+    /* Single events scheduled on demand; cleared on deactivation and deletion too. */
     public const ONE_OFF_CRON_HOOKS = [
-        'fabricator_verifier_cleanup_files',
         'fabricator_verifier_sweep_expired', // Utils\VerifierCleanup::HOOK
         'fabricator_uploads_probe_run',
     ];
@@ -77,70 +89,15 @@ class Plugin
     }
 
     /**
-     * Requires all plugin PHP files; loads admin files when in admin context.
+     * Loads the field classes FieldRegistry::FIELD_MAP lists, so that registerDefaults() finds them among the declared
+     * classes. Every other class is autoloaded when it is first used.
      *
      * @return void
      */
     private static function load(): void
     {
-        // Filter glob() results against FieldRegistry::FIELD_MAP; glob() alone isn't a trust boundary.
-        // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded literal path, not attacker- or request-influenced.
-        include_once FABRICATOR_FORMS_PATH . 'includes/Fields/FieldRegistry.php';
-        // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded literal path, not attacker- or request-influenced.
-        include_once FABRICATOR_FORMS_PATH . 'includes/Fields/BaseField.php';
-        $knownFieldClasses = array_flip(array_keys(\FabricatorForms\Fields\FieldRegistry::FIELD_MAP));
-        $fieldFiles = [];
-        foreach (glob(FABRICATOR_FORMS_PATH . 'includes/Fields/*Field.php') ?: [] as $path) {
-            $basename = basename($path, '.php');
-            if (isset($knownFieldClasses[$basename])) {
-                $fieldFiles[] = 'Fields/' . $basename . '.php';
-            }
-        }
-
-        $files = array_merge($fieldFiles, [
-            'Form/FormModel.php',
-            'Form/FormSelectModel.php',
-            'Admin/FormSelectList.php',
-            'Form/FormProcessor.php',
-            'Form/FormRenderer.php',
-            'PDF/HashSeal.php',
-            'PDF/PdfUtils.php',
-            'PDF/PdfDescriptor.php',
-            'PDF/Generator.php',
-            'Form/MailSender.php',
-            'Utils/Assets.php',
-            'Utils/ClientIp.php',
-            'Utils/RateLimiter.php',
-            'Utils/SingleUseToken.php',
-            'Utils/ConcurrencySlot.php',
-            'Utils/MemoryBudget.php',
-            'Utils/AdminLock.php',
-            'Utils/Cast.php',
-            'Utils/HtmlSanitizer.php',
-            'Utils/OptionMutex.php',
-            'Utils/AjaxGuard.php',
-            'Utils/SecureDir.php',
-            'Utils/VerifierCleanup.php',
-        ]);
-
-        foreach ($files as $file) {
-            // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file comes from the hardcoded $files array above, not user input.
-            include_once FABRICATOR_FORMS_PATH . 'includes/' . $file;
-        }
-
-        if (is_admin()) {
-            $adminFiles = [
-                'Admin/FormList.php', 'Admin/FormEditor.php', 'Admin/FormSettings.php',
-                'Admin/PDFLayoutEditor.php', 'Admin/Verificationpage.php',
-            ];
-            foreach ($adminFiles as $file) {
-                // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- $file comes from the hardcoded $adminFiles array above, not user input.
-                include_once FABRICATOR_FORMS_PATH . 'includes/' . $file;
-            }
-        } elseif (wp_doing_cron()) {
-            // wp-cron.php isn't an admin request, so Verificationpage (holding the verifier's cron callbacks) must be loaded explicitly here.
-            // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded path, not request-influenced.
-            include_once FABRICATOR_FORMS_PATH . 'includes/Admin/Verificationpage.php';
+        foreach (array_keys(Fields\FieldRegistry::FIELD_MAP) as $shortName) {
+            class_exists(__NAMESPACE__ . '\\Fields\\' . $shortName);
         }
     }
 
@@ -179,6 +136,12 @@ class Plugin
     public static function maybeWarnUnprotectedUploads(): void
     {
         if (!current_user_can('manage_options')) {
+            return;
+        }
+        // On this plugin's own screens and the Plugins list only: shown on every admin screen and back every 30 days, it
+        // read as the kind of nag WordPress.org's guideline 11 asks plugins not to put up.
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen || (!str_contains((string) $screen->id, 'fabricator') && $screen->base !== 'plugins')) {
             return;
         }
         // Stored as an expiry timestamp, so the dismissal lapses rather than silencing the
@@ -253,8 +216,8 @@ class Plugin
     /**
      * Whether the PDF folder can be downloaded from, as last probed: 'exposed', 'protected', or '' when unknown.
      *
-     * An uncached answer is never probed inline, which held the admin page for up to five seconds: the probe is queued
-     * as a one-off cron event (runUploadsProbe()), and until it has answered, the caller falls back to the server check.
+     * Never probed inline: the probe is a one-off cron event (runUploadsProbe()), and until it answers the caller falls
+     * back to the server check.
      *
      * @return string
      */
@@ -314,9 +277,7 @@ class Plugin
                 if ($code === 200 && trim((string) wp_remote_retrieve_body($response)) === $token) {
                     $result = 'exposed';
                 } elseif ($code === 403) {
-                    // Only a refusal of this very file counts as protected (the deny rules this plugin writes and suggests
-                    // all answer 403). A WAF or CDN challenge, basic auth, a 404 from another vhost or a 5xx says nothing
-                    // about the folder, and caching one of those as "protected" hid the warning for a day.
+                    // Only a 403 for this file counts as protected; any other status says nothing about the folder.
                     $result = 'protected';
                 }
             }
@@ -377,9 +338,15 @@ class Plugin
         if ($problem === '') {
             return;
         }
-        $fix = $problem === 'undecryptable'
-            ? __('The PDF seal key cannot be decrypted. Check FABRICATOR_SEAL_MASTER_KEY in wp-config.php, or rotate the PDF key.', 'formfabricator')
-            : __('The PDF seal key is missing or damaged. Rotate the PDF key to create a new one.', 'formfabricator');
+        if ($problem === 'wrong-master-key') {
+            $fix = __('FABRICATOR_SEAL_MASTER_KEY in wp-config.php does not open your PDF seal keys. Put the right master key back: rotating the PDF key now would leave the current key unreadable for good.', 'formfabricator');
+        } elseif ($problem === 'undecryptable') {
+            $fix = __('The PDF seal key cannot be decrypted. Check FABRICATOR_SEAL_MASTER_KEY in wp-config.php, or rotate the PDF key.', 'formfabricator');
+        } elseif ($problem === 'retired') {
+            $fix = __('The PDF seal key is one that was already retired: its record was restored from an older copy of the database. Rotate the PDF key to create a new one.', 'formfabricator');
+        } else {
+            $fix = __('The PDF seal key is missing or damaged. Rotate the PDF key to create a new one.', 'formfabricator');
+        }
 
         echo '<div class="notice notice-error"><p><strong>'
             . esc_html__('FormFabricator: forms that attach a sealed PDF cannot be submitted.', 'formfabricator')
@@ -406,6 +373,37 @@ class Plugin
     }
 
     /**
+     * When the last inline sweep ran (sweepIfDue()), as a Unix time.
+     *
+     * @var string
+     */
+    public const LAST_INLINE_SWEEP_OPTION = 'fabricator_last_inline_sweep';
+
+    /**
+     * Runs the rate-limit, single-use, concurrency-slot and temp-file sweeps from the request that writes those rows,
+     * at most once an hour.
+     *
+     * WP-Cron may never run (WP-Cron off, a network site nobody administers), yet the privacy text promises these rows
+     * and files don't stay. The submission handler calls this after writing its rows.
+     *
+     * @return void
+     */
+    public static function sweepIfDue(): void
+    {
+        $last = (int) get_option(self::LAST_INLINE_SWEEP_OPTION, 0);
+        if (time() - $last < HOUR_IN_SECONDS) {
+            return;
+        }
+        // Claimed before the work, so requests arriving together do not all sweep.
+        update_option(self::LAST_INLINE_SWEEP_OPTION, time(), false);
+        Utils\RateLimiter::cronSweepExpired();
+        Utils\SingleUseToken::cronSweepExpired();
+        Utils\ConcurrencySlot::cronSweepExpired();
+        // Only files older than an hour, so a submission still being sent keeps its own.
+        PDF\Generator::cronSweepTmpDirs();
+    }
+
+    /**
      * Registers all WordPress actions, filters, and shortcodes.
      *
      * @return void
@@ -414,7 +412,7 @@ class Plugin
     {
         /* Register CPT */
         add_action('init', [self::class, 'registerCpt']);
-        add_filter('map_meta_cap', [self::class, 'mapCreateFormCap'], 10, 2);
+        add_filter('map_meta_cap', [self::class, 'mapCreateFormCap'], 10, 3);
         add_filter('is_protected_meta', [self::class, 'protectFormMeta'], 10, 3);
         add_filter('user_has_cap', [self::class, 'grantAccessCaps'], 10, 4);
 
@@ -433,6 +431,10 @@ class Plugin
         add_action('wp_ajax_fabricator_forms_get_token', [self::class, 'ajaxGetToken']);
         add_action('wp_ajax_nopriv_fabricator_forms_get_token', [self::class, 'ajaxGetToken']);
 
+        /* A proof-of-work challenge for an ALTCHA CAPTCHA field, fetched by its widget (GET). */
+        add_action('wp_ajax_fabricator_altcha_challenge', [Utils\Altcha::class, 'ajaxChallenge']);
+        add_action('wp_ajax_nopriv_fabricator_altcha_challenge', [Utils\Altcha::class, 'ajaxChallenge']);
+
         /* PDF mail hook */
         Form\MailSender::init();
         add_action(
@@ -442,10 +444,10 @@ class Plugin
             4
         );
 
-        // Safety net for temp PDFs left when a request dies before its own SL_*.pdf/Entry_*.pdf cleanup runs; registered unconditionally since generation also happens on public/cron requests.
+        // Temp PDFs a dead request left behind; registered everywhere, as PDFs are made on public requests too.
         add_action('fabricator_generator_sweep_tmp_dirs', [PDF\Generator::class, 'cronSweepTmpDirs']);
 
-        // Sweeps expired rate-limit rows; without this every IP+form bucket leaves a permanent wp_options row (GDPR storage-limitation — the key embeds a hashed IP).
+        // Expired rate-limit rows, keyed on hashed IPs (GDPR storage limitation).
         add_action('fabricator_rl_sweep_expired', [Utils\RateLimiter::class, 'cronSweepExpired']);
 
         /* Sweeps expired fabricator_su_* single-use-claim rows — same rationale as the sweep above. */
@@ -462,11 +464,6 @@ class Plugin
         add_action('init', [Utils\VerifierCleanup::class, 'maybeSweep']);
         add_action(Utils\VerifierCleanup::HOOK, [Utils\VerifierCleanup::class, 'sweep']);
         add_action('fabricator_verifier_sweep_tmp_dirs', [Utils\VerifierCleanup::class, 'sweep']);
-
-        // Registered here, not in Verificationpage::register(), since that runs only under is_admin() (false in wp-cron.php); guarded since the class loads only for admin/cron requests.
-        if (class_exists(Admin\Verificationpage::class)) {
-            add_action('fabricator_verifier_cleanup_files', [Admin\Verificationpage::class, 'cronCleanupFiles']);
-        }
 
         /* Remove deleted forms from all FormSelect lists */
         add_action('before_delete_post', [Form\FormSelectModel::class, 'removeFormId'], 10, 1);
@@ -500,10 +497,8 @@ class Plugin
     /**
      * Mints a fresh nonce/token pair. Writes nothing and is not rate-limited, by design.
      *
-     * It used to count requests per address and form in the options table. Anyone controlling many addresses could then
-     * make it write rows far faster than the hourly sweep removed them — the very growth SingleUseToken::issue() is kept
-     * stateless to prevent. The pair it hands out sends nothing by itself: FormProcessor::handle() checks both and only
-     * then applies its own per-address limit, so the limit that matters sits behind two credentials.
+     * A per-address count here would write rows faster than the sweep removes them. The pair sends nothing by itself:
+     * FormProcessor::handle() checks both before its own per-address limit.
      *
      * @return void
      */
@@ -519,30 +514,30 @@ class Plugin
         wp_send_json_success(
             [
             'nonce' => wp_create_nonce('fabricator_forms_submit_' . $form_id),
-            /* Replay-protection token, separate from the nonce above (which collides across anonymous
-               visitors). Signed and bound to this form and its issue time, so FormProcessor::handle()
-               accepts only tokens this endpoint issued. See Utils/SingleUseToken.php. */
+            /* Replay protection (the nonce is shared by anonymous visitors), signed and bound to this form. */
             'token' => Utils\SingleUseToken::issue($form_id),
             ]
         );
     }
 
     /**
-     * Locales available for the privacy-policy text: 'en' plus every locale with a shipped .mo file.
+     * Locales available for the privacy-policy text: 'en', plus every locale with both a plugin translation in
+     * WordPress's language folder and the core locale installed (switch_to_locale() refuses others).
      *
      * @return array<string,string> Locale code => human-readable language name.
      */
     public static function availablePrivacyLanguages(): array
     {
-        $langs = ['en' => 'English'];
-        // WP_LANG_DIR/plugins is where WP.org language packs install (the only one populated in production); the bundled path covers dev checkouts.
+        $langs     = ['en' => 'English'];
+        $installed = function_exists('get_available_languages') ? get_available_languages() : [];
+        // WP_LANG_DIR/plugins is where WP.org language packs install.
         $dirs = [
             rtrim((string) WP_LANG_DIR, '/\\') . '/plugins',
-            rtrim(FABRICATOR_FORMS_PATH, '/\\') . '/languages',
         ];
         foreach ($dirs as $dir) {
             foreach (glob($dir . '/formfabricator-*.mo') ?: [] as $path) {
-                if (preg_match('/^formfabricator-([A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?)\.mo$/', basename($path), $m)) {
+                $is_plugin_mo = preg_match('/^formfabricator-([A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?)\.mo$/', basename($path), $m) === 1;
+                if ($is_plugin_mo && in_array($m[1], $installed, true)) {
                     $langs[$m[1]] = self::localeDisplayName($m[1]);
                 }
             }
@@ -571,7 +566,7 @@ class Plugin
      */
     private static function privacyPolicyParagraphs(): array
     {
-        return [
+        $paragraphs = [
             __('Contact forms', 'formfabricator') . "\n" . __(
                 // phpcs:ignore Generic.Files.LineLength -- must be a single string literal for WordPress i18n tooling to extract it correctly, see WordPress.WP.I18n.NonSingularStringLiteralText
                 "When you submit a form on this website, your entries are not stored in the website's database. They are processed only while your submission is being handled and are then sent by email, possibly together with a generated PDF document, to the recipients chosen by the website operator. While this happens, uploaded files and the PDF document are written to temporary files on the server, which are deleted once the emails have been sent. To limit spam and abuse, a one-way hash of your IP address is kept for a short time to count how often a form is submitted, and is then deleted automatically. If the website operator checks a PDF document with the plugin's verification tool, the uploaded copy is deleted from the server right after the check, or about 10 minutes after its last use if the check is not completed.",
@@ -583,6 +578,11 @@ class Plugin
                 'formfabricator'
             ),
         ];
+        // Only a site that uses reCAPTCHA sends anything to Google: without a site key, no CAPTCHA can load.
+        if (trim((string) get_option('fabricator_forms_recaptcha_site_key', '')) === '') {
+            array_pop($paragraphs);
+        }
+        return $paragraphs;
     }
 
     /**
@@ -595,16 +595,28 @@ class Plugin
         if (!function_exists('wp_add_privacy_policy_content')) {
             return;
         }
+        wp_add_privacy_policy_content('FormFabricator', self::privacyPolicyHtml());
+    }
+
+    /**
+     * The suggested privacy-policy text as the Privacy Policy Guide shows and copies it.
+     *
+     * @return string
+     */
+    private static function privacyPolicyHtml(): string
+    {
         $html = '';
         foreach (self::privacyPolicyParagraphs() as $paragraph) {
             // Each paragraph is "Heading\nBody" — render the heading as a sub-heading.
             $parts   = explode("\n", $paragraph, 2);
             $heading = $parts[0];
             $body    = $parts[1] ?? '';
+            // A plain paragraph: WordPress's "Copy suggested policy text" leaves out anything marked
+            // "privacy-policy-tutorial" (it is guidance for the site owner), which left only the two headings.
             $html   .= '<h3>' . esc_html($heading) . '</h3>'
-                . '<p class="privacy-policy-tutorial">' . esc_html($body) . '</p>';
+                . '<p>' . esc_html($body) . '</p>';
         }
-        wp_add_privacy_policy_content('FormFabricator', $html);
+        return $html;
     }
 
     /**
@@ -672,10 +684,8 @@ class Plugin
             'show_in_menu'        => false,
             'show_in_rest'        => false,
             'supports'            => ['title'],
-            // Own capability type, not 'post': with 'post', any core Editor passed edit_post/delete_post on these
-            // forms and could read, rewrite or delete them over XML-RPC, bypassing fabricator_forms_access. Nobody
-            // holds the *_fabricator_forms primitives, so core's post APIs refuse every user; the plugin's own
-            // screens gate on Plugin::userCan() and write via wp_insert_post()/wp_delete_post(), which check none.
+            // Own capability type, which nobody holds, so core's post APIs (XML-RPC) refuse everyone; the plugin's
+            // screens gate on Plugin::userCan() instead.
             'capability_type'     => ['fabricator_form', 'fabricator_forms'],
             // create_posts uses a custom cap so it can be granted to users with the
             // plugin's own 'edit_forms' permission, not just WP admins (see mapCreateFormCap())
@@ -691,20 +701,19 @@ class Plugin
      *
      * @param string[] $caps    Required primitive capabilities.
      * @param string   $cap     Requested meta capability.
+     * @param int      $user_id The user being asked about: not always the current one (user_can($other, …)).
      * @return string[]
      */
-    public static function mapCreateFormCap(array $caps, string $cap): array
+    public static function mapCreateFormCap(array $caps, string $cap, int $user_id = 0): array
     {
         if ($cap === 'create_fabricator_forms') {
-            return self::userCan('edit_forms') ? ['exist'] : ['do_not_allow'];
+            return self::userCan('edit_forms', $user_id) ? ['exist'] : ['do_not_allow'];
         }
         return $caps;
     }
 
     /**
-     * Marks the form-definition meta keys protected, so core's custom-field APIs (XML-RPC custom_fields,
-     * the classic Custom Fields box) neither list nor accept them. A filter rather than renaming the keys
-     * to "_"-prefixed ones, which would need a migration of every stored form.
+     * Marks the form-definition meta keys protected, so core's custom-field APIs neither list nor accept them.
      *
      * @param bool   $protected Core's verdict.
      * @param string $meta_key  Meta key being checked.
@@ -727,9 +736,8 @@ class Plugin
     public const ACCESS_CAP_PREFIX = 'fabricator_access_';
 
     /**
-     * Grants "fabricator_access_<cap>" exactly when userCan(<cap>) allows it, so the admin screens can be registered with
-     * a capability WordPress enforces itself. They used 'read', which every Subscriber has, leaving each page callback's
-     * own userCan() check as the only barrier.
+     * Grants "fabricator_access_<cap>" exactly when userCan(<cap>) allows it, so WordPress itself enforces the admin
+     * screens' capability.
      *
      * @param array $allcaps Capabilities the user has.
      * @param array $caps    Primitive capabilities being checked.
@@ -806,8 +814,9 @@ class Plugin
         }
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing decision (which admin page to redirect to); gated by manage_options above, no data written.
         $current_page = sanitize_text_field(wp_unslash($_GET['page'] ?? ''));
-        // Only redirect within FormFabricator pages, not the whole WP admin.
-        if (strncmp($current_page, 'fabricator-forms', 16) !== 0) {
+        // Only redirect within FormFabricator pages, not the whole WP admin. The verifier's slug has another prefix; before
+        // setup it has no key to check a PDF against, so every PDF would come back unknown.
+        if (strncmp($current_page, 'fabricator-forms', 16) !== 0 && $current_page !== 'fabricator-pdf-verification') {
             return;
         }
         if ($current_page === 'fabricator-forms-settings') {

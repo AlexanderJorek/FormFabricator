@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -32,13 +32,14 @@ abstract class BaseField
     // request, even though multiple fields/requests call getStyles()/getClientInit() etc.
     private static array $assetCache = [];
 
-    // Reads a field's own JS/CSS asset file instead of embedding it as a PHP string (WordPress.org prohibits HEREDOC/NOWDOC — see CLAUDE.md).
+    // Reads a field's own JS/CSS asset file instead of embedding it as a PHP string: WordPress.org rejects plugins
+    // that use HEREDOC/NOWDOC, whose contents its sniffers can't check for escaping.
     protected static function readFieldAsset(string $relativePath): string
     {
         if (!isset(self::$assetCache[$relativePath])) {
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site, never request input.
             $path = \FABRICATOR_FORMS_PATH . $relativePath;
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file read, not a remote URL; wp_remote_get() would be wrong here. Not a deferred WP_Filesystem migration.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file read, not a remote URL; wp_remote_get() would be wrong here.
             $contents = is_readable($path) ? file_get_contents($path) : false;
             self::$assetCache[$relativePath] = $contents !== false ? rtrim($contents, "\r\n") : '';
         }
@@ -159,9 +160,63 @@ abstract class BaseField
     }
 
     /**
-     * Full signature check for validate(): the data-URI prefix, then the same decode and PNG/JPEG magic-byte test
-     * materializeSignature() applies. A bare "data:image/" used to pass the prefix check, and materializeSignature()
-     * then dropped it, so a required signature went out as "[No entry]".
+     * Whether a submitted signature is a typed name rather than a drawing (an image data URI); both arrive in the pad's
+     * one hidden input. Every pad offers typing for anyone who can't draw (WCAG 2.1.1 Keyboard).
+     *
+     * @param mixed $value Submitted signature value.
+     * @return bool
+     */
+    protected static function isTypedSignature(mixed $value): bool
+    {
+        return is_string($value) && trim($value) !== '' && !str_starts_with($value, 'data:');
+    }
+
+    /**
+     * A typed signature as the mail, the PDF and the seal record it: the name, marked as typed.
+     *
+     * @param string $name The name as typed.
+     * @return string
+     */
+    protected static function typedSignatureRecord(string $name): string
+    {
+        // translators: %s: the name the visitor typed as their signature.
+        return sprintf(__('%s (signed by typing the name)', 'formfabricator'), trim($name));
+    }
+
+    /**
+     * The button in a signature pad's toolbar that switches between drawing and typing the name (SignatureField.js).
+     *
+     * @param string $type_label Its text while the pad draws.
+     * @param string $draw_label Its text while the name is typed.
+     * @return string
+     */
+    protected static function signatureModeButton(string $type_label, string $draw_label): string
+    {
+        return '<button type="button" class="fabricator-signature-mode" aria-pressed="false"'
+            . ' data-type-label="' . esc_attr($type_label) . '" data-draw-label="' . esc_attr($draw_label) . '">'
+            . esc_html($type_label) . '</button>';
+    }
+
+    /**
+     * The name input a signature pad shows in place of the drawing area. Unnamed: SignatureField.js copies it into the
+     * pad's hidden input.
+     *
+     * @param string $input_id    Id of the input.
+     * @param string $input_label Its label.
+     * @return string
+     */
+    protected static function typedSignatureInput(string $input_id, string $input_label): string
+    {
+        return '<div class="fabricator-signature-typed-row" hidden>'
+            . '<label class="fabricator-label" for="' . esc_attr($input_id) . '">' . esc_html($input_label) . '</label>'
+            . '<input type="text" id="' . esc_attr($input_id) . '" class="fabricator-input fabricator-signature-typed"'
+            . ' autocomplete="name" maxlength="200">'
+            . '</div>';
+    }
+
+    /**
+     * Full signature check for validate(): the same decode and magic-byte test materializeSignature() applies, so
+     * whatever passes is kept rather than sent out as "[No entry]".
      *
      * @param string $value           Submitted data URI.
      * @param string $expected_format 'png' or 'jpeg' to require that type, '' for either.
@@ -176,8 +231,22 @@ abstract class BaseField
         if ($file === []) {
             return false;
         }
-        return $expected_format === '' || $file[0]['mime'] === 'image/' . $expected_format;
+        if ($expected_format !== '' && $file[0]['mime'] !== 'image/' . $expected_format) {
+            return false;
+        }
+        // Its declared size too: a signature is decoded outside the upload budget. A real pad's canvas stays far below
+        // this and fits the base reservation (MemoryBudget::estimateBytes()).
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the image materializeSignature() just encoded. Not obfuscation.
+        $binary = (string) base64_decode($file[0]['base64'], true);
+        $size   = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => getimagesizefromstring($binary));
+        return is_array($size)
+            && \FabricatorForms\PDF\PdfUtils::precheckDimensions($binary)
+            && (int) $size[0] * (int) $size[1] <= self::SIGNATURE_MAX_PIXELS;
     }
+
+    // The largest signature image accepted, in pixels: well above any signature pad's canvas (8000 × 1000 at a pixel
+    // ratio of 4), and about 32 MB to decode.
+    private const SIGNATURE_MAX_PIXELS = 8000000;
 
     /**
      * Returns the shared client-side validation rule enforcing the "Other" text
@@ -240,6 +309,56 @@ abstract class BaseField
     }
 
     /**
+     * The value show/hide rules (and routing rules) read for this field, from what extractValue() returned.
+     *
+     * Must equal what front.js's getFieldValue() reads from the markup: the value itself for inputs named "id" or
+     * "id[]"; joinedSubValues() for "id[key]" inputs.
+     *
+     * @param mixed $raw    What extractValue() returned.
+     * @param array $config Field configuration.
+     * @return mixed
+     */
+    public function conditionValue(mixed $raw, array $config): mixed
+    {
+        return $raw;
+    }
+
+    /**
+     * front.js's reading of a field's "id[key]" inputs: the non-empty values of $keys, trimmed, in this order (the order
+     * the field renders them), joined by one space. Keys starting with "_" are internal and never read.
+     *
+     * @param mixed    $raw  Sub-values by key, as extractValue() returned them.
+     * @param string[] $keys The keys the field renders inputs for, in render order.
+     * @return string
+     */
+    protected static function joinedSubValues(mixed $raw, array $keys): string
+    {
+        if (!is_array($raw)) {
+            return '';
+        }
+        $parts = [];
+        foreach ($keys as $key) {
+            $value = is_scalar($raw[$key] ?? null) ? trim((string) $raw[$key]) : '';
+            if ($value !== '' && !str_starts_with((string) $key, '_')) {
+                $parts[] = $value;
+            }
+        }
+        return implode(' ', $parts);
+    }
+
+    /**
+     * The value a rule on this field reads while the field is hidden by its own or a group's conditions.
+     *
+     * As front.js reads it: [] for fields that render checkboxes under their own id, '' otherwise.
+     *
+     * @return array|string
+     */
+    public function hiddenConditionValue(): array|string
+    {
+        return '';
+    }
+
+    /**
      * Whether this field is a group container whose children render inline (only GroupField returns true).
      *
      * @return bool
@@ -278,16 +397,6 @@ abstract class BaseField
      * @return bool
      */
     public function needsMultipartEncoding(): bool
-    {
-        return false;
-    }
-
-    /**
-     * Must re-read request itself, not just set enctype — else a mapper could bypass validate() via raw data like $_FILES.
-     *
-     * @return bool
-     */
-    public function extractionReadsRequest(): bool
     {
         return false;
     }
@@ -338,7 +447,7 @@ abstract class BaseField
     }
 
     /**
-     * Whether the "Pflichtfeld" (required) checkbox is shown in the settings panel.
+     * Whether the "Required" checkbox is shown in the settings panel.
      *
      * @return bool
      */
@@ -352,7 +461,7 @@ abstract class BaseField
      *
      * @param array  $config   Field configuration from form definition.
      * @param string $field_id Element ID (e.g. "field-3").
-     * @param mixed  $value    Pre-filled value (for re-displaying on error).
+     * @param mixed  $value    Pre-filled value; the form renderer passes none.
      */
     abstract public function render(array $config, string $field_id, mixed $value = null): string;
 
@@ -393,8 +502,7 @@ abstract class BaseField
         return true;
     }
 
-    // Maps the value to a human-readable string for PDF/email; may return an
-    // array with 'value'/'files' keys for upload/signature fields.
+    // Maps the value to a human-readable string for PDF/email; files go through mapNormalized().
     public function map(mixed $value, array $config): string
     {
         if ($this->isEmpty($value)) {
@@ -421,7 +529,7 @@ abstract class BaseField
      * Returns the client-side initialisation script for this field type.
      *
      * Return a JS function string: function(root) { ... }
-     * Collected by Assets::enqueueFront() into window.FabricatorFieldInits.
+     * Collected by Assets::frontFieldAssets() into window.FabricatorFieldInits.
      *
      * @return string
      */
@@ -457,9 +565,7 @@ abstract class BaseField
     /**
      * Whether this field renders one control that carries $field_id, so the label can point at it with for="".
      *
-     * False for a field that renders a set of controls instead — checkboxes, radios, a star rating, or the name and
-     * address fields once their sub-fields are switched on. wrap() then names the whole set rather than emitting a
-     * label pointing at an element that does not exist.
+     * False for a set of controls (checkboxes, radios, stars, sub-fields); wrap() then names the whole set.
      *
      * @param array $config Field configuration, since some fields render either way depending on it.
      * @return bool
@@ -473,8 +579,7 @@ abstract class BaseField
     /**
      * Whether validate() should run only after every other field has passed.
      *
-     * Set true where validating costs something that can't be taken back — a reCAPTCHA token is single-use, so
-     * spending it on a submission that fails elsewhere made every retry fail the CAPTCHA as well.
+     * True where validating can't be undone, such as spending a single-use CAPTCHA token.
      *
      * @return bool
      */
@@ -533,13 +638,13 @@ abstract class BaseField
         return $this->baseGeneralEntries();
     }
 
-    // Keys rendered as plain text (esc_html()); anything else goes through Utils\HtmlSanitizer::sanitize(), which double-encodes "&" if the renderer also uses esc_html(). Extend via plainTextConfigKeys(), not this constant.
+    // Keys rendered as plain text; anything else is HTML (Utils\HtmlSanitizer::sanitize()). Extend via plainTextConfigKeys().
     private const PLAIN_TEXT_CONFIG_KEYS = [
         'label', 'placeholder', 'description', 'custom_class', 'autocomplete', 'validation',
     ];
 
     /**
-     * Config keys this field treats as plain text (sanitize_text_field()) rather than HTML (Utils\HtmlSanitizer::sanitize()); override to add field-specific label-like keys.
+     * Config keys this field treats as plain text rather than HTML; override to add label-like keys.
      *
      * @return string[]
      */
@@ -549,7 +654,7 @@ abstract class BaseField
     }
 
     /**
-     * Public counterpart to plainTextConfigKeys(); FormEditor needs this for ARRAY-valued config, which bypasses sanitizeConfigValue()'s string path.
+     * Public counterpart to plainTextConfigKeys(), for FormEditor's array-valued config.
      *
      * @param string $key Config key to test.
      * @return bool
@@ -559,9 +664,7 @@ abstract class BaseField
         return in_array($key, $this->plainTextConfigKeys(), true);
     }
 
-    // Sanitizes a single string config value; override plainTextConfigKeys() to extend the plain-text allowlist.
-    // Every HTML-capable value follows one shared rule set (Utils\HtmlSanitizer), so no field's text accepts different
-    // markup from another's; until 1.0.7 only the HTML block used it and every other field used wp_kses_post().
+    // Sanitizes a single string config value. Every HTML value follows one rule set (Utils\HtmlSanitizer).
     public function sanitizeConfigValue(string $key, string $value): string
     {
         if (in_array($key, $this->plainTextConfigKeys(), true)) {
@@ -600,7 +703,7 @@ abstract class BaseField
     }
 
     /**
-     * Maps the field's submitted value to normalized output entries; override for multi-entry fields (SEPA).
+     * Maps the field's submitted value to normalized output entries; override for multi-entry fields (Direct Debit Mandate).
      *
      * @param string $field_id Field identifier.
      * @param string $label    Field label.
@@ -700,9 +803,7 @@ abstract class BaseField
         $req_class   = $required ? ' fabricator-required-field' : '';
         $desc_html   = $description !== '' ? '<p class="fabricator-field-description">' . $description . '</p>' : '';
 
-        // A field that renders several controls (a set of checkboxes, radios, stars, or sub-inputs) has no element
-        // carrying $field_id, so <label for> pointed at nothing: the question text was an orphan and the set of
-        // controls had no name. Those fields name the group instead, through a plain element and aria-labelledby.
+        // A set of controls has no element carrying $field_id for <label for>; it is named via aria-labelledby instead.
         $owns_control = $this->labelsOwnControl($config);
         $label_id     = $field_id . '-label';
         $group_attr   = '';
@@ -718,7 +819,7 @@ abstract class BaseField
         }
 
         $client_rules  = $this->getClientValidation();
-        $validate_attr = !empty($client_rules) ? ' data-validate="' . esc_attr(wp_json_encode(array_column($client_rules, 'rule'))) . '"' : '';
+        $validate_attr = !empty($client_rules) ? ' data-validate="' . esc_attr(\FabricatorForms\Utils\Cast::jsonForAttribute(array_column($client_rules, 'rule'))) . '"' : '';
 
         // Builder-configured "CSS class(es)" (Appearance section) — admin-supplied, sanitize_text_field()'d
         // at save time; esc_attr() below is what actually makes embedding it here safe.
@@ -758,7 +859,7 @@ abstract class BaseField
         );
 
         if (!empty($config['required'])) {
-            $attrs['required'] = 'required';
+            $attrs['required'] = true;
             $attrs['aria-required'] = 'true';
         }
 
@@ -774,7 +875,9 @@ abstract class BaseField
 
         $html = '';
         foreach ($attrs as $k => $v) {
-            if ($v === true || $v === $k) {
+            // Only true is a bare attribute. "value equals name" was one too, so a placeholder of "placeholder" (or a
+            // value of "value") rendered without its text.
+            if ($v === true) {
                 $html .= ' ' . esc_attr($k);
             } elseif ($v !== '' && $v !== false) {
                 $html .= ' ' . esc_attr($k) . '="' . esc_attr($v) . '"';

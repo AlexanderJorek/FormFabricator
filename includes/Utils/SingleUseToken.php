@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -46,8 +46,7 @@ class SingleUseToken
     /**
      * Mints a submission token bound to $form_id and its issue time: "<uuid>.<issued>.<hmac>".
      *
-     * Stateless on purpose. Issuing writes nothing, so the token endpoint cannot be used to grow the
-     * options table; only a token that passes verifyIssued() and full validation is ever claimed.
+     * Stateless, so the token endpoint can't grow the options table; only a validated submission claims one.
      *
      * @param int $form_id Form the token is valid for.
      * @return string Token for the fabricator_submission_token field.

@@ -1,7 +1,11 @@
 function (root) {
-    // Single source of truth is PHP SepaField::IBAN_LEN, localized into window.FabricatorForms.ibanLen
+    // Single source of truth is PHP DirectDebitField::IBAN_LEN, localized into window.FabricatorForms.ibanLen
     // (see Utils/Assets.php, Admin/FormEditor.php) — no separate copy here.
     var IBAN_LEN = (window.FabricatorForms && window.FabricatorForms.ibanLen) || {};
+    // DirectDebitField::SEPA_COUNTRIES: an IBAN from outside SEPA is refused whatever the field's own filter says.
+    var SEPA_COUNTRIES = (window.FabricatorForms && window.FabricatorForms.sepaCountries) || [];
+    // DirectDebitField::SEPA_NON_EEA: an IBAN from these needs a BIC, so the BIC's required mark shows for them.
+    var SEPA_NON_EEA = (window.FabricatorForms && window.FabricatorForms.sepaNonEea) || [];
     function ibanTemplate(cc) {
         var len = IBAN_LEN[cc];
         if (!len) return cc + '__ …';
@@ -14,7 +18,7 @@ function (root) {
         }
         return out;
     }
-    root.querySelectorAll('.fabricator-sepa-iban').forEach(function (input) {
+    root.querySelectorAll('.fabricator-debit-iban').forEach(function (input) {
         if (input._fabricatorIbanInited) return;
         input._fabricatorIbanInited = true;
         var filterMode  = input.dataset.countryFilter || 'off';
@@ -25,6 +29,7 @@ function (root) {
         var lastValidCc = IBAN_LEN[defaultCc] ? defaultCc : 'DE';
         input.placeholder = ibanTemplate(lastValidCc);
         function countryAllowed(cc) {
+            if (SEPA_COUNTRIES.indexOf(cc) === -1) return false;
             if (filterMode === 'off' || !filterList.length) return true;
             var inList = filterList.indexOf(cc) !== -1;
             if (filterMode === 'allow')    return inList;
@@ -34,8 +39,10 @@ function (root) {
         var noticeEl = input.parentNode.querySelector('.fabricator-field-hint');
         function showError(msg)       { if (errorEl)  errorEl.textContent  = msg; }
         function showIbanNotice(msg)  { if (noticeEl) noticeEl.textContent = msg; }
-        // Mirrors PHP SepaField::ibanChecksumValid().
+        // Mirrors PHP DirectDebitField::ibanChecksumValid(): check digits 02-98 (ISO 13616), then mod-97.
         function ibanChecksumValid(iban) {
+            var checkDigits = parseInt(iban.substring(2, 4), 10);
+            if (!(checkDigits >= 2 && checkDigits <= 98)) return false;
             var rearranged = iban.substring(4) + iban.substring(0, 4);
             var numeric = '';
             for (var i = 0; i < rearranged.length; i++) {
@@ -49,6 +56,19 @@ function (root) {
             return remainder === 1;
         }
         function getRaw() { return input.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase(); }
+        // The BIC is required exactly when the server will ask for it (DirectDebitField::validate()): for an IBAN
+        // from a SEPA country outside the EEA. Its mark is rendered only on a required mandate.
+        var mandate = input.closest('.fabricator-field--directdebit');
+        var bicMark = mandate && mandate.querySelector('.fabricator-debit-bic-mark');
+        var bicIn   = mandate && mandate.querySelector('.fabricator-debit-bic');
+        function markBic() {
+            var needed = SEPA_NON_EEA.indexOf(getRaw().substring(0, 2)) !== -1;
+            if (!bicMark) return; // an optional mandate: nothing is marked required
+            bicMark.style.display = needed ? '' : 'none';
+            if (bicIn) bicIn.setAttribute('aria-required', needed ? 'true' : 'false');
+        }
+        markBic();
+        input.addEventListener('input', markBic);
         input.addEventListener('input', function () {
             input._fabricatorIbanValid   = false;
             input._fabricatorIbanInvalid = false;
@@ -56,7 +76,7 @@ function (root) {
             var cc  = raw.substring(0, 2);
             if (cc.length === 2 && IBAN_LEN[cc]) {
                 if (countryAllowed(cc)) { lastValidCc = cc; showError(''); showIbanNotice(''); }
-                else { var _i18nCb = window.FabricatorForms && window.FabricatorForms.i18n; showError((_i18nCb && _i18nCb.sepa_country_blocked) || 'This country is not allowed.'); }
+                else { var _i18nCb = window.FabricatorForms && window.FabricatorForms.i18n; showError((_i18nCb && _i18nCb.debit_country_blocked) || 'This country is not allowed.'); }
             } else { showError(''); showIbanNotice(''); }
             this.placeholder = ibanTemplate(lastValidCc);
             var maxLen = IBAN_LEN[cc] || 34;
@@ -77,7 +97,7 @@ function (root) {
                     input._fabricatorIbanValid   = false;
                     input._fabricatorIbanInvalid = true;
                     var _i18nCk = window.FabricatorForms && window.FabricatorForms.i18n;
-                    showError((_i18nCk && _i18nCk.sepa_iban_invalid) || 'Invalid IBAN (check digit incorrect).');
+                    showError((_i18nCk && _i18nCk.debit_iban_invalid) || 'Invalid IBAN (check digit incorrect).');
                 }
             }
         });
@@ -92,16 +112,28 @@ function (root) {
             }
         });
     });
-    root.querySelectorAll('.fabricator-sepa-bic').forEach(function (input) {
+    root.querySelectorAll('.fabricator-debit-bic').forEach(function (input) {
         if (input._fabricatorBicInited) return;
         input._fabricatorBicInited = true;
         input.addEventListener('input', function () {
             this.value = this.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 11);
         });
     });
-    // Self-contained so SepaField has no dependency on SignatureField; sets data-fabricator-file-count for front.js's total file count.
-    var sepaSigSel = '.fabricator-sepa-mandate .fabricator-signature-wrap';
-    root.querySelectorAll(sepaSigSel).forEach(function (wrap) {
+    // Digits only, cut to the input's maxlength; a sort code reads as 12-34-56 while typing.
+    root.querySelectorAll('.fabricator-debit-sort-code, .fabricator-debit-routing, .fabricator-debit-account').forEach(function (input) {
+        if (input._fabricatorDigitsInited) return;
+        input._fabricatorDigitsInited = true;
+        var sortCode = input.classList.contains('fabricator-debit-sort-code');
+        var max      = sortCode ? 6 : (parseInt(input.getAttribute('maxlength'), 10) || 17);
+        input.addEventListener('input', function () {
+            var digits = this.value.replace(/\D/g, '').slice(0, max);
+            this.value = sortCode ? digits.replace(/(\d{2})(?=\d)/g, '$1-') : digits;
+        });
+    });
+    // Self-contained so DirectDebitField has no dependency on SignatureField. Clearing the pad also resets
+    // data-fabricator-file-count to 0; nothing here counts the signature as a file.
+    var sigSel = '.fabricator-debit-mandate .fabricator-signature-wrap';
+    root.querySelectorAll(sigSel).forEach(function (wrap) {
         if (wrap._fabricatorCanvasInited) return;
         wrap._fabricatorCanvasInited = true;
         var canvas   = wrap.querySelector('.fabricator-signature-canvas');
@@ -121,9 +153,7 @@ function (root) {
             var fallH = parseFloat(canvas.getAttribute('height') || '160');
             var cssH  = rect.height || canvas.offsetHeight || fallH;
             if (!cssW || !cssH) return;
-            /* Resizing a canvas clears it, while the hidden input still holds the signature: without redrawing, a mobile
-               address bar collapsing or a rotation showed an empty pad yet submitted the old signature. Snapshot and
-               redraw, as SignatureField.js does. */
+            /* Resizing clears the canvas but not the hidden input, so redraw, as SignatureField.js does. */
             var snap = lastW ? canvas.toDataURL() : null;
             lastW = cssW;
             canvas.width  = Math.round(cssW * ratio);

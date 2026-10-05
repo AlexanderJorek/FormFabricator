@@ -25,4 +25,11 @@ tests_add_filter('muplugins_loaded', static function () use ($fabricator_root): 
     require $fabricator_root . '/formfabricator.php';
 });
 
+// Builtins the plugin calls unqualified that no real request can satisfy in a test (is_uploaded_file()); see the file.
+require dirname(__DIR__) . '/Support/namespace-overrides.php';
+
 require $fabricator_tests_dir . '/includes/bootstrap.php';
+
+// A test that runs in its own process (one defining FABRICATOR_SEAL_MASTER_KEY, which no later test may see) boots
+// this file again; the parent installed the test site already, and installing again would drop its tables mid-run.
+putenv('WP_TESTS_SKIP_INSTALL=1');

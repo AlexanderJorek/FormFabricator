@@ -8,9 +8,8 @@ use FabricatorForms\Fields\FieldRegistry;
 /**
  * The WordPress functions a field's render()/sanitize path calls, for rendering fields without WordPress.
  *
- * The escaping stubs take string parameters on purpose: like the real ones under PHP 8, they throw a TypeError when a
- * config value arrives as an array — the failure the import tests exist to catch. Visitor state is "logged out, no
- * capabilities, no options set", so every field renders its public form.
+ * The escaping stubs take strings, so an array config value throws a TypeError as with the real ones. The visitor is
+ * logged out, with no options set.
  */
 final class FieldStubs
 {
@@ -44,6 +43,7 @@ final class FieldStubs
         Functions\when('home_url')->alias(static fn($p = '') => 'https://example.test' . $p);
         Functions\when('site_url')->alias(static fn($p = '') => 'https://example.test' . $p);
         Functions\when('admin_url')->alias(static fn($p = '') => 'https://example.test/wp-admin/' . $p);
+        Functions\when('wp_enqueue_script_module')->justReturn(null);
         Functions\when('wp_parse_url')->alias(static fn($u, $c = -1) => parse_url((string) $u, $c));
         Functions\when('apply_filters')->returnArg(2);
         Functions\when('absint')->alias(static fn($v) => abs((int) $v));

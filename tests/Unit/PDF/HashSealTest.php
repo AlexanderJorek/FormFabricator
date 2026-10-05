@@ -10,8 +10,7 @@ use FabricatorForms\Tests\Support\TestCase;
  * HashSeal's key handling fails closed: nothing mints a key behind the admin's back, a damaged or unreadable key is
  * never silently replaced, and every retired key keeps verifying the PDFs it signed.
  *
- * Encryption with FABRICATOR_SEAL_MASTER_KEY defined is in HashSealMasterKeyTest, which runs in its own process
- * because a PHP constant cannot be undefined again.
+ * Encryption under FABRICATOR_SEAL_MASTER_KEY is in HashSealMasterKeyTest, in its own process.
  */
 final class HashSealTest extends TestCase
 {
@@ -159,6 +158,20 @@ final class HashSealTest extends TestCase
         self::assertSame([], get_option(self::HISTORY, []), 'nothing retired');
     }
 
+    public function testALegacyImportRefusesWhileARotationHoldsTheLock(): void
+    {
+        HashSeal::createInitialKey();
+        $this->wp->capabilities = ['manage_options' => true];
+        $this->wp->options['fabricator_lock_opt_' . self::HISTORY] = serialize((string) (time() + 60));
+
+        self::assertThrows(static fn() => HashSeal::addLegacyKey('12345678-1234-1234-1234-123456789abc', str_repeat('a', 64), '', 'rotated-legacy', true));
+        self::assertSame([], get_option(self::HISTORY, []), 'nothing written while the rotation runs');
+
+        unset($this->wp->options['fabricator_lock_opt_' . self::HISTORY]);
+        HashSeal::addLegacyKey('12345678-1234-1234-1234-123456789abc', str_repeat('a', 64), '', 'rotated-legacy', true);
+        self::assertCount(1, get_option(self::HISTORY, []), 'imported once the lock is free');
+    }
+
     public function testChoosingEncryptionWithoutTheMasterKeyRefusesToWriteAKey(): void
     {
         HashSeal::createInitialKey();
@@ -197,11 +210,11 @@ final class HashSealTest extends TestCase
     /**
      * The "enc::" format HashSeal writes: AES-256-GCM, base64(iv . tag . ciphertext).
      */
-    public static function encryptWith(string $hex_master, string $plain): string
+    public static function encryptWith(string $hex_master, string $plain, string $aad = ''): string
     {
         $iv  = random_bytes(12);
         $tag = '';
-        $ct  = openssl_encrypt($plain, 'aes-256-gcm', (string) hex2bin($hex_master), OPENSSL_RAW_DATA, $iv, $tag);
+        $ct  = openssl_encrypt($plain, 'aes-256-gcm', (string) hex2bin($hex_master), OPENSSL_RAW_DATA, $iv, $tag, $aad);
         return 'enc::' . base64_encode($iv . $tag . $ct);
     }
 

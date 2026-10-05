@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -31,12 +31,23 @@ use FabricatorForms\Fields\FieldRegistry;
  */
 class FormProcessor
 {
-    // Set only by handle() once wp_verify_nonce() succeeds; a structural guard against field extraction without a verified nonce.
+    // Passes after which condition rules that never settle stop; front.js (initConditions) stops after the same number.
+    public const MAX_CONDITION_PASSES = 64;
+
+    // Sends allowed per visitor address in 5 minutes: to one form, and to all of the site's forms together.
+    private const SENDS_PER_FORM = 10;
+    private const SENDS_PER_SITE = 50;
+    // Sends allowed per IPv6 /48 in 5 minutes, across all forms: generous for one network, and a bound on its rows.
+    private const SENDS_PER_PREFIX48 = 200;
+
+    // The submit button's place in the hidden set of resolveVisibility(); no field id can contain a NUL byte.
+    private const SUBMIT_KEY = "\0submit";
+
+    // Set only by handle() once wp_verify_nonce() succeeds, so no field extracts input without a verified nonce.
     private static bool $nonceVerified = false;
 
     /**
-     * Whether the current request's nonce has been verified by handle(). Read by
-     * BaseField::assertRequestNonceVerified() before any field extracts $_POST/$_FILES data.
+     * Whether handle() has verified the current request's nonce (BaseField::assertRequestNonceVerified()).
      *
      * @return bool
      */
@@ -64,30 +75,12 @@ class FormProcessor
         self::$nonceVerified = true;
 
         /* ---- Replay-protection token ---- */
-        // Not keyed on $nonce (shared across visitors per ~12h tick). Issued per submit by Plugin::ajaxGetToken() and
-        // signed there, so a client can't mint its own and every unclaimed token expires with ISSUED_MAX_AGE.
+        // Not the nonce, which visitors share. Issued and signed per submit by Plugin::ajaxGetToken().
         $submission_token = sanitize_text_field(wp_unslash($_POST['fabricator_submission_token'] ?? ''));
         if ($submission_token === '' || !\FabricatorForms\Utils\SingleUseToken::verifyIssued($submission_token, $form_id)) {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
         }
         $claim_key = 'submit_' . md5($submission_token . '_' . $form_id);
-
-        /* ---- Rate limit (per IP + form) to prevent replay/abuse ---- */
-        $retry_after = self::rateLimitRetryAfter($form_id);
-        if ($retry_after !== null) {
-            $message = $retry_after > 60
-                ? sprintf(
-                    /* translators: %d: number of minutes until the visitor can submit again */
-                    __('Too many submissions. Please try again in %d minutes.', 'formfabricator'),
-                    (int) ceil($retry_after / 60)
-                )
-                : sprintf(
-                    /* translators: %d: number of seconds until the visitor can submit again */
-                    __('Too many submissions. Please try again in %d seconds.', 'formfabricator'),
-                    max(1, $retry_after)
-                );
-            wp_send_json_error(['message' => $message, 'retry_after' => $retry_after], 429);
-        }
 
         /* ---- Load form ---- */
         $form = FormModel::get($form_id);
@@ -96,8 +89,8 @@ class FormProcessor
         }
 
         /* ---- Somewhere to send it ---- */
-        // With every notification missing or disabled, the data (consent, signature, IBAN) went nowhere while the visitor was
-        // told it had been sent. A site that handles submissions itself on fabricator_forms_submission can allow it.
+        // Without an enabled notification the data would go nowhere while the visitor is told it was sent. A site that
+        // handles fabricator_forms_submission itself can allow it.
         if (!MailSender::hasEnabledNotification($form->notifications ?? [])
             && !apply_filters('fabricator_forms_accept_without_notifications', false, $form_id)
         ) {
@@ -117,9 +110,32 @@ class FormProcessor
             wp_send_json_success(['message' => $hp_msg]);
         }
 
+        /* ---- Rate limit (per IP + form) to prevent replay/abuse ---- */
+        // After the checks that write nothing, so every row written here is at least a real attempt.
+        $retry_after = self::rateLimitRetryAfter($form_id);
+        if ($retry_after !== null) {
+            $message = $retry_after > 60
+                ? sprintf(
+                    /* translators: %d: number of minutes until the visitor can submit again */
+                    __('Too many submissions. Please try again in %d minutes.', 'formfabricator'),
+                    (int) ceil($retry_after / 60)
+                )
+                : sprintf(
+                    /* translators: %d: number of seconds until the visitor can submit again */
+                    __('Too many submissions. Please try again in %d seconds.', 'formfabricator'),
+                    max(1, $retry_after)
+                );
+            wp_send_json_error(['message' => $message, 'retry_after' => $retry_after], 429);
+        }
+        // The rows just written expire even where no scheduled sweep ever runs (no admin visits, WP-Cron off).
+        \FabricatorForms\Plugin::sweepIfDue();
+
         /* ---- Pass 1: extract all values (no validation yet) ---- */
         // Two passes: Pass 2's conditional-visibility rules can reference any other field's value, including later ones.
         $raw = [];
+        // What rules read, by field id (BaseField::conditionValue()), as front.js reads it. Group children are keyed
+        // by their own ids.
+        $flat = [];
 
         foreach ($form->fields as $field_cfg) {
             $field_id   = $field_cfg['id'] ?? '';
@@ -135,9 +151,8 @@ class FormProcessor
             }
 
             if ($handler->isGroupContainer()) {
-                // A group renders its children as ordinary top-level inputs, so their values are read flat, as one copy.
-                // Nothing in the renderer or front.js posts group[n][child] copies; accepting them let a crafted POST send
-                // up to 100 copies per group, re-validating the same upload for each and unslashing every value twice.
+                // A group's children render as top-level inputs, so they are read flat, as one copy; nothing posts
+                // group[n][child] copies, and accepting them would multiply the validation work.
                 $flat_copy = [];
                 foreach (($field_cfg['children'] ?? []) as $child_cfg) {
                     $child_id   = $child_cfg['id']   ?? '';
@@ -150,42 +165,29 @@ class FormProcessor
                         continue;
                     }
                     $flat_copy[$child_id] = $ch->extractValue($child_id);
+                    $flat[$child_id]      = $ch->conditionValue($flat_copy[$child_id], $child_cfg);
                 }
                 $raw[$field_id] = $flat_copy;
                 continue;
             }
 
-            $raw[$field_id] = $handler->extractValue($field_id);
+            $raw[$field_id]  = $handler->extractValue($field_id);
+            $flat[$field_id] = $handler->conditionValue($raw[$field_id], $field_cfg);
         }
 
-        /* ---- Build flat value map for condition evaluation ---- */
-        // A group's value is its children's values keyed by child id; they join the map as top-level entries, which is how
-        // the renderer names them. Group ids are tracked so a field that legitimately returns an array isn't spread out.
-        $group_ids = [];
-        foreach ($form->fields as $fc) {
-            $h = FieldRegistry::get($fc['type'] ?? '');
-            if ($h && $h->isGroupContainer()) {
-                $group_ids[$fc['id'] ?? ''] = true;
-            }
-        }
+        /* ---- Visibility, decided as front.js decides it ---- */
+        // From here on a hidden field reads as empty in $flat, so validation, the submit button and routing all see the
+        // form the visitor saw.
+        $submit_conditions = (array) ($form->settings['submit_conditions'] ?? []);
+        [$hidden_set, $flat] = self::resolveVisibility($form->fields, $flat, $submit_conditions);
 
-        $flat = [];
-        foreach ($raw as $fid => $val) {
-            if (isset($group_ids[$fid]) && is_array($val)) {
-                foreach ($val as $cid => $cv) {
-                    $flat[$cid] = $cv;
-                }
-            } else {
-                $flat[$fid] = $val;
-            }
-        }
+        // Bidi controls go before anything checks or prints the answers, as they can reorder typed text into a marker
+        // (PdfUtils::stripBidiControls()). $flat keeps them, so the conditions agree with front.js.
+        $raw = self::withoutBidiControls($raw);
 
         /* ---- Submit-button conditions ---- */
         // The button is only hidden in the browser, which stops nobody from posting, so the same rules decide here.
-        $submit_conditions = (array) ($form->settings['submit_conditions'] ?? []);
-        $submit_blocked    = !empty($submit_conditions['rules'])
-            && self::isHiddenByConditions(['conditions' => ['action' => 'show'] + $submit_conditions], $flat);
-        if ($submit_blocked) {
+        if (isset($hidden_set[self::SUBMIT_KEY])) {
             wp_send_json_error(
                 ['message' => __('This form cannot be submitted with the answers given.', 'formfabricator')],
                 422
@@ -194,8 +196,7 @@ class FormProcessor
 
         /* ---- Pass 2: validate visible fields only ---- */
         $errors = [];
-        // Checks that reach outside this request run only once every other field is correct: the CAPTCHA token is
-        // single-use, and spending it on a submission that fails another field made every retry fail the CAPTCHA too.
+        // Checks that reach outside this request (the single-use CAPTCHA token) run only once every other field is valid.
         $deferred = [];
 
         foreach ($form->fields as $field_cfg) {
@@ -212,7 +213,7 @@ class FormProcessor
             }
 
             /* A hidden field (or group, with all its children) is neither validated nor required-checked, whatever its type. */
-            if (self::isHiddenByConditions($field_cfg, $flat)) {
+            if (isset($hidden_set[$field_id])) {
                 continue;
             }
 
@@ -229,17 +230,19 @@ class FormProcessor
                         continue;
                     }
 
-                    /* Skip child if hidden by its own conditions, subject to the same opt-out. */
-                    if (self::isHiddenByConditions($child_cfg, $flat)) {
+                    /* Skip child if hidden by its own conditions. */
+                    if (isset($hidden_set[$child_id])) {
                         continue;
                     }
 
                     // Errors are keyed by the child's own id, which is what front.js looks up.
                     $val = $group_raw[$child_id] ?? '';
                     if (!empty($child_cfg['required']) && $val === '') {
-                        // Not esc_html()'d: front.js only shows it via .textContent, so escaping here would double-encode into literal entities.
+                        // Not escaped: front.js shows it via .textContent.
                         // translators: %s: field label.
                         $errors[$child_id] = sprintf(__('%s is a required field.', 'formfabricator'), $child_cfg['label'] ?? $child_id);
+                    } elseif (($reserved = self::reservedMarkerError($val)) !== null) {
+                        $errors[$child_id] = $reserved;
                     } else {
                         $child_cfg['field_id'] = $child_id;
                         if ($ch->defersValidation()) {
@@ -257,6 +260,10 @@ class FormProcessor
 
             $value             = $raw[$field_id] ?? '';
             $field_cfg['field_id'] = $field_id;
+            if (($reserved = self::reservedMarkerError($value)) !== null) {
+                $errors[$field_id] = $reserved;
+                continue;
+            }
             if ($handler->defersValidation()) {
                 $deferred[$field_id] = [$handler, $value, $field_cfg];
                 continue;
@@ -283,12 +290,14 @@ class FormProcessor
             wp_send_json_error(['message' => __('Please correct the highlighted fields.', 'formfabricator'), 'errors' => $errors], 422);
         }
 
-        // Reserve memory sized to this upload's payload before the token claim, so a rejected visitor can retry instead of being locked out.
-        // Only uploads this submission processes count: a hidden field's upload is skipped, and a $_FILES entry no field
-        // declares is never read, so neither may claim the memory budget that other submissions share.
-        $hidden_ids   = self::collectHiddenIds($form->fields, $flat);
+        // Memory is reserved before the token claim, so a rejected visitor can retry. Only uploads this submission
+        // processes count: not a hidden field's, nor a $_FILES entry no field declares.
+        unset($hidden_set[self::SUBMIT_KEY]);
+        $hidden_ids   = array_map('strval', array_keys($hidden_set));
         $uploads      = self::uploadEntries($form->fields, $hidden_ids);
-        $mem_estimate = \FabricatorForms\Utils\MemoryBudget::estimateBytes(self::uploadPayloadBytes($uploads));
+        // Text counts too: mPDF lays out every answer (see MemoryBudget::TEXT_FACTOR); a signature's data URI is image data.
+        [$text_bytes, $image_bytes] = self::answerPayloadBytes(array_diff_key($raw, array_flip($hidden_ids)));
+        $mem_estimate = \FabricatorForms\Utils\MemoryBudget::estimateBytes(self::uploadPayloadBytes($uploads) + $image_bytes, $text_bytes);
         if ($mem_estimate > \FabricatorForms\Utils\MemoryBudget::budgetBytes()) {
             // Waiting can't help a submission larger than the whole budget, so say what the visitor can change instead.
             \FabricatorForms\fabricator_log(
@@ -303,19 +312,18 @@ class FormProcessor
             wp_send_json_error(['message' => self::uploadsTooLargeMessage()], 413);
         }
 
-        // Images are decoded only into a PDF, so without one they cost no more than their files. With one, every image
-        // has to go into it: one the PDF step can't decode is refused, so the visitor can send a smaller one.
+        // Images are decoded only into a PDF. With one, an image it can't decode is refused, so the visitor can send a
+        // smaller one.
         $images        = [];
         $largest_image = 0;
         if (MailSender::attachesPdf($form_id, $form->notifications ?? [])) {
             $images      = self::uploadedImages($uploads);
-            $size_errors = self::imageSizeErrors($images, self::imagePixelLimit(), $mem_estimate, self::uploadPayloadBytes($uploads));
+            $size_errors = self::imageSizeErrors($images, \FabricatorForms\PDF\PdfUtils::imagePixelLimit(), $mem_estimate, self::uploadPayloadBytes($uploads));
             if ($size_errors !== []) {
                 wp_send_json_error(['message' => __('Please correct the highlighted fields.', 'formfabricator'), 'errors' => $size_errors], 422);
             }
-            // mPDF decodes one image at a time and keeps only its compressed data, so the largest image is what it costs.
             $largest_image = $images === [] ? 0 : max(array_column($images, 'pixels'));
-            $mem_estimate  = self::estimateWithImage($mem_estimate, $largest_image);
+            $mem_estimate  = self::estimateWithImage($mem_estimate, max($largest_image, self::largestLayoutImage()));
         }
 
         $mem_token    = \FabricatorForms\Utils\MemoryBudget::reserve($mem_estimate, 300);
@@ -340,9 +348,7 @@ class FormProcessor
             );
         }
 
-        // Held for the rest of the request; released on shutdown so a fatal mid-render can't leak
-        // the reservation (the row's own TTL is the backstop if even shutdown doesn't run).
-        // estimateWithImage() already covers the limit under which the PDF step decodes the largest image.
+        // Released on shutdown, so a fatal can't leak the reservation (its TTL is the backstop).
         \FabricatorForms\Utils\MemoryBudget::raiseTo($mem_estimate);
         register_shutdown_function(
             static function () use ($mem_token): void {
@@ -364,24 +370,21 @@ class FormProcessor
         }
 
         /* ---- Map to human-readable for PDF/email ---- */
-        /* $hidden_ids, collected before the memory reservation, removes hidden field entries. */
-        // Passed IN rather than unset after: a hidden upload was otherwise read/base64-encoded before validate() ever ran.
+        // $hidden_ids passed in, not unset after, so a hidden upload is never read, unvalidated.
         $mapped     = FieldRegistry::mapSubmission($form->fields, $raw, $_FILES, $hidden_ids);
 
         /* ---- Claim the replay-protection token ---- */
-        // Placed right before the side-effecting action so earlier validation failures can retry without touching the claim table.
+        // Right before the side effects, so an earlier failure can retry.
         if (!\FabricatorForms\Utils\SingleUseToken::claim($claim_key, \FabricatorForms\Utils\SingleUseToken::CLAIM_TTL)) {
             wp_send_json_error(['message' => __('This submission has already been received.', 'formfabricator')], 409);
         }
 
         /* ---- Fire submission hook (PDF generation + mail happens here) ---- */
         MailSender::resetDeliveryOutcome();
-        /* $flat travels along so routing rules can test the submitted value itself, not its display text: an empty
-           field reads "[No entry]", which a visitor can also type, and an amount reads "12,50 EUR". */
+        // $flat lets routing rules test the submitted value, not its display text ("[No entry]", "12,50 EUR").
         do_action('fabricator_forms_submission', $form_id, $mapped, $form, $flat);
 
-        // Nothing is stored locally, so an undelivered submission is a lost one: say so instead of "Thank you", and
-        // release the claim so the retry isn't rejected as a duplicate.
+        // Nothing is stored locally, so an undelivered submission is lost: say so, and release the claim for the retry.
         if (MailSender::deliveryFailed()) {
             \FabricatorForms\Utils\SingleUseToken::release($claim_key);
             wp_send_json_error(
@@ -391,7 +394,7 @@ class FormProcessor
         }
 
         /* ---- Respond ---- */
-        // Not esc_html()'d: front.js inserts this via .textContent only, and double-escaping showed literal HTML entities.
+        // Not escaped: front.js shows it via .textContent.
         $success_msg = $form->settings['success_message'] ?? __('Thank you for your submission!', 'formfabricator');
         wp_send_json_success(['message' => $success_msg]);
     }
@@ -426,8 +429,9 @@ class FormProcessor
             if (!is_string($id) || $id === '' || isset($hidden[$id]) || !$handler || !$handler->needsMultipartEncoding()) {
                 continue;
             }
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- reached only after wp_verify_nonce() succeeded at the top of handle(); only PHP-generated size and tmp-path metadata is read from these entries.
-            if (isset($_FILES[$id]) && is_array($_FILES[$id])) {
+            // Flat entries only, as UploadField reads them: a nested one is never processed, so it claims no budget.
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- reached only after wp_verify_nonce() succeeded at the top of handle(); only PHP-generated size and tmp-path metadata is read from these entries, and isFlatFilesEntry() only inspects their shape.
+            if (isset($_FILES[$id]) && \FabricatorForms\Utils\Cast::isFlatFilesEntry($_FILES[$id])) {
                 // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- see above; $_FILES is never slashed, and nothing here is output or stored.
                 $entries[$id] = $_FILES[$id];
             }
@@ -436,7 +440,36 @@ class FormProcessor
     }
 
     /**
-     * Sums the entries' sizes from $_FILES (immune to client understatement); signature/SEPA data URIs are excluded since post_max_size already bounds those.
+     * The bytes of submitted text and of image data URIs (signatures) in the extracted answers, as [text, image].
+     *
+     * Text counts too: mPDF's layout costs many times its size in memory (MemoryBudget::TEXT_FACTOR).
+     *
+     * @param array $raw Extracted values of the fields that are shown, by field id.
+     * @return array{0: int, 1: int}
+     */
+    private static function answerPayloadBytes(array $raw): array
+    {
+        $text  = 0;
+        $image = 0;
+        array_walk_recursive(
+            $raw,
+            static function ($leaf, $key) use (&$text, &$image): void {
+                // $_FILES shapes (an upload's name, tmp_name, type) are no answer text; the file itself counts as upload.
+                if (!is_string($leaf) || in_array($key, ['tmp_name', 'type', 'error', 'size'], true)) {
+                    return;
+                }
+                if (str_starts_with($leaf, 'data:')) {
+                    $image += strlen($leaf);
+                } else {
+                    $text += strlen($leaf);
+                }
+            }
+        );
+        return [$text, $image];
+    }
+
+    /**
+     * Sums the entries' sizes as PHP measured them, not as the client claims.
      *
      * @param array<string, array> $entries From uploadEntries().
      * @return int Sum of uploaded file sizes in bytes.
@@ -460,8 +493,8 @@ class FormProcessor
     }
 
     /**
-     * The uploaded images among the entries, with the dimensions their headers declare; a few-KB PNG can declare
-     * gigapixel dimensions, so the file size alone says nothing about the memory decoding takes.
+     * The uploaded images among the entries, with the pixel counts their headers declare (file size says nothing
+     * about decoding cost).
      *
      * @param array<string, array> $entries From uploadEntries(); each tmp path is gated by is_uploaded_file() below.
      * @return array<int, array{field: string, name: string, bytes: int, pixels: int}>
@@ -499,9 +532,20 @@ class FormProcessor
     }
 
     /**
-     * The memory a submission needs once the PDF step decodes an image of $pixels: the files plus the decoded image, and
-     * never less than the memory limit under which the PDF step accepts that image (PdfUtils::maxSafePixels() keeps
-     * half of the limit free). The request's memory limit is raised to exactly this, so it stays within its reservation.
+     * The largest of the PDF layout's own images, in pixels; 0 for none. mPDF decodes one image at a time, so the
+     * largest image of a PDF, uploaded or the layout's, is what decoding costs.
+     *
+     * @return int Pixels.
+     */
+    private static function largestLayoutImage(): int
+    {
+        $paths = \FabricatorForms\PDF\PdfUtils::layoutImagePaths((array) get_option('fabricator_forms_pdf_layout', []));
+        return max([0, ...array_map([\FabricatorForms\PDF\PdfUtils::class, 'filePixels'], $paths)]);
+    }
+
+    /**
+     * The memory a submission needs to decode an image of $pixels: the files plus the decoded image, and never less
+     * than the memory limit under which the PDF step accepts that image.
      *
      * @param int $base   The estimate for the uploaded files alone.
      * @param int $pixels The largest image; 0 for none.
@@ -516,36 +560,13 @@ class FormProcessor
     }
 
     /**
-     * The largest image, in pixels, this server takes whatever else is uploaded: within the PDF step's own limit where
-     * the host fixes the memory limit (elsewhere this request raises it), and needing no more memory than the budget
-     * holds next to 1 MB of files. Up to it, an image is refused only for the size of the files beside it.
-     *
-     * @return int Pixels.
-     */
-    private static function imagePixelLimit(): int
-    {
-        $own    = \FabricatorForms\Utils\MemoryBudget::canRaiseLimit()
-            ? \FabricatorForms\PDF\PdfUtils::safePixelsFor(-1)
-            : \FabricatorForms\PDF\PdfUtils::maxSafePixels();
-        $budget = \FabricatorForms\Utils\MemoryBudget::budgetBytes();
-        $files  = \FabricatorForms\Utils\MemoryBudget::estimateBytes(1024 * 1024);
-        return min(
-            $own,
-            intdiv($budget, \FabricatorForms\PDF\PdfUtils::memoryLimitFor(1)),
-            intdiv(max(0, $budget - $files), \FabricatorForms\PDF\PdfUtils::DECODE_BYTES_PER_PIXEL)
-        );
-    }
-
-    /**
      * A message for each upload field holding an image the submission can't take, naming the first such image.
      *
-     * An image above $pixel_limit is too large in itself: the message compares megapixels, the image's rounded up and the
-     * limit's down, so the two never read the same. Any other refused image only lacks room next to the other files:
-     * the message compares megabytes, which is what a visitor can change, and the maximum shown (rounded down) is one at
-     * which this image fits.
+     * An image above $pixel_limit gets a megapixel message; any other refused image lacks room next to the other
+     * files and gets a megabyte one. Rounding keeps the two numbers in each message from reading the same.
      *
      * @param array $images      From uploadedImages().
-     * @param int   $pixel_limit From imagePixelLimit().
+     * @param int   $pixel_limit From PdfUtils::imagePixelLimit().
      * @param int   $base        The estimate for the uploaded files alone.
      * @param int   $total_bytes The uploaded files' total size.
      * @return array<string, string> Field id => message.
@@ -558,7 +579,7 @@ class FormProcessor
             if (isset($errors[$image['field']])) {
                 continue;
             }
-            // Not esc_html()'d: front.js only shows these via .textContent, so escaping here would double-encode into literal entities.
+            // Not escaped: front.js shows these via .textContent.
             if ($image['pixels'] > $pixel_limit) {
                 $errors[$image['field']] = sprintf(
                     // translators: 1: file name, 2: the image's megapixels, 3: its file size in MB, 4: largest accepted image in megapixels.
@@ -595,17 +616,15 @@ class FormProcessor
     }
 
     /**
-     * Answers a request that runs out of memory while handling uploads with uploadsTooLargeMessage(), since the estimate
-     * is only an estimate. Otherwise WordPress answers with its critical-error page, which the form can't show. The
-     * submission's claim is released, so the visitor can send it again with smaller files.
+     * Answers a request that runs out of memory while handling uploads with uploadsTooLargeMessage() instead of
+     * WordPress's critical-error page, and releases the claim so the visitor can retry with smaller files.
      *
      * @param string $claim_key Replay-protection claim of this submission.
      * @return void
      */
     private static function answerMemoryExhaustionAsTooLarge(string $claim_key): void
     {
-        // WordPress's fatal-error handler builds its answer through these two filters, which run only for a fatal
-        // error; its AJAX die handler prints the message unchanged, so the form receives the JSON it reads.
+        // WordPress's fatal-error handler answers through these filters, and its AJAX die handler prints the message as is.
         add_filter(
             'wp_php_error_message',
             static function ($message, $error) use ($claim_key) {
@@ -643,8 +662,8 @@ class FormProcessor
     }
 
     /**
-     * The JSON answer for a memory-exhausted submission, or null for any other error. Releases the claim and leaves the
-     * few allocations still needed some room, since the failed request keeps holding its memory.
+     * The JSON answer for a memory-exhausted submission, or null for any other error. Releases the claim and raises the
+     * limit a little for the allocations still needed.
      *
      * @param mixed  $error     error_get_last() shape.
      * @param string $claim_key Replay-protection claim of this submission.
@@ -674,11 +693,64 @@ class FormProcessor
     }
 
     /**
-     * Checks and increments a per-IP, per-form submission counter to slow down scripted abuse.
+     * $raw with every string in it, nested ones included, passed through PdfUtils::stripBidiControls().
+     *
+     * @param array<string, mixed> $raw What the fields' extractValue() returned, by field id.
+     * @return array<string, mixed>
+     */
+    private static function withoutBidiControls(array $raw): array
+    {
+        array_walk_recursive(
+            $raw,
+            static function (&$leaf): void {
+                if (is_string($leaf)) {
+                    $leaf = \FabricatorForms\PDF\PdfUtils::stripBidiControls($leaf);
+                }
+            }
+        );
+        return $raw;
+    }
+
+    /**
+     * The error for an answer, sub-values included, that holds text the PDF verifier reads as structure
+     * (PdfUtils::reservedMarker()), or null.
+     *
+     * @param mixed $value What the field's extractValue() returned.
+     * @return string|null
+     */
+    private static function reservedMarkerError(mixed $value): ?string
+    {
+        $strings = is_string($value) ? [$value] : [];
+        if (is_array($value)) {
+            array_walk_recursive(
+                $value,
+                static function ($leaf) use (&$strings): void {
+                    if (is_string($leaf)) {
+                        $strings[] = $leaf;
+                    }
+                }
+            );
+        }
+        foreach ($strings as $text) {
+            $marker = \FabricatorForms\PDF\PdfUtils::reservedMarker($text);
+            if ($marker !== null) {
+                // Not escaped: front.js shows it via .textContent.
+                return sprintf(
+                    /* translators: %s: the character sequence that is not allowed, e.g. "---BEGIN-SEAL---". */
+                    __('This answer contains "%s", which the sealed PDF uses for itself. Please remove it.', 'formfabricator'),
+                    $marker
+                );
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Checks and increments the per-address submission counters (per form, and across all forms) to slow down
+     * scripted abuse.
      *
      * @param int $form_id The form being submitted.
-     * @return int|null Seconds until the caller's window resets, or null when the caller is within the
-     *                  allowed rate (not limited).
+     * @return int|null Seconds until the caller's window resets, or null when not limited.
      */
     private static function rateLimitRetryAfter(int $form_id): ?int
     {
@@ -693,14 +765,76 @@ class FormProcessor
             );
             return 5 * MINUTE_IN_SECONDS;
         }
-        // Bucketed (IPv6 /64) so rotating addresses inside one prefix neither escapes the limit nor mints a row per address.
-        $key   = 'submit_' . hash_hmac('sha256', \FabricatorForms\Utils\ClientIp::bucket($ip) . '_' . $form_id, wp_salt('auth'));
-        $count = \FabricatorForms\Utils\RateLimiter::increment($key, 5 * MINUTE_IN_SECONDS);
-        if ($count <= 10) {
-            return null;
+        // Bucketed per IPv6 /64, so rotating addresses within it doesn't escape the limit, and counted per form and
+        // across all forms. The /48 comes first, and once full nothing else is written: a /48 holds 65,536 /64s.
+        $prefix48 = \FabricatorForms\Utils\ClientIp::prefix48($ip);
+        if ($prefix48 !== null) {
+            $key48 = 'submit_48_' . hash_hmac('sha256', $prefix48, wp_salt('auth'));
+            if (\FabricatorForms\Utils\RateLimiter::increment($key48, 5 * MINUTE_IN_SECONDS) > self::SENDS_PER_PREFIX48) {
+                return max(1, \FabricatorForms\Utils\RateLimiter::secondsUntilReset($key48));
+            }
         }
-        // secondsUntilReset() re-reads the row increment() just wrote, so a just-reset window is reflected correctly.
-        return max(1, \FabricatorForms\Utils\RateLimiter::secondsUntilReset($key));
+        $bucket = \FabricatorForms\Utils\ClientIp::bucket($ip);
+        $limits = [
+            'submit_' . hash_hmac('sha256', $bucket . '_' . $form_id, wp_salt('auth')) => self::SENDS_PER_FORM,
+            'submit_all_' . hash_hmac('sha256', $bucket, wp_salt('auth'))             => self::SENDS_PER_SITE,
+        ];
+        $retry = null;
+        foreach ($limits as $key => $limit) {
+            if (\FabricatorForms\Utils\RateLimiter::increment($key, 5 * MINUTE_IN_SECONDS) > $limit) {
+                // secondsUntilReset() re-reads the row just written, so a just-reset window counts.
+                $retry = max($retry ?? 1, \FabricatorForms\Utils\RateLimiter::secondsUntilReset($key));
+            }
+        }
+        return $retry;
+    }
+
+    /**
+     * Decides which fields are hidden exactly as front.js does, and returns the values the rules read with it.
+     *
+     * A rule reads a hidden field as empty (BaseField::hiddenConditionValue()), so hiding one field can change another.
+     * Starting from "all visible", passes repeat until nothing changes, at most MAX_CONDITION_PASSES, as in front.js.
+     *
+     * @param array $fields            Form field configs.
+     * @param array $flat              Flat map of field_id → submitted value.
+     * @param array $submit_conditions The form's submit_conditions setting: shown when its rules match.
+     * @return array{0: array<string, true>, 1: array} The hidden ids (SUBMIT_KEY for a hidden submit button), and
+     *                                                 $flat with hidden fields read as empty.
+     */
+    private static function resolveVisibility(array $fields, array $flat, array $submit_conditions): array
+    {
+        $empty = [];
+        foreach ($fields as $field_cfg) {
+            foreach (array_merge([$field_cfg], (array) ($field_cfg['children'] ?? [])) as $cfg) {
+                $handler = is_array($cfg) ? FieldRegistry::get((string) ($cfg['type'] ?? '')) : null;
+                if ($handler && is_string($cfg['id'] ?? null)) {
+                    $empty[$cfg['id']] = $handler->hiddenConditionValue();
+                }
+            }
+        }
+        $submit = empty($submit_conditions['rules']) ? null : ['conditions' => ['action' => 'show'] + $submit_conditions];
+
+        $hidden = [];
+        $view   = $flat;
+        for ($pass = 0; $pass < self::MAX_CONDITION_PASSES; $pass++) {
+            $next = array_fill_keys(self::collectHiddenIds($fields, $view), true);
+            if ($submit !== null && self::isHiddenByConditions($submit, $view)) {
+                $next[self::SUBMIT_KEY] = true;
+            }
+            $settled = count($next) === count($hidden) && array_diff_key($next, $hidden) === [];
+            $hidden  = $next;
+            if ($settled) {
+                break;
+            }
+            $view = $flat;
+            foreach (array_keys($hidden) as $id) {
+                if (isset($empty[$id])) {
+                    $view[$id] = $empty[$id];
+                }
+            }
+        }
+
+        return [$hidden, $view];
     }
 
     /**
@@ -778,6 +912,24 @@ class FormProcessor
     }
 
     /**
+     * Lowercases as front.js's String.prototype.toLowerCase() does, on every supported PHP version.
+     *
+     * Before PHP 8.3, mb_strtolower() lowercases a word-final "Σ" to "σ" where JavaScript gives "ς".
+     *
+     * @param string $s        Text to lowercase.
+     * @param bool   $emulated Apply the final-sigma rule by hand; tests set it to check the rule on PHP 8.3+.
+     * @return string
+     */
+    private static function lowerLikeJs(string $s, bool $emulated = PHP_VERSION_ID < 80300): string
+    {
+        if ($emulated && str_contains($s, 'Σ')) {
+            // Final_Sigma: after a letter (skipping case-ignorable marks such as the acute accent) and before none.
+            $s = (string) preg_replace('/(?<=\p{L})([\p{Mn}\p{Me}\p{Lm}\p{Sk}\x{0027}\x{2019}]*)Σ(?![\p{Mn}\p{Me}]*\p{L})/u', '$1ς', $s);
+        }
+        return mb_strtolower($s);
+    }
+
+    /**
      * Evaluates one condition rule against the flat value map.
      *
      * @param array $rule Rule: field_id, operator, value.
@@ -787,9 +939,8 @@ class FormProcessor
     {
         $fid   = $rule['field_id'] ?? '';
         $op    = $rule['operator'] ?? 'equals';
-        // mb_strtolower(), not strtolower(): the byte-wise one leaves "A"-with-umlaut alone while front.js lowercases it,
-        // so a field the visitor could see counted as hidden here and was dropped from the email and the PDF.
-        $rv    = mb_strtolower((string)($rule['value'] ?? ''));
+        // Multibyte-aware, as front.js lowercases "Ä" too.
+        $rv    = self::lowerLikeJs((string)($rule['value'] ?? ''));
         $val   = $flat[$fid] ?? '';
         // Strip the "Other" free-text key so it can't accidentally satisfy an equals/contains condition rule.
         if (is_array($val)) {
@@ -798,8 +949,8 @@ class FormProcessor
         $isArr = is_array($val);
         // Coerces to strings first: a crafted nested-array POST (e.g. checkboxfield[0][0]=x) would otherwise TypeError strtolower().
         $scalars = $isArr ? array_map(static fn($v) => is_scalar($v) ? (string)$v : '', $val) : [];
-        $str     = $isArr ? mb_strtolower(implode(',', $scalars)) : mb_strtolower((string)$val);
-        $lower   = $isArr ? array_map('mb_strtolower', $scalars) : [];
+        $str     = $isArr ? self::lowerLikeJs(implode(',', $scalars)) : self::lowerLikeJs((string)$val);
+        $lower   = $isArr ? array_map(static fn(string $v): string => self::lowerLikeJs($v), $scalars) : [];
 
         return match ($op) {
             'equals'       => $isArr ? in_array($rv, $lower, strict: true) : $str === $rv,
@@ -813,8 +964,7 @@ class FormProcessor
                 : !str_contains($str, $rv)),
             'empty'        => $isArr ? empty($val) : $str === '',
             'not_empty'    => $isArr ? !empty($val) : $str !== '',
-            // !$isArr, like front.js, which has no joined string to read a number out of: a single ticked checkbox
-            // worth "10" counted as the number 10 here while the browser saw no number at all.
+            // Never for a list, as in front.js: a ticked checkbox worth "10" is no number.
             'greater'      => !$isArr && is_numeric($str) && is_numeric($rv) && (float)$str > (float)$rv,
             'less'         => !$isArr && is_numeric($str) && is_numeric($rv) && (float)$str < (float)$rv,
             // Fail safe on an unrecognized operator: treat as unsatisfied rather than silently hiding/showing.

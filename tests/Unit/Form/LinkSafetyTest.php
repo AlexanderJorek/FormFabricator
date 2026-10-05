@@ -3,7 +3,7 @@
 namespace FabricatorForms\Tests\Unit\Form;
 
 use Brain\Monkey\Functions;
-use FabricatorForms\Fields\HtmlField;
+use FabricatorForms\Utils\HtmlSanitizer;
 use FabricatorForms\Form\MailSender;
 use FabricatorForms\Tests\Support\Reflect;
 use FabricatorForms\Tests\Support\TestCase;
@@ -12,13 +12,11 @@ use PHPUnit\Framework\Attributes\DataProvider;
 /**
  * Two guards against URLs that arrive after the author's HTML was sanitized:
  *
- * - MailSender::restrictLinkProtocols(): a visitor's answer filled into href="{field}" must not bring its own
- *   javascript: scheme into the email.
- * - HtmlField::stripRemoteResourcesForPdf(): mPDF fetches <img src> and CSS url() server-side, so only same-origin,
- *   relative or data: references may reach it (the SSRF cases in TESTING.md §4, HTML block — 1.0.7).
+ * - MailSender::restrictLinkProtocols(): an answer in href="{field}" brings no javascript: scheme into the email.
+ * - HtmlSanitizer::stripRemoteResourcesForPdf(): only same-origin, relative or data: references reach mPDF
+ *   (TESTING.md §4).
  *
- * wp_kses_bad_protocol() is stubbed with its scheme-stripping behaviour; HtmlSanitizer's <use> narrowing needs the
- * real wp_kses() and is covered in the integration suite.
+ * wp_kses_bad_protocol() is stubbed; the <use> narrowing needs real wp_kses() and is in the integration suite.
  */
 final class LinkSafetyTest extends TestCase
 {
@@ -172,6 +170,31 @@ final class LinkSafetyTest extends TestCase
         self::assertSame('<p style="background:none">x</p>', $out);
     }
 
+    public function testWhenThePatternEngineGivesUpNoRemoteReferenceOrLinkSurvives(): void
+    {
+        // PCRE's backtrack limit on a large block: the PDF step used to die on a TypeError, and the mail went out with
+        // its links unchecked. Both now fail closed.
+        Functions\when('esc_html')->alias(static fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'));
+        Functions\when('wp_strip_all_tags')->alias(static fn($s) => strip_tags((string) $s));
+        $html = '<p style="background:url(http://169.254.169.254/)">' . str_repeat('word ', 2000) . '</p>'
+            . '<a href="javascript:alert(1)">x</a>';
+        $jit   = ini_get('pcre.jit');
+        $limit = ini_get('pcre.backtrack_limit');
+        ini_set('pcre.jit', '0');
+        ini_set('pcre.backtrack_limit', '2');
+        try {
+            $pdf  = self::stripForPdf($html);
+            $mail = self::restrict($html);
+        } finally {
+            ini_set('pcre.jit', (string) $jit);
+            ini_set('pcre.backtrack_limit', (string) $limit);
+        }
+        self::assertStringNotContainsString('169.254', $pdf);
+        self::assertStringContainsString('word', $pdf, 'the text still reaches the PDF');
+        self::assertStringNotContainsString('href=', $mail);
+        self::assertStringNotContainsString('javascript:', $mail);
+    }
+
     private static function restrict(string $html): string
     {
         return Reflect::call(MailSender::class, 'restrictLinkProtocols', $html);
@@ -179,6 +202,6 @@ final class LinkSafetyTest extends TestCase
 
     private static function stripForPdf(string $html): string
     {
-        return Reflect::call(HtmlField::class, 'stripRemoteResourcesForPdf', $html);
+        return HtmlSanitizer::stripRemoteResourcesForPdf($html);
     }
 }

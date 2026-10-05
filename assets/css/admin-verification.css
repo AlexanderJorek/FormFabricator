@@ -5,9 +5,7 @@
  */
 
 /* ── Detail panels, hash lists and comparison cards ──
-   Moved here from admin.css. The verifier's verdict, summary and detail rules used to be defined in both files with
-   conflicting values, so the result depended on which stylesheet loaded last; each selector is now defined once, with
-   the values that were winning. These come first so the page rules below keep their later place in the cascade. */
+   Here only, not in admin.css, so nothing depends on load order; first, so the page rules below come later. */
 .fabricator-pdf-detail-content {
     padding: 14px 16px;
     background: #fff;
@@ -443,22 +441,9 @@
             #fabricator-pdf-scan-more-close:hover { color: #1d2327; }
 
             /* ── Upload-in-progress overlay ──
-               A native <form> POST gives the browser zero hooks for upload progress —
-               it just sits on the current page until the whole request/response
-               round-trip finishes. With several large PDFs (e.g. 20 files x 17MB) that
-               round-trip is dominated by the user's own upload bandwidth and can take
-               a while, during which the page would otherwise show no feedback at all
-               and look hung. This is shown immediately on submit, before the browser's
-               own (real, native) form submission proceeds — deliberately NOT an
-               XHR-driven submit: that would need to swap the resulting page content in
-               via JS afterward, and document.write()-ing a full new page over the live
-               one does NOT reset the JS global scope, so the response's own <script>
-               tags (this page's enqueued admin-verification.js/verification.js, even
-               wp-admin's own scripts) collide with the still-alive top-level
-               const/let bindings from the original load and throw redeclaration
-               errors, breaking the page. A real native submit avoids that entirely by
-               giving the browser an actual fresh navigation/JS realm — the only cost
-               is no byte-accurate progress bar, just this indeterminate indicator. */
+               Shown on submit, since a native <form> POST reports no progress. Native rather than XHR: writing the
+               response page over the live one would keep the old JS scope, and its scripts would fail to redeclare
+               their bindings. */
             #fabricator-pdf-upload-overlay {
                 display: none;
                 position: fixed;

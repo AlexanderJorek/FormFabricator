@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -39,7 +39,7 @@ class Assets
     private static bool $front_assets_done = false;
 
     /**
-     * wp_enqueue_scripts fast path: loads assets when the shortcode is detectable in post_content; FormRenderer::render() is the authoritative fallback for widgets/page builders/FSE.
+     * wp_enqueue_scripts fast path for a shortcode in post_content; FormRenderer::render() covers every other placement.
      *
      * @return void
      */
@@ -52,7 +52,7 @@ class Assets
     }
 
     /**
-     * Enqueues the front-end CSS/JS a rendered form needs (safe to call more than once); a late call from FormRenderer::render() still works since WP prints late-enqueued styles in wp_footer.
+     * Enqueues the front-end CSS/JS a rendered form needs; safe to call again, and late (styles then print in wp_footer).
      *
      * @return void
      */
@@ -122,9 +122,13 @@ class Assets
     {
         return [
             'ajaxUrl'      => \admin_url('admin-ajax.php'),
-            // Single source of truth for per-country IBAN length lives in SepaField::IBAN_LEN;
-            // localized here rather than duplicated in SepaField.js.
-            'ibanLen'      => \FabricatorForms\Fields\SepaField::IBAN_LEN,
+            // Single source of truth for per-country IBAN length lives in DirectDebitField::IBAN_LEN;
+            // localized here rather than duplicated in DirectDebitField.js.
+            'ibanLen'      => \FabricatorForms\Fields\DirectDebitField::IBAN_LEN,
+            // The same for the countries a SEPA mandate accepts.
+            'sepaCountries' => \FabricatorForms\Fields\DirectDebitField::SEPA_COUNTRIES,
+            // And those of them outside the EEA, whose IBANs need a BIC.
+            'sepaNonEea'    => \FabricatorForms\Fields\DirectDebitField::SEPA_NON_EEA,
             'i18n'         => [
                 'submitting'              => __('Sending…', 'formfabricator'),
                 'error_server'            => __('Server error. Please try again.', 'formfabricator'),
@@ -136,7 +140,8 @@ class Assets
                 // CAPTCHA
                 'recaptcha_blocked'       => __('Could not load CAPTCHA. Please disable content blockers for this site or try another browser.', 'formfabricator'),
                 // Upload field
-                'upload_remove_prefix'    => __('Remove: ', 'formfabricator'),
+                // translators: %s: file name (substituted client-side). Read out by screen readers for the button that removes the file.
+                'upload_remove'           => __('Remove %s', 'formfabricator'),
                 // translators: %d: maximum number of files allowed (substituted client-side).
                 'upload_too_many'         => __('Too many files. Maximum %d allowed.', 'formfabricator'),
                 'upload_no_types'         => __('No allowed file types in selection.', 'formfabricator'),
@@ -145,20 +150,24 @@ class Assets
                 'upload_skipped_many'     => __('%d files were skipped due to file type.', 'formfabricator'),
                 // translators: %1$d: total number of files submitted, %2$d: maximum allowed per submission (both substituted client-side).
                 'upload_overflow'         => __('Too many files total (%1$d). Max. %2$d per submission.', 'formfabricator'),
-                // Checkbox field
-                // translators: %d: minimum number of options that must be selected (substituted client-side).
-                'checkbox_min'            => __('Please select at least %d option(s).', 'formfabricator'),
-                // translators: %d: maximum number of options that may be selected (substituted client-side).
-                'checkbox_max'            => __('Please select at most %d option(s).', 'formfabricator'),
-                // SEPA field
-                'sepa_iban_invalid'       => __('Invalid IBAN (check digit incorrect).', 'formfabricator'),
-                'sepa_iban_incomplete'    => __('Please enter a complete and valid IBAN.', 'formfabricator'),
-                'sepa_bic_invalid'        => __('Please enter a valid BIC.', 'formfabricator'),
-                'sepa_iban_required'      => __('IBAN is required.', 'formfabricator'),
-                'sepa_bic_required'       => __('BIC is required.', 'formfabricator'),
-                'sepa_holder_required'    => __('Account holder is required.', 'formfabricator'),
-                'sepa_sig_required'       => __('Please sign.', 'formfabricator'),
-                'sepa_country_blocked'    => __('This country is not allowed.', 'formfabricator'),
+                // Direct debit field (the same wording as DirectDebitField::validate() where both say it)
+                'debit_iban_invalid'          => __('Invalid IBAN (check digit incorrect).', 'formfabricator'),
+                'debit_iban_incomplete'       => __('Please enter a complete and valid IBAN.', 'formfabricator'),
+                'debit_bic_invalid'           => __('Please enter a valid BIC.', 'formfabricator'),
+                'debit_country_blocked'       => __('This country is not allowed.', 'formfabricator'),
+                'debit_sort_code_invalid'     => __('Please enter a valid sort code (6 digits).', 'formfabricator'),
+                'debit_routing_invalid'       => __('Please enter a valid routing number.', 'formfabricator'),
+                'debit_bacs_account_invalid'  => __('Please enter a valid account number (8 digits).', 'formfabricator'),
+                'debit_ach_account_invalid'   => __('Please enter a valid account number (4 to 17 digits).', 'formfabricator'),
+                'debit_iban_required'         => __('IBAN is required.', 'formfabricator'),
+                // translators: %s: two-letter IBAN country code, e.g. "CH".
+                'debit_bic_needed'            => __('The BIC is needed for IBANs from %s.', 'formfabricator'),
+                'debit_sort_code_required'    => __('Sort code is required.', 'formfabricator'),
+                'debit_routing_required'      => __('Routing number is required.', 'formfabricator'),
+                'debit_account_required'      => __('Account number is required.', 'formfabricator'),
+                'debit_account_type_required' => __('Please choose the account type.', 'formfabricator'),
+                'debit_holder_required'       => __('Account holder is required.', 'formfabricator'),
+                'debit_sig_required'          => __('Please sign.', 'formfabricator'),
                 // Phone field
                 'phone_invalid'           => __('Please enter a valid phone number.', 'formfabricator'),
                 'phone_intl_required'     => __('Please enter the number with international prefix (+...).', 'formfabricator'),
@@ -213,10 +222,8 @@ class Assets
     /**
      * Every field type's CSS and client-side JS, as ensureFrontAssets() inlines it into a page with a form.
      *
-     * One pass over all field classes collects CSS, empty-checks, validators, inits and skip-validation flags without
-     * re-instantiating. 'globals' maps each window.* name to its JS literal, in the order front.js expects them defined,
-     * and leaves out a global no field contributes to. Public so the JS test suite (tests/js/) runs against exactly
-     * this output instead of a copy of the loop.
+     * 'globals' maps each window.* name to its JS literal, in the order front.js expects, omitting empty ones. Public
+     * so the JS tests run against exactly this output.
      *
      * @return array{css: string, globals: array<string, string>}
      */
@@ -494,6 +501,13 @@ class Assets
                 FABRICATOR_FORMS_VERSION
             );
             \wp_enqueue_script(
+                'fabricator-forms-editor-canvas',
+                FABRICATOR_FORMS_URL . 'assets/js/admin-editor-canvas.js',
+                [],
+                FABRICATOR_FORMS_VERSION,
+                true
+            );
+            \wp_enqueue_script(
                 'fabricator-forms-admin-verification',
                 FABRICATOR_FORMS_URL . 'assets/js/admin-verification.js',
                 [],
@@ -530,10 +544,8 @@ class Assets
                 [
                 'ajaxUrl'     => \admin_url('admin-ajax.php'),
                 'nonce'       => \wp_create_nonce('fabricator_verifier_nonce'),
-                // .js, not pdf.js's own .mjs name: many servers have no MIME type for .mjs, and module workers refuse to run
-                // anything not served as JavaScript.
-                // Both carry the plugin version: a static import from verification.js would resolve without one, so a
-                // browser could pair a cached older library with a freshly fetched worker, which pdf.js refuses to run.
+                // .js, not .mjs, which many servers serve without a JavaScript MIME type. Both versioned, so a cached
+                // library is never paired with a newer worker.
                 'pdfJsModule' => FABRICATOR_FORMS_URL . 'vendor/pdfjs/pdf.js?ver=' . FABRICATOR_FORMS_VERSION,
                 'pdfJsWorker' => FABRICATOR_FORMS_URL . 'vendor/pdfjs/pdf.worker.js?ver=' . FABRICATOR_FORMS_VERSION,
                 'i18n'        => [
@@ -556,8 +568,10 @@ class Assets
                     // translators: %d: HTTP status code (substituted client-side).
                     'server_error'     => __('Server error (HTTP %d)', 'formfabricator'),
                     'network_error'    => __('Network error', 'formfabricator'),
-                    'pdf_load_error'   => __('PDF load error: ', 'formfabricator'),
-                    'error_prefix'     => __('Error: ', 'formfabricator'),
+                    // translators: %s: the error message (substituted client-side).
+                    'pdf_load_error'   => __('PDF load error: %s', 'formfabricator'),
+                    // translators: %s: the error message (substituted client-side).
+                    'error_message'    => __('Error: %s', 'formfabricator'),
                     'unknown_error'    => __('Unknown server error', 'formfabricator'),
                 ],
                 ]
@@ -599,6 +613,8 @@ class Assets
         $hb = hexdec(substr($hover, 5, 2));
         $hover_lum = (0.299 * $hr + 0.587 * $hg + 0.114 * $hb) / 255;
         $hover_fg  = $hover_lum > 0.55 ? '#1d2327' : $hover;
+        // Read by admin-editor-canvas.js, as the accent is: 'off' leaves the particle background undrawn.
+        $particles = \get_option('fabricator_forms_particles', 'on') === 'off' ? 'off' : 'on';
 
         \wp_add_inline_style(
             'fabricator-forms-admin',
@@ -607,7 +623,8 @@ class Assets
                 . '; --fabricator-hover-color: ' . $hover
                 . '; --fabricator-hover-color-fg: ' . $hover_fg
                 . '; --fabricator-accent-text: ' . $accent_text
-                . '; --fabricator-admin-accent-fg: ' . $accent_fg . '; }'
+                . '; --fabricator-admin-accent-fg: ' . $accent_fg
+                . '; --fabricator-particles: ' . $particles . '; }'
         );
     }
 

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,6 +28,23 @@ defined('ABSPATH') || exit;
  */
 class PostDataField extends BaseField
 {
+    /**
+     * The selected post fields' values in the configured order (BaseField::joinedSubValues()), as front.js reads them.
+     * They come texturized from the post, so they are decoded and sanitized as front.js does.
+     *
+     * @param mixed $raw    What extractValue() returned.
+     * @param array $config Field configuration.
+     * @return mixed
+     */
+    public function conditionValue(mixed $raw, array $config): mixed
+    {
+        $read = is_array($raw) ? array_map(
+            static fn($v) => is_scalar($v) ? sanitize_text_field(html_entity_decode((string) $v, ENT_QUOTES | ENT_HTML5, 'UTF-8')) : '',
+            $raw
+        ) : $raw;
+        return self::joinedSubValues($read, self::selectedFields($config));
+    }
+
     /**
      * Returns the field type label.
      *
@@ -66,6 +83,30 @@ class PostDataField extends BaseField
     private const ALLOWED_FIELDS = ['post_title', 'post_url', 'post_id', 'post_author'];
 
     /**
+     * $post when it is published and not password-protected, else null: the one test render() and extractValue() share.
+     *
+     * @param mixed $post A WP_Post, or anything else.
+     * @return \WP_Post|null
+     */
+    private static function publicPost(mixed $post): ?\WP_Post
+    {
+        return $post instanceof \WP_Post && $post->post_status === 'publish' && $post->post_password === '' ? $post : null;
+    }
+
+    /**
+     * The post fields the configuration selects, in its order: only known names, so an imported form's list of lists
+     * (or any other shape) selects nothing instead of reaching array_flip().
+     *
+     * @param array $config Field configuration.
+     * @return string[]
+     */
+    private static function selectedFields(array $config): array
+    {
+        $selected = (array) ($config['post_field'] ?? ['post_title']);
+        return array_values(array_filter($selected, static fn($key) => in_array($key, self::ALLOWED_FIELDS, true)));
+    }
+
+    /**
      * Renders the field HTML.
      *
      * @param array  $config   Field configuration.
@@ -75,21 +116,19 @@ class PostDataField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $selected = (array)($config['post_field'] ?? ['post_title']);
         global $post;
         $out = '';
-        foreach ($selected as $key) {
-            if (!in_array($key, self::ALLOWED_FIELDS, true)) {
-                continue;
-            }
-            $val = self::resolveField($key, $post);
+        // The same posts extractValue() accepts: on a private, draft or password-protected post the page showed values
+        // the server then treated as absent, so rules on this field decided differently on each side.
+        $shown = self::publicPost($post);
+        foreach (self::selectedFields($config) as $key) {
+            $val = self::resolveField($key, $shown);
             $out .= '<input type="hidden" name="' . esc_attr($field_id) . '[' . esc_attr($key) . ']"'
                 . ' id="' . esc_attr($field_id . '_' . $key) . '"'
                 . ' value="' . esc_attr($val) . '">';
         }
-        // extractValue() needs the ID to re-derive values server-side, where global $post is unset. The signature binds it
-        // to this field, so a visitor can't swap in another post for the one the mail and PDF record. Static per post,
-        // so it survives full-page caching.
+        // extractValue() re-derives the values from this ID; the signature stops a visitor swapping in another post.
+        // Static per post, so it survives full-page caching.
         $source_id = (int) ($post?->ID ?? 0);
         $out .= '<input type="hidden" name="' . esc_attr($field_id) . '[_source_post_id]"'
             . ' value="' . esc_attr($source_id ? (string) $source_id : '') . '">';
@@ -119,11 +158,16 @@ class PostDataField extends BaseField
      */
     private static function resolveField(string $key, ?\WP_Post $post): string
     {
+        // No post, nothing: get_the_title(0) and get_permalink(0) fall back to the global post, which is the private
+        // one publicPost() just refused.
+        if ($post === null) {
+            return '';
+        }
         return match ($key) {
-            'post_title'  => get_the_title($post?->ID ?? 0),
-            'post_url'    => (string)get_permalink($post?->ID ?? 0),
-            'post_id'     => (string)($post?->ID ?? ''),
-            'post_author' => $post ? get_the_author_meta('display_name', (int)$post->post_author) : '',
+            'post_title'  => get_the_title($post->ID),
+            'post_url'    => (string)get_permalink($post->ID),
+            'post_id'     => (string)$post->ID,
+            'post_author' => get_the_author_meta('display_name', (int)$post->post_author),
             default       => '',
         };
     }
@@ -149,9 +193,7 @@ class PostDataField extends BaseField
         }
         $post = $source_id ? get_post($source_id) : null;
         // Client-submitted post ID; reject non-public posts so drafts/private data can't leak into output.
-        if ($post && ($post->post_status !== 'publish' || $post->post_password !== '')) {
-            $post = null;
-        }
+        $post = self::publicPost($post);
 
         $out = [];
         foreach (self::ALLOWED_FIELDS as $key) {
@@ -171,8 +213,7 @@ class PostDataField extends BaseField
         if (!is_array($value) || empty($value)) {
             return __('[No entry]', 'formfabricator');
         }
-        $selected = (array)($config['post_field'] ?? ['post_title']);
-        $filtered = array_intersect_key($value, array_flip($selected));
+        $filtered = array_intersect_key($value, array_flip(self::selectedFields($config)));
         return implode(', ', array_filter(array_map('strval', $filtered), static fn($v) => $v !== ''));
     }
 

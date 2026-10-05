@@ -25,6 +25,7 @@ define('WP_TESTS_TITLE', 'FormFabricator Tests');
 define('WP_PHP_BINARY', PHP_BINARY);
 define('WPLANG', '');
 
-define('WP_DEBUG', true);
+// On, except in a test process started with FABRICATOR_TESTS_WP_DEBUG=0 (Form\DebugOffTest: what a live site logs).
+define('WP_DEBUG', getenv('FABRICATOR_TESTS_WP_DEBUG') !== '0');
 
 $table_prefix = 'wptests_'; // phpcs:ignore -- read by the WordPress test bootstrap as a local variable

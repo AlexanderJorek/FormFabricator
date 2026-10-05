@@ -5,9 +5,7 @@
  */
 
 /* ── Design tokens ────────────────────────────────────────────────────────────
- * --fabricator-accent is the only colour the user configures (Settings → Appearance).
- * PHP injects it as an inline <style> on the page; every component references
- * it here so changing the single variable recolours the entire form.
+ * --fabricator-accent (Settings → Appearance) arrives as an inline <style>; every component uses it.
  * ──────────────────────────────────────────────────────────────────────────── */
 :root {
     --fabricator-accent:        #f59e0b;

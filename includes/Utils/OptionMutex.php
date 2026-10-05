@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,9 +24,8 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 /**
- * Serializes concurrent read-modify-write cycles on one option, so two requests changing different keys of the same
- * array option can't overwrite each other's change. Backed by wp_options' unique option_name (INSERT IGNORE), like
- * SingleUseToken::claim(), so it needs no extension or special database privilege.
+ * Serializes read-modify-write cycles on one option, backed by wp_options' unique option_name (INSERT IGNORE), so it
+ * needs no extension or special database privilege.
  */
 class OptionMutex
 {
@@ -47,16 +46,13 @@ class OptionMutex
     /**
      * Runs $fn while holding the lock for $option, with that option's cache cleared first so $fn reads the stored value.
      *
-     * If the lock can't be taken within $wait_ms, $fn runs anyway and the wait is logged: an unlocked save is what every
-     * save did before, and refusing it would lose the admin's change instead of risking someone else's. That trade holds
-     * only while the worst case of racing is an edit to redo; pass $fail_closed where a lost write can't be recovered.
+     * If the lock can't be taken within $wait_ms, $fn runs anyway and the wait is logged: refusing would lose the
+     * admin's change for sure. Pass $fail_closed where a lost write can't be recovered.
      *
      * @param string   $option      Option name the callback reads and writes.
      * @param callable $fn          Zero-argument callback doing the read-modify-write.
      * @param int      $wait_ms     How long to wait for a concurrent holder.
-     * @param bool     $fail_closed Refuse instead of writing unlocked, throwing a RuntimeException that names the option.
-     *                              For writes whose loss is permanent — a retired seal key dropped from the history
-     *                              leaves every PDF it signed unverifiable, with no way back.
+     * @param bool     $fail_closed Throw a RuntimeException instead of writing unlocked (such as for seal keys).
      * @return mixed Whatever $fn returns.
      * @throws \RuntimeException When $fail_closed is set and the lock could not be taken.
      */
@@ -66,13 +62,17 @@ class OptionMutex
         $lock     = self::PREFIX . $option;
         $deadline = microtime(true) + ($wait_ms / 1000);
         $acquired = false;
+        // "<expiry>:<owner>": the stale check reads the leading number, and the owner token lets a release remove only
+        // its own row, even after a slow holder's lock was broken.
+        $value = '';
         do {
+            $value = (time() + self::STALE_AFTER) . ':' . bin2hex(random_bytes(8));
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- atomic lock row; see class docblock.
             $wpdb->query(
                 $wpdb->prepare(
                     "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')",
                     $lock,
-                    (string) (time() + self::STALE_AFTER)
+                    $value
                 )
             );
             if ((int) $wpdb->rows_affected === 1) {
@@ -98,9 +98,7 @@ class OptionMutex
             }
             \FabricatorForms\fabricator_log('FabricatorForms OptionMutex: could not lock ' . $option . ' within ' . $wait_ms . ' ms; writing without the lock.');
         }
-        // Every cache the value can sit in, not just one: an autoloaded option lives in the 'alloptions' bundle, and a
-        // transient under its own name in the 'transient' group and as _transient_<name> among the options. Clearing
-        // only 'options' left VerifierCleanup reading a stale pending list inside the lock it had just taken.
+        // Every cache the value can sit in: 'options', 'alloptions', and for a transient its own group and option.
         wp_cache_delete($option, 'options');
         wp_cache_delete('alloptions', 'options');
         wp_cache_delete('_transient_' . $option, 'options');
@@ -110,8 +108,9 @@ class OptionMutex
             return $fn();
         } finally {
             if ($acquired) {
+                // Only while the row is still this holder's: after a stale break it belongs to the next holder.
                 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- releases the lock row taken above.
-                $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s", $lock));
+                $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", $lock, $value));
             }
         }
     }

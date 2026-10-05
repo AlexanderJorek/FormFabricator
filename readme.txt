@@ -4,7 +4,7 @@ Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.0.7
+Stable tag: 1.0.8
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -22,7 +22,7 @@ Submissions are never saved in WordPress: they go out by email, optionally with 
 
 **Field types**
 
-Text, text area, email, website, phone, number, amount, name, address, date, time, dropdown, radio buttons, checkboxes, file upload, signature, rating, slider, CAPTCHA (Google reCAPTCHA), consent and privacy policy checkboxes (recorded with date and time), text block, field group, page break, page step bar, page details (hidden), SEPA Direct Debit mandate.
+Text, text area, email, website, phone, number, amount, name, address, date, time, dropdown, radio buttons, checkboxes, file upload, signature, rating, slider, CAPTCHA (ALTCHA, checked on your own site, or Google reCAPTCHA), consent and privacy policy checkboxes (recorded with date and time), text block, field group, page break, page step bar, page details (hidden), Direct Debit Mandate (SEPA, Bacs or ACH).
 
 **Emails**
 
@@ -45,13 +45,15 @@ Text, text area, email, website, phone, number, amount, name, address, date, tim
 * Sending limit per IP address, no duplicate submissions, dangerous file types always refused.
 * You decide which roles or users may view or edit forms, the PDF layout, the PDF check and the settings.
 
-**Known limitation**
+**Signing without a mouse, finger or pen**
 
-The signature field, and the signature in the SEPA mandate, are drawn with a mouse, finger or pen. There is no way to produce one with a keyboard alone. If a visitor who cannot use a pointing device has to reach you, offer a second form without a required signature, or another way to get in touch.
+The signature field, and the signature in the Direct Debit Mandate, are drawn with a mouse, finger or pen, or signed by typing the name instead: a "Type your name instead" button sits next to every signature pad, so visitors who use only a keyboard can sign too. A typed signature is recorded, shown in the PDF and sealed as the name, marked as typed.
 
 == Uses Third Party / External Services ==
 
-**Google reCAPTCHA**: only on forms with a CAPTCHA field, once an administrator has entered the reCAPTCHA keys.
+**ALTCHA**, the default for CAPTCHA fields, uses no outside service: its widget comes with the plugin, the visitor's browser fetches its task from your site, and your site checks the answer.
+
+**Google reCAPTCHA**: only on forms with a CAPTCHA field set to reCAPTCHA, once an administrator has entered the reCAPTCHA keys.
 
 * When the visitor clicks "Load CAPTCHA", their browser loads `https://www.google.com/recaptcha/api.js`. Google receives the visitor's IP address, browser and device details, and existing Google cookies.
 * On sending, once every other field is filled in correctly, your site sends the CAPTCHA response to `https://www.google.com/recaptcha/api/siteverify`. Nothing else is sent — not the visitor's IP address, and none of their answers.
@@ -60,19 +62,22 @@ Mention this in your privacy policy (example text under FormFabricator → Setti
 
 **Images from other websites**: if you enter an image's web address in the PDF layout editor, your site downloads the image once into your media library.
 
+**Images and media you link in a form**: a rating field's custom icon, or an image or other media in a text block, that you link from another website is loaded by every visitor's browser from that website, which receives their IP address and browser details. Nothing is sent by the plugin itself. Pick such images from your Media Library to avoid this, or name the other website in your privacy policy.
+
 == Third-Party Libraries & Credits ==
 
 License texts are included; `THIRD-PARTY-NOTICES.txt` lists every component.
 
-* **mPDF** (GPL-2.0): creates PDFs
+* **mPDF** (GPL-2.0-only): creates PDFs
 * **PdfParser** (LGPL-3.0): reads PDFs for checking
 * **FPDI**, **DeepCopy**, **random_compat**, **Symfony mbstring polyfill**, **PSR-7 HTTP message**, **PSR-3 logging**, **mPDF PSR-7 and PSR-3 shims** (all MIT): helpers for mPDF and PdfParser
 * **pdf.js** (Apache 2.0, [Mozilla](https://github.com/mozilla/pdf.js)): reads PDFs in the browser, unchanged from the official `pdfjs-dist` package
+* **ALTCHA** widget (MIT, [altcha.org](https://altcha.org/)): the CAPTCHA that runs on your own site, unchanged from the official `altcha` package
 * **Font Awesome Free** (icons CC BY 4.0, fonts SIL OFL 1.1, code MIT, [fontawesome.com](https://fontawesome.com/)): icons; readable source of its compressed style file at [github.com/FortAwesome/Font-Awesome](https://github.com/FortAwesome/Font-Awesome)
 
 == Installation ==
 
-Requires WordPress 6.5+, PHP 8.1+ and the PHP extensions fileinfo, gd and mbstring (included by almost every host). Without fileinfo, upload fields refuse all files.
+Requires WordPress 6.5+, PHP 8.1+ and the PHP extensions fileinfo, gd and mbstring (included by almost every host). Without fileinfo, upload fields refuse all files. Encrypting the PDF seal keys with a master key also needs the openssl extension.
 
 The database must be MySQL or MariaDB, which is what WordPress normally runs on. Spam limits and the safeguards against two submissions colliding are handled by the database itself, and that needs these. Test setups on SQLite, such as WordPress Playground, are not supported.
 
@@ -109,6 +114,24 @@ Replaced keys stay on your site, so older PDFs remain checkable. After a server 
 Deactivating keeps everything. Deleting removes all forms, settings, seal keys and stored files for good, so keep your key backup files.
 
 == Changelog ==
+
+= 1.0.8 =
+* New: the SEPA field is now the Direct Debit Mandate, with SEPA, Bacs (UK) or ACH (US) per field. Account details are checked on your site, and every text the mandate shows can be changed; only SEPA comes with default wording. The creditor's name and address, the type of payment, the debtor's address and the place of signing can be added.
+* New: CAPTCHA fields can use ALTCHA, which runs on your own site: no outside service, no keys. It is the default; Google reCAPTCHA stays available. ALTCHA needs HTTPS.
+* New: every signature can be given by typing the name instead of drawing, for visitors who cannot use a mouse, finger or pen.
+* New: the moving background of the admin pages can be switched off under Settings → Editor; with reduced motion it shows as a still picture.
+* Changed: a notification's sender address can no longer be a form field (providers often discard such mail); use "Reply-to email" instead.
+* Changed: one visitor address can send at most 50 forms in 5 minutes across the site, one IPv6 network at most 200.
+* Changed: macro-enabled Office files, disk images and more risky file types are always refused; .doc, .xls, .ppt and .rtf left the default "Documents" group.
+* Improved: show/hide rules can test any field, including multi-input fields, uploads and the CAPTCHA, and rules that depend on each other work in any order, the same in the browser and on the server.
+* Improved: the form builder warns about a Consent field still showing its placeholder text, a mandate without creditor details, and notifications that carry no signatures.
+* Improved: with a master key in wp-config.php, seal keys are always encrypted and bound to their place, so a planted, edited or copied-back key is never trusted, and a wrong master key is recognised. Key backups carry a fingerprint.
+* Improved: a PDF logo or header image too large for the PDF is refused when the layout is saved.
+* Privacy: log lines no longer contain visitors' file names, and temporary copies of uploads are removed even after an interrupted submission, on deactivation and on deletion.
+* Fixed: a visitor could make their own sealed PDF fail the check later, through hidden markers in an answer or a crafted image; genuine PDFs with long answers were refused.
+* Fixed: hiding "Signatures & Uploads" in the PDF layout removed every field; the "Footer" switch now works.
+* Fixed: IBANs from outside SEPA or with impossible check digits were accepted; web addresses with umlauts were refused.
+* Fixed: many smaller problems with fields, the form and selection lists, the builder, emails, PDFs and translations.
 
 = 1.0.7 =
 * New: choose a date format for each date field (for example 31.12.2026 or 12/31/2026).

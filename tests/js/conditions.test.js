@@ -87,7 +87,7 @@ test('a checkbox group is a list: equals and contains test each ticked box, none
     assert.equal(visibleAfter(boxes('a', 'b'), rule('empty', ''), (wrap) => wrap.querySelector('[name="ctrl"]')), true);
 });
 
-test('CheckboxField names its boxes "id[]", and the condition still finds them (1.0.1)', () => {
+test('CheckboxField names its boxes "id[]", and the condition still finds them', () => {
     const html = '<input name="ctrl[]" type="checkbox" value="a"><input name="ctrl[]" type="checkbox" value="b">';
     const tick = (wrap) => {
         const box = wrap.querySelectorAll('[name="ctrl[]"]')[1];

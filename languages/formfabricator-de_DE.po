@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: FormFabricator 1.0.7\n"
+"Project-Id-Version: FormFabricator 1.0.8\n"
 "Report-Msgid-Bugs-To: https://github.com/AlexanderJorek/FormFabricator/issues\n"
 "POT-Creation-Date: 2026-08-01T00:00:00+00:00\n"
 "PO-Revision-Date: 2026-09-06 14:00+0000\n"
@@ -92,10 +92,6 @@ msgstr "[Kein Eintrag]"
 #: includes/Fields/SelectField.php:312
 msgid "[Other]"
 msgstr "[Sonstiges]"
-
-#: includes/Fields/ConsentField.php:115
-msgid "I agree."
-msgstr "Ich stimme zu."
 
 #: includes/Admin/FormEditor.php:73
 msgid "FormFabricator Editor"
@@ -211,10 +207,6 @@ msgstr "Formular nicht gefunden."
 #: includes/Utils/Assets.php:91
 msgid "Sending…"
 msgstr "Wird gesendet…"
-
-#: includes/Admin/FormEditor.php:357
-msgid "Server error."
-msgstr "Serverfehler."
 
 #: includes/Admin/FormEditor.php:415
 msgid "Ignore required fields"
@@ -392,12 +384,6 @@ msgstr "Schließen"
 #: includes/Admin/FormList.php:297
 msgid "Really delete form?"
 msgstr "Formular wirklich löschen?"
-
-#. translators: %d is replaced client-side with the number of selected forms.
-#: includes/Admin/FormList.php:117
-#, php-format
-msgid "Really delete %d form(s)?"
-msgstr "%d Formular(e) wirklich löschen?"
 
 #: includes/Admin/FormList.php:123
 msgid "Import error"
@@ -1652,12 +1638,6 @@ msgstr "PDF"
 msgid "Seal Blocks"
 msgstr "Siegelblöcke"
 
-#. translators: %d: number of seal blocks found in the PDF (should be exactly 1).
-#: includes/Admin/Verificationpage.php:1979
-#, php-format
-msgid "%d seal block(s) found — exactly 1 is expected."
-msgstr "%d Siegelblock/-blöcke gefunden — erwartet wird genau 1."
-
 #: includes/Admin/Verificationpage.php:1986
 msgid "Any extra seal block is proof of tampering regardless of its HMAC status."
 msgstr "Jeder zusätzliche Siegelblock ist ein Nachweis für Manipulation, unabhängig von seinem HMAC-Status."
@@ -1834,10 +1814,6 @@ msgstr "Prüfung"
 msgid "Seal integrity"
 msgstr "Siegelintegrität"
 
-#: includes/Admin/Verificationpage.php:3868
-msgid "Extra seal block(s) injected — document has been tampered with"
-msgstr "Zusätzliche(r) Siegelblock/-blöcke eingeschleust — Dokument wurde manipuliert"
-
 #: includes/Admin/Verificationpage.php:3873
 msgid "MISMATCH — document may have been tampered with"
 msgstr "ABWEICHUNG — Dokument wurde möglicherweise manipuliert"
@@ -1872,21 +1848,9 @@ msgstr "Signiert mit einem rotierten (älteren) Schlüssel"
 msgid "Visual field content"
 msgstr "Sichtbarer Feldinhalt"
 
-#. translators: %d: number of visible form fields whose content no longer matches the seal.
-#: includes/Admin/Verificationpage.php:3912
-#, php-format
-msgid "%d field(s) do not match the seal"
-msgstr "%d Feld(er) stimmen nicht mit dem Siegel überein"
-
 #: includes/Admin/Verificationpage.php:3919
 msgid "Annotations"
 msgstr "Anmerkungen"
-
-#. translators: %d: number of PDF annotations that don't match the seal.
-#: includes/Admin/Verificationpage.php:3921
-#, php-format
-msgid "%d annotation(s) unmatched"
-msgstr "%d Anmerkung(en) nicht zugeordnet"
 
 #: includes/Admin/Verificationpage.php:3925
 msgid "Page count"
@@ -2101,22 +2065,6 @@ msgstr "Bitte angeben"
 #, php-format
 msgid "%s: Please select at least one option."
 msgstr "%s: Bitte mindestens eine Option wählen."
-
-#. translators: %d: minimum number of options that must be selected.
-#. translators: %d: minimum number of options that must be selected (substituted client-side).
-#: includes/Fields/CheckboxField.php:306
-#: includes/Utils/Assets.php:105
-#, php-format
-msgid "Please select at least %d option(s)."
-msgstr "Bitte mindestens %d Option(en) wählen."
-
-#. translators: %d: maximum number of options that may be selected.
-#. translators: %d: maximum number of options that may be selected (substituted client-side).
-#: includes/Fields/CheckboxField.php:310
-#: includes/Utils/Assets.php:107
-#, php-format
-msgid "Please select at most %d option(s)."
-msgstr "Bitte höchstens %d Option(en) wählen."
 
 #: includes/Fields/CheckboxField.php:319
 #: includes/Fields/CheckboxField.php:324
@@ -2584,10 +2532,6 @@ msgstr "Dropdown"
 msgid "— Please select —"
 msgstr "— Bitte wählen —"
 
-#: includes/Fields/SepaField.php:173
-msgid "SEPA Direct Debit"
-msgstr "SEPA Lastschrift"
-
 #: includes/Fields/SepaField.php:439
 #: includes/Fields/SepaField.php:839
 #: includes/Fields/SepaField.php:842
@@ -2609,10 +2553,6 @@ msgstr "BIC:"
 msgid "Account holder:"
 msgstr "Kontoinhaber:"
 
-#: includes/Fields/SepaField.php:446
-msgid "Your member number"
-msgstr "Ihre Mitgliedsnummer"
-
 #: includes/Fields/SepaField.php:447
 #: includes/Fields/SepaField.php:795
 #: includes/Fields/SepaField.php:850
@@ -2621,14 +2561,6 @@ msgstr "Ihre Mitgliedsnummer"
 #: includes/Fields/SignatureField.php:314
 msgid "Signature"
 msgstr "Unterschrift"
-
-#: includes/Fields/SepaField.php:526
-msgid "Creditor identification number:"
-msgstr "Gläubiger-Identifikationsnummer:"
-
-#: includes/Fields/SepaField.php:529
-msgid "Mandate reference:"
-msgstr "Mandatsreferenz:"
 
 #: includes/Fields/SepaField.php:566
 #: includes/Fields/SignatureField.php:263
@@ -2650,10 +2582,6 @@ msgstr "Hier unterschreiben"
 msgid "Signature data is too large."
 msgstr "Signaturdaten sind zu groß."
 
-#: includes/Fields/SepaField.php:682
-msgid "SEPA data missing."
-msgstr "SEPA-Daten fehlen."
-
 #: includes/Fields/SepaField.php:690
 msgid "IBAN is a required field."
 msgstr "IBAN ist ein Pflichtfeld."
@@ -2671,10 +2599,6 @@ msgstr "Bitte geben Sie eine gültige IBAN ein."
 msgid "IBANs from country \"%s\" are not allowed."
 msgstr "IBANs aus dem Land \"%s\" sind nicht zulässig."
 
-#: includes/Fields/SepaField.php:726
-msgid "BIC is a required field."
-msgstr "BIC ist ein Pflichtfeld."
-
 #: includes/Fields/SepaField.php:729
 #: includes/Utils/Assets.php:111
 msgid "Please enter a valid BIC."
@@ -2683,33 +2607,6 @@ msgstr "Bitte geben Sie einen gültigen BIC ein."
 #: includes/Fields/SepaField.php:732
 msgid "Account holder is a required field."
 msgstr "Kontoinhaber ist ein Pflichtfeld."
-
-#: includes/Fields/SepaField.php:773
-msgid "IBAN"
-msgstr "IBAN"
-
-#: includes/Fields/SepaField.php:779
-msgid "BIC"
-msgstr "BIC"
-
-#: includes/Fields/SepaField.php:784
-msgid "Account holder"
-msgstr "Kontoinhaber"
-
-#. translators: %s: formatted IBAN.
-#: includes/Fields/SepaField.php:817
-msgid "IBAN: %s"
-msgstr "IBAN: %s"
-
-#. translators: %s: BIC.
-#: includes/Fields/SepaField.php:819
-msgid "BIC: %s"
-msgstr "BIC: %s"
-
-#. translators: %s: account holder name.
-#: includes/Fields/SepaField.php:821
-msgid "Account holder: %s"
-msgstr "Kontoinhaber: %s"
 
 #: includes/Fields/SepaField.php:871
 msgid "Mandate title"
@@ -2765,24 +2662,12 @@ msgid "Andorra"
 msgstr "Andorra"
 
 #: includes/Fields/SepaField.php:975
-msgid "United Arab Emirates"
-msgstr "Vereinigte Arab. Emirate"
-
-#: includes/Fields/SepaField.php:975
 msgid "Albania"
 msgstr "Albanien"
 
 #: includes/Fields/SepaField.php:955
 msgid "Austria"
 msgstr "Österreich"
-
-#: includes/Fields/SepaField.php:955
-msgid "Azerbaijan"
-msgstr "Aserbaidschan"
-
-#: includes/Fields/SepaField.php:955
-msgid "Bosnia and Herzegovina"
-msgstr "Bosnien-Herzegowina"
 
 #: includes/Fields/SepaField.php:977
 msgid "Belgium"
@@ -2792,10 +2677,6 @@ msgstr "Belgien"
 msgid "Bulgaria"
 msgstr "Bulgarien"
 
-#: includes/Fields/SepaField.php:977
-msgid "Bahrain"
-msgstr "Bahrain"
-
 #: includes/Fields/SepaField.php:957
 msgid "Brazil"
 msgstr "Brasilien"
@@ -2803,10 +2684,6 @@ msgstr "Brasilien"
 #: includes/Fields/SepaField.php:957
 msgid "Switzerland"
 msgstr "Schweiz"
-
-#: includes/Fields/SepaField.php:957
-msgid "Costa Rica"
-msgstr "Costa Rica"
 
 #: includes/Fields/SepaField.php:958
 msgid "Cyprus"
@@ -2821,16 +2698,8 @@ msgid "Germany"
 msgstr "Deutschland"
 
 #: includes/Fields/SepaField.php:959
-msgid "Djibouti"
-msgstr "Dschibuti"
-
-#: includes/Fields/SepaField.php:959
 msgid "Denmark"
 msgstr "Dänemark"
-
-#: includes/Fields/SepaField.php:959
-msgid "Dominican Republic"
-msgstr "Dominikanische Republik"
 
 #: includes/Fields/SepaField.php:960
 msgid "Estonia"
@@ -2857,24 +2726,12 @@ msgid "United Kingdom"
 msgstr "Vereinigtes Königreich"
 
 #: includes/Fields/SepaField.php:962
-msgid "Georgia"
-msgstr "Georgien"
-
-#: includes/Fields/SepaField.php:962
 msgid "Gibraltar"
 msgstr "Gibraltar"
-
-#: includes/Fields/SepaField.php:962
-msgid "Greenland"
-msgstr "Grönland"
 
 #: includes/Fields/SepaField.php:963
 msgid "Greece"
 msgstr "Griechenland"
-
-#: includes/Fields/SepaField.php:963
-msgid "Guatemala"
-msgstr "Guatemala"
 
 #: includes/Fields/SepaField.php:963
 msgid "Croatia"
@@ -2888,14 +2745,6 @@ msgstr "Ungarn"
 msgid "Ireland"
 msgstr "Irland"
 
-#: includes/Fields/SepaField.php:964
-msgid "Israel"
-msgstr "Israel"
-
-#: includes/Fields/SepaField.php:965
-msgid "Iraq"
-msgstr "Irak"
-
 #: includes/Fields/SepaField.php:965
 msgid "Iceland"
 msgstr "Island"
@@ -2903,26 +2752,6 @@ msgstr "Island"
 #: includes/Fields/SepaField.php:965
 msgid "Italy"
 msgstr "Italien"
-
-#: includes/Fields/SepaField.php:966
-msgid "Jordan"
-msgstr "Jordanien"
-
-#: includes/Fields/SepaField.php:966
-msgid "Kuwait"
-msgstr "Kuwait"
-
-#: includes/Fields/SepaField.php:966
-msgid "Kazakhstan"
-msgstr "Kasachstan"
-
-#: includes/Fields/SepaField.php:967
-msgid "Lebanon"
-msgstr "Libanon"
-
-#: includes/Fields/SepaField.php:967
-msgid "St. Lucia"
-msgstr "St. Lucia"
 
 #: includes/Fields/SepaField.php:967
 msgid "Liechtenstein"
@@ -2939,10 +2768,6 @@ msgstr "Luxemburg"
 #: includes/Fields/SepaField.php:968
 msgid "Latvia"
 msgstr "Lettland"
-
-#: includes/Fields/SepaField.php:969
-msgid "Libya"
-msgstr "Libyen"
 
 #: includes/Fields/SepaField.php:969
 msgid "Morocco"
@@ -2965,20 +2790,8 @@ msgid "North Macedonia"
 msgstr "Nordmazedonien"
 
 #: includes/Fields/SepaField.php:971
-msgid "Mauritania"
-msgstr "Mauretanien"
-
-#: includes/Fields/SepaField.php:971
 msgid "Malta"
 msgstr "Malta"
-
-#: includes/Fields/SepaField.php:971
-msgid "Mauritius"
-msgstr "Mauritius"
-
-#: includes/Fields/SepaField.php:972
-msgid "Nicaragua"
-msgstr "Nicaragua"
 
 #: includes/Fields/SepaField.php:972
 msgid "Netherlands"
@@ -3001,20 +2814,12 @@ msgid "Portugal"
 msgstr "Portugal"
 
 #: includes/Fields/SepaField.php:974
-msgid "Qatar"
-msgstr "Katar"
-
-#: includes/Fields/SepaField.php:974
 msgid "Romania"
 msgstr "Rumänien"
 
 #: includes/Fields/SepaField.php:974
 msgid "Serbia"
 msgstr "Serbien"
-
-#: includes/Fields/SepaField.php:975
-msgid "Saudi Arabia"
-msgstr "Saudi-Arabien"
 
 #: includes/Fields/SepaField.php:975
 msgid "Sweden"
@@ -3032,10 +2837,6 @@ msgstr "Slowakei"
 msgid "San Marino"
 msgstr "San Marino"
 
-#: includes/Fields/SepaField.php:976
-msgid "El Salvador"
-msgstr "El Salvador"
-
 #: includes/Fields/SepaField.php:977
 msgid "Tunisia"
 msgstr "Tunesien"
@@ -3052,14 +2853,6 @@ msgstr "Ukraine"
 msgid "Vatican City"
 msgstr "Vatikanstadt"
 
-#: includes/Fields/SepaField.php:978
-msgid "British Virgin Islands"
-msgstr "Brit. Jungferninseln"
-
-#: includes/Fields/SepaField.php:978
-msgid "Kosovo"
-msgstr "Kosovo"
-
 #: includes/Fields/SepaField.php:995
 msgid "I hereby authorize the creditor to collect payments from my account by direct debit. At the same time, I instruct my bank to honor the direct debits drawn by the creditor on my account."
 msgstr "Hiermit ermächtige ich den Zahlungsempfänger, Zahlungen von meinem Konto mittels Lastschrift einzuziehen. Zugleich weise ich mein Kreditinstitut an, die vom Zahlungsempfänger auf mein Konto gezogenen Lastschriften einzulösen."
@@ -3071,10 +2864,6 @@ msgstr "Wenn mein angegebenes Konto die erforderliche Deckung nicht aufweist, be
 #: includes/Fields/SepaField.php:1012
 msgid "Note: I can request a refund of the debited amount within eight weeks, starting from the debit date. The terms agreed with my bank apply."
 msgstr "Hinweis: Ich kann innerhalb von acht Wochen, beginnend mit dem Belastungsdatum, die Erstattung des belasteten Betrages verlangen. Es gelten dabei die mit meinem Kreditinstitut vereinbarten Bedingungen."
-
-#: includes/Fields/SignatureField.php:363
-msgid "[Signature present – see attachment]"
-msgstr "[Unterschrift vorhanden – siehe Anhang]"
 
 #: includes/Fields/SignatureField.php:430
 msgid "Height (px)"
@@ -3246,10 +3035,6 @@ msgstr "Diese Dateien werden im PDF nur als Dateiname angezeigt und können nich
 msgid "Images (jpg, png, gif, bmp, tiff, webp)"
 msgstr "Bilder (jpg, png, gif, bmp, tiff, webp)"
 
-#: includes/Fields/UploadField.php:771
-msgid "Documents (pdf, doc, docx, xls, xlsx, odt, ppt, pptx, txt)"
-msgstr "Dokumente (pdf, doc, docx, xls, xlsx, odt, ppt, pptx, txt)"
-
 #: includes/Fields/UploadField.php:777
 msgid "Audio (mp3, ogg, wav, m4a, flac)"
 msgstr "Audio (mp3, ogg, wav, m4a, flac)"
@@ -3349,10 +3134,6 @@ msgstr "Bitte füllen Sie alle Pflichtfelder aus."
 msgid "Please enter valid data."
 msgstr "Bitte geben Sie gültige Daten ein."
 
-#: includes/Utils/Assets.php:94
-msgid "Remove: "
-msgstr "Entfernen: "
-
 #. translators: %d: maximum number of files allowed (substituted client-side).
 #: includes/Utils/Assets.php:96
 #, php-format
@@ -3390,10 +3171,6 @@ msgstr "Bitte geben Sie eine vollständige und gültige IBAN ein."
 #: includes/Utils/Assets.php:112
 msgid "IBAN is required."
 msgstr "IBAN ist erforderlich."
-
-#: includes/Utils/Assets.php:113
-msgid "BIC is required."
-msgstr "BIC ist erforderlich."
 
 #: includes/Utils/Assets.php:114
 msgid "Account holder is required."
@@ -3472,14 +3249,6 @@ msgstr "Serverfehler (HTTP %d)"
 #: includes/Utils/Assets.php:353
 msgid "Network error"
 msgstr "Netzwerkfehler"
-
-#: includes/Utils/Assets.php:354
-msgid "PDF load error: "
-msgstr "PDF-Ladefehler: "
-
-#: includes/Utils/Assets.php:351
-msgid "Error: "
-msgstr "Fehler: "
 
 #: includes/Utils/Assets.php:352
 msgid "Unknown server error"
@@ -3643,10 +3412,6 @@ msgstr "Keine Felder gefunden."
 msgid "No fields yet"
 msgstr "Noch keine Felder"
 
-#: includes/Admin/FormEditor.php:1041
-msgid "Add your first field via"
-msgstr "Fügen Sie Ihr erstes Feld über"
-
 #: includes/Admin/FormEditor.php:1042
 msgid "(no label)"
 msgstr "(kein Label)"
@@ -3730,10 +3495,6 @@ msgstr "Ganzzahlen"
 #: includes/Admin/FormEditor.php:1086
 msgid "Half values"
 msgstr "Halbe Werte"
-
-#: includes/Admin/FormEditor.php:1087
-msgid "Page "
-msgstr "Seite "
 
 #: includes/Admin/FormEditor.php:1088
 msgid "Use in emails:"
@@ -3923,17 +3684,9 @@ msgstr "Teilfelder"
 msgid "Enable subfield"
 msgstr "Teilfeld aktivieren"
 
-#: includes/Admin/FormEditor.php:1161
-msgid "No notifications yet. Click"
-msgstr "Noch keine Benachrichtigungen. Klicke"
-
 #: includes/Admin/FormEditor.php:1162
 msgid "Add notification"
 msgstr "Benachrichtigung hinzufügen"
-
-#: includes/Admin/FormEditor.php:1163
-msgid "Notification "
-msgstr "Benachrichtigung "
 
 #: includes/Admin/FormEditor.php:1164
 msgid "Routing active"
@@ -4035,10 +3788,6 @@ msgstr "{site_name} für Standardwert"
 msgid "Sender email address"
 msgstr "E-Mail-Adresse des Absenders"
 
-#: includes/Admin/FormEditor.php:1191
-msgid "{admin_email} for default value"
-msgstr "{admin_email} für Standardwert"
-
 #: includes/Admin/FormEditor.php:1192
 msgid "Reply-to email"
 msgstr "Antwort-E-Mail"
@@ -4126,10 +3875,6 @@ msgstr "Vorschau fehlgeschlagen."
 #: includes/Admin/FormEditor.php:1221
 msgid "Network error."
 msgstr "Netzwerkfehler."
-
-#: includes/Admin/FormEditor.php:1294
-msgid "Seychelles"
-msgstr "Seychellen"
 
 #: includes/Admin/FormEditor.php:1312
 msgid "USA / Canada"
@@ -4745,9 +4490,6 @@ msgstr "Die Auswahl konnte nicht gespeichert werden. Bitte versuchen Sie es erne
 msgid "The selection could not be deleted. Please try again."
 msgstr "Die Auswahl konnte nicht gelöscht werden. Bitte versuchen Sie es erneut."
 
-msgid "%d selection(s) could not be deleted. Please try again."
-msgstr "%d Auswahl(en) konnte(n) nicht gelöscht werden. Bitte versuchen Sie es erneut."
-
 msgid "Please enter a valid sender email address, or leave the field blank."
 msgstr "Bitte geben Sie eine gültige Absender-E-Mail-Adresse ein oder lassen Sie das Feld leer."
 
@@ -4765,9 +4507,6 @@ msgstr "Bild-Hashes"
 
 msgid "Content Streams"
 msgstr "Inhaltsströme"
-
-msgid "%1$d stream(s) in seal · %2$d verifiable in PDF"
-msgstr "%1$d Stream(s) im Siegel · %2$d im PDF prüfbar"
 
 msgid "UNRECOGNISED"
 msgstr "UNBEKANNT"
@@ -4871,8 +4610,8 @@ msgstr "Volle Kontrolle über Formulare:\n- Formulare anlegen, bearbeiten, dupli
 msgid "Width × Height:"
 msgstr "Breite × Höhe:"
 
-msgid "No content stream hashes in seal (PDF generated before this feature was added)."
-msgstr "Keine Inhaltsstrom-Hashes im Siegel (das PDF wurde vor Einführung dieser Funktion erzeugt)."
+msgid "The seal lists no content streams, so the page content cannot be checked."
+msgstr "Das Siegel enthält keine Inhaltsströme, daher lässt sich der Seiteninhalt nicht prüfen."
 
 msgid "All streams accounted for"
 msgstr "Alle Streams zugeordnet"
@@ -5029,11 +4768,6 @@ msgid_plural "… and %d more parts."
 msgstr[0] "… und %d weiterer Teil."
 msgstr[1] "… und %d weitere Teile."
 
-#: assets/js/admin-formselect.js (via includes/Admin/FormSelectList.php)
-#, php-format
-msgid "Delete %d selection(s)? This cannot be undone."
-msgstr "%d Auswahl(en) löschen? Das lässt sich nicht rückgängig machen."
-
 #: includes/Admin/Verificationpage.php
 msgid "Implausible or missing image dimensions"
 msgstr "Unplausible oder fehlende Bildmaße"
@@ -5059,3 +4793,550 @@ msgstr "Gerade läuft eine andere Änderung am Siegelschlüssel. Es wurde nichts
 #, php-format
 msgid "%s has far more parts than any document this plugin creates and was not read."
 msgstr "%s besteht aus weit mehr Teilen als jedes Dokument, das dieses Plugin erstellt, und wurde nicht gelesen."
+
+#, php-format
+msgid "Page %d"
+msgstr "Seite %d"
+
+msgid "{admin_email}, or a fixed address of this site."
+msgstr "{admin_email} oder eine feste Adresse dieser Website."
+
+msgid "A form field cannot be the sender: mail claiming to come from a visitor's address is often discarded by their provider after sending. It will not be saved. Put the field into \"Reply-to email\" instead."
+msgstr "Ein Formularfeld kann nicht der Absender sein: Mails, die angeblich von der Adresse eines Besuchers kommen, verwirft dessen Anbieter oft erst nach dem Versand. Es wird nicht gespeichert. Tragen Sie das Feld stattdessen unter „Antwort-E-Mail“ ein."
+
+#, php-format
+msgid "Really delete the selected forms (%d)?"
+msgstr "Ausgewählte Formulare (%d) wirklich löschen?"
+
+#, php-format
+msgid "Some of the selected form selections could not be deleted (%d). Please try again."
+msgstr "Einige der ausgewählten Formularauswahlen konnten nicht gelöscht werden (%d). Bitte versuchen Sie es erneut."
+
+#, php-format
+msgid "Delete the selected form selections (%d)? This cannot be undone."
+msgstr "Ausgewählte Formularauswahlen (%d) löschen? Das lässt sich nicht rückgängig machen."
+
+#, php-format
+msgid "%s trusts a large part of the internet as a proxy: any visitor from there can claim another address and so get past the sending limit. Enter only the addresses of your own proxy or CDN."
+msgstr "%s vertraut einem großen Teil des Internets als Proxy: Jeder Besucher von dort kann eine andere Adresse angeben und so das Sendelimit umgehen. Tragen Sie nur die Adressen Ihres eigenen Proxys oder CDNs ein."
+
+msgid "The key could not be imported. Please check the server log."
+msgstr "Der Schlüssel konnte nicht importiert werden. Bitte prüfen Sie das Server-Log."
+
+#, php-format
+msgid "Streams in seal: %1$d · verifiable in PDF: %2$d"
+msgstr "Streams im Siegel: %1$d · im PDF prüfbar: %2$d"
+
+msgid "More than one seal block — the document has been tampered with"
+msgstr "Mehr als ein Siegelblock — das Dokument wurde manipuliert"
+
+msgid "Creditor identification number"
+msgstr "Gläubiger-Identifikationsnummer"
+
+#, php-format
+msgid "End of %s"
+msgstr "Ende: %s"
+
+#, php-format
+msgid "Remove %s"
+msgstr "%s entfernen"
+
+#, php-format
+msgid "PDF load error: %s"
+msgstr "PDF-Ladefehler: %s"
+
+#, php-format
+msgid "Error: %s"
+msgstr "Fehler: %s"
+
+#, php-format
+msgid "%d seal block found — exactly 1 is expected."
+msgid_plural "%d seal blocks found — exactly 1 is expected."
+msgstr[0] "%d Siegelblock gefunden — erwartet wird genau 1."
+msgstr[1] "%d Siegelblöcke gefunden — erwartet wird genau 1."
+
+#, php-format
+msgid "%d field does not match the seal"
+msgid_plural "%d fields do not match the seal"
+msgstr[0] "%d Feld stimmt nicht mit dem Siegel überein"
+msgstr[1] "%d Felder stimmen nicht mit dem Siegel überein"
+
+#, php-format
+msgid "%d annotation unmatched"
+msgid_plural "%d annotations unmatched"
+msgstr[0] "%d Anmerkung nicht zugeordnet"
+msgstr[1] "%d Anmerkungen nicht zugeordnet"
+
+#, php-format
+msgid "Please select at least %d option."
+msgid_plural "Please select at least %d options."
+msgstr[0] "Bitte mindestens %d Option wählen."
+msgstr[1] "Bitte mindestens %d Optionen wählen."
+
+#, php-format
+msgid "Please select at most %d option."
+msgid_plural "Please select at most %d options."
+msgstr[0] "Bitte höchstens %d Option wählen."
+msgstr[1] "Bitte höchstens %d Optionen wählen."
+
+#, php-format
+msgid "Add your first field via %s"
+msgstr "Fügen Sie Ihr erstes Feld über %s hinzu"
+
+#, php-format
+msgid "No notifications yet. Click %s."
+msgstr "Noch keine Benachrichtigungen. Klicken Sie auf %s."
+
+msgid "The form could not be deleted."
+msgstr "Das Formular konnte nicht gelöscht werden."
+
+msgid "FABRICATOR_SEAL_MASTER_KEY is set in wp-config.php, so keys must be stored encrypted. Choose encrypted storage, or remove that line from wp-config.php to use Standard storage."
+msgstr "FABRICATOR_SEAL_MASTER_KEY ist in der wp-config.php gesetzt, daher müssen Schlüssel verschlüsselt gespeichert werden. Wählen Sie die verschlüsselte Speicherung, oder entfernen Sie diese Zeile aus der wp-config.php, um die Standard-Speicherung zu nutzen."
+
+msgid "Make it required only if what the form does cannot work without it; consent demanded for anything else is not freely given."
+msgstr "Machen Sie sie nur zur Pflicht, wenn das, wofür das Formular da ist, ohne sie nicht funktioniert; eine für anderes verlangte Einwilligung ist nicht freiwillig."
+
+msgid "Images, videos or other content from another site are fetched by every visitor, which hands that site their IP address — use files from your Media Library, or name that site in your privacy policy."
+msgstr "Bilder, Videos oder andere Inhalte von einer anderen Website ruft jeder Besucher selbst ab und übermittelt dieser Website dabei seine IP-Adresse — verwenden Sie Dateien aus Ihrer Mediathek, oder nennen Sie diese Website in Ihrer Datenschutzerklärung."
+
+msgid "Direct Debit Mandate"
+msgstr "Lastschriftmandat"
+
+msgid "Please choose"
+msgstr "Bitte wählen"
+
+msgid "Checking"
+msgstr "Girokonto"
+
+msgid "Savings"
+msgstr "Sparkonto"
+
+msgid "Direct debit details are missing."
+msgstr "Die Lastschriftdaten fehlen."
+
+msgid "Please enter a valid sort code (6 digits)."
+msgstr "Bitte geben Sie einen gültigen Sort Code (6 Ziffern) ein."
+
+msgid "Please enter a valid routing number."
+msgstr "Bitte geben Sie eine gültige Routing-Nummer ein."
+
+msgid "Please enter a valid account number (8 digits)."
+msgstr "Bitte geben Sie eine gültige Kontonummer (8 Ziffern) ein."
+
+msgid "Please enter a valid account number (4 to 17 digits)."
+msgstr "Bitte geben Sie eine gültige Kontonummer (4 bis 17 Ziffern) ein."
+
+msgid "Please choose the account type."
+msgstr "Bitte wählen Sie die Kontoart."
+
+msgid "Sort code is a required field."
+msgstr "Sort Code ist ein Pflichtfeld."
+
+msgid "Routing number is a required field."
+msgstr "Routing-Nummer ist ein Pflichtfeld."
+
+msgid "Account number is a required field."
+msgstr "Kontonummer ist ein Pflichtfeld."
+
+msgid "Direct Debit Instruction"
+msgstr "Lastschriftauftrag"
+
+msgid "ACH Debit Authorization"
+msgstr "ACH-Lastschriftermächtigung"
+
+msgid "Service user number"
+msgstr "Service User Number"
+
+msgid "Company ID"
+msgstr "Company ID"
+
+msgid "Reference"
+msgstr "Referenz"
+
+msgid "Authorization reference"
+msgstr "Referenz der Ermächtigung"
+
+msgid "Sort code:"
+msgstr "Sort Code:"
+
+msgid "Routing number:"
+msgstr "Routing-Nummer:"
+
+msgid "Account number:"
+msgstr "Kontonummer:"
+
+msgid "Account type:"
+msgstr "Kontoart:"
+
+msgid "Scheme"
+msgstr "Verfahren"
+
+msgid "Bacs (UK)"
+msgstr "Bacs (GB)"
+
+msgid "ACH (US)"
+msgstr "ACH (USA)"
+
+msgid "FormFabricator ships no wording for Bacs. Enter the instruction text and the Direct Debit Guarantee as your bank or payment provider requires them."
+msgstr "FormFabricator liefert keinen Text für Bacs. Geben Sie den Auftragstext und die Direct Debit Guarantee so ein, wie Ihre Bank oder Ihr Zahlungsdienstleister sie vorgibt."
+
+msgid "FormFabricator ships no wording for ACH. Enter the authorization text your bank or payment provider requires."
+msgstr "FormFabricator liefert keinen Text für ACH. Geben Sie den Ermächtigungstext ein, den Ihre Bank oder Ihr Zahlungsdienstleister vorgibt."
+
+msgid "Sort code label"
+msgstr "Sort-Code-Label"
+
+msgid "Routing number label"
+msgstr "Routing-Nummer-Label"
+
+msgid "Account number label"
+msgstr "Kontonummer-Label"
+
+msgid "Account type label"
+msgstr "Kontoart-Label"
+
+msgid "Service user number (SUN)"
+msgstr "Service User Number (SUN)"
+
+msgid "Sort code is required."
+msgstr "Sort Code ist erforderlich."
+
+msgid "Routing number is required."
+msgstr "Routing-Nummer ist erforderlich."
+
+msgid "Account number is required."
+msgstr "Kontonummer ist erforderlich."
+
+msgid "A Direct Debit Mandate has no mandate text, so visitors cannot give it. Enter the text your bank or payment provider requires in the field's settings."
+msgstr "Ein Lastschriftmandat hat keinen Mandatstext, daher können Besucher es nicht erteilen. Geben Sie in den Einstellungen des Feldes den Text ein, den Ihre Bank oder Ihr Zahlungsdienstleister vorgibt."
+
+msgid "Encrypted — master key missing"
+msgstr "Verschlüsselt — Master-Schlüssel fehlt"
+
+msgid "The keys are stored encrypted, but %1$s is no longer in %2$s, so none of them can be read. Put the line back from your backup."
+msgstr "Die Schlüssel sind verschlüsselt gespeichert, aber %1$s steht nicht mehr in %2$s, daher kann keiner von ihnen gelesen werden. Stellen Sie die Zeile aus Ihrer Sicherung wieder her."
+
+msgid "wp-config.php already holds FABRICATOR_SEAL_MASTER_KEY, so no new line is issued. Confirm to store keys encrypted with it."
+msgstr "Die wp-config.php enthält bereits FABRICATOR_SEAL_MASTER_KEY, daher wird keine neue Zeile ausgegeben. Bestätigen Sie, um Schlüssel damit verschlüsselt zu speichern."
+
+msgid "active key"
+msgstr "aktiver Schlüssel"
+
+msgid "retired key"
+msgstr "ausgemusterter Schlüssel"
+
+msgid "set-aside damaged key"
+msgstr "beiseitegelegter beschädigter Schlüssel"
+
+msgid "key waiting for download"
+msgstr "Schlüssel wartet auf Download"
+
+msgid "Direct Debit Mandate: enter the mandate text in this field's settings. Until then, visitors cannot give a mandate here."
+msgstr "Lastschriftmandat: Geben Sie den Mandatstext in den Einstellungen dieses Feldes ein. Bis dahin können Besucher hier kein Mandat erteilen."
+
+msgid "Direct debits cannot be set up with this form at the moment."
+msgstr "Über dieses Formular kann derzeit kein Lastschriftmandat erteilt werden."
+
+msgid "Fingerprint:"
+msgstr "Fingerprint:"
+
+msgid "These stored keys are not encrypted, so they are refused now. Tick only keys whose fingerprint is in one of your key backup files: they are encrypted and used again. Unticked keys stay refused."
+msgstr "Diese gespeicherten Schlüssel sind nicht verschlüsselt und werden daher derzeit abgelehnt. Haken Sie nur Schlüssel an, deren Fingerprint in einer Ihrer Schlüssel-Sicherungsdateien steht: Sie werden verschlüsselt und wieder verwendet. Nicht angehakte Schlüssel bleiben abgelehnt."
+
+msgid "If you leave the active key unticked, rotate the PDF key afterwards so forms can seal again."
+msgstr "Lassen Sie den aktiven Schlüssel ohne Haken, rotieren Sie anschließend den PDF-Schlüssel, damit Formulare wieder versiegeln können."
+
+msgid "The fingerprint in this key file does not match its key. The file is damaged or was changed."
+msgstr "Der Fingerprint in dieser Schlüsseldatei passt nicht zu ihrem Schlüssel. Die Datei ist beschädigt oder wurde verändert."
+
+msgid "Unknown user (#%d)"
+msgstr "Unbekannter Benutzer (#%d)"
+
+msgid "Encrypted key storage needs the PHP openssl extension, which this server does not have. Ask your host to enable it, or keep Standard storage."
+msgstr "Die verschlüsselte Schlüsselspeicherung benötigt die PHP-Erweiterung openssl, die auf diesem Server fehlt. Bitten Sie Ihren Hoster, sie zu aktivieren, oder bleiben Sie bei der Standard-Speicherung."
+
+msgid "(more than %d different object types)"
+msgstr "(mehr als %d verschiedene Objekttypen)"
+
+msgid "Field #%d"
+msgstr "Feld #%d"
+
+msgid "MISSING FROM PDF"
+msgstr "FEHLT IM PDF"
+
+msgid "Annotation #%1$d — %2$s"
+msgstr "Anmerkung #%1$d — %2$s"
+
+msgid "Unreadable XObject"
+msgstr "Unlesbares XObject"
+
+msgid "assigned when the form is sent"
+msgstr "wird beim Absenden vergeben"
+
+msgid "Mandate reference prefix"
+msgstr "Präfix der Mandatsreferenz"
+
+msgid "[Signature present]"
+msgstr "[Unterschrift vorhanden]"
+
+msgid "Documents (pdf, docx, xlsx, pptx, odt, ods, txt)"
+msgstr "Dokumente (pdf, docx, xlsx, pptx, odt, ods, txt)"
+
+msgid "This answer contains \"%s\", which the sealed PDF uses for itself. Please remove it."
+msgstr "Diese Antwort enthält „%s“, das das versiegelte PDF für sich selbst verwendet. Bitte entfernen Sie es."
+
+msgid "Account type: empty choice"
+msgstr "Kontoart: leere Auswahl"
+
+msgid "Account type: checking"
+msgstr "Kontoart: Girokonto"
+
+msgid "Account type: savings"
+msgstr "Kontoart: Sparkonto"
+
+msgid "Label of the creditor line"
+msgstr "Beschriftung der Gläubiger-Zeile"
+
+msgid "Label of the reference line"
+msgstr "Beschriftung der Referenz-Zeile"
+
+msgid "Own text"
+msgstr "Eigener Text"
+
+msgid "Reference text"
+msgstr "Referenztext"
+
+msgid "Shown and recorded as typed, e.g. \"Your membership number\". Empty: no reference line."
+msgstr "Wird so angezeigt und festgehalten, wie Sie ihn eingeben, z. B. „Ihre Mitgliedsnummer“. Leer: keine Referenz-Zeile."
+
+msgid "Shown in place of the reference before sending"
+msgstr "Vor dem Absenden statt der Referenz angezeigt"
+
+msgid "Signature hint"
+msgstr "Hinweis zur Unterschrift"
+
+msgid "Clear button"
+msgstr "Schaltfläche „Löschen“"
+
+msgctxt "mandate reference made per mandate"
+msgid "Generated"
+msgstr "Automatisch erzeugt"
+
+msgid "Signatures reach recipients only in the attached PDF, if the PDF Layout shows them, or with \"Attach uploaded files\". These notifications have neither, so their email only says a signature is present: %s."
+msgstr "Unterschriften erreichen die Empfänger nur im angehängten PDF, sofern das PDF-Layout sie zeigt, oder mit „Hochgeladene Dateien anhängen“. Diese Benachrichtigungen haben keines von beiden, daher sagt ihre E-Mail nur, dass eine Unterschrift vorliegt: %s."
+
+msgid "The old master key is lost"
+msgstr "Der alte Master-Schlüssel ist verloren"
+
+msgid "Tick only if the master key your seal keys were encrypted with is gone for good. Keys encrypted with it stay unreadable, and their PDFs can no longer be checked."
+msgstr "Nur ankreuzen, wenn der Master-Schlüssel, mit dem Ihre Siegelschlüssel verschlüsselt wurden, endgültig verloren ist. Damit verschlüsselte Schlüssel bleiben unlesbar, und ihre PDFs können nicht mehr geprüft werden."
+
+msgid "Nothing was changed: FABRICATOR_SEAL_MASTER_KEY in wp-config.php does not open your seal keys. Put the right master key back, or, if it is lost for good, tick \"The old master key is lost\" and rotate."
+msgstr "Nichts wurde geändert: FABRICATOR_SEAL_MASTER_KEY in der wp-config.php öffnet Ihre Siegelschlüssel nicht. Setzen Sie den richtigen Master-Schlüssel wieder ein, oder kreuzen Sie, wenn er endgültig verloren ist, „Der alte Master-Schlüssel ist verloren“ an und rotieren Sie."
+
+msgid "This layout leaves signatures out of the PDF. These forms take signatures, and the recipients of their notifications without \"Attach uploaded files\" get none: %s."
+msgstr "Dieses Layout lässt Unterschriften im PDF weg. Diese Formulare nehmen Unterschriften entgegen, und die Empfänger ihrer Benachrichtigungen ohne „Hochgeladene Dateien anhängen“ erhalten keine: %s."
+
+msgid "FABRICATOR_SEAL_MASTER_KEY in wp-config.php does not open your PDF seal keys. Put the right master key back: rotating the PDF key now would leave the current key unreadable for good."
+msgstr "FABRICATOR_SEAL_MASTER_KEY in der wp-config.php öffnet Ihre PDF-Siegelschlüssel nicht. Setzen Sie den richtigen Master-Schlüssel wieder ein: Den PDF-Schlüssel jetzt zu rotieren, würde den aktuellen Schlüssel endgültig unlesbar machen."
+
+msgid "The PDF seal key is one that was already retired: its record was restored from an older copy of the database. Rotate the PDF key to create a new one."
+msgstr "Der PDF-Siegelschlüssel ist einer, der bereits ausgemustert wurde: Sein Eintrag wurde aus einer älteren Kopie der Datenbank wiederhergestellt. Rotieren Sie den PDF-Schlüssel, um einen neuen zu erstellen."
+
+msgid "Date of signing"
+msgstr "Datum der Unterschrift"
+
+msgid "Creditor"
+msgstr "Zahlungsempfänger"
+
+msgid "Creditor address"
+msgstr "Anschrift des Zahlungsempfängers"
+
+msgid "Type of payment"
+msgstr "Zahlungsart"
+
+msgid "Recurrent payment"
+msgstr "Wiederkehrende Zahlung"
+
+msgid "One-off payment"
+msgstr "Einmalige Zahlung"
+
+msgid "Street and number:"
+msgstr "Straße und Hausnummer:"
+
+msgid "Postal code:"
+msgstr "Postleitzahl:"
+
+msgid "City:"
+msgstr "Ort:"
+
+msgid "Country:"
+msgstr "Land:"
+
+msgid "Place of signing:"
+msgstr "Ort der Unterschrift:"
+
+msgid "Ask for the debtor's address"
+msgstr "Anschrift des Zahlungspflichtigen abfragen"
+
+msgid "Ask for the place of signing"
+msgstr "Ort der Unterschrift abfragen"
+
+msgid "Date of signing label"
+msgstr "Beschriftung des Unterschriftsdatums"
+
+msgid "Creditor name"
+msgstr "Name des Zahlungsempfängers"
+
+msgid "Empty: not shown."
+msgstr "Leer: wird nicht angezeigt."
+
+msgid "Label of the creditor name"
+msgstr "Beschriftung des Empfängernamens"
+
+msgid "Label of the creditor address"
+msgstr "Beschriftung der Empfängeranschrift"
+
+msgid "Not stated"
+msgstr "Nicht angegeben"
+
+msgid "Recurrent"
+msgstr "Wiederkehrend"
+
+msgid "One-off"
+msgstr "Einmalig"
+
+msgid "Label of the payment type"
+msgstr "Beschriftung der Zahlungsart"
+
+msgid "Text for recurrent payments"
+msgstr "Text für wiederkehrende Zahlungen"
+
+msgid "Text for a one-off payment"
+msgstr "Text für eine einmalige Zahlung"
+
+msgid "Street label"
+msgstr "Beschriftung der Straße"
+
+msgid "Postal code label"
+msgstr "Beschriftung der Postleitzahl"
+
+msgid "City label"
+msgstr "Beschriftung des Orts"
+
+msgid "Country label"
+msgstr "Beschriftung des Lands"
+
+msgid "Place of signing label"
+msgstr "Beschriftung des Unterschriftsorts"
+
+msgid "The BIC is needed for IBANs from %s."
+msgstr "Für IBANs aus %s wird die BIC benötigt."
+
+msgid "Mandate"
+msgstr "Mandat"
+
+msgid "Debtor details"
+msgstr "Angaben zum Zahlungspflichtigen"
+
+msgid "Labels"
+msgstr "Beschriftungen"
+
+msgid "A mandate also names the debtor's address and where it was signed; for IBANs from outside the EEA, such as Swiss or British ones, banks need the address. Switch these on unless the form asks elsewhere."
+msgstr "Ein Mandat nennt auch die Anschrift des Zahlungspflichtigen und den Ort der Unterschrift; für IBANs von außerhalb des EWR, etwa aus der Schweiz oder dem Vereinigten Königreich, benötigen Banken die Anschrift. Schalten Sie diese ein, sofern das Formular nicht anderswo danach fragt."
+
+msgid "A mandate also names the debtor's address and where it was signed. Switch these on unless the form asks elsewhere."
+msgstr "Ein Mandat nennt auch die Anschrift des Zahlungspflichtigen und den Ort der Unterschrift. Schalten Sie diese ein, sofern das Formular nicht anderswo danach fragt."
+
+msgid "Particle background"
+msgstr "Partikel-Hintergrund"
+
+msgid "On"
+msgstr "An"
+
+msgid "Moving, or a still picture when the system asks for reduced motion."
+msgstr "Bewegt, oder als stilles Bild, wenn das System reduzierte Bewegung wünscht."
+
+msgid "A plain background on every FormFabricator page."
+msgstr "Ein schlichter Hintergrund auf allen FormFabricator-Seiten."
+
+msgid "Each mandate gets its own reference: this prefix, the date and a random part."
+msgstr "Jedes Mandat erhält eine eigene Referenz: dieses Präfix, das Datum und einen Zufallsteil."
+
+msgid "The visitor learns the reference only from an email: put {ID_ref}, with this field's ID for ID, into a notification sent to them."
+msgstr "Die Referenz erfährt der Besucher nur per E-Mail: Setzen Sie {ID_ref}, mit der ID dieses Feldes statt ID, in eine Benachrichtigung an ihn."
+
+msgid "A Direct Debit Mandate does not name: %s. Visitors give bank details without knowing who collects, and banks cannot use it. Enter them in the field's settings, or ignore this if the mandate text names them."
+msgstr "Ein Lastschriftmandat nennt nicht: %s. Besucher geben Bankdaten an, ohne zu wissen, wer einzieht, und Banken können es nicht verwenden. Tragen Sie die Angaben in den Feldeinstellungen ein, oder ignorieren Sie diesen Hinweis, wenn der Mandatstext sie nennt."
+
+msgid "Also say how the visitor can withdraw their consent, e.g. \"You can withdraw it at any time by emailing …\"."
+msgstr "Sagen Sie auch, wie der Besucher seine Einwilligung widerrufen kann, z. B. „Sie können sie jederzeit per E-Mail an … widerrufen.“"
+
+msgid "A Consent field still shows its placeholder text, which names no purpose and no way to withdraw, so it is not valid consent. Write what the visitor agrees to and how they can withdraw it."
+msgstr "Ein Einwilligungsfeld zeigt noch seinen Platzhaltertext, der weder einen Zweck noch einen Weg zum Widerruf nennt; das ist keine gültige Einwilligung. Schreiben Sie, worin der Besucher einwilligt und wie er widerrufen kann."
+
+msgid "%s (signed by typing the name)"
+msgstr "%s (durch Eingabe des Namens unterschrieben)"
+
+msgid "Your full name"
+msgstr "Ihr vollständiger Name"
+
+msgid "Type your name instead"
+msgstr "Stattdessen Namen eingeben"
+
+msgid "Draw instead"
+msgstr "Stattdessen zeichnen"
+
+msgid "Button to type the name instead"
+msgstr "Schaltfläche „Namen eingeben“"
+
+msgid "Button to draw instead"
+msgstr "Schaltfläche „Zeichnen“"
+
+msgid "Label of the typed name"
+msgstr "Beschriftung des eingegebenen Namens"
+
+msgid "Only for CAPTCHA fields set to reCAPTCHA. ALTCHA, the default, runs on this site and needs no keys."
+msgstr "Nur für CAPTCHA-Felder, die auf reCAPTCHA eingestellt sind. ALTCHA, die Voreinstellung, läuft auf dieser Website und braucht keine Schlüssel."
+
+msgid "Verification failed. Try again later."
+msgstr "Prüfung fehlgeschlagen. Bitte später erneut versuchen."
+
+msgid "Verification expired. Try again."
+msgstr "Prüfung abgelaufen. Bitte erneut versuchen."
+
+msgid "I'm not a robot"
+msgstr "Ich bin kein Roboter"
+
+msgid "Reload"
+msgstr "Neu laden"
+
+msgid "Verify"
+msgstr "Prüfen"
+
+msgid "Verification required!"
+msgstr "Prüfung erforderlich!"
+
+msgid "Verified"
+msgstr "Geprüft"
+
+msgid "Verifying…"
+msgstr "Wird geprüft…"
+
+msgid "Verifying… please wait."
+msgstr "Wird geprüft… bitte warten."
+
+msgid "Provider"
+msgstr "Anbieter"
+
+msgid "ALTCHA (on this site)"
+msgstr "ALTCHA (auf dieser Website)"
+
+msgid "reCAPTCHA (Google)"
+msgstr "reCAPTCHA (Google)"
+
+msgid "Checked on this site: the visitor's browser solves a small calculation. No third party is involved, and nothing is stored about the visitor. Needs HTTPS: browsers allow the calculation only on secure pages."
+msgstr "Wird auf dieser Website geprüft: Der Browser des Besuchers löst eine kleine Rechenaufgabe. Kein Dritter ist beteiligt, und über den Besucher wird nichts gespeichert. Erfordert HTTPS: Browser erlauben die Rechenaufgabe nur auf sicheren Seiten."
+
+msgid "An image is larger than PDFs on this site can take: at most %s megapixels. Choose a smaller image, or scale this one down."
+msgstr "Ein Bild ist größer, als PDFs auf dieser Website es aufnehmen können: höchstens %s Megapixel. Wählen Sie ein kleineres Bild oder verkleinern Sie dieses."

@@ -3,21 +3,15 @@
     A throwaway MariaDB for the WordPress integration suite, dot-sourced by build.ps1.
 
 .DESCRIPTION
-    The integration suite (tests/Integration, phpunit-integration.xml.dist) needs MySQL or MariaDB. Rather than ask
-    for a database server to be installed, the build keeps a portable MariaDB of its own:
+    A portable MariaDB, so the integration suite needs no installed database server. It:
 
-      - lives in %LOCALAPPDATA%\FormFabricator\test-db, outside the repository, so the release build, phpcs, php -l
-        and make-pot never walk through it, and every clone on this machine shares one copy;
-      - is downloaded once from mariadb.org and checked against the SHA-256 pinned below before anything is
-        extracted (NIST SSDF PS.3/PW.4, as for vendor/pdfjs);
-      - is unpacked without debug symbols (.pdb), link libraries (.lib) and the admin tools in bin/, which the build
-        never runs — about 40 MB instead of 290 MB;
-      - runs only for the duration of a build: bound to 127.0.0.1 on a free port, started with --no-defaults so no
-        my.ini elsewhere on the machine can change it, and shut down afterwards;
-      - holds nothing worth keeping: the WordPress test library drops and recreates its tables on every run.
+      - lives in %LOCALAPPDATA%\FormFabricator\test-db, outside the repository, shared by every clone;
+      - is downloaded once and checked against the SHA-256 pinned below before anything is extracted;
+      - is unpacked without debug symbols, link libraries and unused tools (about 40 MB instead of 290 MB);
+      - runs only during a build, on 127.0.0.1 and a free port, with --no-defaults;
+      - holds nothing worth keeping: the test library recreates its tables on every run.
 
-    Dev tooling, never shipped: build.ps1's $exclude list drops this file, and the package verification rejects
-    any .ps1 that reaches the archive.
+    Dev tooling, never shipped.
 #>
 
 $TestDbVersion = '11.4.13'
@@ -113,9 +107,7 @@ function Expand-TestDatabaseZip {
         foreach ($entry in $zip.Entries) {
             if ($entry.Name -eq '') { continue } # a directory entry
             if ($entry.FullName -match '(?i)\.(pdb|lib)$' -or $entry.FullName -match '(?i)/include/') { continue }
-            # From bin/ only the server (mariadbd.exe, and mysqld.exe, the name the initializer bootstraps through), its
-            # initializer and the DLLs they load (the server is server.dll): the backup, dump, client and storage-engine
-            # tools there are most of the archive and never run here.
+            # From bin/ only the server (mariadbd.exe, and mysqld.exe for the initializer), the initializer and the DLLs.
             if ($entry.FullName -match '(?i)/bin/' -and $entry.Name -notmatch '(?i)^(mariadbd|mysqld|mariadb-install-db)\.exe$|\.dll$') { continue }
             # Drop the archive's own top folder (mariadb-<version>-winx64/).
             $relative = $entry.FullName.Substring($entry.FullName.IndexOf('/') + 1)

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -92,7 +92,7 @@ class FormRenderer
         $submit_cond_attr = '';
         if (!empty($submit_cond['rules'])) {
             $submit_cond_attr = ' data-conditions="' . esc_attr(
-                (string) wp_json_encode(
+                \FabricatorForms\Utils\Cast::jsonForAttribute(
                     [
                         'action' => 'show',
                         'match'  => ($submit_cond['match'] ?? 'all') === 'any' ? 'any' : 'all',
@@ -121,10 +121,8 @@ class FormRenderer
         $has_upload = self::anyFieldHandler($seen_handlers, static fn($h) => $h->needsMultipartEncoding());
         $has_pages  = self::anyFieldHandler($seen_handlers, static fn($h) => $h->isPageBreak());
 
-        // Two forms on one page repeated every id, so a label could focus the other form's input. Every form after
-        // the first on the page gets a suffix on its ids (uniqueIds()), which front.js reads back.
-        // Counted per page, not per form id: a form selection renders several *different* forms, and two of them
-        // using the same field id ("email", say) collided while each was only its own first copy.
+        // Every form after the first on a page gets an id suffix (uniqueIds()), which front.js reads back. Counted per
+        // page, not per form: different forms can share field ids.
         self::$render_count++;
         $id_suffix = self::$render_count > 1 ? '--' . self::$render_count : '';
 
@@ -185,9 +183,8 @@ class FormRenderer
     private static int $render_count = 0;
 
     /**
-     * Appends $suffix to every id in $html and to each reference to one of those ids (label for, form, list, headers,
-     * aria-* id lists, in-page #links), so a repeated copy of a form points only at itself. Field classes are left
-     * untouched, and names too: they are what the server reads, and each copy is its own <form>.
+     * Appends $suffix to every id in $html and every reference to one (for, aria-*, #links, …), so a repeated form
+     * points only at itself. Names stay: the server reads them, and each copy is its own <form>.
      *
      * @param string $html   Rendered form markup.
      * @param string $suffix Suffix such as "--2".
@@ -231,7 +228,7 @@ class FormRenderer
         if (!$field_cfg || empty($field_cfg['conditions']['rules'])) {
             return '';
         }
-        return ' data-conditions="' . esc_attr((string) wp_json_encode($field_cfg['conditions'])) . '"';
+        return ' data-conditions="' . esc_attr(\FabricatorForms\Utils\Cast::jsonForAttribute($field_cfg['conditions'])) . '"';
     }
 
     /**

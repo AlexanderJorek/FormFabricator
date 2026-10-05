@@ -36,9 +36,7 @@ function (root) {
             if (showNames && names[i]) {
                 var nameSpan = document.createElement('span');
                 nameSpan.className = 'fabricator-page-step-name';
-                // textContent, not innerHTML — names[i] is server-sanitized
-                // (wp_strip_all_tags) but this is the real XSS boundary,
-                // not the PHP-side stripping.
+                // textContent: this, not the server's stripping, is the XSS boundary.
                 nameSpan.textContent = String(names[i]);
                 btn.appendChild(nameSpan);
             }

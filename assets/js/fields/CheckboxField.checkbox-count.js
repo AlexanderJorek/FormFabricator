@@ -5,8 +5,8 @@ function (fieldEl) {
     var max = parseInt(group.dataset.maxSelections || '0', 10);
     if (!min && !max) return null;
     var cnt = fieldEl.querySelectorAll('input[type="checkbox"]:checked').length;
-    var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
-    if (min > 0 && cnt < min) return (_i18n && _i18n.checkbox_min ? _i18n.checkbox_min.replace('%d', min) : 'Please select at least ' + min + ' option(s).');
-    if (max > 0 && cnt > max) return (_i18n && _i18n.checkbox_max ? _i18n.checkbox_max.replace('%d', max) : 'Please select at most ' + max + ' option(s).');
+    /* CheckboxField::render() writes each message with its plural form already chosen for the configured count. */
+    if (min > 0 && cnt < min) return group.dataset.minMessage || ('Please select at least ' + min + ' options.');
+    if (max > 0 && cnt > max) return group.dataset.maxMessage || ('Please select at most ' + max + ' options.');
     return null;
 }

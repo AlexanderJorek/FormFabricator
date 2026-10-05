@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -39,9 +39,8 @@ class GdprField extends BaseField
     }
 
     /**
-     * Stores privacy_policy_url as a URL. Through the HTML sanitizer "&" was saved as "&amp;", which esc_url() then
-     * emitted as "&#038;amp;", so a policy link with more than one query parameter pointed at the wrong page.
-     * sanitize_text_field() is no option either: it strips percent-encoded characters out of the URL.
+     * Stores privacy_policy_url as a URL: the HTML sanitizer would double-encode "&", and sanitize_text_field() strips
+     * percent-encoding.
      *
      * @param string $key   Config key.
      * @param string $value Raw value.
@@ -63,6 +62,29 @@ class GdprField extends BaseField
     public function getStyles(): string
     {
         return self::readFieldAsset('assets/css/fields/GdprField.css');
+    }
+
+    /**
+     * Its inputs are checkboxes named after the field id, which front.js reads as an empty list while hidden.
+     *
+     * @return array
+     */
+    public function hiddenConditionValue(): array
+    {
+        return [];
+    }
+
+    /**
+     * A list, as front.js reads a checkbox named after the field: ["1"] when ticked, [] when not. Read as the scalar
+     * "1", "greater" and "less" rules compared a number on the server and a list in the browser.
+     *
+     * @param mixed $raw    What extractValue() returned.
+     * @param array $config Field configuration.
+     * @return mixed
+     */
+    public function conditionValue(mixed $raw, array $config): mixed
+    {
+        return is_scalar($raw) && (string) $raw !== '' ? [(string) $raw] : [];
     }
 
     /**
@@ -111,7 +133,7 @@ class GdprField extends BaseField
         $req     = ' required aria-required="true"';
         $checked = !empty($value) ? ' checked' : '';
         // trim()+?: not ??: these keys are always set, so ?? never fires and the WP privacy-policy fallback would be unreachable.
-        $configured_url = trim(wp_specialchars_decode((string) ($config['privacy_policy_url'] ?? ''), ENT_QUOTES)); // decodes "&amp;" saved before 1.0.7
+        $configured_url = trim((string) ($config['privacy_policy_url'] ?? ''));
         $policy_url     = esc_url($configured_url !== '' ? $configured_url : (string) get_privacy_policy_url());
         $configured_txt = trim((string) ($config['privacy_policy_text'] ?? ''));
         $policy_text    = esc_html($configured_txt !== '' ? $configured_txt : __('Privacy policy', 'formfabricator'));
@@ -191,7 +213,7 @@ class GdprField extends BaseField
         // Same fallback semantics as render() — see the comment there for why ?? is wrong here.
         $configured_txt = trim((string) ($config['privacy_policy_text'] ?? ''));
         $policy_text = wp_strip_all_tags($configured_txt !== '' ? $configured_txt : __('Privacy policy', 'formfabricator'));
-        $configured_url = trim(wp_specialchars_decode((string) ($config['privacy_policy_url'] ?? ''), ENT_QUOTES)); // decodes "&amp;" saved before 1.0.7
+        $configured_url = trim((string) ($config['privacy_policy_url'] ?? ''));
         $policy_url  = $configured_url !== '' ? $configured_url : (string) get_privacy_policy_url();
         return sprintf(
             // translators: %1$s: privacy policy link text, %2$s: privacy policy URL, %3$s: acknowledgment timestamp.

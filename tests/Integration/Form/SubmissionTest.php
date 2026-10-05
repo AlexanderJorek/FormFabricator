@@ -18,7 +18,7 @@ final class SubmissionTest extends AjaxTestCase
 
     public function testAValidSubmissionIsMailedToToCcAndBcc(): void
     {
-        // TESTING.md §3: CC/BCC were saved but not sent (1.0.6).
+        // TESTING.md §3: CC/BCC were saved but not sent.
         $form = $this->createForm(self::FIELDS, [self::notification(['cc' => 'cc@example.org', 'bcc' => 'bcc1@example.org, bcc2@example.org'])]);
 
         $r = $this->submit($form, ['name' => 'Ada', 'email' => 'ada@example.net']);
@@ -32,9 +32,51 @@ final class SubmissionTest extends AjaxTestCase
         self::assertStringContainsString('Ada', $mail[0]->body);
     }
 
+    public function testAnAnswerHoldingAPdfMarkerIsRefusedAtItsField(): void
+    {
+        // Typed into an answer, a seal delimiter or field marker lands in the PDF's text, where the verifier read it as
+        // structure: the submitter's own genuine PDF then reported "Modified". Also when only the verifier's folding of the
+        // text (entities, full-width forms) turns it into one, and inside a composite field's sub-values.
+        $form = $this->createForm(
+            [
+                ['id' => 'name', 'type' => 'text', 'label' => 'Name'],
+                ['id' => 'addr', 'type' => 'address', 'label' => 'Address', 'expanded' => true, 'street_enabled' => true, 'city_enabled' => true],
+            ],
+            [self::notification()]
+        );
+
+        $typed = $this->submit($form, ['name' => 'Ada ---BEGIN-SEAL---x', 'addr' => ['street' => 'Main St 1', 'city' => 'Berlin']]);
+        self::assertFalse($typed['success']);
+        self::assertStringContainsString('---BEGIN-SEAL---', (string) ($typed['data']['errors']['name'] ?? ''));
+
+        $folded = $this->submit($form, ['name' => 'Ada', 'addr' => ['street' => '&#91;FABRICATOR_PDF_FIELD_END]', 'city' => 'Berlin']]);
+        self::assertFalse($folded['success']);
+        self::assertArrayHasKey('addr', $folded['data']['errors'] ?? []);
+        self::assertSame([], self::sentMail(), 'nothing was sent');
+
+        self::assertTrue($this->submit($form, ['name' => 'Ada [urgent] --- ok', 'addr' => ['street' => 'Main St 1', 'city' => 'Berlin']])['success']);
+    }
+
+    public function testBidiControlsAreRemovedBeforeTheMarkerCheckAndThePdf(): void
+    {
+        // mPDF reorders text by U+202E and the isolates, so they could turn typed text into a marker only in the PDF.
+        // Removed first, a control can neither hide a marker nor reverse one into being.
+        $form = $this->createForm([['id' => 'name', 'type' => 'text', 'label' => 'Name']], [self::notification()]);
+
+        $hidden = $this->submit($form, ['name' => "[FABRICATOR\u{2066}_PDF_FIELD_END]"]);
+        self::assertFalse($hidden['success']);
+        self::assertArrayHasKey('name', $hidden['data']['errors'] ?? []);
+
+        $r = $this->submit($form, ['name' => "\u{05D0}\u{202E}[DNE_DLEIF_FDP_ROTACIRBAF]"]);
+        self::assertTrue($r['success'], json_encode($r['data']));
+        $body = self::sentMail()[0]->body;
+        self::assertStringContainsString("\u{05D0}[DNE_DLEIF_FDP_ROTACIRBAF]", $body);
+        self::assertStringNotContainsString("\u{202E}", $body);
+    }
+
     public function testFieldPlaceholdersResolveInRecipientsAndHeaders(): void
     {
-        // TESTING.md §3: {field_id} in To/CC/BCC, Reply-To, From Name and Subject (1.0.6) — a feature, not an open relay.
+        // TESTING.md §3: {field_id} in To/CC/BCC, Reply-To, From Name and Subject — a feature, not an open relay.
         // Distinct addresses per list: PHPMailer drops an address already among the recipients of another list.
         $form = $this->createForm(self::FIELDS, [self::notification([
             'to'        => '{email}',
@@ -52,6 +94,18 @@ final class SubmissionTest extends AjaxTestCase
         self::assertSame('Message from Ada', $mail->subject);
         self::assertStringContainsString('Reply-To: ada@example.net', $mail->header);
         self::assertMatchesRegularExpression('/^From: Ada via the site </m', $mail->header);
+    }
+
+    public function testAFormFieldNeverBecomesTheSender(): void
+    {
+        // Mail "from" a visitor's own domain is discarded by strict domains after wp_mail() succeeded, and the
+        // submission is stored nowhere else. Even a stored or imported {email} sender is ignored; Reply-To carries it.
+        $form = $this->createForm(self::FIELDS, [self::notification(['from_email' => '{email}', 'reply_to' => '{email}'])]);
+
+        self::assertTrue($this->submit($form, ['name' => 'Ada', 'email' => 'ada@gmail.com'])['success']);
+        $mail = self::sentMail()[0];
+        self::assertDoesNotMatchRegularExpression('/^From:.*ada@gmail\.com/m', $mail->header);
+        self::assertStringContainsString('Reply-To: ada@gmail.com', $mail->header);
     }
 
     public function testABlankPlaceholderFallsBackToTheOtherRecipients(): void
@@ -86,7 +140,7 @@ final class SubmissionTest extends AjaxTestCase
 
     public function testTheSameTokenIsAcceptedOnce(): void
     {
-        // TESTING.md §3: a resubmission via the back button or a cached page is refused as a duplicate (1.0.2).
+        // TESTING.md §3: a resubmission via the back button or a cached page is refused as a duplicate.
         $form  = $this->createForm(self::FIELDS, [self::notification()]);
         $token = SingleUseToken::issue($form);
 
@@ -110,7 +164,7 @@ final class SubmissionTest extends AjaxTestCase
 
     public function testTheEleventhSendInFiveMinutesFromOneAddressIsRefused(): void
     {
-        // TESTING.md §3: "sending the form still stops after 10 sends in 5 minutes from one address" (1.0.7).
+        // TESTING.md §3: "sending the form still stops after 10 sends in 5 minutes from one address".
         $form = $this->createForm(self::FIELDS, [self::notification()]);
         for ($i = 1; $i <= 10; $i++) {
             self::assertTrue($this->submit($form, ['name' => 'Send ' . $i])['success'], "send $i");
@@ -123,9 +177,90 @@ final class SubmissionTest extends AjaxTestCase
         self::assertTrue($this->submit($form, ['name' => 'Someone else'])['success'], 'another address has its own count');
     }
 
+    public function testTheFiftyFirstSendAcrossAllFormsIsRefused(): void
+    {
+        // The per-form count alone allowed 10 sends per form, so a site with more forms allowed more from one address.
+        // 50 across all forms leaves room for a shared network (school, office) and still bounds one address.
+        $forms = [];
+        for ($f = 0; $f < 6; $f++) {
+            $forms[] = $this->createForm(self::FIELDS, [self::notification()]);
+        }
+        for ($i = 1; $i <= 50; $i++) {
+            self::assertTrue($this->submit($forms[$i % 5], ['name' => 'Send ' . $i])['success'], "send $i");
+        }
+        $r = $this->submit($forms[5], ['name' => 'Send 51, to a form not used yet']);
+        self::assertFalse($r['success']);
+        self::assertArrayHasKey('retry_after', $r['data']);
+    }
+
+    public function testAFullIpv6Slash48WritesNoFurtherRows(): void
+    {
+        // Counted per /64 alone, one /48 (65,536 /64s, free from a tunnel broker) wrote two rows for every /64 it used.
+        // The /48 is counted first; once full, a send from yet another /64 in it is refused and writes nothing.
+        global $wpdb;
+        $form  = $this->createForm(self::FIELDS, [self::notification()]);
+        $rows  = static fn(): int => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('fabricator_rl_') . '%'));
+        $key48 = 'submit_48_' . hash_hmac('sha256', '2001:db8:1234::/48', wp_salt('auth'));
+        for ($i = 0; $i < 200; $i++) {
+            \FabricatorForms\Utils\RateLimiter::increment($key48, 5 * MINUTE_IN_SECONDS);
+        }
+
+        $_SERVER['REMOTE_ADDR'] = '2001:db8:1234:77::1';
+        $before = $rows();
+        $r      = $this->submit($form, ['name' => 'Send 201 from this /48']);
+        self::assertFalse($r['success']);
+        self::assertArrayHasKey('retry_after', $r['data']);
+        self::assertSame($before, $rows(), 'no /64 rows once the /48 is full');
+
+        $_SERVER['REMOTE_ADDR'] = '2001:db8:9999:1::1';
+        self::assertTrue($this->submit($form, ['name' => 'Another /48'])['success']);
+    }
+
+    public function testASubmissionSweepsExpiredRowsAtMostHourly(): void
+    {
+        // The scheduled sweeps are set up on activation and from admin_init only: on a network site nobody opens wp-admin
+        // on, or with WP-Cron off, the rows keyed on hashed visitor addresses would stay forever, and so would a
+        // submission PDF a request that died left behind.
+        global $wpdb;
+        // Read from the table, as RateLimiter does: the sweep deletes with SQL, which the option cache does not see.
+        $stored = static fn(string $name): bool => $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $name)) !== null;
+        $form   = $this->createForm(self::FIELDS, [self::notification()]);
+        update_option(\FabricatorForms\Plugin::LAST_INLINE_SWEEP_OPTION, time() - 2 * HOUR_IN_SECONDS, false);
+        add_option('fabricator_rl_expired_one', '3|' . (time() - 10), '', false);
+        $pdf_dir = wp_upload_dir()['basedir'] . '/fabricator-secure-pdf/pdf';
+        wp_mkdir_p($pdf_dir);
+        $stale = $pdf_dir . '/left-behind.pdf';
+        $fresh = $pdf_dir . '/being-sent.pdf';
+        file_put_contents($stale, '%PDF-1.4');
+        file_put_contents($fresh, '%PDF-1.4');
+        touch($stale, time() - 2 * HOUR_IN_SECONDS);
+
+        self::assertTrue($this->submit($form, ['name' => 'Ada'])['success']);
+        self::assertFalse($stored('fabricator_rl_expired_one'), 'swept by the submission');
+        self::assertFileDoesNotExist($stale, 'a PDF left behind over an hour ago is removed');
+        self::assertFileExists($fresh, 'one still being sent is not');
+        wp_delete_file($fresh);
+
+        add_option('fabricator_rl_expired_two', '3|' . (time() - 10), '', false);
+        self::assertTrue($this->submit($form, ['name' => 'Ada again'])['success']);
+        self::assertTrue($stored('fabricator_rl_expired_two'), 'not again within the hour');
+    }
+
+    public function testAHoneypotHitWritesNoRateLimitRows(): void
+    {
+        // The honeypot, the form and its notifications are checked before any row is written: the nonce and token before
+        // them are free to anyone who loads the page.
+        global $wpdb;
+        $form   = $this->createForm(self::FIELDS, [self::notification()]);
+        $before = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('fabricator_rl_') . '%'));
+        self::assertTrue($this->submit($form, ['name' => 'Bot', 'fabricator_hp_field' => 'filled'])['success'], 'looks sent to the bot');
+        self::assertSame($before, (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('fabricator_rl_') . '%')));
+        self::assertSame([], self::sentMail());
+    }
+
     public function testRenderingTheFormWritesNoRateLimitRows(): void
     {
-        // TESTING.md §3: loading a form page many times leaves no fabricator_rl_token_... rows (1.0.7).
+        // TESTING.md §3: loading a form page many times leaves no fabricator_rl_token_... rows.
         global $wpdb;
         $form   = $this->createForm(self::FIELDS, [self::notification()]);
         $before = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->options}");
@@ -138,7 +273,7 @@ final class SubmissionTest extends AjaxTestCase
 
     public function testAFailedMailIsReportedAndTheVisitorCanRetry(): void
     {
-        // TESTING.md §3: a mail failure gives the visitor an error, not a false "Thank you" (1.0.7), and the retry works.
+        // TESTING.md §3: a mail failure gives the visitor an error, not a false "Thank you", and the retry works.
         $form  = $this->createForm(self::FIELDS, [self::notification()]);
         $token = SingleUseToken::issue($form);
         add_filter('pre_wp_mail', '__return_false');
@@ -154,7 +289,7 @@ final class SubmissionTest extends AjaxTestCase
     public function testOneFailedNotificationOfTwoFailsTheSubmissionAndLogsNoAddress(): void
     {
         // TESTING.md §3: with two notifications, one failing — error for the visitor, a log line naming the form and
-        // the notification but no email address, even with WP_DEBUG off (1.0.7).
+        // the notification but no email address, even with WP_DEBUG off.
         $form = $this->createForm(self::FIELDS, [
             self::notification(['slug' => 'owner', 'to' => 'owner@example.org']),
             self::notification(['slug' => 'visitor', 'to' => 'fails@example.org']),
@@ -178,7 +313,7 @@ final class SubmissionTest extends AjaxTestCase
 
     public function testAFormWithEveryNotificationDisabledRefusesTheSubmission(): void
     {
-        // TESTING.md §3: refused with an error instead of accepted and silently discarded (1.0.7).
+        // TESTING.md §3: refused with an error instead of accepted and silently discarded.
         $form = $this->createForm(self::FIELDS, [self::notification(['enabled' => false])]);
 
         $r = $this->submit($form, ['name' => 'Ada']);
@@ -189,7 +324,7 @@ final class SubmissionTest extends AjaxTestCase
 
     public function testASubmitButtonConditionIsEnforcedOnTheServer(): void
     {
-        // TESTING.md §3: posting anyway (Enter key, developer tools) while the button is hidden is refused (1.0.7).
+        // TESTING.md §3: posting anyway (Enter key, developer tools) while the button is hidden is refused.
         $form = $this->createForm(self::FIELDS, [self::notification()], ['submit_conditions' => [
             'match' => 'all',
             'rules' => [['field_id' => 'name', 'operator' => 'equals', 'value' => 'open sesame']],
@@ -212,6 +347,26 @@ final class SubmissionTest extends AjaxTestCase
         self::assertTrue($this->submit($form, ['country' => 'FR', 'vat' => 'posted anyway'])['success']);
         self::assertStringNotContainsString('posted anyway', self::sentMail()[0]->body, 'a hidden field never reaches the mail');
         self::assertFalse($this->submit($form, ['country' => 'DE', 'vat' => ''])['success'], 'visible again: required');
+    }
+
+    public function testAFieldShownBecauseTheFieldItTestsIsHiddenIsMailed(): void
+    {
+        // Chained conditions: "a" is hidden but still posted, so front.js reads it as empty and shows "b". The server
+        // read the posted value, hid "b" too, and the visitor's answer never reached the mail while they were thanked.
+        $show   = static fn(string $field, string $op, string $value = ''): array => [
+            'action' => 'show', 'match' => 'all', 'rules' => [['field_id' => $field, 'operator' => $op, 'value' => $value]],
+        ];
+        $fields = [
+            ['id' => 'gate', 'type' => 'text', 'label' => 'Gate'],
+            ['id' => 'a', 'type' => 'text', 'label' => 'A', 'conditions' => $show('gate', 'equals', 'on')],
+            ['id' => 'b', 'type' => 'text', 'label' => 'B', 'required' => true, 'conditions' => $show('a', 'empty')],
+            ['id' => 'c', 'type' => 'text', 'label' => 'C', 'required' => true, 'conditions' => $show('a', 'equals', 'x')],
+        ];
+        $form = $this->createForm($fields, [self::notification()]);
+
+        $r = $this->submit($form, ['gate' => 'off', 'a' => 'x', 'b' => 'PLEASE-CALL-ME-BACK', 'c' => '']);
+        self::assertTrue($r['success'], 'c tests the hidden a, so it is hidden too and not required: ' . wp_json_encode($r));
+        self::assertStringContainsString('PLEASE-CALL-ME-BACK', self::sentMail()[0]->body);
     }
 
     public function testTheHoneypotDropsTheSubmissionSilently(): void

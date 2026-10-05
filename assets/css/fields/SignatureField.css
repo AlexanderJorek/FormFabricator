@@ -63,4 +63,32 @@
     fill: currentColor;
     overflow: visible;
 }
-.fabricator-signature-hint { font-size: 12px; color: var(--fabricator-text-subtle); }
+.fabricator-signature-hint { font-size: 12px; color: var(--fabricator-text-subtle); }/* The pad hides the drawing area or the name input with [hidden]; the canvas's display: block would override it. */
+.fabricator-signature-wrap [hidden] {
+    display: none !important;
+}
+/* Typing the name instead of drawing (SignatureField.js). */
+.fabricator-signature-typed-row {
+    padding: 12px;
+}
+.fabricator-signature-typed {
+    width: 100%;
+    font-size: 1.25em;
+    font-style: italic;
+}
+.fabricator-signature-mode {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent !important;
+    border: 0;
+    padding: 4px 2px;
+    margin-left: auto;
+    cursor: pointer;
+    color: var(--fabricator-accent, #2271b1);
+    font-size: 0.85em;
+    text-decoration: underline;
+}
+.fabricator-signature-mode:focus-visible {
+    outline: 2px solid var(--fabricator-accent, #2271b1) !important;
+    outline-offset: 2px;
+}

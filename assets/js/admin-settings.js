@@ -212,6 +212,9 @@ try {
                 fd.append('action',               'fabricator_forms_rotate_key');
                 fd.append('nonce',                NONCES.rotate);
                 fd.append('key_compromised',      chk.checked ? '1' : '0');
+                // Shown only while the configured master key doesn't open the stored keys.
+                var lost = document.getElementById('fabricator_key_master_lost');
+                if (lost && lost.checked) { fd.append('master_key_lost', '1'); }
 
                 fetch(ajaxurl, { method: 'POST', body: fd })
                     .then(function (r) { return r.json(); })
@@ -226,9 +229,10 @@ try {
                         if (ok) {
                             closeKeyModal();
                             showKeyDownloadModal({
-                                uuid:       data.data.key_uuid,
-                                key:        data.data.key_value,
-                                created_at: data.data.created_at,
+                                uuid:        data.data.key_uuid,
+                                key:         data.data.key_value,
+                                fingerprint: data.data.key_fingerprint,
+                                created_at:  data.data.created_at,
                             });
                         } else {
                             confirmBtn.disabled = false;
@@ -248,12 +252,14 @@ try {
             var dlOverlay  = document.getElementById('fabricator-key-dl-overlay');
             var dlUuid     = document.getElementById('fabricator-key-dl-uuid');
             var dlDate     = document.getElementById('fabricator-key-dl-date');
+            var dlFp       = document.getElementById('fabricator-key-dl-fingerprint');
             var dlBtn      = document.getElementById('fabricator-key-dl-btn');
             var dlConfirm  = document.getElementById('fabricator-key-dl-confirm');
             if (!dlOverlay) { location.reload(); return; }
 
             dlUuid.textContent    = keyData.uuid || '—';
             dlDate.textContent    = keyData.created_at || '—';
+            if (dlFp) { dlFp.textContent = keyData.fingerprint || '—'; }
             dlConfirm.disabled    = true;
             dlOverlay._keyData    = keyData;
             dlOverlay.hidden      = false;
@@ -261,9 +267,12 @@ try {
             dlBtn.onclick = function () {
                 var payload = JSON.stringify({
                     plugin:     'FormFabricator PDF Seal Key',
-                    uuid:       keyData.uuid,
-                    key:        keyData.key,
-                    created_at: keyData.created_at,
+                    uuid:        keyData.uuid,
+                    key:         keyData.key,
+                    /* HashSeal::keyFingerprint(): what the upgrade dialog shows for this key, to compare it by more than
+                       its UUID; checked against the key again on import. */
+                    fingerprint: keyData.fingerprint,
+                    created_at:  keyData.created_at,
                 }, null, 2);
                 var blob = new Blob([payload], { type: 'application/json' });
                 var a    = document.createElement('a');
@@ -594,12 +603,54 @@ try {
             var mkConfirm = document.getElementById('fabricator-master-key-confirm');
             var mkCancel  = document.getElementById('fabricator-master-key-cancel');
             var mkError   = document.getElementById('fabricator-master-key-error');
+            var mkIntro   = document.getElementById('fabricator-master-key-intro');
+            var mkLose    = document.getElementById('fabricator-master-key-lose-hint');
+            var mkKeys    = document.getElementById('fabricator-master-key-keys');
 
             function openMkModal(defineLine) {
                 mkLine.textContent    = defineLine || '…';
                 mkError.style.display = 'none';
                 mkConfirm.disabled    = !defineLine;
+                showExisting(false, []);
                 mkOverlay.hidden      = false;
+            }
+
+            /* The master key is already in wp-config.php: no line to add or lose, and the unencrypted keys are listed
+               for the admin to tick the ones their backups show to be theirs (FormSettings::handleUpgradeGetMasterKey()). */
+            function showExisting(existing, keys) {
+                if (mkIntro) { mkIntro.hidden = existing; }
+                if (mkLose)  { mkLose.hidden  = existing; }
+                if (!mkKeys) { return; }
+                mkKeys.textContent = '';
+                mkKeys.hidden      = !existing || !keys.length;
+                if (mkKeys.hidden) { return; }
+                var intro = document.createElement('p');
+                intro.className   = 'fabricator-settings-hint';
+                intro.textContent = (I18N.masterKeyUnencrypted || '') + ' ' + (I18N.masterKeyActiveUnticked || '');
+                mkKeys.appendChild(intro);
+                var statusText = {
+                    active: I18N.keyStatusActive, retired: I18N.keyStatusRetired,
+                    'set-aside': I18N.keyStatusSetAside, pending: I18N.keyStatusPending
+                };
+                keys.forEach(function (key) {
+                    var row = document.createElement('label');
+                    row.style.display = 'block';
+                    row.style.margin  = '4px 0';
+                    var box = document.createElement('input');
+                    box.type  = 'checkbox';
+                    box.value = key.uuid;
+                    box.className = 'fabricator-master-key-choice';
+                    /* The fingerprint names the key itself; a UUID is a label a database write can put on any key. */
+                    var fp = document.createElement('code');
+                    fp.textContent = key.fingerprint;
+                    var uuid = document.createElement('small');
+                    uuid.textContent = ' ' + key.uuid + ' — ' + (statusText[key.status] || key.status) + (key.date ? ', ' + key.date : '');
+                    row.appendChild(box);
+                    row.appendChild(document.createTextNode(' '));
+                    row.appendChild(fp);
+                    row.appendChild(uuid);
+                    mkKeys.appendChild(row);
+                });
             }
             function closeMkModal() { mkOverlay.hidden = true; }
 
@@ -615,7 +666,9 @@ try {
                     .then(function (data) {
                         upgradeBtn.disabled = false;
                         if (data.success) {
-                            mkLine.textContent = data.data.define_line;
+                            /* A master key already in wp-config.php is confirmed, never replaced: keys may be encrypted with it. */
+                            mkLine.textContent = data.data.existing ? (I18N.masterKeyExisting || '') : data.data.define_line;
+                            showExisting(!!data.data.existing, data.data.keys || []);
                             mkConfirm.disabled = false;
                         } else {
                             mkError.textContent   = (data.data && data.data.message) || I18N.error;
@@ -643,6 +696,12 @@ try {
                 var fd = new FormData();
                 fd.append('action', 'fabricator_setup_confirm_secure');
                 fd.append('nonce',  DATA.setupNonce);
+                /* Existing master key: only the keys the admin ticked are encrypted (and so trusted again). */
+                if (mkKeys) {
+                    mkKeys.querySelectorAll('.fabricator-master-key-choice:checked').forEach(function (box) {
+                        fd.append('keys[]', box.value);
+                    });
+                }
                 fetch(ajaxurl, { method: 'POST', body: fd })
                     .then(function (r) { return r.json(); })
                     .then(function (data) {
@@ -667,9 +726,7 @@ try {
             });
         }());
 
-        /* ── Privacy policy text: language switch (instant, no round-trip — every
-           language's text is pre-rendered server-side into the data attribute)
-           and copy-to-clipboard ── */
+        /* ── Privacy policy text: language switch (every language pre-rendered) and copy-to-clipboard ── */
         (function () {
             var overlay  = document.getElementById('fabricator-privacy-text-overlay');
             var trigger  = document.getElementById('fabricator-privacy-text-trigger');
@@ -801,9 +858,7 @@ try {
 
         /* ── User-access modal ── */
         (function () {
-            /* slug, column header, hover text. The header alone does not say what a grant confers
-               (edit_forms carries outbound mail to arbitrary addresses), so each one carries a
-               description shown on hover. */
+            /* slug, column header, hover text saying what the grant confers. */
             var CAPS = [
                 ['view_forms',      I18N.permList,      I18N.permListDesc],
                 ['edit_forms',      I18N.permForms,     I18N.permFormsDesc],
@@ -990,8 +1045,8 @@ try {
                 return list.filter(function (u) { return usedIds.indexOf(u.id) === -1; });
             }
 
-            /* Asks the server for matching users as the admin types (FormSettings::handleAccessUserSearch()); the page
-               no longer embeds every account on the site. The sequence number drops out-of-order replies. */
+            /* Asks the server for matching users as the admin types (FormSettings::handleAccessUserSearch()), so the
+               page never embeds every account on the site. The sequence number drops out-of-order replies. */
             var searchTimer = null;
             var searchSeq   = 0;
             function searchUsers(term) {

@@ -51,9 +51,8 @@ final class Measure
     /**
      * The exponent k in "time grows as n^k" for a scan, from runs at n and 4n.
      *
-     * The base size is grown until one run takes at least $min_seconds, so the exponent is not measuring timer noise. A
-     * scan that stays under that even at the largest size is reported as not trusted: it is fast in absolute terms, and
-     * the caller asserts a time bound instead.
+     * The base size grows until a run takes $min_seconds; a scan faster than that at every size is reported as not
+     * trusted, and the caller asserts a time bound instead.
      *
      * @param callable $build Builds the input for a size: fn(int $n): string (bytes, or a path to a file it wrote).
      * @param callable $scan  The scan under test: fn(string $input): mixed.

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -36,6 +36,22 @@ class SliderField extends BaseField
     public function getStyles(): string
     {
         return self::readFieldAsset('assets/css/fields/SliderField.css');
+    }
+
+    /**
+     * A range: both ends, "from to" (BaseField::joinedSubValues()), as front.js reads the "id[from]"/"id[to]" inputs. A
+     * single slider posts one input named after the field, read as it is.
+     *
+     * @param mixed $raw    What extractValue() returned.
+     * @param array $config Field configuration.
+     * @return mixed
+     */
+    public function conditionValue(mixed $raw, array $config): mixed
+    {
+        if (!empty($config['ranged'])) {
+            return self::joinedSubValues($raw, ['from', 'to']);
+        }
+        return is_array($raw) ? '' : $raw;
     }
 
     /**
@@ -295,7 +311,13 @@ class SliderField extends BaseField
     public function map(mixed $value, array $config): string
     {
         if (!empty($config['ranged']) && is_array($value)) {
-            return ($value['from'] ?? '') . ' – ' . ($value['to'] ?? '');
+            $from = is_scalar($value['from'] ?? null) ? trim((string) $value['from']) : '';
+            $to   = is_scalar($value['to'] ?? null) ? trim((string) $value['to']) : '';
+            // An optional range left untouched posts neither end: "[No entry]", not a bare " – ".
+            if ($from === '' && $to === '') {
+                return __('[No entry]', 'formfabricator');
+            }
+            return $from . ' – ' . $to;
         }
         if (is_array($value)) {
             return __('[No entry]', 'formfabricator');

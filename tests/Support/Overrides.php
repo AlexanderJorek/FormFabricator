@@ -10,6 +10,13 @@ final class Overrides
     /** @var string[]|null Paths is_uploaded_file() accepts, as if PHP had received them in this request. */
     public static ?array $uploadedFiles = null;
 
+    public static function isUploadedFile(string $filename): bool
+    {
+        return self::$uploadedFiles !== null
+            ? in_array($filename, self::$uploadedFiles, true)
+            : \is_uploaded_file($filename);
+    }
+
     public static function reset(): void
     {
         self::$uploadedFiles = null;

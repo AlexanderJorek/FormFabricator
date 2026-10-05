@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -176,25 +176,27 @@ class FormSelectModel
      *                             (action-specific) nonce before calling this
      *                             method. Forwarded the same way as save() —
      *                             see its docblock.
+     * @return bool Whether the selection existed and is now deleted.
      */
-    public static function delete(int $id, bool $nonce_verified = false): void
+    public static function delete(int $id, bool $nonce_verified = false): bool
     {
         if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            return;
+            return false;
         }
         if (!self::nonceVerifiedOrCheck($nonce_verified)) {
-            return;
+            return false;
         }
-        \FabricatorForms\Utils\OptionMutex::run(
+        // Whether a selection with this ID was there and is now gone, for the caller to report.
+        return (bool) \FabricatorForms\Utils\OptionMutex::run(
             self::$option,
-            static function () use ($id): void {
-                $all = array_values(
-                    array_filter(
-                        self::getRaw(),
-                        static fn($r) => (int) ($r['id'] ?? 0) !== $id
-                    )
-                );
+            static function () use ($id): bool {
+                $before = self::getRaw();
+                $all    = array_values(array_filter($before, static fn($r) => (int) ($r['id'] ?? 0) !== $id));
+                if (count($all) === count($before)) {
+                    return false;
+                }
                 update_option(self::$option, $all, false);
+                return true;
             }
         );
     }
@@ -234,7 +236,7 @@ class FormSelectModel
     }
 
     /**
-     * CSRF backstop for save()/delete(); falls back to the shared admin nonce if $nonce_verified is false. Mirrors {@see FormModel::nonceVerifiedOrCheck()}.
+     * CSRF backstop for save()/delete(), as FormModel::nonceVerifiedOrCheck().
      *
      * @param bool $nonce_verified Whether the caller already verified its own nonce.
      * @return bool True if the request may proceed.
@@ -248,20 +250,29 @@ class FormSelectModel
     }
 
     /**
-     * Returns the next available integer ID for a new record.
+     * The highest selection ID ever handed out, so none is handed out twice.
+     *
+     * @var string
+     */
+    private const LAST_ID_OPTION = 'fabricator_form_selects_last_id';
+
+    /**
+     * Returns the next ID for a new record, above every ID handed out before, so a shortcode naming a deleted
+     * selection never shows a new one. Called inside save()'s lock.
      *
      * @param array $all Existing records array.
      * @return int Next available ID.
      */
     private static function nextId(array $all): int
     {
-        $max = 0;
+        $max = (int) get_option(self::LAST_ID_OPTION, 0);
         foreach ($all as $r) {
             $id = (int) ($r['id'] ?? 0);
             if ($id > $max) {
                 $max = $id;
             }
         }
+        update_option(self::LAST_ID_OPTION, $max + 1, false);
         return $max + 1;
     }
 }

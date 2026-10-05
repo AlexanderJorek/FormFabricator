@@ -3,9 +3,9 @@
     <description>
         Security-focused review ruleset for FormFabricator. Separate from .phpcs.xml
         (which enforces day-to-day PSR-1/PSR-2 style) — this one is run manually
-        or in CI as part of the security/code-quality review pass described in
-        CLAUDE.md, covering the WordPress-Security and CWE-Top-25-oriented parts
-        of that protocol. Warnings here are review findings, not style violations.
+        or in CI as part of the security review described in CONTRIBUTING.md,
+        covering the WordPress-Security and CWE-Top-25-oriented parts of that
+        review. Warnings here are review findings, not style violations.
 
         Usage: vendor/bin/phpcs --standard=.phpcs-security.xml
     </description>
@@ -65,7 +65,7 @@
 
     <!-- Direct database access and filesystem/cURL calls that bypass the WP APIs. Both are
          legitimate in places here (atomic counters, kernel pseudo-files) and both are noisy, so
-         they are review material to triage per CLAUDE.md — not a pass/fail gate. Included so a
+         they are review material to triage (CONTRIBUTING.md, "Linters"), not a pass/fail gate. Included so a
          NEW bypass has to be looked at and justified rather than sliding in unnoticed. -->
     <rule ref="WordPress.WP.AlternativeFunctions"/>
     <rule ref="WordPress.DB.DirectDatabaseQuery"/>
@@ -102,12 +102,10 @@
         <exclude-pattern>languages/*</exclude-pattern>
     </rule>
 
-    <!-- Not a security sniff per se, but the table's "WordPress Security Sniffs" row scope
-         previously undersold what this ruleset actually covers — WordPress.WP.I18n checks that
-         every translatable string is correctly wrapped/escaped, which is unrelated to the checks
-         above; it's included here for completeness, not because it substitutes for the manual
-         GDPR/i18n-coverage review CLAUDE.md's table also calls for (it can't detect a MISSING
-         __() call, only a malformed existing one). -->
+    <!-- Not a security sniff: WordPress.WP.I18n checks that every translatable string is
+         correctly wrapped/escaped. It does not replace the manual GDPR/i18n review in
+         CONTRIBUTING.md's table, since it can't detect a MISSING __() call, only a malformed
+         existing one. -->
     <rule ref="WordPress.WP.I18n"/>
 
     <!-- pheromone/phpcs-security-audit: generic CWE-oriented dangerous-function checks

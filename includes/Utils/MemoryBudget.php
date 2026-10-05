@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,12 +24,12 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 /**
- * Works out how much memory this host can spare and what a job costs — advisory bookkeeping only (no real allocation or cross-process guarantee), a safety rail, not an allocator.
+ * Works out how much memory this host can spare and what a job costs: advisory bookkeeping, not an allocator.
  */
 class MemoryBudget
 {
     /**
-     * Share of detected host memory the plugin will ever commit — deliberately well under 1.0; the rest goes to PHP-FPM, the DB, the web server and the OS page cache.
+     * Share of detected host memory the plugin will ever commit; the rest is for PHP, the DB, the web server and the OS.
      *
      * @var float
      */
@@ -51,7 +51,8 @@ class MemoryBudget
     private const MAX_BUDGET_MB = 8192;
 
     /**
-     * MARGINAL cost only — charging WP's own baseline here double-counts it; a prior 256MB value throttled a no-upload contact form to 2 concurrent submissions on a 1GB container.
+     * Marginal cost only: WordPress's own baseline is already in use, and charging it here again would count it twice.
+     * 256 MB, for example, would let a 1 GB container run only 2 submissions of a contact form without uploads at once.
      *
      * @var int
      */
@@ -65,11 +66,18 @@ class MemoryBudget
     private const RESERVATION_THRESHOLD_MB = 128;
 
     /**
-     * Deliberately pessimistic multiplier: an upload/PDF payload realistically exists in up to four copies at once (raw, base64, imageVar/stream, bitmap).
+     * Copies of an upload held at once (raw, base64, PDF stream, bitmap).
      *
      * @var int
      */
     private const PAYLOAD_FACTOR = 4;
+
+    /**
+     * Memory per byte of submitted text while mPDF lays it out (measured at about 500 on mPDF 8).
+     *
+     * @var int
+     */
+    private const TEXT_FACTOR = 512;
 
     /**
      * How long host-capacity detection is cached — capacity rarely changes, but an hour keeps a container resize from going unnoticed for long.
@@ -79,7 +87,7 @@ class MemoryBudget
     private const DETECT_CACHE_TTL = 3600;
 
     /**
-     * Deliberately one shared bucket, not one per subsystem — separate buckets could each stay within limit while together exceeding what the host actually has.
+     * One bucket for every subsystem, since separate ones could together exceed the host.
      *
      * @var string
      */
@@ -128,7 +136,7 @@ class MemoryBudget
     }
 
     /**
-     * Sentinel for jobs below RESERVATION_THRESHOLD_MB (no row held) — not a valid ConcurrencySlot token (24 hex chars), so it can't collide with a real one.
+     * Token for jobs below RESERVATION_THRESHOLD_MB (no row held); never a valid ConcurrencySlot token.
      *
      * @var string
      */
@@ -182,7 +190,7 @@ class MemoryBudget
         if ($detected !== null) {
             $budget_mb = (int) (($detected * self::SAFETY_FRACTION) / (1024 * 1024));
         } else {
-            // Nothing probe-able: fall back to PHP's own memory_limit — concurrent work totaling one request's limit isn't a regression, and still scales with the host.
+            // Nothing to probe: PHP's own memory_limit.
             $php_limit = self::phpMemoryLimitBytes();
             $budget_mb = $php_limit > 0
                 ? (int) ($php_limit / (1024 * 1024))
@@ -197,23 +205,23 @@ class MemoryBudget
     /**
      * Estimated peak memory for a job whose payload is $payload_bytes.
      *
-     * @param int $payload_bytes Sum of the bytes this job will hold in memory: uploaded files for
+     * @param int $payload_bytes Sum of the bytes this job will hold in memory: uploaded files and signature images for
      *                            a submission, the PDF's own size for a verification.
+     * @param int $text_bytes    Submitted text that the PDF lays out (TEXT_FACTOR); 0 for a verification.
      * @return int Estimated peak in bytes.
      */
-    public static function estimateBytes(int $payload_bytes): int
+    public static function estimateBytes(int $payload_bytes, int $text_bytes = 0): int
     {
         $payload_bytes = max(0, $payload_bytes);
-        return (self::BASE_COST_MB * 1024 * 1024) + ($payload_bytes * self::PAYLOAD_FACTOR);
+        $text_bytes    = max(0, $text_bytes);
+        return (self::BASE_COST_MB * 1024 * 1024) + ($payload_bytes * self::PAYLOAD_FACTOR) + ($text_bytes * self::TEXT_FACTOR);
     }
 
     /**
      * Raises memory_limit to at least $bytes when the current limit is lower, targeting the job's own estimate.
      *
-     * Through wp_raise_memory_limit(), not ini_set(): WordPress.org's Plugin Check rejects ini_set('memory_limit'), and
-     * the core function is the sanctioned way. Its "fabricator_forms_memory_limit" context filter carries the estimate;
-     * core then sets the larger of that and WP_MAX_MEMORY_LIMIT, and never lowers the limit. Nothing is restored
-     * afterwards, since PHP resets ini values at the end of every request.
+     * Through wp_raise_memory_limit() (Plugin Check rejects ini_set('memory_limit')), whose context filter carries the
+     * estimate; it never lowers the limit, and PHP resets it after the request.
      *
      * @param int $bytes Target limit in bytes.
      * @return void
@@ -241,9 +249,8 @@ class MemoryBudget
     }
 
     /**
-     * The largest total upload whose estimate, with $besides bytes more, still fits the whole budget. Without $besides,
-     * a file above it can never be sent, however long the visitor waits, so upload fields accept nothing larger (104 MB
-     * with the smallest budget).
+     * The largest total upload whose estimate, with $besides bytes more, still fits the whole budget. Upload fields
+     * accept nothing larger.
      *
      * @param int $besides Memory needed on top of the files, such as a decoded image.
      * @return int Bytes.

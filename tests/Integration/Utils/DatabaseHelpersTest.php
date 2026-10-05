@@ -9,10 +9,8 @@ use FabricatorForms\Utils\RateLimiter;
 use FabricatorForms\Utils\SingleUseToken;
 
 /**
- * The helpers that let the database, not PHP, decide a race — RateLimiter, SingleUseToken, ConcurrencySlot and
- * OptionMutex — against real MySQL/MariaDB SQL (INSERT ... ON DUPLICATE KEY UPDATE, INSERT IGNORE, SUBSTRING_INDEX,
- * ordering by option_id). The unit suite's fake $wpdb can only check that these queries are issued; this checks what
- * they do.
+ * The helpers that let the database decide a race (RateLimiter, SingleUseToken, ConcurrencySlot, OptionMutex),
+ * against real MySQL/MariaDB: the unit suite's fake $wpdb only sees which queries are issued.
  */
 final class DatabaseHelpersTest extends TestCase
 {
@@ -148,6 +146,17 @@ final class DatabaseHelpersTest extends TestCase
     {
         self::setRow('fabricator_lock_opt_it_stale', (string) (time() - 1));
         self::assertSame('ran', OptionMutex::run('it_stale', static fn() => 'ran', 500, true));
+    }
+
+    public function testASlowHolderDoesNotReleaseTheLockOfTheRequestThatBrokeIt(): void
+    {
+        // The holder outlives STALE_AFTER: another request breaks its lock and takes it. When the slow holder finishes,
+        // it must leave that request's row alone, or a third request walks in beside it.
+        OptionMutex::run('it_slow', static function (): void {
+            self::setRow('fabricator_lock_opt_it_slow', '9999999999:someoneelse');
+        }, 200, true);
+
+        self::assertSame('9999999999:someoneelse', self::row('fabricator_lock_opt_it_slow'));
     }
 
     public function testTheLockIsReleasedWhenTheCallbackThrows(): void

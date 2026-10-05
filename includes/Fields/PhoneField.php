@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -74,7 +74,7 @@ class PhoneField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         $mode  = $config['phone_mode'] ?? '';
-        $attrs = $this->inputAttrs($config, $field_id, 'tel', ['value' => esc_attr((string)($value ?? '')), 'autocomplete' => 'tel']);
+        $attrs = $this->inputAttrs($config, $field_id, 'tel', ['value' => (string)($value ?? ''), 'autocomplete' => 'tel']);
         if ($mode !== '') {
             $attrs .= ' data-phone-mode="' . esc_attr($mode) . '"';
         }
@@ -83,7 +83,7 @@ class PhoneField extends BaseField
             $list  = array_values((array)($config['phone_country_list'] ?? []));
             $attrs .= ' data-phone-country-mode="' . esc_attr($cmode) . '"';
             if (!empty($list)) {
-                $attrs .= " data-phone-country-list='" . esc_attr(wp_json_encode($list)) . "'";
+                $attrs .= " data-phone-country-list='" . esc_attr(\FabricatorForms\Utils\Cast::jsonForAttribute($list)) . "'";
             }
         }
         return $this->wrap($field_id, $config, '<input' . $attrs . '>');
@@ -106,9 +106,7 @@ class PhoneField extends BaseField
             return true;
         }
 
-        // Hard cap on raw submitted length before any format-specific processing —
-        // relevant when phone_mode is '' (format validation "Off"), which otherwise
-        // accepts an unbounded-length string server-side.
+        // Length cap first, which also bounds the "Off" format mode.
         $hard = self::validateTextHardCap((string)$value);
         if ($hard !== true) {
             return $hard;

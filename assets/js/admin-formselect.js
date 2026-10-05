@@ -487,7 +487,12 @@
                     var q = this.value.toLowerCase().trim();
                     list.querySelectorAll('.fabricator-form-row').forEach(function (row) {
                         row.hidden = q !== '' && row.dataset.title.indexOf(q) === -1;
+                        /* A bulk action works on what the admin can see: a row the search hides is unticked. */
+                        var rowCb = row.hidden ? row.querySelector('.fabricator-row-check') : null;
+                        if (rowCb) { rowCb.checked = false; }
                     });
+                    if (selectAll) { selectAll.checked = false; }
+                    syncBulkBar();
                     var noRes = document.getElementById('fabricator-fsel-no-results');
                     if (noRes) {
                         noRes.hidden = list.querySelectorAll('.fabricator-form-row:not([hidden])').length > 0;
@@ -499,8 +504,9 @@
             var selectAll = document.getElementById('fabricator-fsel-select-all');
             if (selectAll) {
                 selectAll.addEventListener('change', function () {
+                    // Visible rows only, as in the form list: a bulk delete removed selections the search had hidden.
                     list.querySelectorAll('.fabricator-row-check').forEach(function (cb) {
-                        cb.checked = selectAll.checked;
+                        if (!cb.closest('.fabricator-form-row').hidden) { cb.checked = selectAll.checked; }
                     });
                     syncBulkBar();
                 });

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,7 +24,8 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 /**
- * Enforces the capability-then-nonce order for wp_ajax_* handlers, after past reviews caught it done wrong by hand.
+ * Enforces the capability-then-nonce order for wp_ajax_* handlers, which is easy to get wrong when each handler does it
+ * by hand.
  */
 class AjaxGuard
 {

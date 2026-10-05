@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,172 +28,101 @@ defined('ABSPATH') || exit;
  *  HOW TO ADD A NEW FIELD
  * ════════════════════════════════════════════════════════════
  *
- * This file is a teaching document with zero runtime effect — but not because of its leading underscore, which
- * Plugin.php's glob('*Field.php') matches like any other. What keeps it out is FieldRegistry::FIELD_MAP: only a
- * class named there is included at all. Add your new field to that map, or it will never load, underscore or not.
- * (build.ps1 also strips this file from the release package.)
+ * This file is a teaching document and never loads: Plugin::load() loads only the classes FieldRegistry::FIELD_MAP
+ * names, and the file name doesn't match its class for the autoloader either. build.ps1 leaves it out of the package.
+ * CONTRIBUTING.md ("Fields", "Coding rules", "JS suite") holds the rules referred to below.
  *
- * First time? Read top to bottom once. After that, use the DECISION TREE
- * below and jump straight to the section you need.
+ * QUICK START
+ * ───────────
+ *   1. Create includes/Fields/MyField.php with class MyField extends BaseField. The file name must equal the class
+ *      name: classes load through Composer's PSR-4 map.
+ *   2. Implement getType(), getLabel(), getIcon() and render(), as in THE MINIMUM VIABLE FIELD below.
+ *   3. Add 'MyField' => 'group:my-field' to FieldRegistry::FIELD_MAP (group: input, choice, personal, advanced,
+ *      layout or system). The entry makes the class load and places it in the palette; the slug after the colon
+ *      only documents getType(), which is authoritative (a mismatch is logged).
+ *   4. Run php languages/make-pot.php for the new strings, and add tests (CONTRIBUTING.md, "Tests").
  *
- * QUICK START (5 min)
- * ───────────────────
- *   1. Copy this file, rename the class (remove the leading _).
- *   2. Implement getType(), getLabel(), getIcon(), render() — see MINIMUM VIABLE FIELD below.
- *   3. Drop the file in includes/Fields/.
- *   4. Add one line to FieldRegistry::FIELD_MAP: 'MyField' => 'group:my-field'
- *      (group = input/choice/personal/advanced/layout/system). This both
- *      allowlists the file for loading and sets its palette placement.
- *   5. Done. Everything past MINIMUM VIABLE FIELD is optional reference material.
- *
- * Every field extends BaseField, which provides sensible defaults.
- * Override only when your field needs different behavior. Field classes are
- * fully self-contained: no file outside includes/Fields/ branches on type slugs.
- * If you find yourself writing if ($field['type'] === '...') elsewhere,
- * add a method to BaseField and override it in the field class instead.
- *
- * THE MINIMUM VIABLE FIELD — everything else in this file is optional
- * ──────────────────────────────────────────────────────────────────
+ * THE MINIMUM VIABLE FIELD
+ * ────────────────────────
  *   class MyField extends BaseField
  *   {
  *       public function getType(): string { return 'my-field'; }
  *       public function getLabel(): string { return __('My field', 'formfabricator'); }
- *       public function getIcon(): string { return 'fa-solid fa-star'; }
+ *       public function getIcon(): string { return 'fa-solid fa-star'; } // Font Awesome classes
  *
  *       public function render(array $config, string $field_id, mixed $value = null): string
  *       {
- *           $attrs = $this->inputAttrs($config, $field_id, 'text', [
- *               'value' => esc_attr((string)($value ?? '')),
- *           ]);
- *           return $this->wrap($field_id, $config, '<input' . $attrs . '>');
+ *           return $this->wrap($field_id, $config, '<input' . $this->inputAttrs($config, $field_id) . '>');
  *       }
  *   }
  *
- *   Drop the file in includes/Fields/ and add it to FieldRegistry::FIELD_MAP (step 4 above); the registry then
- *   picks up its slug from getType().
- *   That's a complete, working field. Treat inputAttrs() and wrap() as black
- *   boxes for now — they generate the standard input attributes and the
- *   outer .fabricator-field wrapper (label, description, error placeholder).
- *   Every simple text-like field follows this exact pattern. BaseField
- *   already handles the required check, the default map() → string, and a
- *   plain-text PDF row — so the four methods above are all a simple field needs.
+ *   BaseField already provides the rest: the required check, extraction with sanitize_text_field(), map() to a
+ *   string, the email row and a plain-text PDF cell. Everything below is optional.
  *
- * ✓ STOP HERE if that's all your field needs.
- *   Everything below is optional reference for the pieces you reach for only
- *   when a field needs more: format validation, custom CSS/JS, non-text
- *   values, composite sub-inputs, or PDF images. Jump to the section
- *   matching your field.
+ * RULES EVERY FIELD FOLLOWS
+ * ─────────────────────────
+ *   • Field classes never call each other; a helper several fields need goes in includes/Utils.
+ *   • No HEREDOC/NOWDOC. CSS and JS go in their own files (assets/css/fields/, assets/js/fields/, named after the
+ *     class, e.g. MyField.css or MyField.my-rule.js) and are read with self::readFieldAsset().
+ *   • Prefer a BaseField hook over checking ($field['type'] === '...') elsewhere in the plugin.
+ *   • $config is what was saved or imported, not merged with getDefaultConfig(): read every key with a default.
+ *   • Strings are English and translated: __('…', 'formfabricator'), with a "// translators:" comment directly above
+ *     any call that has placeholders.
+ *   • Show/hide rules must read the field the same way in front.js and on the server (see CONDITIONS below).
  *
- * WHEN TO OVERRIDE — grouped by how often fields need it
- * ─────────────────────────────────────────────────────
- * Every field (always)
- *   getType(), getLabel(), getIcon(), render()
+ * WHAT TO OVERRIDE, BY NEED
+ * ─────────────────────────
+ *   Format validation             validate() + getClientValidation()
+ *   Interactive widget            getClientInit()
+ *   Field-specific CSS            getStyles()
+ *   Custom blank check            getClientEmptyCheck()
+ *   Settings in the builder       getDefaultConfig(), getGeneralSchema(), getAdvancedSchema()
+ *   Label-like settings           plainTextConfigKeys() (anything else is sanitized as HTML)
+ *   Several inputs or $_FILES     extractValue(), map(), labelsOwnControl(), conditionValue()
+ *   Checkboxes named after the id hiddenConditionValue() → []
+ *   Several output rows or files  mapNormalized()
+ *   Image or HTML in the PDF      pdfData()
+ *   Flags                         see FLAGS below
  *
- * Most fields (~80%)
- *   validate() + getClientValidation()   format rules
- *   map()                                composite or formatted value → string
- *   getStyles()                          field-specific CSS
- *   getClientInit()                      interactive JS widget
- *   getClientEmptyCheck()                custom blank check (non-standard widgets)
- *   getDefaultConfig()                   config keys the field uses
- *   getGeneralSchema()                   General settings tab controls
+ * FIELD LIFECYCLE
+ * ───────────────
+ *   Builder               getDefaultConfig(), getGeneralSchema(), getAdvancedSchema(), sanitizeConfigValue()
+ *   Page with a form      getStyles(), getClientInit(), getClientEmptyCheck(), getClientValidation() (every field
+ *                         type's, inlined by Assets::frontFieldAssets()); enqueueFrontScripts(); render()
+ *   Submission            extractValue() → conditionValue() → validate() → mapNormalized() (→ map()) → pdfData()
  *
- * Some fields (~15%)
- *   extractValue()                       non-standard $_POST / $_FILES shape, or a "{field_id}_other"
- *                                         sibling value (Checkbox/Radio/Select "Other" free-text option)
- *   mapNormalized()                      file uploads or multiple output entries
- *   pdfData()                            image embed or raw HTML in PDF
- *   hasTextPreview() → true              include in PDF token-picker preview
+ * WHERE TO LOOK
+ * ─────────────
+ *   UploadField      $_FILES: extractValue(), validate(), mapNormalized(), pdfData(), needsMultipartEncoding()
+ *   AddressField     sub-inputs named id[key]: extractValue(), labelsOwnControl(), conditionValue()
+ *   CheckboxField    array POST capped with capRawArray(), hiddenConditionValue(), the "Other" option
+ *   RadioField       "Other" option: extractValue() returns ['value' => …, '__other_text__' => …]
+ *   SignatureField   data URI capped in validate(), mapNormalized(), pdfData(), includeValueInSeal()
+ *   DirectDebitField several output rows and a box in the PDF (PdfDescriptor::opensFrame())
+ *   CaptchaField     defersValidation(), enqueueFrontScripts() left empty on purpose
+ *   GroupField       isGroupContainer(), openTag(), closeTag()
+ *   PageBreakField   isPageBreak(), renderBreak(), skipValidation()
+ *   HtmlField        skipValidation(), rawEmailHtml(), mapNormalized() gated by "Show in mail/PDF"
+ *   PostDataField    values re-derived from a signed hidden {id}[_source_post_id] / [_source_sig] pair, since
+ *                    global $post is unset during admin-ajax.php
  *
- * Rare (~5%, framework features)
- *   skipValidation() → true              purely presentational, no user input
- *   includeInEmailSummary() → false      exclude from {all_fields} email block
- *   includeValueInSeal() → false         exclude value from HMAC integrity seal
- *   rawEmailHtml() → true                value is trusted HTML, output unescaped in mail — see HtmlField
- *   needsMultipartEncoding() → true      field uses a file input
- *   enqueueFrontScripts()                third-party script required (e.g. reCAPTCHA)
- *   isPageBreak() + renderBreak()        structural page-nav field
- *   isGroupContainer() + openTag/closeTag structural section container
+ * READING THE REQUEST
+ * ───────────────────
+ *   Every extractValue() starts with self::assertRequestNonceVerified(). WPCS can't see that guard, so each line
+ *   that reads $_POST/$_FILES still needs a "// phpcs:ignore WordPress.Security.NonceVerification.Missing --
+ *   verified above via assertRequestNonceVerified()." directly above it.
  *
- * DECISION TREE — "what do I need to touch?"
- * ────────────────────────────────────────────
- *   Simple text-like input?        → render()
- *   Needs format validation?       → validate() + getClientValidation()
- *   Needs interactive JS?          → getClientInit()
- *   Needs field-specific CSS?      → getStyles()
- *   Reads $_FILES or a custom
- *     $_POST shape?                → extractValue()
- *   Value is composite/array?      → map()
- *   Multiple outputs or files?     → mapNormalized()
- *   Embeds an image / raw HTML
- *     in the PDF?                  → pdfData()
- *
- * FIELD LIFECYCLE — when each method is called
- * ─────────────────────────────────────────────
- *   Builder  →  Render  →  Submit  →  Output
- *   getDefaultConfig()      enqueueFrontScripts()   extractValue()   map()
- *   getGeneralSchema()      getStyles() · render()  validate()       ↓ mapNormalized()
- *   getAdvancedSchema()     getClientInit()                          ↓ pdfData()
- *                           getClientEmptyCheck()
- *                           getClientValidation()
- *
- * REAL-WORLD EXAMPLES — where to look
- * ─────────────────────────────────────
- * UploadField      render(), extractValue(), validate(), mapNormalized(), pdfData(),
- *                  needsMultipartEncoding()
- * TextareaField    extractValue()
- * SignatureField   mapNormalized(), pdfData(), includeValueInSeal()
- * CheckboxField    extractValue(),
- *                  element-count capping (see NONCE / RESOURCE LIMITS note below)
- * RadioField       extractValue() returning ['value' => ..., '__other_text__' => ...]
- * SepaField        extractValue(), mapNormalized(), size cap on signature data URI
- * CaptchaField     enqueueFrontScripts(), validate(), defersValidation()
- * GroupField       isGroupContainer(), openTag(), closeTag()
- * PageBreakField   isPageBreak(), renderBreak(), skipValidation(), includeInEmailSummary()
- * HtmlField        skipValidation(), includeInEmailSummary(), rawEmailHtml(), mapNormalized()
- *                  (config-toggle-gated output — "Show in mail/PDF" checkbox)
- * PostDataField    extractValue() resolving via a hidden companion input rather than global
- *                  state — global $post is unavailable during admin-ajax.php requests, so
- *                  render() emits a hidden {field_id}[_source_post_id] input and extractValue()
- *                  re-resolves via get_post() instead of relying on the (absent) Loop context
- * TextField        hasTextPreview()
- *
- * NONCE / RESOURCE-LIMIT CONVENTIONS — apply to every extractValue() override
- * ────────────────────────────────────────────────────────────────────────────────────────────
- * Every extractValue() override must call self::assertRequestNonceVerified(); as its first
- * statement (see BaseField::assertRequestNonceVerified()) — a structural guard, not just a
- * comment, against ever reading $_POST/$_FILES without FormProcessor::handle() having already
- * verified the request nonce. Then, every direct $_POST/$_FILES read in extractValue()
- * still needs:
- *   // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via
- *   // assertRequestNonceVerified().
- * immediately above the line touching the superglobal — WPCS's sniff works line-by-line and
- * can't see the guard call above it, so this silences that otherwise-correct per-line warning.
- *
- * If your field accepts an array-valued POST field (checkboxes, multi-selects),
- * cap the element count with array_slice() BEFORE sanitizing/validating each entry —
- * an unbounded array otherwise costs unbounded O(n) sanitize calls and O(n*m)
- * validation work per submission (see CheckboxField::extractValue()). If your field
- * accepts a data-URI/binary value (signature, upload), cap its byte length in
- * validate() the same way regardless of whether the field is required (see
- * SepaField::validate() / SignatureField::validate()).
- *
- * Every sprintf()/__() pairing that has a %s/%d placeholder needs a `// translators:`
- * comment on the line directly above explaining what each placeholder is.
- *
- * Template/example field demonstrating the full field implementation pattern.
+ *   Bound what the visitor controls: cap an array with self::capRawArray() before sanitizing it, keep only string
+ *   leaves (self::scalarSubfieldMap()), and cap a data URI's length in validate(), required or not.
  */
 class ExampleField extends BaseField
 {
     // ═══════════════════════════════════════════════════════
-    //  MANDATORY — getType(), getLabel(), and getIcon() are trivial one-liners.
-    //  render() is the only method every field must meaningfully
-    //  implement because every field has unique HTML. Most fields are
-    //  under 100 lines.
+    //  MANDATORY
     // ═══════════════════════════════════════════════════════
 
     /**
-     * Returns the unique type slug used by FieldRegistry auto-discovery.
+     * The type slug: the field's authoritative name, stored in every form.
      *
      * @return string
      */
@@ -203,7 +132,7 @@ class ExampleField extends BaseField
     }
 
     /**
-     * Returns the label shown in the field palette and builder panel header.
+     * The label in the palette and the settings panel header.
      *
      * @return string
      */
@@ -213,7 +142,7 @@ class ExampleField extends BaseField
     }
 
     /**
-     * Returns the Font Awesome 6 class shown as the palette tile icon.
+     * The Font Awesome classes of the palette icon.
      *
      * @return string
      */
@@ -224,72 +153,64 @@ class ExampleField extends BaseField
 
 
     // ═══════════════════════════════════════════════════════
-    //  RENDER — build the frontend HTML
+    //  RENDER
     // ═══════════════════════════════════════════════════════
+    //
+    //  inputAttrs() builds type, id, name, class, placeholder, required/aria-required and autocomplete, and escapes
+    //  every value itself: pass extras raw. wrap() adds the .fabricator-field wrapper (class fabricator-field--<type>,
+    //  which the client checks are keyed by), the label, description, error slot and data-validate.
 
     /**
-     * Renders the field HTML for frontend display.
+     * Renders the field.
      *
-     * @param array  $config   Field config merged with getDefaultConfig() defaults.
-     * @param string $field_id Unique element id/name, e.g. "field-3".
-     * @param mixed  $value    Pre-filled value when re-displaying after a server error.
-     *
+     * @param array  $config   The saved field configuration.
+     * @param string $field_id Element id and input name.
+     * @param mixed  $value    Pre-filled value; the form renderer passes none.
      * @return string
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        // ── Simple single input ──────────────────────────────────────────
-        // inputAttrs() builds: id, name, class="fabricator-input", placeholder,
-        // required + aria-required. Pass extra HTML attributes as 4th array.
         $attrs = $this->inputAttrs(
             $config,
             $field_id,
             'text',
             [
-                'value'     => esc_attr((string)($value ?? '')),
-                'maxlength' => (int)($config['maxlength'] ?? 0) ?: false,
+                'value'     => (string) ($value ?? ''),
+                'maxlength' => (int) ($config['maxlength'] ?? 0) ?: false,
             ]
         );
-
-        // wrap() adds the outer .fabricator-field div, label, description, error placeholder,
-        // required class/asterisk, and data-validate attribute automatically.
-        // Almost every field should call wrap() — do not reproduce those pieces manually.
         return $this->wrap($field_id, $config, '<input' . $attrs . '>');
     }
 
-    // ✓ Simple field complete — everything below in this file is optional reference.
-
     /**
-     * EXAMPLE (unused) — composite field with multiple independent sub-inputs,
-     * each with its own required flag (like Address / Name in expanded mode).
-     * Body of render() would return this instead of the single <input> above.
+     * EXAMPLE (unused) — a composite field with sub-inputs posted as "id[key]", each with its own required flag.
      *
-     * Rules:
-     *  • Put `required` HTML attr on each individual <input>/<select>
-     *  • Add a .fabricator-field-error.fabricator-sub-error div after each input
-     *    (front.js will write the error message there)
-     *  • Add $req_star so the label shows a red *
-     *  • Pass $wrapper_config with required=false to wrap() so the
-     *    global * on the field label is suppressed
+     * Such a field also needs:
+     *  • extractValue() reading the array (exampleExtractComposite()): the default reads a string, and '' for an array;
+     *  • labelsOwnControl() → false, so wrap() names the group instead of pointing <label for> at nothing;
+     *  • conditionValue() → self::joinedSubValues($raw, [keys in render order]), as front.js reads it, plus a case in
+     *    tests/js/build-fixture.php's $compositeCases;
+     *  • validate() checking each required sub-input, which front.js checks through their required attributes.
+     * Each sub-input gets a .fabricator-sub-error slot, and wrap() a config with required off, so the field label
+     * shows no asterisk of its own.
+     *
+     * @param array  $config   The saved field configuration.
+     * @param string $field_id Element id and input name.
+     * @return string
      */
     private function exampleRenderComposite(array $config, string $field_id): string
     {
         $inner = '<div class="fabricator-example-group">';
         foreach (['part_a', 'part_b'] as $k) {
-            $label = esc_html($config[$k . '_label'] ?? $k);
-
-            $req      = '';
-            $req_star = '';
-            if (!empty($config[$k . '_required'])) {
-                $req      = ' required aria-required="true"';
-                $req_star = ' <span class="fabricator-required" aria-hidden="true">*</span>';
-            }
-
-            $inner .= '<div class="fabricator-example-sub">';
-            $inner .= '<label class="fabricator-sub-label">' . $label . $req_star . '</label>';
-            $inner .= '<input type="text" name="' . esc_attr($field_id) . '[' . $k . ']" class="fabricator-input"' . $req . '>';
-            $inner .= '<div class="fabricator-field-error fabricator-sub-error"></div>';
-            $inner .= '</div>';
+            $sub_id   = $field_id . '-' . $k;
+            $required = !empty($config[$k . '_required']);
+            $inner   .= '<div class="fabricator-example-sub">'
+                . '<label class="fabricator-sub-label" for="' . esc_attr($sub_id) . '">' . esc_html($config[$k . '_label'] ?? $k)
+                . ($required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '') . '</label>'
+                . '<input type="text" id="' . esc_attr($sub_id) . '" name="' . esc_attr($field_id) . '[' . $k . ']" class="fabricator-input"'
+                . ($required ? ' required aria-required="true"' : '') . '>'
+                . '<div class="fabricator-field-error fabricator-sub-error"></div>'
+                . '</div>';
         }
         $inner .= '</div>';
         $wrapper_config             = $config;
@@ -299,34 +220,26 @@ class ExampleField extends BaseField
 
 
     // ═══════════════════════════════════════════════════════
-    //  STYLES — field-specific CSS injected on the page
+    //  STYLES
     // ═══════════════════════════════════════════════════════
     //
-    //  Return a raw CSS string (no <style> tags). Assets::enqueueFront() collects all non-empty getStyles() returns
-    //  and emits them as a single wp_add_inline_style call after front.css loads, so CSS variables and the .fabricator-input base rules are already defined and available here.
-    //
-    //  Put the CSS in its own file at assets/css/fields/MyField.css and read it via
-    //  self::readFieldAsset('assets/css/fields/MyField.css') — this keeps the content
-    //  real, syntax-highlightable CSS instead of a PHP string. WordPress.org prohibits
-    //  HEREDOC/NOWDOC in hosted plugins (their codesniffers can't verify escaping inside
-    //  them), so don't reach for <<<'CSS' either — see BaseField::readFieldAsset().
-    //
-    //  Include @media blocks inside the same string when needed.
-    //  Return '' (default from BaseField) when no custom CSS is required.
+    //  Raw CSS, no <style> tags, from its own file. Every field type's CSS is inlined after front.css on any page
+    //  with a form, so front.css's variables and .fabricator-input rules apply. '' (the default) for none.
 
     /**
-     * Returns field-specific CSS injected inline on pages that load this form.
+     * Field-specific CSS.
      *
      * @return string
      */
     public function getStyles(): string
     {
-        return ''; // no custom CSS needed for this field
+        return '';
     }
 
     /**
-     * EXAMPLE (unused) — custom wrapper with responsive behaviour.
-     * getStyles() would return this instead of ''.
+     * EXAMPLE (unused) — the CSS of the composite layout above.
+     *
+     * @return string
      */
     private function exampleStylesComposite(): string
     {
@@ -335,173 +248,119 @@ class ExampleField extends BaseField
 
 
     // ═══════════════════════════════════════════════════════
-    //  EXTRACT VALUE — assemble the raw value from $_POST / $_FILES
+    //  EXTRACT VALUE
     // ═══════════════════════════════════════════════════════
     //
-    //    extractValue(string $field_id): mixed
-    //      → reads directly from $_POST / $_FILES by field_id
-    //      → called by FormProcessor once per field before validate(), for top-level fields and
-    //        for children of a Group alike: a group renders its children as ordinary top-level
-    //        inputs, so there is no per-copy extraction (repeatable group copies were removed in 1.0.7)
-    //      → the returned value is what validate(), map(), and mapNormalized() receive
-    //
-    //  BaseField default for extractValue(): reads $_POST[$field_id] with sanitize_text_field().
-    //  This is correct for every plain text field — override only when your field's value
-    //  lives somewhere else or has a different shape:
-    //
-    //      • $_FILES          → UploadField
-    //      • composite array  → SepaField (iban/bic/holder + separate -sig key)
-    //      • parallel arrays  → a gallery field: files[] + desc[] as separate keys
-    //      • sanitize_textarea_field instead of sanitize_text_field → TextareaField
-    //
-    //  See "NONCE / RESOURCE-LIMIT CONVENTIONS" at the top of this file for the
-    //  phpcs:ignore comment and array element-count capping this method needs.
+    //  Called once per field (a group's children included) before validate(); what it returns is what validate(),
+    //  conditionValue(), map() and mapNormalized() receive. The default reads $_POST[$field_id] through
+    //  sanitize_text_field(). Override for another shape: TextareaField (keeps line breaks), AddressField (id[key]),
+    //  UploadField ($_FILES). See READING THE REQUEST above.
 
     /**
-     * EXAMPLE (unused) — parallel file + caption arrays. Would replace the
-     * inherited BaseField::extractValue() as a real override.
+     * EXAMPLE (unused) — sub-inputs posted as "id[key]", as AddressField reads them.
+     *
+     * @param string $field_id Input name.
+     * @return mixed
+     */
+    private function exampleExtractComposite(string $field_id): mixed
+    {
+        self::assertRequestNonceVerified();
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
+        $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : [];
+        return self::scalarSubfieldMap($raw);
+    }
+
+    /**
+     * EXAMPLE (unused) — files with a caption each, posted as id[] files and id_desc[] texts.
+     *
+     * @param string $field_id Input name.
+     * @return mixed
      */
     private function exampleExtractParallelArrays(string $field_id): mixed
     {
-        // A real override must call self::assertRequestNonceVerified(); first, same as every
-        // extractValue() implementation in this plugin — see BaseField::assertRequestNonceVerified().
         self::assertRequestNonceVerified();
-        // No wp_unslash(): WordPress never slashes $_FILES, and unslashing stripped the backslashes out of Windows temp paths,
-        // which then failed is_readable()/is_uploaded_file() (the UploadField bug fixed in 1.0.7).
+        // Not unslashed: $_FILES is never slashed, and wp_unslash() would break Windows tmp paths.
         // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- verified above via assertRequestNonceVerified(); 'name' is sanitized below, other keys (tmp_name/size/error) are PHP-generated, not attacker text.
         $files = isset($_FILES[$field_id]) ? $_FILES[$field_id] : [];
-        if (is_array($files) && isset($files['name'])) {
+        // A shape the form's own input never posts is no upload of this field.
+        if (!\FabricatorForms\Utils\Cast::isFlatFilesEntry($files)) {
+            $files = [];
+        }
+        if (isset($files['name'])) {
             $files['name'] = is_array($files['name'])
                 ? map_deep($files['name'], 'sanitize_file_name')
                 : sanitize_file_name($files['name']);
         }
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
         $desc = isset($_POST[$field_id . '_desc'])
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-            ? map_deep(wp_unslash($_POST[$field_id . '_desc']), 'sanitize_text_field')
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
+            ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id . '_desc']), 20), 'sanitize_text_field')
             : [];
         return [
             'files' => $files,
-            'desc'  => $desc,
+            'desc'  => is_array($desc) ? array_filter($desc, 'is_string') : [],
         ];
     }
 
+
     // ═══════════════════════════════════════════════════════
-    //  VALIDATE — server-side validation, runs after form submission
+    //  VALIDATE
     // ═══════════════════════════════════════════════════════
     //
-    //  Default (BaseField): handles the generic required check automatically.
-    //  Override only to add format rules on top.
-    //  Return true = OK, return string = user-facing error message.
-    //
-    //  $config['field_id'] — FormProcessor injects this before calling validate(),
-    //  setting it to the same value as $config['id'] (the HTML element name, e.g. "field-3").
-    //  Use it to look up $_FILES[$config['field_id']] for file-bearing fields.
-    //
-    //  The $value received here is whatever extractValue() returned — shape it
-    //  there, validate and sanitize it here.
+    //  true, or the message for the visitor (not escaped: front.js shows it via textContent). The default handles
+    //  the required check; a field hidden by its conditions is never validated. $config['field_id'] holds the
+    //  element id. Mirror format rules in getClientValidation() for instant feedback; the server's check decides.
 
     /**
-     * Validates the submitted value (required check + five-digit format).
+     * Validates the submitted value: required, then five digits.
      *
-     * @param mixed $value  The submitted value.
-     * @param array $config Field configuration array.
-     *
+     * @param mixed $value  What extractValue() returned.
+     * @param array $config The saved field configuration.
      * @return bool|string
      */
     public function validate(mixed $value, array $config): bool|string
     {
-        $base = parent::validate($value, $config); // required check
-        if ($base !== true) {
+        $base = parent::validate($value, $config);
+        if ($base !== true || $this->isEmpty($value)) {
             return $base;
         }
-        if ($this->isEmpty($value)) {
-            return true; // optional + empty → skip format check
-        }
-
-        if (!preg_match('/^\d{5}$/', (string)$value)) {
+        if (!preg_match('/^\d{5}$/', (string) $value)) {
             return __('Please enter a five-digit number.', 'formfabricator');
         }
         return true;
     }
 
-    /**
-     * EXAMPLE (unused) — an error message with a %s/%d placeholder always
-     * needs a translators comment directly above the sprintf()/__() pairing.
-     */
-    private function exampleValidateRequiredMessage(string $label): string
-    {
-        // translators: %s: field label.
-        return sprintf(__('%s is a required field.', 'formfabricator'), $label);
-    }
+
+    // ═══════════════════════════════════════════════════════
+    //  CONDITIONS
+    // ═══════════════════════════════════════════════════════
+    //
+    //  conditionValue() is what show/hide and routing rules read; it must equal front.js's getFieldValue() on the
+    //  rendered markup (condition-parity.test.js checks both). The default fits inputs named "id" or "id[]".
+    //  hiddenConditionValue() is what a rule reads while the field is hidden: '' by default, [] for checkboxes
+    //  named after the field.
 
 
     // ═══════════════════════════════════════════════════════
-    //  OUTPUT PIPELINE — map() → mapNormalized() → pdfData(), plus the
-    //  includeInEmailSummary() / includeValueInSeal() flags below, are all
-    //  facets of the same question: "how does this field's value leave the
-    //  system?" map() covers 99% of fields. Only reach for mapNormalized()
-    //  or pdfData() when map()'s plain string isn't enough (files, images,
-    //  multiple output rows) — see each section for exact triggers.
+    //  OUTPUT — map() → mapNormalized() → pdfData()
     // ═══════════════════════════════════════════════════════
     //
-    //  MAP — value → human-readable string for email / PDF
-    //  99% of fields → map() only. 1% → also mapNormalized(). 0.1% → also pdfData().
+    //  map() turns the value into the text the email and the PDF show. The default returns the string, or
+    //  __('[No entry]', 'formfabricator') when empty (isEmpty(): null, '' or an array of '' only; override it for
+    //  other shapes). Shared wording: '[No entry]', '[Other]', '[Signature present]'. Consent-like fields record what
+    //  was agreed and when (ConsentField::map()).
     //
-    //  map(mixed $value, array $config): string
-    //    Returns a plain human-readable string. The BaseField default casts the
-    //    value to string and returns __('[No entry]', 'formfabricator') when empty.
-    //    Override for composite (array) values or custom formatting (e.g. IBAN
-    //    spacing, date format).
-    //
-    //  WELL-KNOWN SENTINEL RETURNS — use these exact strings so the translation
-    //  system picks them up consistently across all fields:
-    //    __('[No entry]', 'formfabricator')                 — field was left blank
-    //    __('[Other]', 'formfabricator')                    — user chose the free-text "other" option
-    //    __('[Signature present – see attachment]', 'formfabricator') — binary excluded from text output
-    //    __('Yes', 'formfabricator') / __('No', 'formfabricator')        — boolean consent
-    //    __('Privacy accepted', 'formfabricator') / __('Privacy not accepted', 'formfabricator')
-    //
-    //  Do NOT return raw German strings — always wrap in __('English source', 'formfabricator').
-    //  JS strings inside getClientInit()/getClientValidation() literals cannot use __() directly; add them to Assets::enqueueFront()
-    //  under FabricatorForms.i18n and read them as:
-    //    (window.FabricatorForms && window.FabricatorForms.i18n && window.FabricatorForms.i18n.MY_KEY) || 'English fallback'
-    //
-    //  Override mapNormalized() only when your field needs any of:
-    //    • Multiple output entries  (SepaField expands to IBAN + BIC + Kontoinhaber + sig)
-    //    • File materialization     (UploadField reads $_FILES; SignatureField decodes base64)
-    //    • Custom output keys       (default key is $field_id)
-    //    • Return []                to emit nothing (PageBreakField, empty HtmlField)
-    //
-    //  BaseField default for mapNormalized() wraps map() in a single [$field_id => entry].
-    //
-    //  mapNormalized() signature: (field_id, label, value, config, context): array<key, entry>
-    //  $context: ['files' => $_FILES subset, 'raw_values' => all raw POST values]
-    //  Entry shape: ['label' => ..., 'type' => ..., 'value' => ..., 'materialized_files' => []]
-    //
-    //  isEmpty() — The default checks array_filter($v, fn => $v !== '') for arrays.
-    //  This works for flat scalar arrays (checkboxes, multi-select) but will misfire
-    //  for structured values (e.g. [{file, desc}, ...]). Override isEmpty() whenever
-    //  your value shape is not a flat array of strings.
-    //
-    //  Size note — mapNormalized() base64-encodes the full binary of every materialized
-    //  file into the returned array. For fields with many or large files this array can
-    //  be very large. There is no built-in cap — be mindful of memory when materializing
-    //  more than a handful of images (see UploadField for the per-file pattern to follow).
-    //
-    //  Parallel arrays (repeatable user-added groups, e.g. N images each with a caption):
-    //  Use a naming convention such as field_id[files][] and field_id[desc][] in your
-    //  render() HTML. Override extractValue() in your field class to collect both arrays
-    //  and return them as a single value — that value then reaches map() and mapNormalized()
-    //  with the full shape intact. There is no built-in repeatable-group mechanism — the
-    //  'group' schema type is builder-admin children only, not user-driven runtime rows.
+    //  mapNormalized($field_id, $label, $value, $config, $context) returns the field's output rows, keyed by row id.
+    //  The default is one row, [$field_id => ['label', 'type', 'value' => map()]]. Override for several rows
+    //  (DirectDebitField), files ('materialized_files', UploadField, SignatureField) or none ([], PageBreakField).
+    //  $context holds 'files', 'raw_values' and 'skip_ids'. Every materialized file is held base64-encoded in
+    //  memory; the submission's memory budget counts uploads, so read files the way UploadField does.
 
     /**
-     * Maps the submitted value to a human-readable string for email/PDF.
+     * Turns the value into text for the email and the PDF.
      *
-     * @param mixed $value  The submitted value.
-     * @param array $config Field configuration array.
-     *
+     * @param mixed $value  What extractValue() returned.
+     * @param array $config The saved field configuration.
      * @return string
      */
     public function map(mixed $value, array $config): string
@@ -510,47 +369,40 @@ class ExampleField extends BaseField
             return __('[No entry]', 'formfabricator');
         }
         if (is_array($value)) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- literal callback ('trim'), not request input.
             return implode(', ', array_filter(array_map('trim', $value)));
         }
-        return (string)$value;
+        return (string) $value;
     }
 
 
     // ═══════════════════════════════════════════════════════
-    //  CLIENT-SIDE INIT — interaction logic for this field type
+    //  CLIENT-SIDE INIT
     // ═══════════════════════════════════════════════════════
     //
-    //  Return a JS function string: function(root) { ... }
-    //  Assets::enqueueFront() collects these into window.FabricatorFieldInits keyed by field type. front.js calls each with the container root element — no field-specific knowledge lives in front.js.
+    //  A JS function expression, function (root) { … }, from its own file, collected into
+    //  window.FabricatorFieldInits by field type. front.js calls it with each form's root, and again after every
+    //  successful send, so it must be idempotent: mark each element once and skip it next time. front.js's own
+    //  helpers are not available. Text comes from window.FabricatorForms.i18n (Assets::frontLocalization()), with an
+    //  English fallback. '' for none.
     //
-    //  Use querySelectorAll / addEventListener directly. The on() helper in front.js is scoped to its IIFE and is NOT available here.
-    //
-    //  Must be idempotent: front.js calls every init again after each successful submit, so mark each element once
-    //  (e.g. el._fabricatorMyFieldInited = true) and skip it next time, or every submit attaches another listener.
-    //  See RatingField.js and ExampleField.clientInitClickHandler.js.
-    //
-    //  Return '' (default) when no client-side init is needed.
-    //
-    //  fabricator:upload-overflow — front.js dispatches this custom event on the <form> element
-    //  during pre-submit validation when the sum of data-fabricator-file-count attributes across
-    //  all file-upload zones exceeds PHP's max_file_uploads limit. The event detail carries
-    //  { total, max }. If your field reports a file count via data-fabricator-file-count it will
-    //  be included in this sum — listen for the event to show a user-visible error.
-    //  See UploadField::getClientInit() for a full usage example.
+    //  An upload-like field that sets data-fabricator-file-count counts towards PHP's max_file_uploads; front.js then
+    //  dispatches fabricator:upload-overflow ({ total, max }) on the <form> (see UploadField.js).
 
     /**
-     * Returns the client-side initialisation script for this field type.
+     * The client-side init function.
      *
      * @return string
      */
     public function getClientInit(): string
     {
-        return ''; // no client-side interaction needed
+        return '';
     }
 
     /**
-     * EXAMPLE (unused) — attach a click handler to every widget instance.
-     * getClientInit() would return this instead of ''.
+     * EXAMPLE (unused) — a click handler on every widget, attached once.
+     *
+     * @return string
      */
     private function exampleClientInitClickHandler(): string
     {
@@ -559,36 +411,30 @@ class ExampleField extends BaseField
 
 
     // ═══════════════════════════════════════════════════════
-    //  CLIENT-SIDE VALIDATION — two separate concerns
+    //  CLIENT-SIDE CHECKS
     // ═══════════════════════════════════════════════════════
     //
-    //  getClientEmptyCheck()  →  IS THE FIELD BLANK?
-    //    Used by the required check. Only override when "blank" is not "first visible
-    //    input has no value" — e.g. a checkbox group is blank when no checkbox is
-    //    checked, not when the input value is ''. Return [] to use the generic fallback.
+    //  getClientEmptyCheck(): ['fn' => 'function (fieldEl) { return isBlank; }'], for the required check when
+    //  "blank" isn't "the first visible input is empty". [] uses that fallback.
     //
-    //  getClientValidation()  →  IS THE VALUE IN THE RIGHT FORMAT?
-    //    Only runs when the field already HAS content. May return zero, one, or multiple
-    //    validation rules — each is an array with a 'rule' key (globally unique string)
-    //    and a 'fn' key (JS function string). Return [] if no format check is needed.
-    //
-    //  Both are collected by Assets::enqueueFront() and injected as
-    //  window.FabricatorEmptyChecks / window.FabricatorValidators before front.js loads.
-    //  front.js is a pure runner — zero field-specific logic lives there.
+    //  getClientValidation(): a list of ['rule' => name, 'fn' => function (fieldEl)], run only when the field has
+    //  content; fn returns null or the error text. Rule names are global, and the first field to use a name wins,
+    //  so prefix them with the type. wrap() lists them in data-validate.
 
     /**
-     * Returns the client-side empty-check function for this field type.
+     * The client-side blank check; [] for the generic one.
      *
      * @return array
      */
     public function getClientEmptyCheck(): array
     {
-        return []; // generic fallback: first visible input non-empty
+        return [];
     }
 
     /**
-     * EXAMPLE (unused) — field is empty when no checkbox is checked.
-     * getClientEmptyCheck() would return this instead of [].
+     * EXAMPLE (unused) — blank while no checkbox is ticked. A one-line function may stay inline.
+     *
+     * @return array
      */
     private function exampleClientEmptyCheckCheckboxGroup(): array
     {
@@ -596,29 +442,11 @@ class ExampleField extends BaseField
     }
 
     /**
-     * Returns client-side format validation rules for this field type.
+     * The client-side mirror of validate()'s format rule.
      *
      * @return array
      */
     public function getClientValidation(): array
-    {
-        return []; // no format validation needed
-    }
-
-    /**
-     * EXAMPLE (unused) — five-digit number format check. getClientValidation()
-     * would return this instead of [].
-     *
-     * Rule keys must be globally unique — prefix with the field type if unsure.
-     * The function receives the outer .fabricator-field wrapper element, not the input.
-     * Return null = valid, return string = error message shown below the field.
-     *
-     * Note the i18n lookup below — per the "Do NOT return raw German strings" rule
-     * in the MAP section above, JS-side error text must read from
-     * window.FabricatorForms.i18n (registered in Assets::enqueueFront()) with an
-     * English literal as the fallback, not a bare hardcoded string.
-     */
-    private function exampleClientValidationZip(): array
     {
         return [[
             'rule' => 'example-zip',
@@ -628,54 +456,41 @@ class ExampleField extends BaseField
 
 
     // ═══════════════════════════════════════════════════════
-    //  PDF DATA — pdfData() — how this field appears in the generated PDF
+    //  PDF DATA
     // ═══════════════════════════════════════════════════════
     //
-    //  BaseField already generates a standard PDF row (label + escaped value text)
-    //  automatically. Override pdfData() only when the field should appear differently
-    //  in the PDF than it does in the email — specifically:
-    //    1. The value is raw HTML, not plain text  →  see HtmlField
-    //    2. The field embeds an image in the PDF   →  see SignatureField / UploadField
-    //       (non-image uploads appear as filename text only; only attachImage() exists — there is no attachPdf())
+    //  The default is a labelled cell with the escaped map() text. A cell holds exactly the field's sealed value,
+    //  between the markers the verifier compares; titles and boxes go outside it (PdfDescriptor::opensFrame() and
+    //  closesFrame()). $this->pdf($field) returns a PdfDescriptor; chain, then ->build():
     //
-    //  $this->pdf($field) returns a PdfDescriptor. Chain methods, then build():
-    //
-    //  ->text(string $escaped)
-    //    Replace the default cell text (pre-escaped value) with something else.
-    //    Pass '' to suppress it entirely (e.g. signature — image speaks for itself).
-    //
-    //  ->rawHtml(string $html)
-    //    Use when the value itself IS trusted HTML (HtmlField).
-    //
-    //  ->unlabeled()
-    //    Suppress the label row — only for HTML blocks without a heading.
-    //
-    //  ->attachImage(string $binary, string $filename, string $mime = 'image/png')
-    //    Embeds an image and records its perceptual hash in the HMAC seal. Only types PdfUtils::embeddableImageMime() accepts are shown (not TIFF); attach others as files. PdfUtils::thumbnailHash($binary) is used internally — no manual call needed.
-    //    Chain multiple times to attach several images — each call appends one image after the cell text, in attachment order.
-    //    All images appear together after the cell text; there is no mechanism to interleave per-image captions between images.
-    //    For per-image captions, build the caption list into ->rawHtml() and accept that images are grouped below it.
-    //
-    //  ->build()
-    //    Returns the array Generator consumes. Always call last.
+    //    ->text($escaped)           replace the cell text ('' for none, as a signature does)
+    //    ->rawHtml($html, $trusted) HTML through wp_kses_post(); the PDF keeps only <br>, <strong> and <em> unless
+    //                               $trusted, for HTML the field has sanitized itself (HtmlField)
+    //    ->unlabeled()              no label row
+    //    ->attachImage($binary, $filename, $mime)
+    //                               embed an image after the cell text and record it in the seal; only types
+    //                               PdfUtils::embeddableImageMime() accepts and sizes within the pixel limit
+    //    ->opensFrame($title) / ->closesFrame()
+    //                               a titled box around this field and the ones after it
 
     /**
-     * EXAMPLE (unused) — a field that also puts an image of its value in the PDF.
-     * Would replace the inherited BaseField::pdfData() as a real override.
+     * EXAMPLE (unused) — an image of the value in the PDF.
      *
-     * $binary stands in for whatever your field produces; there is no image encoder in this plugin, so a field that
-     * needs one has to bring its own. (This used to call a generateQrPng() that never existed.)
+     * @param array $field Entry from mapNormalized().
+     * @return array
      */
     private function examplePdfDataImage(array $field): array
     {
-        $binary = $this->exampleRenderPng((string)($field['value'] ?? ''));
         return $this->pdf($field)
-            ->attachImage($binary, 'value.png')
+            ->attachImage($this->exampleRenderPng((string) ($field['value'] ?? '')), 'value.png')
             ->build();
     }
 
     /**
-     * EXAMPLE (unused) — stands in for a real encoder; returns a 1×1 transparent PNG.
+     * EXAMPLE (unused) — stands in for an image encoder the field would bring: a 1×1 transparent PNG.
+     *
+     * @param string $value The value to draw.
+     * @return string
      */
     private function exampleRenderPng(string $value): string
     {
@@ -685,25 +500,47 @@ class ExampleField extends BaseField
     }
 
     /**
-     * EXAMPLE (unused) — a field whose value is raw HTML (like HtmlField).
+     * EXAMPLE (unused) — HTML the field has already sanitized, as HtmlField does.
+     *
+     * @param array $field Entry from mapNormalized().
+     * @return array
      */
     private function examplePdfDataRawHtml(array $field): array
     {
         return $this->pdf($field)
-            ->rawHtml((string)($field['value'] ?? ''))
+            ->rawHtml(\FabricatorForms\Utils\HtmlSanitizer::sanitize((string) ($field['value'] ?? '')), true)
             ->build();
     }
 
 
     // ═══════════════════════════════════════════════════════
-    //  SKIP VALIDATION — presentational fields only
+    //  FLAGS
     // ═══════════════════════════════════════════════════════
     //
-    //  Return true for fields that carry no user input and should never be evaluated by validatePage() — e.g. PageBreakField, HtmlField.
-    //  Assets::enqueueFront() collects these into window.FabricatorSkipValidation. Default (BaseField): false. Almost every field should leave this alone.
-    //  FormProcessor also checks skipValidation() — returning true skips both server-side validation and value extraction for the field.
+    //  skipValidation() → true          no input at all (HtmlField, PageBreakField, PageHeaderField): never extracted
+    //                                   or validated, on either side
+    //  defersValidation() → true        validate() spends something single-use (CaptchaField): it runs only once
+    //                                   every other field has passed
+    //  includeInEmailSummary() → false  left out of {all_fields} (GroupField, PageBreakField, PageHeaderField)
+    //  includeValueInSeal() → false     value sealed as '' (SignatureField; its image is sealed by hash)
+    //  rawEmailHtml() → true            value goes into the email unescaped; only for HTML the field sanitizes itself
+    //                                   (HtmlField)
+    //  hasTextPreview() → true          used as sample text in the PDF layout preview (Text, Email, Textarea)
+    //  hasRequired() → false            no "Required" checkbox in the settings panel
+    //  hasSettingsPanel() → false       clicking the tile opens no settings panel
+    //  needsMultipartEncoding() → true  file input: the form gets enctype="multipart/form-data", and the submission's
+    //                                   memory budget counts its $_FILES entry (UploadField)
+    //  enqueueFrontScripts()            runs once per type among a form's top-level fields; load a third-party script
+    //                                   only after a click instead, as CaptchaField does for reCAPTCHA
+    //  isPageBreak() + renderBreak()    page navigation (PageBreakField)
+    //  isGroupContainer() + openTag()/closeTag()
+    //                                   renders $config['children'] inside (GroupField)
 
-    /** EXAMPLE (unused) — would replace the inherited BaseField::skipValidation(). */
+    /**
+     * EXAMPLE (unused) — would replace BaseField::skipValidation().
+     *
+     * @return bool
+     */
     private function exampleSkipValidation(): bool
     {
         return true;
@@ -711,122 +548,27 @@ class ExampleField extends BaseField
 
 
     // ═══════════════════════════════════════════════════════
-    //  DEFER VALIDATION — checks that reach outside this request
+    //  SETTINGS
     // ═══════════════════════════════════════════════════════
     //
-    //  Return true when validate() does something that can't be taken back — CaptchaField asks Google, and the token
-    //  it spends is single-use. FormProcessor then runs your validate() only after every other field has passed, so a
-    //  submission that fails elsewhere doesn't consume it. Default (BaseField): false. Only CaptchaField returns true.
-
-    /** EXAMPLE (unused) — would replace the inherited BaseField::defersValidation(). */
-    private function exampleDefersValidation(): bool
-    {
-        return true;
-    }
-
-
-    // ═══════════════════════════════════════════════════════
-    //  OUTPUT FLAGS — control how the field appears in email and PDF
-    // ═══════════════════════════════════════════════════════
+    //  getDefaultConfig() is what a field dropped onto the canvas starts with; merge the parent's (label, required,
+    //  hide_label, placeholder, description, autocomplete, custom_class). On save, a value of the wrong kind (list vs.
+    //  single) is replaced with its default, and strings are sanitized by sanitizeConfigValue(): as HTML, unless
+    //  plainTextConfigKeys() names the key.
     //
-    //  includeInEmailSummary(): bool
-    //    Default: true. Return false for fields that carry no user-submitted
-    //    value and should be invisible in the {all_fields} email block.
-    //    MailSender checks this before building each row. GroupField, PageBreakField
-    //    and PageHeaderField return false; HtmlField returns true and gates its output
-    //    in mapNormalized() through its "Show in mail/PDF" toggle instead.
-    //
-    //  includeValueInSeal(): bool
-    //    Default: true. Return false when the field value is a data URI,
-    //    binary blob, or otherwise non-text content that must be excluded
-    //    from the HMAC integrity seal text. Generator::buildSealFields()
-    //    sets the value to '' for any field returning false. SignatureField
-    //    returns false (the image binary is sealed separately via its hash).
-    //
-    //  hasTextPreview(): bool
-    //    Default: false. Return true when the field produces a short plain-text
-    //    string that is meaningful as a sample in the PDF layout token-picker
-    //    preview. PDFLayoutEditor filters dummyFields() using this flag.
-    //    Only TextField, EmailField, and TextareaField return true.
-    //
-    //  rawEmailHtml(): bool
-    //    Default: false. Return true when the field's value is trusted HTML that should be
-    //    output unescaped in {all_fields}/{field_id} mail placeholders instead of the normal
-    //    nl2br(esc_html(...)) treatment. Only safe when the value can never come from
-    //    end-user input — see HtmlField, which sanitizes html_content via wp_kses() at
-    //    config-save time, so marking it rawEmailHtml() here doesn't reopen an XSS path.
-    //    MailSender checks this flag per-field before choosing the escaping path.
-
-    /** EXAMPLE (unused) — would replace the inherited BaseField::includeInEmailSummary(). */
-    private function exampleIncludeInEmailSummary(): bool
-    {
-        return false;
-    }
-
-    /** EXAMPLE (unused) — would replace the inherited BaseField::includeValueInSeal(). */
-    private function exampleIncludeValueInSeal(): bool
-    {
-        return false;
-    }
-
-    /** EXAMPLE (unused) — would replace the inherited BaseField::hasTextPreview(). */
-    private function exampleHasTextPreview(): bool
-    {
-        return true;
-    }
-
-
-    // ═══════════════════════════════════════════════════════
-    //  STRUCTURAL FLAGS — form-level and renderer behavior
-    // ═══════════════════════════════════════════════════════
-    //
-    //  These methods don't affect the field itself — they tell FormRenderer how to
-    //  treat the field before rendering begins. Almost no field needs them.
-    //
-    //  needsMultipartEncoding(): bool
-    //    Return true when your field uses a file input. FormRenderer checks all
-    //    fields and adds enctype="multipart/form-data" to the <form> tag when any
-    //    returns true. Default: false. Only UploadField returns true.
-    //
-    //  enqueueFrontScripts(): void
-    //    Called once per unique field type present in a form before rendering.
-    //    Call wp_enqueue_script() here for any third-party library your field
-    //    requires (e.g. Google reCAPTCHA). Default: no-op. Only CaptchaField overrides this.
-    //
-    //  isPageBreak(): bool
-    //    FormRenderer calls renderBreak(array $config, int $page): string on the field
-    //    instead of render() and emits page-navigation HTML and <div> wrappers around it.
-    //    You must also implement renderBreak() when returning true. Default: false.
-    //    Only PageBreakField returns true.
-    //
-    //  isGroupContainer(): bool
-    //    FormRenderer calls openTag()/closeTag() on the field and recurses into
-    //    $config['children'] to render child fields inline. You must also implement
-    //    openTag() and closeTag() when returning true. Default: false.
-    //    Only GroupField returns true.
-
-    /** EXAMPLE (unused) — would replace the inherited BaseField::needsMultipartEncoding(). */
-    private function exampleNeedsMultipartEncoding(): bool
-    {
-        return true;
-    }
-
-    /** EXAMPLE (unused) — would replace the inherited BaseField::enqueueFrontScripts(). */
-    private function exampleEnqueueFrontScripts(): void
-    {
-        wp_enqueue_script('fabricator-my-lib', FABRICATOR_FORMS_URL . 'assets/js/my-lib.js', [], FABRICATOR_FORMS_VERSION, true);
-    }
-
-
-    // ═══════════════════════════════════════════════════════
-    //  DEFAULT CONFIG — every config key the field uses
-    // ═══════════════════════════════════════════════════════
-    // The builder reads this when a new field is dropped onto the canvas.
-    // Always merge with parent to inherit: label, required, hide_label,
-    // placeholder, description.
+    //  The schemas list the settings panel's controls, in order; label, required and hide_label are built in. Types:
+    //    General and Advanced  text, email, url, number, textarea, checkbox, select (options), pill3 (values, labels),
+    //                          media_upload, section_title, notice (level, text)
+    //    General only          bool_seg (false_label, true_label), pill_multi, options_list, page_names_list,
+    //                          subfields (items), limit_row (count_key), icon_row, time_row, country_tags,
+    //                          html_editor, rating_preview
+    //  Optional keys: hint; rebuild => true (re-renders the tab, so dependent controls appear); depends_on:
+    //    ['other_key' => true]                    shown while other_key is truthy (false: falsy)
+    //    ['key' => 'other_key', 'is' => 'x']      shown while other_key equals 'x'
+    //    ['key' => 'other_key', 'not' => 'x']     shown while it doesn't; 'default' stands in for a missing value
 
     /**
-     * Returns default config values for the builder canvas.
+     * The settings a new field starts with.
      *
      * @return array
      */
@@ -838,55 +580,20 @@ class ExampleField extends BaseField
                 'maxlength' => '',
                 'my_toggle' => false,
                 'my_select' => 'option-a',
+                'pattern'   => '',
             ]
         );
     }
 
-
-    // ═══════════════════════════════════════════════════════
-    //  SETTINGS SCHEMA — what the builder's right-hand panel renders
-    // ═══════════════════════════════════════════════════════
-    //
-    //  ┌────────────────┬──────────────────────────────────────────────────────────────┐
-    //  │ type           │ renders as                                                   │
-    //  ├────────────────┼──────────────────────────────────────────────────────────────┤
-    //  │ text           │ single-line text input                                       │
-    //  │ textarea       │ multi-line textarea                                          │
-    //  │ number         │ numeric input                                                │
-    //  │ checkbox       │ single toggle checkbox                                       │
-    //  │ bool_seg       │ two-button segmented switch (false_label/true_label)         │
-    //  │ pill3          │ three-way pill (values[] + labels[] required)                │
-    //  │ options_list   │ editable draggable option list (select/radio/chk)            │
-    //  │ icon_row       │ icon picker row (options[] required)                         │
-    //  │ limit_row      │ char/word limit row (count_key required)                     │
-    //  │ subfields      │ sub-field configurator (items[] required)                    │
-    //  │ rating_preview │ live star-rating preview widget (no extra keys)              │
-    //  │ html_editor    │ raw HTML textarea (for HtmlField)                            │
-    //  │ media_upload   │ WP media library picker + thumbnail preview                  │
-    //  │ notice         │ informational banner (level: 'info'|'warning'|'error', text) │
-    //  └────────────────┴──────────────────────────────────────────────────────────────┘
-    //
-    //  Optional keys on any entry:
-    //    hint       → small grey hint text shown below the control
-    //    rebuild    => true  → re-renders the canvas preview when value changes
-    //    depends_on => ['key' => value]   → hide entry unless another key equals value
-    //    depends_on => ['key' => 'x', 'not' => 'y']  → hide when key equals 'y'
-    //
-    //  The builder iterates over these arrays and automatically generates the
-    //  settings panel — one control per entry, in order. You never write panel HTML.
-    //
-    //  IMPORTANT: label / required / hide_label are rendered automatically by
-    //  the builder JS and must NOT appear in any schema array.
-
     /**
-     * Returns the settings schema for the General tab.
+     * The General tab's controls.
      *
      * @return array
      */
     public function getGeneralSchema(): array
     {
         return array_merge(
-            $this->baseGeneralEntries(), // placeholder + description
+            $this->baseGeneralEntries(), // placeholder and description
             [
                 [
                     'key'         => 'my_toggle',
@@ -910,16 +617,12 @@ class ExampleField extends BaseField
                     'values' => ['option-a', 'option-b', 'option-c'],
                     'labels' => [__('Off', 'formfabricator'), __('Allowed', 'formfabricator'), __('Blocked', 'formfabricator')],
                 ],
-                // Media upload example — stores a URL string:
-                // ['key' => 'icon_url', 'type' => 'media_upload', 'label' => __('Icon', 'formfabricator')],
-                // Notice (no key — display only, no config value):
-                // ['type' => 'notice', 'level' => 'warning', 'text' => __('Note…', 'formfabricator')],
             ]
         );
     }
 
     /**
-     * Returns the settings schema for the Advanced tab.
+     * The Advanced tab's controls.
      *
      * @return array
      */
@@ -927,11 +630,11 @@ class ExampleField extends BaseField
     {
         return [
             [
-                'key'        => 'maxlength',
+                'key'        => 'pattern',
                 'type'       => 'textarea',
                 'label'      => __('Pattern', 'formfabricator'),
                 'hint'       => __('One per line', 'formfabricator'),
-                'depends_on' => ['key' => 'my_select', 'not' => 'option-a'], // visible unless my_select = 'option-a'
+                'depends_on' => ['key' => 'my_select', 'not' => 'option-a'],
             ],
         ];
     }

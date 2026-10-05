@@ -23,7 +23,8 @@ test('every validation rule a field declares is a function', () => {
     const validators = loadPage().window.FabricatorValidators;
     const expected = [
         'email', 'iban', 'phone', 'number-range', 'date-format', 'currency-range', 'text-word-limit',
-        'textarea-word-limit', 'website-url', 'checkbox-count', 'slider-range', 'sepa-bic', 'sepa-required',
+        'textarea-word-limit', 'website-url', 'checkbox-count', 'slider-range', 'debit-bic', 'debit-sort-code',
+        'debit-routing', 'debit-account', 'debit-required',
     ];
     for (const rule of expected) {
         assert.equal(typeof validators[rule], 'function', rule);
@@ -32,7 +33,7 @@ test('every validation rule a field declares is a function', () => {
 
 test('every field with client behaviour registers an init function', () => {
     const inits = loadPage().window.FabricatorFieldInits;
-    for (const type of ['slider', 'rating', 'date', 'select', 'radio', 'upload', 'signature', 'sepa']) {
+    for (const type of ['slider', 'rating', 'date', 'select', 'radio', 'checkbox', 'upload', 'signature', 'directdebit']) {
         assert.equal(typeof inits[type], 'function', type);
     }
 });

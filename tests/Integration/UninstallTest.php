@@ -5,11 +5,9 @@ namespace FabricatorForms\Tests\Integration;
 use FabricatorForms\Form\FormModel;
 
 /**
- * Deleting the plugin leaves nothing behind (TESTING.md §8), on every site of a network (§7, 1.0.6: cleanup used to
- * reach only the main site). Run the suite with WP_MULTISITE=1 for the network case.
+ * Deleting the plugin leaves nothing behind (TESTING.md §8), on every site of a network with WP_MULTISITE=1.
  *
- * uninstall.php declares a global function, so it can be included once per PHP process: this is one scenario, and it
- * must stay the only test that runs it.
+ * uninstall.php declares a global function, so this must stay the only test that includes it.
  */
 final class UninstallTest extends TestCase
 {
@@ -39,6 +37,16 @@ final class UninstallTest extends TestCase
         foreach ($sites as $site) {
             $this->onSite($site, fn() => $this->plantData());
         }
+        // Mail-attachment copies a killed request left in the system temp dir, and a folder a submission elsewhere on
+        // this server (sharing the temp dir) may still be sending.
+        $copies = untrailingslashit(get_temp_dir()) . '/fabricator_test' . wp_generate_password(8, false, false);
+        mkdir($copies . '/0', 0700, true);
+        file_put_contents($copies . '/0/passport.jpg', 'x');
+        file_put_contents($copies . '/form.pdf', '%PDF-1.4');
+        touch($copies, time() - 20 * MINUTE_IN_SECONDS);
+        $in_use = untrailingslashit(get_temp_dir()) . '/fabricator_test' . wp_generate_password(8, false, false);
+        mkdir($in_use);
+        file_put_contents($in_use . '/form.pdf', '%PDF-1.4');
 
         if (!defined('WP_UNINSTALL_PLUGIN')) {
             define('WP_UNINSTALL_PLUGIN', 'formfabricator/formfabricator.php');
@@ -49,6 +57,11 @@ final class UninstallTest extends TestCase
             $this->onSite($site, fn() => $this->assertNothingLeft('site ' . $site));
         }
         self::assertSame('', get_user_meta($admin, 'fabricator_uploads_notice_dismissed', true));
+        clearstatcache();
+        self::assertDirectoryDoesNotExist($copies, 'attachment copies in the temp dir');
+        self::assertFileExists($in_use . '/form.pdf', 'a folder possibly still being sent');
+        wp_delete_file($in_use . '/form.pdf');
+        rmdir($in_use);
     }
 
     /**

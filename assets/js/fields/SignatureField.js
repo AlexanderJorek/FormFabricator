@@ -64,7 +64,7 @@ function (root) {
             if (!drawing) return;
             drawing = false;
             /* A tap that draws nothing left a blank white image behind, which validate() accepts — so a required
-               signature, including the SEPA mandate, could be submitted empty. */
+               signature, including the direct debit mandate's, could be submitted empty. */
             if (!drew) return;
             input.value = canvas.toDataURL(fmt === 'jpeg' ? 'image/jpeg' : 'image/png');
         }
@@ -83,9 +83,48 @@ function (root) {
                 drew        = false;
             });
         }
+        /* Typing the name instead of drawing (WCAG 2.1.1), into the same hidden input a drawing uses. */
+        var modeBtn  = wrap.querySelector('.fabricator-signature-mode');
+        var typedRow = wrap.querySelector('.fabricator-signature-typed-row');
+        var typed    = typedRow && typedRow.querySelector('.fabricator-signature-typed');
+        var hint     = wrap.querySelector('.fabricator-signature-hint');
+        function setTyping(on) {
+            if (!modeBtn || !typed) return;
+            wrap.classList.toggle('fabricator-signature-wrap--typed', on);
+            canvas.hidden   = on;
+            typedRow.hidden = !on;
+            if (clearBtn) clearBtn.hidden = on;
+            if (hint) hint.hidden = on;
+            modeBtn.textContent = on ? modeBtn.dataset.drawLabel : modeBtn.dataset.typeLabel;
+            modeBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            // Only one way signs: switching drops what the other way held.
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drew        = false;
+            typed.value = '';
+            input.value = '';
+            if (on) {
+                typed.focus();
+            } else {
+                // Back to drawing at its proper size, now that the canvas is shown again.
+                resize();
+            }
+        }
+        if (modeBtn && typed) {
+            modeBtn.addEventListener('click', function () {
+                setTyping(!wrap.classList.contains('fabricator-signature-wrap--typed'));
+            });
+            typed.addEventListener('input', function () {
+                // Trimmed as PHP's trim() does, so a name of spaces is no signature here either.
+                input.value = typed.value.replace(/^[ \t\n\r\0\x0B]+|[ \t\n\r\0\x0B]+$/g, '');
+            });
+        }
         var ownerForm = canvas.closest('form');
         if (ownerForm) {
             ownerForm.addEventListener('reset', function () {
+                if (wrap.classList.contains('fabricator-signature-wrap--typed')) {
+                    setTyping(false);
+                }
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 input.value = '';

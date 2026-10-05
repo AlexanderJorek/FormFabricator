@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * front.js guards for things outside the plugin's control: a blocked reCAPTCHA script (1.0.2) and a page restored
+ * front.js guards for things outside the plugin's control: a blocked reCAPTCHA script and a page restored
  * from the back/forward cache (a second submission, a stale message).
  */
 

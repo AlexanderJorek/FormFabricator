@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -161,8 +161,7 @@ class DateField extends BaseField
     /**
      * Parses a stored min/max date, in the field's own format or in any of the others.
      *
-     * The bounds are written in whatever format the field had when they were entered. Reading them in the current
-     * format only meant that changing the format silently dropped them, so every date passed again.
+     * Bounds keep the format they were entered in, so a format change must not drop them.
      *
      * @param string $value Trimmed bound, as stored.
      * @param string $key   The field's current format, tried first.

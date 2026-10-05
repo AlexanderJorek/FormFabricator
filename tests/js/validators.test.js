@@ -36,9 +36,9 @@ test('email', () => {
 test('iban reads the flags its input handler sets', () => {
     const valid = (el) => { el.querySelector('input')._fabricatorIbanValid = true; };
     const invalid = (el) => { el.querySelector('input')._fabricatorIbanInvalid = true; };
-    assert.equal(check('iban', '<input class="fabricator-sepa-iban" value="DE89370400440532013000">', valid), null);
-    assert.equal(check('iban', '<input class="fabricator-sepa-iban" value="DE00000000000000000000">', invalid), i18n.sepa_iban_invalid);
-    assert.equal(check('iban', '<input class="fabricator-sepa-iban" value="DE123">'), i18n.sepa_iban_incomplete, 'no flag yet: incomplete');
+    assert.equal(check('iban', '<input class="fabricator-debit-iban" value="DE89370400440532013000">', valid), null);
+    assert.equal(check('iban', '<input class="fabricator-debit-iban" value="DE00000000000000000000">', invalid), i18n.debit_iban_invalid);
+    assert.equal(check('iban', '<input class="fabricator-debit-iban" value="DE123">'), i18n.debit_iban_incomplete, 'no flag yet: incomplete');
 });
 
 test('phone', () => {
@@ -60,7 +60,7 @@ test('number-range: bounds', () => {
     assert.equal(n('11'), i18n.number_max.replace('%s', '10'));
 });
 
-test('number-range: step 1 refuses decimals (TESTING.md §4, 1.0.7)', () => {
+test('number-range: step 1 refuses decimals (TESTING.md §4)', () => {
     const n = (v, attrs = 'step="1"') => check('number-range', '<input type="number" value="' + v + '" ' + attrs + '>');
     assert.equal(n('3'), null);
     assert.equal(n('2.5'), i18n.number_step.replace('%s', '1'));
@@ -84,7 +84,7 @@ test('currency-range: bounds', () => {
     assert.equal(c('2000'), i18n.currency_max.replace('%s', '1000'));
 });
 
-test('currency-range: at most two decimal places (TESTING.md §4, 1.0.7)', () => {
+test('currency-range: at most two decimal places (TESTING.md §4)', () => {
     const c = (v) => check('currency-range', '<input type="number" value="' + v + '">');
     assert.equal(c('12.345'), i18n.currency_decimals);
     assert.equal(c('12.34'), null);
@@ -109,16 +109,24 @@ test('website-url', () => {
     assert.equal(check('website-url', '<input type="url" value="not-a-url">'), null, 'not switched on');
     assert.equal(check('website-url', '<input type="url" value="https://example.de" data-validate-url="1">'), null);
     assert.equal(check('website-url', '<input type="url" value="not-a-url" data-validate-url="1">'), i18n.website_invalid_url);
+    // As WebsiteField::validate(): invisible characters are refused, also a non-breaking space at the end.
+    const url = (v) => check('website-url', '<input type="url" data-validate-url="1">', (el) => { el.querySelector('input').value = v; });
+    assert.equal(url('https://müller.de/über'), null);
+    for (const v of ['https://exa‮lpmoc.de', 'https://exa​mple.de', 'https://example.de ']) {
+        assert.equal(url(v), i18n.website_invalid_url, JSON.stringify(v));
+    }
 });
 
 test('checkbox-count', () => {
-    const group = (min, max, checked) => '<div class="fabricator-checkbox-group" data-min-selections="' + min + '" data-max-selections="' + max + '">'
+    // CheckboxField::render() writes each message with its plural form already chosen; the validator shows it as is.
+    const group = (min, max, checked) => '<div class="fabricator-checkbox-group" data-min-selections="' + min + '" data-max-selections="' + max + '"'
+        + ' data-min-message="at least ' + min + '" data-max-message="at most ' + max + '">'
         + checked.map((c) => '<input type="checkbox"' + (c ? ' checked' : '') + '>').join('') + '</div>';
     assert.equal(check('checkbox-count', '<input type="checkbox" checked>'), null, 'no group');
     assert.equal(check('checkbox-count', '<div class="fabricator-checkbox-group"><input type="checkbox" checked></div>'), null, 'no limits');
-    assert.equal(check('checkbox-count', group(2, 0, [true, false])), i18n.checkbox_min.replace('%d', '2'));
+    assert.equal(check('checkbox-count', group(2, 0, [true, false])), 'at least 2');
     assert.equal(check('checkbox-count', group(2, 0, [true, true])), null);
-    assert.equal(check('checkbox-count', group(0, 1, [true, true])), i18n.checkbox_max.replace('%d', '1'));
+    assert.equal(check('checkbox-count', group(0, 1, [true, true])), 'at most 1');
 });
 
 test('slider-range', () => {
@@ -131,28 +139,27 @@ test('slider-range', () => {
     assert.equal(typeof check('slider-range', range(-5, 80)), 'string');
 });
 
-test('sepa-bic', () => {
-    const bic = (v) => check('sepa-bic', '<div><input class="fabricator-sepa-bic" value="' + v + '"><span class="fabricator-field-error"></span></div>');
+test('debit-bic', () => {
+    const bic = (v) => check('debit-bic', '<div><input class="fabricator-debit-bic" value="' + v + '"><span class="fabricator-field-error"></span></div>');
     assert.equal(bic(''), null);
     assert.equal(bic('COBADEFF'), null);
     assert.equal(bic('COBADEFFXXX'), null);
 });
 
-test('sepa-bic: a wrong BIC is flagged at the BIC input itself', () => {
-    // The SEPA rules write their message into the sub-field's own error slot and return a zero-width space: the field
-    // counts as invalid without a second, field-level message.
+test('debit-bic: a wrong BIC is flagged at the BIC input itself', () => {
+    // The direct debit rules write their message into the sub-field's own error slot and return a zero-width space: the
+    // field counts as invalid without a second, field-level message.
     let el;
-    const r = check('sepa-bic', '<div><input class="fabricator-sepa-bic" value="INVALID"><span class="fabricator-field-error"></span></div>', (e) => { el = e; });
+    const r = check('debit-bic', '<div><input class="fabricator-debit-bic" value="INVALID"><span class="fabricator-field-error"></span></div>', (e) => { el = e; });
     assert.equal(r, '​');
-    assert.equal(el.querySelector('.fabricator-field-error').textContent, i18n.sepa_bic_invalid);
+    assert.equal(el.querySelector('.fabricator-field-error').textContent, i18n.debit_bic_invalid);
 });
 
-test('sepa-required', () => {
-    const sepa = (iban, bic, holder) => '<div><input class="fabricator-sepa-iban" value="' + iban + '"><span class="fabricator-field-error"></span></div>'
-        + '<div><input class="fabricator-sepa-bic" value="' + bic + '"><span class="fabricator-field-error"></span></div>'
-        + '<div><input class="fabricator-sepa-holder" value="' + holder + '"><span class="fabricator-field-error"></span></div>';
+test('debit-required', () => {
+    const part = (name, value) => '<div><input data-debit-part="' + name + '" value="' + value + '"><span class="fabricator-field-error"></span></div>';
+    const sepa = (iban, bic, holder) => part('iban', iban) + part('bic', bic) + part('holder', holder);
     const required = (el) => { el.dataset.required = 'true'; };
-    assert.equal(check('sepa-required', '<input class="fabricator-sepa-iban" value="">'), null, 'not required');
-    assert.equal(typeof check('sepa-required', sepa('', 'COBADEFF', 'Max'), required), 'string', 'IBAN missing');
-    assert.equal(check('sepa-required', sepa('DE89370400440532013000', 'COBADEFF', 'Max Muster'), required), null);
+    assert.equal(check('debit-required', part('iban', '')), null, 'not required');
+    assert.equal(typeof check('debit-required', sepa('', 'COBADEFF', 'Max'), required), 'string', 'IBAN missing');
+    assert.equal(check('debit-required', sepa('DE89370400440532013000', 'COBADEFF', 'Max Muster'), required), null);
 });

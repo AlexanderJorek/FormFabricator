@@ -310,7 +310,7 @@ function renderFieldList() {
         empty.innerHTML =
             '<div class="fabricator-empty-icon"><i class="fa-solid fa-layer-group"></i></div>' +
             '<h2 style="font-size:16px;font-weight:700;color:#1d2327;margin:0;">' + escHtml(_i18n.noFieldsYetTitle || 'No fields yet') + '</h2>' +
-            '<p>' + escHtml(_i18n.addFirstFieldHtml || 'Add your first field via') + ' <strong>' + escHtml(_i18n.addFieldTitle || 'Add field') + '</strong></p>';
+            '<p>' + withBoldName(_i18n.addFirstFieldHtml || 'Add your first field via %s', _i18n.addFieldTitle || 'Add field') + '</p>';
         list.appendChild(empty);
     } else {
         for (var i = 0; i < state.fields.length; i++) {
@@ -319,9 +319,8 @@ function renderFieldList() {
     }
 }
 
-/* For dragend: dragstart hid the source row (display:none), so a drag that ends where it began (or is cancelled) leaves
-   state.fields unchanged and renderFieldList()'s JSON check would skip the rebuild, keeping the row hidden until the next
-   real change. Clearing the cache forces the rebuild; null also skips markDirty(), since nothing moved. */
+/* For dragend: forces the rebuild, so the row dragstart hid comes back even when nothing moved (null also skips
+   markDirty()). */
 function renderFieldListAfterDrag() {
     if (JSON.stringify(state.fields) === _lastRenderedFieldsJson) {
         _lastRenderedFieldsJson = null;
@@ -1360,7 +1359,7 @@ function addField(type, targetGroup) {
         var gf = state.fields[ctx.groupIdx];
         if (!gf) return;
         if (!gf.children) gf.children = [];
-        /* A page break separates pages, so it cannot sit inside a group (noPanel used to stand in for this). */
+        /* A page break separates pages, so it cannot sit inside a group. */
         if (pal && pal.noNesting) return;
         var childIdx = gf.children.length;
         gf.children.push(field);
@@ -1499,6 +1498,22 @@ function buildSettingsTabs(idx, overrideField) {
     buildConditionsTab(idx, field);
 }
 
+/* Whether a schema entry's depends_on holds for fld:
+   {key, is: v}  — shown when the setting equals v;
+   {key, not: v} — shown when it differs from v;
+   {someKey: b}  — shown when the setting's truthiness equals b.
+   'default' stands in for a setting the field was saved without (a field older than the setting). */
+function dependsOnMet(dep, fld) {
+    if (!dep) return true;
+    if (dep.is !== undefined || dep.not !== undefined) {
+        var v = fld[dep.key];
+        if ((v === undefined || v === '') && dep['default'] !== undefined) v = dep['default'];
+        return dep.is !== undefined ? v === dep.is : v !== dep.not;
+    }
+    var depKey = Object.keys(dep)[0];
+    return !!fld[depKey] === !!dep[depKey];
+}
+
 /* ---- General tab ---- */
 function buildGeneralTab(idx, field, pal) {
     var panel  = document.getElementById('fabricator-stab-general');
@@ -1529,10 +1544,7 @@ function buildGeneralTab(idx, field, pal) {
 
     /* Hide global "Pflichtfeld" for fields that manage required per sub-component instead. */
     var hasActiveSubfields = schema.some(function (s) {
-        if (s.type !== 'subfields') return false;
-        if (!s.depends_on) return true;
-        var depKey = Object.keys(s.depends_on)[0];
-        return !!field[depKey] === !!s.depends_on[depKey];
+        return s.type === 'subfields' && dependsOnMet(s.depends_on, field);
     });
     var hideRequired = (pal && pal.noRequired) || hasActiveSubfields;
     if (!hideRequired) {
@@ -1553,17 +1565,7 @@ function buildGeneralTab(idx, field, pal) {
 
     schema.forEach(function (s) {
         /* depends_on: skip this entry if condition not met */
-        if (s.depends_on) {
-            var depField = editedField();
-            if (s.depends_on.not !== undefined) {
-                /* {key: 'fieldKey', not: 'value'} — show when field !== value */
-                if (depField[s.depends_on.key] === s.depends_on.not) return;
-            } else {
-                var depKey = Object.keys(s.depends_on)[0];
-                var depExpected = s.depends_on[depKey];
-                if (!!depField[depKey] !== !!depExpected) return;
-            }
-        }
+        if (!dependsOnMet(s.depends_on, editedField())) return;
 
         var cur = field[s.key] !== undefined ? field[s.key] : (s.default !== undefined ? s.default : '');
 
@@ -1604,6 +1606,10 @@ function buildGeneralTab(idx, field, pal) {
                     if (schema_entry.rebuild) {
                         refreshGeneralTab();
                     }
+                    /* Settings in the Advanced tab can depend on this one (the direct debit mandate's labels). */
+                    if (schema_entry.rebuild_advanced) {
+                        buildAdvancedTab(idx, editedField());
+                    }
                 }, schema_entry.disclaimer || '');
             }(s));
         } else if (s.type === 'select') {
@@ -1642,6 +1648,12 @@ function buildGeneralTab(idx, field, pal) {
             (function (schema_entry) {
                 spHtmlFieldEditor(panel, schema_entry.key, schema_entry.label, cur,
                     function (v) { change(schema_entry.key, v); });
+                if (schema_entry.hint) {
+                    var htmlHint = document.createElement('p');
+                    htmlHint.className   = 'fabricator-sp-hint';
+                    htmlHint.textContent = schema_entry.hint;
+                    panel.appendChild(htmlHint);
+                }
             }(s));
         } else if (s.type === 'icon_row') {
             (function (schema_entry) {
@@ -1701,6 +1713,10 @@ function buildGeneralTab(idx, field, pal) {
                         if (schema_entry.rebuild) {
                             refreshGeneralTab();
                         }
+                        /* The Advanced tab's blocks can depend on this setting too (the direct debit scheme's country filter). */
+                        if (schema_entry.rebuild_advanced) {
+                            buildAdvancedTab(idx, editedField());
+                        }
                     }
                 );
                 pillRow.appendChild(pill);
@@ -1731,7 +1747,9 @@ function buildGeneralTab(idx, field, pal) {
 /* Custom advanced-tab blocks: field-specific UI the schema system can't express; each renders BEFORE its schema-driven entries. */
 var FIELD_ADVANCED_BLOCKS = {
 
-    sepa: function (panel, field, change) {
+    directdebit: function (panel, field, change) {
+        /* IBAN countries: SEPA only. A field saved without a scheme is SEPA, as on the server. */
+        if ((field.scheme || 'sepa') !== 'sepa') return;
         spSectionTitle(panel, _i18n.countryFilter || 'Country filter');
 
         var modeRow = document.createElement('div');
@@ -1919,6 +1937,10 @@ function buildAdvancedTab(idx, field) {
             : state.fields[idx];
 
         advSchema.forEach(function (s) {
+            if (s.type === 'section_title') {
+                if (dependsOnMet(s.depends_on, advField)) spSectionTitle(panel, s.label);
+                return;
+            }
             if (s.type === 'notice') {
                 var nEl = document.createElement('div');
                 nEl.className = 'fabricator-sp-notice fabricator-sp-notice--' + (s.level || 'info');
@@ -1952,14 +1974,7 @@ function buildAdvancedTab(idx, field) {
             }
 
             /* depends_on: skip entry when condition not met */
-            if (s.depends_on) {
-                if (s.depends_on.not !== undefined) {
-                    if (advField[s.depends_on.key] === s.depends_on.not) return;
-                } else {
-                    var depKey2 = Object.keys(s.depends_on)[0];
-                    if (!!advField[depKey2] !== !!s.depends_on[depKey2]) return;
-                }
-            }
+            if (!dependsOnMet(s.depends_on, advField)) return;
 
             (function (schema_entry) {
                 var cur2 = advField[schema_entry.key] !== undefined ? advField[schema_entry.key] : '';
@@ -2437,7 +2452,7 @@ function spPageNamesList(parent, key, label, values, onChange, hint, fieldIdx) {
             inp.type        = 'text';
             inp.className   = 'fabricator-sp-input';
             inp.value       = names[idx] || '';
-            inp.placeholder = (_i18n.pagePrefix || 'Page ') + (idx + 1);
+            inp.placeholder = (_i18n.pageNumber || 'Page %d').replace('%d', String(idx + 1));
             inp.addEventListener('input', function () {
                 names[idx] = this.value;
                 onChange(names.slice());
@@ -2469,7 +2484,7 @@ function spInfoIcon(text) {
     icon.className = 'fa-solid fa-circle-info';
     wrap.appendChild(icon);
 
-    // Appended to <body>, not `wrap` — avoids clipping by the settings modal's overflow:hidden (same fix as fabricator-access-dropdown in FormSettings.php).
+    // Appended to <body>, so the settings modal's overflow:hidden can't clip it.
     var tip = document.createElement('span');
     tip.className   = 'fabricator-info-tooltip';
     tip.textContent = text;
@@ -2612,21 +2627,15 @@ function spSelect(parent, key, label, options, value, onChange) {
 
 /* English literal fallback; runtime values come from window.FabricatorBuilderI18n.countryNames. */
 var COUNTRY_NAMES_EN = {
-    AD:'Andorra',AE:'United Arab Emirates',AL:'Albania',AT:'Austria',AZ:'Azerbaijan',
-    BA:'Bosnia and Herzegovina',BE:'Belgium',BG:'Bulgaria',BH:'Bahrain',BR:'Brazil',
-    CH:'Switzerland',CR:'Costa Rica',CY:'Cyprus',CZ:'Czechia',DE:'Germany',
-    DJ:'Djibouti',DK:'Denmark',DO:'Dominican Republic',EE:'Estonia',EG:'Egypt',
-    ES:'Spain',FI:'Finland',FR:'France',GB:'United Kingdom',GE:'Georgia',
-    GI:'Gibraltar',GL:'Greenland',GR:'Greece',GT:'Guatemala',HR:'Croatia',
-    HU:'Hungary',IE:'Ireland',IL:'Israel',IQ:'Iraq',IS:'Iceland',IT:'Italy',
-    JO:'Jordan',KW:'Kuwait',KZ:'Kazakhstan',LB:'Lebanon',LC:'St. Lucia',
-    LI:'Liechtenstein',LT:'Lithuania',LU:'Luxembourg',LV:'Latvia',LY:'Libya',
-    MA:'Morocco',MC:'Monaco',MD:'Moldova',ME:'Montenegro',MK:'North Macedonia',
-    MR:'Mauritania',MT:'Malta',MU:'Mauritius',NI:'Nicaragua',NL:'Netherlands',
-    NO:'Norway',PK:'Pakistan',PL:'Poland',PT:'Portugal',QA:'Qatar',
-    RO:'Romania',RS:'Serbia',SA:'Saudi Arabia',SC:'Seychelles',SE:'Sweden',
-    SI:'Slovenia',SK:'Slovakia',SM:'San Marino',SV:'El Salvador',TN:'Tunisia',
-    TR:'Turkey',UA:'Ukraine',VA:'Vatican City',VG:'British Virgin Islands',XK:'Kosovo'
+    AD:'Andorra',AL:'Albania',AT:'Austria',BE:'Belgium',BG:'Bulgaria',
+    CH:'Switzerland',CY:'Cyprus',CZ:'Czechia',DE:'Germany',DK:'Denmark',
+    EE:'Estonia',ES:'Spain',FI:'Finland',FR:'France',GB:'United Kingdom',
+    GI:'Gibraltar',GR:'Greece',HR:'Croatia',HU:'Hungary',IE:'Ireland',
+    IS:'Iceland',IT:'Italy',LI:'Liechtenstein',LT:'Lithuania',LU:'Luxembourg',
+    LV:'Latvia',MC:'Monaco',MD:'Moldova',ME:'Montenegro',MK:'North Macedonia',
+    MT:'Malta',NL:'Netherlands',NO:'Norway',PL:'Poland',PT:'Portugal',
+    RO:'Romania',RS:'Serbia',SE:'Sweden',SI:'Slovenia',SK:'Slovakia',
+    SM:'San Marino',VA:'Vatican City'
 };
 var COUNTRY_NAMES = mergeI18nMap(COUNTRY_NAMES_EN, (window.FabricatorBuilderI18n && window.FabricatorBuilderI18n.countryNames) || {});
 
@@ -3015,9 +3024,9 @@ function spOptionsList(parent, key, label, values, onChange) {
             labelInp.placeholder = _i18n.optionLabelPlaceholder || 'Label';
             labelInp.addEventListener('input', function () {
                 opts[i].label = this.value;
-                /* Only auto-derive value from label while it still matches slugify() of the label pre-keystroke; a hand-edited value breaks the match and stops auto-deriving. */
-                if (!opts[i].value || opts[i].value === slugify(this.value.slice(0, -1))) {
-                    opts[i].value = slugify(this.value);
+                /* The value follows the label until it is edited by hand. */
+                if (!opts[i].value || opts[i].value === slugify(this.value.slice(0, -1)) || opts[i].value === 'option-' + (i + 1)) {
+                    opts[i].value = slugify(this.value) || ('option-' + (i + 1));
                     var vi = optRow.querySelector('.fabricator-sp-opt-value');
                     if (vi) vi.value = opts[i].value;
                 }
@@ -3377,7 +3386,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
             setTimeout(function () { loadDoc(html); }, 0);
             return;
         }
-        // id="fabricator-editor-preview-style" is display-only scaffolding; cleanRichDoc() strips it so it never leaks into a sent notification email.
+        // id="fabricator-editor-preview-style" is display-only; cleanRichDoc() strips it before saving.
         var hasHtmlDoc = /<html[\s>]/i.test(html || '');
         var full = hasHtmlDoc
             ? html
@@ -3389,7 +3398,7 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
         doc.designMode = 'on';
         doc.addEventListener('input', emitChange);
 
-        // Re-inject the scaffold whenever it's missing (e.g. reloading a saved doc, which had it stripped on save) or reload falls back to unstyled defaults.
+        // A saved doc has it stripped, so re-inject it.
         if (!doc.getElementById('fabricator-editor-preview-style')) {
             var scaffold = doc.createElement('style');
             scaffold.id = 'fabricator-editor-preview-style';
@@ -3440,7 +3449,7 @@ function cleanRichDoc(doc) {
     // Editor's own display-only scaffold (see loadDoc()) — must not survive into the fragment/full-document output (sent as emails).
     var editorStyle = doc.getElementById('fabricator-editor-preview-style');
     if (editorStyle) { editorStyle.remove(); }
-    // loadDoc() also sets overflow-x:hidden inline on <html>/<body> for the editor widget; that's scaffolding too and must not leak into the stored/sent document.
+    // loadDoc()'s inline overflow-x:hidden is scaffolding too.
     [doc.documentElement, doc.body].forEach(function (el) {
         if (!el) { return; }
         el.style.removeProperty('overflow-x');
@@ -3465,7 +3474,7 @@ function cleanRichDoc(doc) {
 
 /* Full-document serialization — used only by the notification-body editor, which stores a complete HTML document. */
 function sanitizeRichDoc(doc) {
-    // Clean a detached clone, not the live doc — stripping the editor's display <style> from the live doc would break the visible editing surface while the admin is typing.
+    // A detached clone, so the live editing surface keeps its styles.
     var clone = doc.cloneNode(true);
     cleanRichDoc(clone);
     return (clone.doctype ? '<!DOCTYPE ' + clone.doctype.name + '>' : '')
@@ -3785,7 +3794,7 @@ function renderNotifications() {
         empty.className = 'fabricator-empty-canvas';
         empty.innerHTML =
             '<div class="fabricator-empty-icon"><i class="fa-solid fa-bell"></i></div>' +
-            '<p>' + escHtml(_i18n.noNotificationsHtml || 'No notifications yet. Click') + ' <strong>' + escHtml(_i18n.addNotification || 'Add notification') + '</strong>.</p>';
+            '<p>' + withBoldName(_i18n.noNotificationsHtml || 'No notifications yet. Click %s.', _i18n.addNotification || 'Add notification') + '</p>';
         list.appendChild(empty);
     } else {
         state.notifications.forEach(function (notif, idx) {
@@ -4168,9 +4177,7 @@ function buildNotifRecipientTab(notif) {
                 emailRow.appendChild(emailInp);
                 content.appendChild(emailRow);
 
-                /* Per-rule Cc/Bcc: the whole point of routing is that different enquiries reach
-                   different groups, which only holds if the copy lists travel with the rule
-                   rather than sitting once on the notification. */
+                /* Per-rule Cc/Bcc, so each routed enquiry reaches its own group. */
                 function copyRow(key, arrowLabel, placeholder) {
                     var row = document.createElement('div');
                     row.className = 'fabricator-notif-routing-email-row';
@@ -4273,8 +4280,10 @@ function buildNotifContentTab(notif) {
             function (v) { state.notifications[notifModalIdx].body = v; },
             { showToggle: false });
     } else {
+        /* markDirty() here: typing happens inside the editor's iframe, whose input events never reach the dialog's
+           listener, so leaving the page after editing only the body lost it without a warning. */
         spRichTextEditor(panel, 'notif-body', '', notif.body || '',
-            function (v) { state.notifications[notifModalIdx].body = v; });
+            function (v) { state.notifications[notifModalIdx].body = v; markDirty(); });
     }
 
     /* Attachments section */
@@ -4303,7 +4312,19 @@ function buildNotifSenderTab(notif) {
             function (v) { state.notifications[notifModalIdx][key] = v; }, hint);
     }
     sr('from_name',  _i18n.fromName  || 'Sender name',                  _i18n.defaultSiteNameHint  || '{site_name} for default value');
-    sr('from_email', _i18n.fromEmail || 'Sender email address',            _i18n.defaultAdminEmailHint || '{admin_email} for default value');
+    sr('from_email', _i18n.fromEmail || 'Sender email address',            _i18n.fromEmailHint || '{admin_email}, or a fixed address of this site.');
+    /* A form field as sender is not saved (FormEditor::sanitizeFromEmail()): mail claiming to come from a visitor's
+       domain is discarded by strict domains after it was sent. Say so while the value is being typed. */
+    var fromInput = document.getElementById('fabricator-sp-notif-from_email');
+    if (fromInput) {
+        var fromWarn = document.createElement('p');
+        fromWarn.className   = 'fabricator-sp-notice fabricator-sp-notice--warning';
+        fromWarn.textContent = _i18n.fromEmailFieldWarning || 'A form field cannot be the sender.';
+        fromInput.parentNode.appendChild(fromWarn);
+        var checkFrom = function () { fromWarn.hidden = !/\{(?!admin_email\})[^{}]*\}/.test(fromInput.value); };
+        fromInput.addEventListener('input', checkFrom);
+        checkFrom();
+    }
     sr('reply_to',   _i18n.replyTo   || 'Reply-to email',                  _i18n.emptyMeansSenderEmail || 'Empty = sender email');
     /* CC/BCC live on the Recipients tab — they ARE recipients, and in routing mode they belong to
        the individual rule rather than the notification, which this tab has no concept of. */
@@ -4747,7 +4768,7 @@ function bindPreview() {
             .then(function (r) { return r.json(); })
             .then(function (resp) {
                 if (resp.success && resp.data.html) {
-                    /* allow-scripts without allow-same-origin: blob: URL is same-origin wp-admin, so this denies admin cookies/storage to anything that survives HtmlField::kses(). */
+                    /* allow-scripts without allow-same-origin: the blob: URL would otherwise share wp-admin's origin. */
                     var wrapper = '<!doctype html><html><head><meta charset="utf-8"><title>'
                         + escHtml(_i18n.previewLabel || 'Preview')
                         + '</title><style>html,body{margin:0;height:100%}'
@@ -4910,8 +4931,11 @@ function isUnsafeUrl(url, allowData) {
 }
 
 /* Slugify a string for use as an option value */
+/* An option value from its label: accents transliterated ("Ärzte" -> "arzte"), then ASCII letters, digits and dashes;
+   '' when nothing is left, and the caller numbers it, as FormEditor::sanitizeFields() does. */
 function slugify(str) {
-    return str.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-{2,}/g, '-');
+    return String(str).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+        .replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
 }
 
 function escHtml(str) {
@@ -4919,6 +4943,12 @@ function escHtml(str) {
     d.appendChild(document.createTextNode(String(str || '')));
     /* Also encode " and ' (not just &,<,>) so this is safe when spliced into a quoted HTML attribute too. */
     return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* A translated sentence with %s where a button's name goes, both escaped; the name is set in bold. One sentence, so
+   translators can put the name wherever their language needs it. */
+function withBoldName(sentence, name) {
+    return escHtml(sentence).replace('%s', function () { return '<strong>' + escHtml(name) + '</strong>'; });
 }
 
 })();

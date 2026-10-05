@@ -54,6 +54,17 @@ final class ConditionsTest extends TestCase
         }
     }
 
+    #[\PHPUnit\Framework\Attributes\RequiresPhp('>= 8.3')]
+    public function testTheFinalSigmaRuleForPhpBefore83MatchesUnicodeLowercasing(): void
+    {
+        // PHP 8.1/8.2's mb_strtolower() made a word-final "Σ" into "σ" where JavaScript gives "ς"; FormProcessor applies
+        // the rule itself there. Checked here against PHP 8.3+'s own full Unicode lowercasing, which is JavaScript's.
+        $words = array_merge(self::VALUES, ['ΟΔΟΣ ΣΟΦΙΑΣ', 'Σ', 'ΑΣ.', 'ΑΣΑ', 'σίσυφοσ', 'ΛΟΓΟΣ,ΛΟΓΟΣ', 'ΆΣ΄', 'Σ Σ', 'ΤΈΛΟΣ!']);
+        foreach ($words as $word) {
+            self::assertSame(mb_strtolower($word), Reflect::call(FormProcessor::class, 'lowerLikeJs', $word, true), $word);
+        }
+    }
+
     public function testUmlautsCompareWithoutCase(): void
     {
         // The case byte-wise lowercasing got wrong.
@@ -108,7 +119,12 @@ final class ConditionsTest extends TestCase
      */
     private static function frontJs(array $rule, array $flat): bool
     {
-        $lower  = static fn(string $s): string => mb_strtolower($s, 'UTF-8');
+        // String.prototype.toLowerCase() is mb_strtolower() from PHP 8.3 on. Before, mb_strtolower() lacks the final-sigma
+        // rule, and FormProcessor's emulation stands in for JavaScript here (itself checked against 8.3's mb_strtolower()
+        // in testTheFinalSigmaRuleForPhpBefore83MatchesUnicodeLowercasing); the JS suite checks front.js itself.
+        $lower  = PHP_VERSION_ID >= 80300
+            ? static fn(string $s): string => mb_strtolower($s, 'UTF-8')
+            : static fn(string $s): string => Reflect::call(FormProcessor::class, 'lowerLikeJs', $s, true);
         $number = static fn(string $s): ?float => preg_match('/^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/', trim($s)) === 1 ? (float) trim($s) : null;
 
         $val   = $flat[$rule['field_id']] ?? '';

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -86,9 +86,7 @@ class SelectField extends BaseField
         $req     = !empty($config['required']) ? ' required aria-required="true"' : '';
         $options = $config['options'] ?? [];
 
-        /* extractValue() returns ['value' => ..., '__other_text__' => ...] when
-           "Other" was selected with typed text — unwrap to the plain
-           selection for every comparison below. */
+        /* With "Other" text, extractValue() returns ['value' => …, '__other_text__' => …]: unwrap the selection. */
         $other_text = is_array($value) ? trim((string)($value['__other_text__'] ?? '')) : '';
         if (is_array($value)) {
             $value = $value['value'] ?? '';

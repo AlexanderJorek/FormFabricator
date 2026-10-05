@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -86,9 +86,7 @@ class PageBreakField extends BaseField
     /**
      * Returns true — the builder opens a panel so the Back and Next button labels can be edited.
      *
-     * It used to return false, which also left those two settings unreachable: the field declared them, the sanitizer
-     * stored them, and only their defaults were ever used. Nesting a page break inside a group is refused through
-     * isPageBreak() instead, which is what that really depended on.
+     * Nesting a page break inside a group is refused through isPageBreak(), not through this method.
      *
      * @return bool
      */

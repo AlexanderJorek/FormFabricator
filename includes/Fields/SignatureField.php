@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -120,11 +120,13 @@ class SignatureField extends BaseField
             . ' style="height:' . $height . 'px"'
             . ' tabindex="0"'
             . ' aria-label="' . esc_attr($config['label'] ?? __('Signature', 'formfabricator')) . '"></canvas>'
+            . self::typedSignatureInput($field_id . '-typed', __('Your full name', 'formfabricator'))
             . '<div class="fabricator-signature-toolbar">'
             . '<button type="button" class="fabricator-signature-clear"'
             . ' data-canvas="' . esc_attr($canvas_id) . '" title="' . esc_attr__('Clear', 'formfabricator') . '" aria-label="' . esc_attr__('Clear signature', 'formfabricator') . '">'
             . self::ICON_RESET . '</button>'
             . '<span class="fabricator-signature-hint">' . esc_html__('Sign here', 'formfabricator') . '</span>'
+            . self::signatureModeButton(__('Type your name instead', 'formfabricator'), __('Draw instead', 'formfabricator'))
             . '</div>'
             . '<input type="hidden" name="' . esc_attr($field_id) . '" id="' . esc_attr($field_id) . '-data"'
             . ' value="' . esc_attr((string)($value ?? '')) . '">'
@@ -134,7 +136,8 @@ class SignatureField extends BaseField
     }
 
     /**
-     * Returns the sanitized base64 data-URI submitted by the signature canvas. Returns null when the hidden input is absent (isEmpty() treats null as empty).
+     * Returns the sanitized signature: the canvas's base64 data URI, or the name typed instead (isTypedSignature()).
+     * Returns null when the hidden input is absent (isEmpty() treats null as empty).
      *
      * @param string $field_id The field element ID.
      */
@@ -170,9 +173,7 @@ class SignatureField extends BaseField
      */
     public function validate(mixed $value, array $config): bool|string
     {
-        // A real canvas signature is a few KB; cap well above that so a
-        // crafted oversized data URI can't inflate memory/CPU use per
-        // submission (extractValue() has no upper bound of its own). Checked before anything decodes it.
+        // A real signature is a few KB; capped well above that before anything decodes it.
         if (!empty($value) && strlen((string)$value) > 2 * 1024 * 1024) {
             return __('Signature data is too large.', 'formfabricator');
         }
@@ -184,8 +185,11 @@ class SignatureField extends BaseField
             // translators: %s: field label.
             return sprintf(__('%s is a required field.', 'formfabricator'), $label);
         }
-        // Present but not a readable image: "required field" told a visitor who had signed that they hadn't, and an
-        // optional signature that fails here would have been dropped from the mail and PDF without a word.
+        if (self::isTypedSignature($value)) {
+            return self::validateTextHardCap((string) $value);
+        }
+        // Present but not a readable image: "required field" would tell a visitor who has signed that they haven't, and
+        // an optional signature that fails here would be dropped from the mail and PDF without a word.
         $format = ($config['export_format'] ?? 'png') === 'jpeg' ? 'jpeg' : 'png';
         if (!self::isValidSignatureImage((string)$value, $format)) {
             return __('The signature could not be read. Please sign again.', 'formfabricator');
@@ -202,6 +206,9 @@ class SignatureField extends BaseField
      */
     public function map(mixed $value, array $config): string
     {
+        if (self::isTypedSignature($value)) {
+            return self::typedSignatureRecord((string) $value);
+        }
         return empty($value) ? __('[No entry]', 'formfabricator') : '';
     }
 
@@ -222,11 +229,20 @@ class SignatureField extends BaseField
         array $config,
         array $context
     ): array {
+        // A typed name is text: recorded, shown in the PDF and sealed like any answer (a drawing's image is sealed by hash).
+        if (self::isTypedSignature($value)) {
+            return [$field_id => [
+                'label' => $label,
+                'type'  => 'text',
+                'value' => self::typedSignatureRecord((string) $value),
+            ]];
+        }
         $materialized = self::materializeSignature($value);
         return [$field_id => [
             'label'              => $label,
             'type'               => 'signature',
-            'value'              => $materialized ? __('[Signature present – see attachment]', 'formfabricator') : __('[No entry]', 'formfabricator'),
+            // Not "see attachment": whether the email carries one is the notification's choice (the builder warns when none).
+            'value'              => $materialized ? __('[Signature present]', 'formfabricator') : __('[No entry]', 'formfabricator'),
             'materialized_files' => $materialized,
         ]];
     }

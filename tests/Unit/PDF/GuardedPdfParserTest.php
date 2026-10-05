@@ -71,6 +71,51 @@ final class GuardedPdfParserTest extends TestCase
         self::assertSame(10, $unlisted);
     }
 
+    public function testCrossReferenceEntriesPastTheCeilingAreRefusedBeforePdfparserBuildsThem(): void
+    {
+        // A few bytes per entry, every one naming the catalog: pdfparser builds an object per entry.
+        $head  = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n";
+        $count = PdfUtils::MAX_OBJECTS + 1;
+        $pdf   = $head . "xref\n0 $count\n" . str_repeat("0000000009 00000 n \n", $count)
+            . "trailer\n<< /Size $count /Root 1 0 R >>\nstartxref\n" . strlen($head) . "\n%%EOF\n";
+        self::assertRefused($pdf, 'cross-reference entries');
+
+        // The same as a cross-reference stream: one row, one entry.
+        $rows = PdfUtils::MAX_OBJECTS + 1;
+        $pdf  = $head . "3 0 obj\n<< /Type /XRef /W [1 0 0] /Size $rows /Root 1 0 R /Length $rows >>\nstream\n"
+            . str_repeat("\x01", $rows) . "\nendstream\nendobj\nstartxref\n" . strlen($head) . "\n%%EOF\n";
+        self::assertRefused($pdf, 'cross-reference entries');
+
+        // The ceiling itself still parses.
+        $ok = PdfUtils::MAX_OBJECTS - 1;
+        $pdf = $head . "xref\n0 $ok\n" . str_repeat("0000000009 00000 n \n", $ok)
+            . "trailer\n<< /Size $ok /Root 1 0 R >>\nstartxref\n" . strlen($head) . "\n%%EOF\n";
+        $config = new \Smalot\PdfParser\Config();
+        self::assertInstanceOf(\Smalot\PdfParser\Document::class, (new GuardedPdfParser($config, 1048576))->parseContent($pdf));
+    }
+
+    public function testALongChainOfCrossReferenceSectionsIsRefused(): void
+    {
+        $pdf  = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n";
+        $prev = null;
+        for ($i = 0; $i <= \FabricatorForms\PDF\GuardedRawDataParser::MAX_XREF_SECTIONS; $i++) {
+            $at   = strlen($pdf);
+            $pdf .= "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 2 /Root 1 0 R" . ($prev !== null ? " /Prev $prev" : '') . " >>\n";
+            $prev = $at;
+        }
+        self::assertRefused($pdf . "startxref\n$prev\n%%EOF\n", 'cross-reference sections');
+    }
+
+    private static function assertRefused(string $pdf, string $what): void
+    {
+        try {
+            (new GuardedPdfParser(new \Smalot\PdfParser\Config(), 64 * 1048576))->parseContent($pdf);
+            self::fail('refused: ' . $what);
+        } catch (\LengthException $e) {
+            self::assertSame('Too many objects: ' . $what . '.', $e->getMessage());
+        }
+    }
+
     private static function cleanImage(): string
     {
         return PdfFixtures::stream(

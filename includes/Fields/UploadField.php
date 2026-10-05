@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -38,6 +38,14 @@ class UploadField extends BaseField
         'xhtml','xht','svgz','mhtml','mht','xsl','xslt','shtml','hta','jar','jnlp','lnk',
         'msi','vbs','vbe','ps1','ps1xml','psm1','scr','pif','wsf','wsh','reg','cer',
         'zip','tar','gz','7z',
+        // Macro-enabled Office files, more scripts, and disk images (which Windows opens like a folder, carrying any of
+        // the above inside): the recipients open what the form forwards.
+        'docm','dotm','xlsm','xltm','xlam','pptm','potm','ppsm','ppam','sldm',
+        'cmd','php8','phps','cpl','msc','msix','appx',
+        'iso','img','vhd','vhdx','dmg',
+        // Macro-capable binary workbook, add-ins and query files, OneNote, compiled help and internet shortcuts: each runs
+        // code or fetches from elsewhere when opened.
+        'xlsb','xll','iqy','slk','one','chm','url',
     ];
 
     // Second line of defense (real MIME via finfo); image/svg+xml is denied since mPDF would parse its XML/script payloads.
@@ -60,7 +68,9 @@ class UploadField extends BaseField
 
     private const TYPE_GROUPS = [
         'images'    => ['jpg','jpeg','png','gif','bmp','tiff','webp'],
-        'documents' => ['pdf','doc','docx','xls','xlsx','odt','ods','ppt','pptx','txt','rtf'],
+        // Not the older .doc, .xls, .ppt and .rtf: they can carry macros too. An admin who needs them lists them per field
+        // (allowed_types); the macro-enabled formats themselves are always refused (BLOCKED_TYPES).
+        'documents' => ['pdf','docx','xlsx','odt','ods','pptx','txt'],
         'audio'     => ['mp3','ogg','wav','m4a','flac'],
         'video'     => ['mp4','mov','avi','wmv','mkv'],
     ];
@@ -73,6 +83,22 @@ class UploadField extends BaseField
     public function getStyles(): string
     {
         return self::readFieldAsset('assets/css/fields/UploadField.css');
+    }
+
+    /**
+     * The number of files chosen, "" for none. File names differ between browser and server (sanitize_file_name()
+     * rewrites them), a count does not: front.js reads the file input's files the same way.
+     *
+     * @param mixed $raw    What extractValue() returned.
+     * @param array $config Field configuration.
+     * @return mixed
+     */
+    public function conditionValue(mixed $raw, array $config): mixed
+    {
+        $names = is_array($raw) ? ($raw['name'] ?? null) : null;
+        $names = is_array($names) ? $names : [$names];
+        $count = count(array_filter($names, static fn($n) => is_scalar($n) && (string) $n !== ''));
+        return $count > 0 ? (string) $count : '';
     }
 
     /**
@@ -221,12 +247,6 @@ class UploadField extends BaseField
         return true;
     }
 
-    // The value lives in $_FILES, never in $_POST, so it cannot be rebuilt from a parsed fragment.
-    public function extractionReadsRequest(): bool
-    {
-        return true;
-    }
-
     /**
      * Returns the raw $_FILES entry for this upload field.
      *
@@ -235,12 +255,13 @@ class UploadField extends BaseField
     public function extractValue(string $field_id): mixed
     {
         self::assertRequestNonceVerified();
-        // No wp_unslash(): wp_magic_quotes() never slashes $_FILES, so unslashing only damaged it. It stripped the
-        // backslashes out of a Windows tmp_name, is_readable() then failed, and validate() skipped the MIME check.
+        // No wp_unslash(): wp_magic_quotes() never slashes $_FILES, so unslashing only damages it. It strips the
+        // backslashes out of a Windows tmp_name, is_readable() then fails, and validate() would skip the MIME check.
         // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- verified above; 'name' sanitized below, the other keys are PHP-generated and tmp_name is gated by is_uploaded_file().
         $file = isset($_FILES[$field_id]) ? $_FILES[$field_id] : null;
-        if (!is_array($file) || !isset($file['name'])) {
-            return $file;
+        // A shape this field's input never posts (name="f[a][]") is no upload of this field; see Cast::isFlatFilesEntry().
+        if (!\FabricatorForms\Utils\Cast::isFlatFilesEntry($file) || !isset($file['name'])) {
+            return null;
         }
         $file['name'] = is_array($file['name'])
             ? map_deep($file['name'], 'sanitize_file_name')
@@ -276,9 +297,7 @@ class UploadField extends BaseField
      */
     public function validate(mixed $value, array $config): bool|string
     {
-        // File names and extensions go into the messages below unescaped, like every other field's validate(): front.js
-        // shows a field error through .textContent only, so escaping here showed a file named "a&b.pdf" as "a&amp;b.pdf".
-        // render() above is the opposite case — it builds HTML, so everything there stays escaped.
+        // Messages below are not escaped: front.js shows them via .textContent.
         $file = is_array($value) ? $value : null;
 
         if (!empty($config['required'])) {
@@ -311,7 +330,7 @@ class UploadField extends BaseField
                     return sprintf(__('"%s" was only partially uploaded. Please try again.', 'formfabricator'), $failed);
                 }
                 \FabricatorForms\fabricator_log(
-                    "FabricatorForms: Upload failed for {$failed} with PHP error code {$code}"
+                    'FabricatorForms: upload failed for ' . \FabricatorForms\fabricator_log_file((string) $failed) . ' with PHP error code ' . $code
                 );
                 // translators: %s: uploaded file name.
                 return sprintf(__('"%s" could not be uploaded. Please try again.', 'formfabricator'), $failed);
@@ -364,7 +383,7 @@ class UploadField extends BaseField
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $tmp is the temp path PHP itself assigned in $_FILES, not client input; is_uploaded_file() gates it below.
                 if (!is_string($tmp) || $tmp === '' || !is_readable($tmp)) {
                     \FabricatorForms\fabricator_log(
-                        'FabricatorForms: uploaded temp file not readable: ' . sanitize_file_name((string) $name)
+                        'FabricatorForms: uploaded temp file not readable: ' . \FabricatorForms\fabricator_log_file((string) $name)
                     );
                     // translators: %s: uploaded file name.
                     return sprintf(__('"%s" could not be uploaded. Please try again.', 'formfabricator'), (string) $name);
@@ -387,9 +406,8 @@ class UploadField extends BaseField
                     // translators: %s: rejected file extension.
                     return sprintf(__('File type ".%s" is not allowed for security reasons.', 'formfabricator'), $ext);
                 }
-                // Extension and content must agree, or an .exe renamed to .pdf passes every check above. For an extension
-                // WordPress knows, core's own media-upload test decides; an admin-added extension core doesn't know has
-                // only the blocklist to go on.
+                // Extension and content must agree (an .exe renamed to .pdf). Core decides for extensions it knows;
+                // others have only the blocklist.
                 if (wp_check_filetype((string) $name)['ext'] !== false) {
                     $checked = wp_check_filetype_and_ext($tmp, (string) $name);
                     if (empty($checked['ext'])) {
@@ -436,6 +454,10 @@ class UploadField extends BaseField
         array $context
     ): array {
         $file_data = ($context['files'] ?? [])[$field_id] ?? null;
+        // As extractValue(): a nested shape is no upload of this field.
+        if (!\FabricatorForms\Utils\Cast::isFlatFilesEntry($file_data)) {
+            $file_data = null;
+        }
 
         if (!$file_data || (is_array($file_data) && !self::hasFileName($file_data['name'] ?? null))) {
             return [$field_id => [
@@ -472,15 +494,16 @@ class UploadField extends BaseField
 
         foreach ($files_list as $file) {
             $tmp  = $file['tmp_name'] ?? '';
-            $name = sanitize_file_name($file['name'] ?? 'unknown');
+            // Without bidi controls, which reorder how the name reads ("invoice<U+202E>fdp.exe" shows as "invoiceexe.pdf").
+            $name = \FabricatorForms\PDF\PdfUtils::stripBidiControls(sanitize_file_name($file['name'] ?? 'unknown'));
 
             $binary = false;
             if (!$tmp || !is_readable($tmp) || !is_uploaded_file($tmp)) {
                 \FabricatorForms\fabricator_log(
-                    "FabricatorForms: Upload file not readable: {$name}"
+                    'FabricatorForms: upload not readable: ' . \FabricatorForms\fabricator_log_file((string) $name)
                 );
             } else {
-                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of the uploaded $_FILES tmp_name, not a remote URL; wp_remote_get() would be wrong. Not a deferred WP_Filesystem migration.
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of the uploaded $_FILES tmp_name, not a remote URL; wp_remote_get() would be wrong.
                 $binary = file_get_contents($tmp);
             }
 
@@ -512,9 +535,7 @@ class UploadField extends BaseField
                 'mime'   => $mime,
                 'size'   => $size,
                 'sha256' => hash('sha256', $binary),
-                // False for an image the PDF can't show: a type it can't read (TIFF; see PdfUtils::embeddableImageMime()),
-                // which is then attached like a document, or one too large to decode safely, which a form that makes a PDF
-                // refuses before it gets here (FormProcessor). pdfData() skips both.
+                // False for an image the PDF can't show (unreadable type or too large); pdfData() skips it.
                 'pdf_embeddable' => !str_starts_with($mime, 'image/')
                     || (\FabricatorForms\PDF\PdfUtils::embeddableImageMime($mime) && \FabricatorForms\PDF\PdfUtils::precheckDimensions($binary)),
                 // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- carries raw binary across a JSON/array boundary between the field handler and the PDF/mail layer. Not obfuscation.
@@ -628,7 +649,7 @@ class UploadField extends BaseField
             [
                 'key'        => 'allow_documents',
                 'type'       => 'checkbox',
-                'label'      => __('Documents (pdf, doc, docx, xls, xlsx, odt, ppt, pptx, txt)', 'formfabricator'),
+                'label'      => __('Documents (pdf, docx, xlsx, pptx, odt, ods, txt)', 'formfabricator'),
                 'disclaimer' => $nd,
             ],
             [

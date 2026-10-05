@@ -3,20 +3,9 @@
 /**
  * MPDF HTML layout template for form submission PDF output.
  *
- * NOTE: This is rendered by mPDF, not the browser — it is not subject to WordPress's
- * default output-escaping/KSES filters or CSP. Field values echoed here ($value in the
- * 'field' closure) arrive already pre-escaped by each field type's own pdfData()/map()
- * handler, and are then passed through a narrow wp_kses() allowlist as defense-in-depth
- * in case a field renderer's own escaping is ever incomplete.
- *
- * That wp_kses() call is NOT in this file: it runs once in Generator.php (on $pdf['cell_html'],
- * against FABRICATOR_PDF_ALLOWED_VALUE_TAGS or Utils\HtmlSanitizer::allowedTags()) before the
- * value is handed to the 'field' closure, and it has to happen there because Generator wraps the
- * result in marker spans and <img> tags that a later kses() pass would strip. This file only
- * DEFINES that constant (below) for Generator to use. Values reaching the closures here are
- * therefore already sanitized — do not read the definition below as a second filtering layer.
- * The one kses() this file performs is on the header title (line ~184), against the separate
- * FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS.
+ * Field values ($value in the 'field' closure) arrive escaped by their field's pdfData() and already passed through
+ * wp_kses() by Generator, before it adds the marker spans a later pass would strip. This file only defines
+ * FABRICATOR_PDF_ALLOWED_VALUE_TAGS for that; its own wp_kses() runs on the header title and footer.
  *
  * PHP Version 8.1
  *
@@ -25,7 +14,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -36,11 +25,6 @@
 
 defined('ABSPATH') || exit;
 
-// Generator also runs outside wp-admin (REST, cron, WP-CLI, another plugin's do_action()), where Plugin::init() never
-// loaded the admin classes, so this template died with a fatal error there.
-if (!class_exists(\FabricatorForms\Admin\PDFLayoutEditor::class)) {
-    require_once FABRICATOR_FORMS_PATH . 'includes/Admin/PDFLayoutEditor.php';
-}
 $fabricator_defaults     = \FabricatorForms\Admin\PDFLayoutEditor::defaults();
 $fabricator_raw          = (array) get_option('fabricator_forms_pdf_layout', []);
 $fabricator_o             = array_merge($fabricator_defaults, $fabricator_raw);
@@ -54,7 +38,7 @@ $fabricator_sep = preg_match($fabricator_hex_color_re, (string) $fabricator_o['s
     ? $fabricator_o['separator_color'] : $fabricator_defaults['separator_color'];
 $fabricator_accent    = esc_attr($fabricator_accent);
 $fabricator_sep       = esc_attr($fabricator_sep);
-// Clamped, not merely cast: these land unquoted in CSS font-size declarations below. Bounds match PDFLayoutEditor's save()/ajaxPreview().
+// Clamped as PDFLayoutEditor's save() does: these land unquoted in CSS.
 $fabricator_fs        = min(20, max(6, (int) $fabricator_o['font_size_body']));
 $fabricator_title_fs  = min(36, max(10, (int) $fabricator_o['title_size']));
 $fabricator_logo_w    = min(400, max(40, (int) $fabricator_o['logo_width']));
@@ -69,10 +53,18 @@ $fabricator_font      = match ($fabricator_o['font_family']) {
 $fabricator_logo_post_id = !empty($fabricator_o['logo_url']) ? attachment_url_to_postid($fabricator_o['logo_url']) : 0;
 $fabricator_logo_path    = $fabricator_logo_post_id ? (get_attached_file($fabricator_logo_post_id) ?: '') : '';
 
+// An image too large to decode here is left out, so the PDF is still made (the editor refuses such images on save).
+$fabricator_image_fits = static function (string $path): bool {
+    if (\FabricatorForms\PDF\PdfUtils::layoutImageFits($path, \FabricatorForms\PDF\PdfUtils::maxSafePixels())) {
+        return true;
+    }
+    \FabricatorForms\fabricator_log('FabricatorForms PDF layout: image ' . basename($path) . ' is too large to decode here; left out of the PDF.');
+    return false;
+};
+
 $fabricator_section_hidden = is_array($fabricator_o['section_hidden']) ? $fabricator_o['section_hidden'] : [];
 
-// Clamped at render time too, with PDFLayoutEditor::save()'s bounds: the option can also come from an older version or a
-// direct database edit, and these values drive page geometry and the header's absolute positions.
+// Clamped at render time too, with PDFLayoutEditor::save()'s bounds, since the option may hold anything.
 $fabricator_margin_top_mm    = min(50, max(0, (int) ($fabricator_o['margin_top'] ?? 15)));
 $fabricator_margin_left_mm   = min(50, max(0, (int) ($fabricator_o['margin_left'] ?? 15)));
 $fabricator_margin_right_mm  = min(50, max(0, (int) ($fabricator_o['margin_right'] ?? 15)));
@@ -83,7 +75,7 @@ if (!defined('FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS')) {
     define(
         'FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS',
         [
-        // Must match PDFLayoutEditor::sanitizeHeaderLayout()'s save-time allowlist (style on u/span), or accepted styling gets silently stripped here.
+        // Must match PDFLayoutEditor::sanitizeHeaderLayout()'s allowlist.
         'b'      => [],
         'strong' => [],
         'i'      => [],
@@ -132,6 +124,8 @@ return [
             .section-metadata { background:#f9f9f9; border:1px solid #e0e0e0;'
             . ' padding:8px 10px; font-size:' . ($fabricator_fs - 2) . 'pt; margin-bottom:12px; }
             .section-legal    { font-size:' . ($fabricator_fs - 3) . 'pt; color:#666; margin-top:8px; line-height:1.4; }
+            .section-frame    { background:#f9f9f9; border:1px solid #e0e0e0; padding:8px 10px; margin-bottom:14px; }
+            .section-frame-title { font-weight:bold; font-size:' . $fabricator_title_fs . 'pt; color:#222; margin-bottom:8px; }
         </style>';
     },
 
@@ -143,7 +137,8 @@ return [
         $fabricator_hex_color_re,
         $fabricator_margin_top_mm,
         $fabricator_margin_left_mm,
-        $fabricator_margin_right_mm
+        $fabricator_margin_right_mm,
+        $fabricator_image_fits
     ): string {
         $hb = $fabricator_o['header_layout'] ?? [];
         $elements = $hb['elements'] ?? [];
@@ -167,8 +162,7 @@ return [
             }
             $header_h_mm = round($max_bottom * $cell_mm, 2);
 
-            // Spacer div occupies the header area in the content flow so fields below
-            // start after it; the header elements themselves are position:absolute.
+            // Spacer for the absolutely positioned header elements.
             $out = '<div style="height:' . $header_h_mm . 'mm;">&nbsp;</div>';
 
             foreach ($elements as $el) {
@@ -189,13 +183,13 @@ return [
                     // Fail closed: never fall back to the raw src value, since mPDF has no SSRF guard of its own.
                     $post_id  = attachment_url_to_postid($el['src']);
                     $img_path = $post_id ? (get_attached_file($post_id) ?: '') : '';
-                    if ($img_path !== '') {
+                    if ($img_path !== '' && $fabricator_image_fits($img_path)) {
                         $out .= '<img src="' . esc_attr($img_path) . '" style="width:' . $el_w_mm . 'mm;height:auto;" />';
                     }
                 } elseif ($type === 'title') {
-                    // Same 6..72 clamp as PDFLayoutEditor::sanitizeHeaderLayout()/hbSize(), so this render path can't honour an unbounded stored size.
+                    // Same clamp as PDFLayoutEditor::sanitizeHeaderLayout().
                     $fs = min(72, max(6, (int) ($el['size'] ?? 18)));
-                    // Validate hex color format before it lands in a CSS property value; esc_attr() alone isn't enough.
+                    // esc_attr() alone doesn't make a CSS value safe.
                     $raw_color = (string) ($el['color'] ?? '#1d2327');
                     $color     = esc_attr(
                         preg_match($fabricator_hex_color_re, $raw_color) ? $raw_color : '#1d2327'
@@ -204,7 +198,10 @@ return [
                            ? $el['align'] : 'left';
                     $raw   = $el['content'] ?? $el['text'] ?? '{form_title}';
                     $raw   = str_replace('{form_title}', esc_html($title), $raw);
-                    $safe  = wp_kses($raw, FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS);
+                    // WordPress's CSS filter keeps background-image:url(http://…) in a style attribute; remove it.
+                    $safe  = \FabricatorForms\Utils\HtmlSanitizer::stripRemoteResourcesForPdf(
+                        wp_kses($raw, FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS)
+                    );
                     $out .= '<div style="font-size:' . $fs . 'pt;color:' . $color
                           . ';text-align:' . $align . ';line-height:' . $el_h_mm . 'mm;">'
                           . $safe . '</div>';
@@ -223,7 +220,7 @@ return [
             \FabricatorForms\fabricator_log("PDF header: logo missing at {$fabricator_logo_path}");
         }
 
-        if ($has_logo) {
+        if ($has_logo && $fabricator_image_fits($fabricator_logo_path)) {
             $logo_cell  = '<td style="width:' . $fabricator_logo_w . 'px;vertical-align:middle;">'
                 . '<img src="' . esc_attr($fabricator_logo_path) . '" style="width:' . $fabricator_logo_w
                 . 'px;height:auto;" /></td>';
@@ -271,7 +268,7 @@ return [
             . '</div>';
     },
 
-    'document_metadata' => function (array $data) use ($fabricator_fs): string {
+    'document_metadata' => function (array $data): string {
         $metadata = $data['metadata'] ?? [];
         return '
         <div class="section-metadata">
@@ -282,9 +279,20 @@ return [
         </div>';
     },
 
+    // A titled box around a group of fields, outside their markers (PdfDescriptor::opensFrame()).
+    'frame_open' => function (string $title): string {
+        return '
+        <div class="section-frame">
+            <div class="section-frame-title">' . esc_html($title) . '</div>';
+    },
+
+    'frame_close' => function (): string {
+        return '
+        </div>';
+    },
+
     'legal_notice' => function (): string {
-        // Bound to a variable: the trailing-comment convention can't be used inside this concatenated string without printing into the PDF.
-        // phpcs:ignore Generic.Files.LineLength -- single translatable msgid, see above.
+        // phpcs:ignore Generic.Files.LineLength -- single translatable msgid.
         $legal_text = esc_html__('This document represents the original. Any change, manipulation, or modification invalidates this document. This document was issued in electronic form and must be kept exclusively in electronic form. Any printout is merely a copy and has no legal validity.', 'formfabricator');
         return '
         <p class="section-legal">
@@ -293,18 +301,18 @@ return [
         </p>';
     },
 
-    'footer' => function () use ($fabricator_o, $fabricator_sep): string {
+    'footer' => function () use ($fabricator_o): string {
         $text = $fabricator_o['footer_text'] ?? '';
         if (!$text) {
             return '';
         }
         $text = str_replace(
             ['{site_name}', '{site_url}', '{date}'],
-            // The site's own date format (Settings > General), not a fixed d.m.Y that reads ambiguously outside the DACH region.
+            // The site's own date format (Settings > General).
             [get_bloginfo('name'), get_bloginfo('url'), (string) wp_date((string) (get_option('date_format') ?: 'Y-m-d'))],
             $text
         );
-        // Defense-in-depth: same trust level as the header title above, so apply the same wp_kses() allowlist.
+        // Same allowlist as the header title.
         return wp_kses($text, FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS);
     },
 ];

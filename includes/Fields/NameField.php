@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,6 +28,28 @@ defined('ABSPATH') || exit;
  */
 class NameField extends BaseField
 {
+    /**
+     * Expanded: the enabled sub-fields' values in render order (BaseField::joinedSubValues()), as front.js reads them.
+     * Otherwise the single input's text; an array there is a crafted POST, which the browser never sends.
+     *
+     * @param mixed $raw    What extractValue() returned.
+     * @param array $config Field configuration.
+     * @return mixed
+     */
+    public function conditionValue(mixed $raw, array $config): mixed
+    {
+        if (empty($config['expanded'])) {
+            return is_array($raw) ? '' : $raw;
+        }
+        $keys = [];
+        foreach (self::SUBFIELDS as $sf) {
+            if (!empty($config[$sf['key'] . '_enabled'])) {
+                $keys[] = $sf['key'];
+            }
+        }
+        return self::joinedSubValues($raw, $keys);
+    }
+
     /**
      * Returns the field type label.
      *
@@ -101,10 +123,8 @@ class NameField extends BaseField
     }
 
     /**
-     * Fixed salutation/prefix list, keyed by the value that is submitted; not a class const because of the __() calls.
-     *
-     * The keys are the same in every language. The page renders in the site locale, but admin-ajax.php validates in a
-     * logged-in visitor's profile locale, so comparing translated labels rejected every salutation for such a visitor.
+     * Fixed salutation list, keyed by the submitted value, which is the same in every language: admin-ajax.php may
+     * validate in another locale than the page rendered in.
      *
      * @return array<string, string> Submitted value => label.
      */
@@ -120,18 +140,6 @@ class NameField extends BaseField
             'Dipl.'   => 'Dipl.',
             'Ing.'    => 'Ing.',
         ];
-    }
-
-    /**
-     * Whether a submitted salutation is one of the list's values, or one of its labels as a page cached before 1.0.7 posts it.
-     *
-     * @param string $submitted Submitted salutation.
-     * @return bool
-     */
-    private static function isKnownPrefix(string $submitted): bool
-    {
-        $options = self::prefixOptions();
-        return array_key_exists($submitted, $options) || in_array($submitted, $options, true);
     }
 
     /**
@@ -158,7 +166,7 @@ class NameField extends BaseField
     {
         if (empty($config['expanded'])) {
             $safe_value = is_array($value) ? '' : ($value ?? '');
-            $attrs = $this->inputAttrs($config, $field_id, 'text', ['value' => esc_attr((string)$safe_value)]);
+            $attrs = $this->inputAttrs($config, $field_id, 'text', ['value' => (string)$safe_value]);
             return $this->wrap($field_id, $config, '<input' . $attrs . '>');
         }
 
@@ -276,10 +284,10 @@ class NameField extends BaseField
                 continue;
             }
             if (!empty($sf['is_select'])) {
-                // Not required-enforced ("—" is a valid answer), but a direct POST could submit
-                // an arbitrary string outside the <select> options, so allowlist it here.
+                // Allowlisted against the options; a required salutation rejects the empty option, as the browser does.
                 $submitted = trim((string)(is_array($value) ? ($value[$k] ?? '') : ''));
-                if ($submitted !== '' && !self::isKnownPrefix($submitted)) {
+                $missing   = $submitted === '' && !empty($config[$k . '_required']);
+                if ($missing || ($submitted !== '' && !array_key_exists($submitted, self::prefixOptions()))) {
                     $errors[] = $config[$k . '_label'] ?? self::subfieldLabel($sf['label']);
                 }
                 continue;
@@ -314,7 +322,10 @@ class NameField extends BaseField
     public function map(mixed $value, array $config): string
     {
         if (empty($config['expanded'])) {
-            return trim((string)($value ?? '')) ?: __('[No entry]', 'formfabricator');
+            // A crafted name[first]=x reaches a single-input field as an array: read it as empty, as validate() does,
+            // not as the text "Array" in the email and the sealed PDF.
+            $scalar = is_array($value) ? '' : trim((string)($value ?? ''));
+            return $scalar !== '' ? $scalar : __('[No entry]', 'formfabricator');
         }
         if (!is_array($value)) {
             return __('[No entry]', 'formfabricator');

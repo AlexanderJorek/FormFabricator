@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -85,7 +85,7 @@ class TimeField extends BaseField
     {
         $is12h   = !empty($config['time_format']);
         $prefill = !empty($config['prefill_now']) ? ' data-prefill-now="true"' : '';
-        $attrs   = $this->inputAttrs($config, $field_id, 'time', ['value' => esc_attr((string)($value ?? ''))]);
+        $attrs   = $this->inputAttrs($config, $field_id, 'time', ['value' => (string)($value ?? '')]);
         if ($is12h) {
             $attrs .= ' data-time-format="12h"';
         }
@@ -110,9 +110,7 @@ class TimeField extends BaseField
             if ($hard !== true) {
                 return $hard;
             }
-            // <input type="time">'s own value format is HH:MM (or HH:MM:SS) — a direct POST can
-            // send anything else, and that value flows unchecked into the notification email and
-            // the sealed PDF without this check.
+            // <input type="time"> posts HH:MM(:SS); a direct POST could send anything.
             if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/', (string)$value)) {
                 return __('Please enter a valid time.', 'formfabricator');
             }

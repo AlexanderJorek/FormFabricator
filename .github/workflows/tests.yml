@@ -9,13 +9,16 @@ on:
 permissions:
   contents: read
 
+# Actions are pinned to a commit, like every other dependency (composer.lock, package-lock.json, pdf.js by SHA-256):
+# a tag can be moved to other code. The comment names the release; update both together.
+
 jobs:
   lint:
     name: phpcs, security sniffs, .pot
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.3'
           extensions: gd, fileinfo, mbstring
@@ -37,8 +40,8 @@ jobs:
         # 8.1 is the plugin's minimum. The perf suite needs memory_reset_peak_usage() (8.2+) and skips itself on 8.1.
         php: ['8.1', '8.2', '8.3', '8.4']
     steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ matrix.php }}
           extensions: gd, fileinfo, mbstring, openssl, zlib
@@ -70,8 +73,8 @@ jobs:
       WP_TESTS_DB_HOST: 127.0.0.1:3306
       WP_MULTISITE: ${{ matrix.site == 'multisite' && '1' || '0' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ matrix.php }}
           extensions: gd, fileinfo, mbstring, openssl, zlib, mysqli
@@ -88,14 +91,14 @@ jobs:
       matrix:
         node: ['22', '24']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # PHP writes the fixture the JS suite runs against (tests/js/build-fixture.php).
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.3'
           extensions: gd, fileinfo, mbstring
           coverage: none
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm

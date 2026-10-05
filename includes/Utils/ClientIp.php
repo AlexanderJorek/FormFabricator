@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -65,10 +65,29 @@ class ClientIp
     }
 
     /**
+     * The IPv6 /48 an address belongs to, or null for IPv4 (and IPv4-mapped IPv6).
+     *
+     * A free tunnel broker hands out a /48 (65,536 /64s), so FormProcessor rate-limits it before the /64.
+     *
+     * @param string $ip Address from resolve().
+     * @return string|null
+     */
+    public static function prefix48(string $ip): ?string
+    {
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            return null;
+        }
+        $bin = inet_pton($ip);
+        if ($bin === false || strlen($bin) !== 16 || strncmp($bin, str_repeat("\0", 10) . "\xff\xff", 12) === 0) {
+            return null;
+        }
+        return inet_ntop(substr($bin, 0, 6) . str_repeat("\0", 10)) . '/48';
+    }
+
+    /**
      * Reduces an address to the unit one client controls: the /64 for IPv6, the address itself for IPv4.
      *
-     * A single IPv6 subscriber is routinely handed a whole /64, so keying rate limits on the full
-     * address lets one client rotate through 2^64 buckets and write a fresh row for each.
+     * An IPv6 subscriber routinely gets a whole /64 to rotate through.
      *
      * @param string $ip Address from resolve().
      * @return string Rate-limit bucket identifier.
@@ -103,6 +122,30 @@ class ClientIp
         }
         $entries = preg_split('/[\s,]+/', implode(',', $sources)) ?: [];
         return array_values(array_filter($entries, static fn(string $e): bool => $e !== ''));
+    }
+
+    /**
+     * The trusted proxy entries wide enough to trust much of the internet (IPv4 /7, IPv6 /15 or wider), whose visitors
+     * could claim any address. The settings page warns about them; they still apply.
+     *
+     * @return string[]
+     */
+    public static function wideTrustedEntries(): array
+    {
+        return array_values(array_filter(
+            self::trustedProxyEntries(),
+            static function (string $entry): bool {
+                if (strpos($entry, '/') === false) {
+                    return false;
+                }
+                [$net, $bits] = explode('/', $entry, 2);
+                if (!ctype_digit($bits)) {
+                    return false;
+                }
+                $is_v4 = filter_var($net, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+                return (int) $bits < ($is_v4 ? 8 : 16);
+            }
+        ));
     }
 
     /**
@@ -170,9 +213,7 @@ class ClientIp
     /**
      * Whether two addresses are the same address, whichever way each one is written.
      *
-     * One IPv6 address has many spellings ("2001:db8::1" and "2001:0db8:0000:0000:0000:0000:0000:0001" are the same
-     * host). Comparing the text meant a proxy entered in one form never matched the form the server reports, so every
-     * visitor behind it shared a single rate-limit bucket.
+     * An IPv6 address has many spellings ("2001:db8::1" = "2001:0db8:0:0:0:0:0:1").
      *
      * @param string $a First address.
      * @param string $b Second address.

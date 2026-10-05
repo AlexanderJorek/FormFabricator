@@ -7,9 +7,9 @@ use FabricatorForms\Tests\Support\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
- * PdfUtils::indexObjects() must return exactly what the preg_match_all() version it replaced returned.
- *
- * Speed and memory on the shapes that made the old version quadratic are covered in Perf\PdfScanPerfTest.
+ * PdfUtils::indexObjects() against the preg_match_all() oracle below, with one deliberate difference: an object ends
+ * at its "endobj" or the next object header, whichever comes first. The generated files include header-like comments
+ * to exercise it. Speed and memory are in Perf\PdfScanPerfTest.
  */
 final class ObjectIndexTest extends TestCase
 {
@@ -109,6 +109,11 @@ final class ObjectIndexTest extends TestCase
             $end   = strpos($pdf_raw, 'endobj', $start);
             if ($end === false) {
                 continue;
+            }
+            // The one deliberate difference (see the class docblock): an object ends where the next header of any
+            // generation starts, if that comes before its "endobj" (PdfUtils::objectBodyEnd()'s rule).
+            if (preg_match('/(?<![0-9])\d+\s+\d+\s+obj\b/', $pdf_raw, $next, PREG_OFFSET_CAPTURE, $start) === 1 && $next[0][1] < $end) {
+                $end = $next[0][1];
             }
             $record = ['dict' => substr($pdf_raw, $start, $end - $start), 'stream' => null];
             if (preg_match('/>>\s*stream(\r\n|\n|\r)/', $pdf_raw, $sm, PREG_OFFSET_CAPTURE, $start) === 1 && $sm[0][1] < $end) {

@@ -31,7 +31,7 @@ function (root) {
         }
         if (text && text.dataset.prefillToday === 'true') {
             if (!text.value) prefillToday(text);
-            /* Re-applied after front.js resets the form, which the unguarded re-init used to do. */
+            /* Re-applied after front.js resets the form. */
             var ownerForm = text.closest('form');
             if (ownerForm) {
                 ownerForm.addEventListener('fabricator:reset', function () {

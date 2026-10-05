@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -31,11 +31,12 @@ defined('ABSPATH') || exit;
 class FormModel
 {
     /**
-     * Post meta keys holding a form's definition; Plugin::protectFormMeta() hides them from core's custom-field APIs.
+     * Post meta keys holding a form's definition and its save counter (snapshot()); Plugin::protectFormMeta() hides them
+     * from core's custom-field APIs.
      *
      * @var string[]
      */
-    public const META_KEYS = ['fabricator_form_fields', 'fabricator_form_notifications', 'fabricator_form_settings'];
+    public const META_KEYS = ['fabricator_form_fields', 'fabricator_form_notifications', 'fabricator_form_settings', 'fabricator_form_revision'];
 
     /**
      * How many forms one post query reads at a time; the callers page until a short batch comes back.
@@ -78,7 +79,16 @@ class FormModel
     }
 
     /**
-     * Optimistic-concurrency snapshot token for a form (its post_modified_gmt).
+     * Post meta counting the saves writeForm() made, part of the snapshot.
+     *
+     * @var string
+     */
+    private const REVISION_META = 'fabricator_form_revision';
+
+    /**
+     * Optimistic-concurrency snapshot token for a form: its post_modified_gmt and its save counter.
+     *
+     * The counter tells apart saves within one second; the timestamp catches changes made outside this plugin.
      *
      * @param int $form_id The post ID of the form.
      * @return string The snapshot token, or '' if the form doesn't exist.
@@ -89,7 +99,7 @@ class FormModel
         if (!$post || $post->post_type !== 'fabricator_form') {
             return '';
         }
-        return (string) $post->post_modified_gmt;
+        return $post->post_modified_gmt . '#' . (int) get_post_meta($form_id, self::REVISION_META, true);
     }
 
     /**
@@ -129,16 +139,17 @@ class FormModel
      *
      * @param int    $form_id           Post ID, or 0 for a new form.
      * @param array  $data              Form data: title, fields, notifications, settings.
-     * @param string $expected_snapshot post_modified_gmt this save was based on; '' skips the check.
+     * @param string $expected_snapshot snapshot() this save was based on; '' skips the check.
      * @return int|\WP_Error The form's post ID, or an error.
      */
     private static function writeForm(int $form_id, array $data, string $expected_snapshot): int|\WP_Error
     {
         if ($form_id > 0 && $expected_snapshot !== '') {
             // Read inside the lock, never from before it: the point is that nothing can change between here and the write.
+            // clean_post_cache() drops the cached meta too, so the counter is read fresh as well.
             clean_post_cache($form_id);
-            $current = get_post($form_id);
-            if ($current && $current->post_type === 'fabricator_form' && $current->post_modified_gmt !== $expected_snapshot) {
+            $current = self::snapshot($form_id);
+            if ($current !== '' && !hash_equals($current, $expected_snapshot)) {
                 return new \WP_Error(
                     'conflict',
                     __('This form was changed in another tab or by another user. Please reload and try again.', 'formfabricator')
@@ -147,6 +158,9 @@ class FormModel
         }
 
         $title = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($data['title'] ?? null, 'Untitled Form'));
+        // The title is plain text, escaped where shown; wp_filter_kses() would store "Q&A" as "Q&amp;A". Only that
+        // filter, only for this write.
+        $kses_title = has_filter('title_save_pre', 'wp_filter_kses');
 
         $post_data = [
             // wp_insert_post()/wp_update_post() unslash the title, just as update_post_meta() does the meta below.
@@ -161,9 +175,16 @@ class FormModel
                 return new \WP_Error('not_found', __('Form not found.', 'formfabricator'));
             }
             $post_data['ID'] = $form_id;
-            $result = wp_update_post($post_data, true);
-        } else {
-            $result = wp_insert_post($post_data, true);
+        }
+        if ($kses_title !== false) {
+            remove_filter('title_save_pre', 'wp_filter_kses', (int) $kses_title);
+        }
+        try {
+            $result = $form_id > 0 ? wp_update_post($post_data, true) : wp_insert_post($post_data, true);
+        } finally {
+            if ($kses_title !== false) {
+                add_filter('title_save_pre', 'wp_filter_kses', (int) $kses_title);
+            }
         }
 
         if (is_wp_error($result)) {
@@ -176,10 +197,12 @@ class FormModel
         $notifications = $data['notifications'] ?? [];
         $settings      = $data['settings']      ?? [];
         // update_post_meta() runs wp_unslash() on what it is given, but this is decoded JSON that was never slashed, so every
-        // save stripped backslashes from email patterns, CSS escapes and HTML. wp_slash() adds exactly what it removes.
+        // save would strip backslashes from email patterns, CSS escapes and HTML. wp_slash() adds exactly what it removes.
         update_post_meta($id, 'fabricator_form_fields', wp_slash($fields));
         update_post_meta($id, 'fabricator_form_notifications', wp_slash($notifications));
         update_post_meta($id, 'fabricator_form_settings', wp_slash($settings));
+        // Inside the save lock (save()), so no two writes take the same number; see snapshot().
+        update_post_meta($id, self::REVISION_META, (int) get_post_meta($id, self::REVISION_META, true) + 1);
 
         return $id;
     }

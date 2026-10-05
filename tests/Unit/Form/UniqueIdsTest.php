@@ -10,7 +10,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 /**
  * The same form twice on one page: FormRenderer::uniqueIds() suffixes every id and every reference to one (for,
  * aria-describedby, #hash links), and nothing else — names, values and data attributes keep what the server and
- * front.js read. (TESTING.md §2, "same form twice" — 1.0.7.)
+ * front.js read. (TESTING.md §2, "same form twice".)
  */
 final class UniqueIdsTest extends TestCase
 {

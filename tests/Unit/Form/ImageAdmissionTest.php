@@ -14,8 +14,8 @@ use FabricatorForms\Utils\MemoryBudget;
  * Image admission on forms that build a PDF: the pixel limit, the memory reservation per image, and the messages a
  * visitor gets — the numbers TESTING.md §3 lists for a 512 MB budget ("44.7 megapixels", "at most 52.5 MB").
  *
- * The property test at the end checks the promise behind those messages over many hosts, budgets and uploads: an
- * accepted image fits the budget and can be decoded, and a maximum shown to the visitor is one that really fits.
+ * The closing property test checks, over many hosts and budgets, that an accepted image fits and decodes, and that
+ * a maximum shown really fits.
  */
 final class ImageAdmissionTest extends TestCase
 {
@@ -187,6 +187,22 @@ final class ImageAdmissionTest extends TestCase
         self::assertStringStartsWith('"a.jpg" has 12.0 megapixels', $errs['photos'], 'the first offending image is named');
     }
 
+    public function testSubmittedTextReservesMemoryAndASignatureCountsAsImageData(): void
+    {
+        // The reservation counted uploads only, while mPDF lays text out at about 500 bytes of memory per byte (measured:
+        // 109 KB of text peaked 62.6 MB): a form of long answers started renders no limit covered.
+        $raw = [
+            'note' => str_repeat('x', 100000),
+            'sig'  => 'data:image/png;base64,' . str_repeat('A', 1000),
+            'file' => ['name' => 'a.pdf', 'tmp_name' => '/tmp/php123', 'type' => 'application/pdf', 'error' => 0, 'size' => 5],
+            'addr' => ['street' => 'Main St 1', 'city' => 'Köln'],
+        ];
+        [$text, $image] = Reflect::call(FormProcessor::class, 'answerPayloadBytes', $raw);
+        self::assertSame(100000 + strlen('Main St 1') + strlen('Köln') + strlen('a.pdf'), $text);
+        self::assertSame(strlen($raw['sig']), $image, 'a data URI is image data, not text laid out letter by letter');
+        self::assertGreaterThanOrEqual(MemoryBudget::estimateBytes(0) + 48 * self::MB, MemoryBudget::estimateBytes(0, 100000));
+    }
+
     public function testMemoryExhaustionIsRecognised(): void
     {
         $isOom = static fn(?array $e): bool => Reflect::call(FormProcessor::class, 'isMemoryExhaustion', $e);
@@ -203,7 +219,7 @@ final class ImageAdmissionTest extends TestCase
 
     private static function pixelLimit(): int
     {
-        return Reflect::call(FormProcessor::class, 'imagePixelLimit');
+        return PdfUtils::imagePixelLimit();
     }
 
     private static function withImage(int $base, int $pixels): int

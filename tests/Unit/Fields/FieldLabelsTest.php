@@ -10,7 +10,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 /**
  * BaseField::wrap()'s accessibility rule: a field rendering one control gets <label for>, and a field rendering a set
  * of controls names the set (role="group" + aria-labelledby) instead of pointing a label at an id that isn't there.
- * This is the markup a screen reader relies on (TESTING.md §2 and §4 — 1.0.7); listening to it stays manual.
+ * This is the markup a screen reader relies on (TESTING.md §2 and §4); listening to it stays manual.
  */
 final class FieldLabelsTest extends TestCase
 {

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -144,9 +144,7 @@ class RatingField extends BaseField
             . ' data-half="' . ($half ? '1' : '0') . '"'
             . $req . '>';
 
-        /* One .fabricator-rating-star container per visible star.
-         * Each container holds two invisible click zones (left=half, right=full)
-         * and a visual background + filled overlay controlled by JS classes. */
+        /* Per star: two click zones (left half, right full) and a filled overlay that JS classes control. */
         for ($i = 1; $i <= $max; $i++) {
             $v_full         = $i;
             $v_half         = $i - 0.5;
@@ -228,14 +226,21 @@ class RatingField extends BaseField
         }
         $max = (float)($config['max'] ?? 5);
         if ($max <= 0) {
-            // A blank/zero admin-set "Number of symbols" value would otherwise
-            // collapse the valid range to n === 0, making the field impossible
-            // to satisfy for any real rating.
+            // A blank or zero "Number of symbols" would leave no valid rating.
             $max = 5;
         }
         $max = min(20, $max); // matches the render()-side clamp.
         $half = !empty($config['allow_half']);
         $n    = (float)$value;
+        // The stars start at one (or half of one), so 0 is no rating, as the browser would send it: a direct POST of 0
+        // satisfied a required rating and was recorded as "0 / 5".
+        if ($n == 0.0) {
+            if (!empty($config['required'])) {
+                // translators: %s: field label.
+                return sprintf(__('%s is a required field.', 'formfabricator'), $config['label'] ?? __('Rating', 'formfabricator'));
+            }
+            return true;
+        }
         if ($n < 0 || $n > $max) {
             // translators: %s: maximum allowed rating value.
             return sprintf(__('Please select a rating between 0 and %s.', 'formfabricator'), $max);
@@ -258,7 +263,8 @@ class RatingField extends BaseField
      */
     public function map(mixed $value, array $config): string
     {
-        if ($value === null || $value === '') {
+        // 0 is no rating (see validate()).
+        if ($value === null || $value === '' || (is_numeric($value) && (float) $value == 0.0)) {
             return __('[No entry]', 'formfabricator');
         }
         // The same 1..20 clamp as render() and validate(), or an out-of-range config printed e.g. "4 / 0".

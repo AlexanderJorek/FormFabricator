@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -74,7 +74,7 @@ class WebsiteField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         $ph    = $config['placeholder'] ?? 'https://';
-        $attrs = $this->inputAttrs($config, $field_id, 'url', ['value' => esc_attr((string)($value ?? '')), 'placeholder' => $ph]);
+        $attrs = $this->inputAttrs($config, $field_id, 'url', ['value' => (string)($value ?? ''), 'placeholder' => $ph]);
         if (!empty($config['validate_url'])) {
             $attrs .= ' data-validate-url="1"';
         }
@@ -101,7 +101,15 @@ class WebsiteField extends BaseField
             }
         }
         if ($value !== null && $value !== '' && !empty($config['validate_url'])) {
-            if (!filter_var((string)$value, FILTER_VALIDATE_URL) || !preg_match('#^https?://#i', (string)$value)) {
+            // Invisible characters (bidi overrides, zero-width, non-breaking spaces) and invalid UTF-8 are refused:
+            // they would pass as letters below, and have no place in a URL.
+            if (preg_match('/[\p{Cc}\p{Cf}\p{Z}]/u', (string) $value) !== 0) {
+                return __('Please enter a valid URL (e.g. https://example.com).', 'formfabricator');
+            }
+            // FILTER_VALIDATE_URL knows ASCII only, so on its own it refuses https://müller.de, which the browser's check
+            // accepts. Each non-ASCII character stands in as a plain letter for the check; the value itself stays as typed.
+            $ascii = (string) preg_replace('/[^\x00-\x7F]/u', 'a', (string) $value);
+            if (!filter_var($ascii, FILTER_VALIDATE_URL) || !preg_match('#^https?://#i', $ascii)) {
                 return __('Please enter a valid URL (e.g. https://example.com).', 'formfabricator');
             }
         }

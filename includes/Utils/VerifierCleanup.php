@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -26,11 +26,9 @@ defined('ABSPATH') || exit;
 /**
  * Removes stored verification copies as soon as nothing needs them.
  *
- * A finished check deletes its own copy at once (Verificationpage::discardCheckedCopy()). This class removes the rest
- * UNUSED_TTL after their last use: copies whose check never ran or never finished. WP-Cron alone runs late on quiet
- * sites and not at all under DISABLE_WP_CRON without a server cron, so the same sweep also runs on the first request of
- * any kind once a copy is due. That trigger is an autoloaded timestamp, so a request with nothing due costs no query.
- * Lives in Utils, not in the admin-only Verificationpage, because front-end requests must be able to run it.
+ * A finished check deletes its own copy; this removes the rest UNUSED_TTL after their last use. Besides WP-Cron, the
+ * sweep runs on the first request of any kind once a copy is due (an autoloaded timestamp, so no query otherwise),
+ * which is why it lives in Utils.
  */
 class VerifierCleanup
 {
@@ -129,7 +127,7 @@ class VerifierCleanup
                 }
                 wp_delete_file($file);
                 if (file_exists($file)) {
-                    \FabricatorForms\fabricator_log("FabricatorForms VerifierCleanup: could not remove {$file}");
+                    \FabricatorForms\fabricator_log('FabricatorForms VerifierCleanup: could not remove ' . \FabricatorForms\fabricator_log_file(basename($file)));
                 }
             }
         }
@@ -165,9 +163,7 @@ class VerifierCleanup
     }
 
     /**
-     * Restarts the waiting time of the current user's unchecked copies. The verification page's requests (download,
-     * check, progress) call this, so a batch stays available while the page works through it and expires UNUSED_TTL
-     * after the page stops asking.
+     * Restarts the waiting time of the current user's unchecked copies; every verification page request calls it.
      *
      * @return void
      */

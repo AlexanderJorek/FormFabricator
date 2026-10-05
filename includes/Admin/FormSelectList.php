@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -364,7 +364,10 @@ class FormSelectList
         $id = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
         check_ajax_referer('fabricator_fsel_delete_' . $id, 'nonce');
 
-        FormSelectModel::delete($id, true);
+        // Reported as it happened, like FormList::ajaxDelete(): a refused or missing selection is not "deleted".
+        if (!FormSelectModel::delete($id, true)) {
+            wp_send_json_error(['message' => __('The selection could not be deleted. Please try again.', 'formfabricator')], 400);
+        }
         wp_send_json_success();
     }
 
@@ -380,7 +383,7 @@ class FormSelectList
      */
     public static function shortcode($atts): string
     {
-        // Deliberately NOT `array $atts`: a bare [fabricator_form_select] hands the callback an empty string, and an array type declaration would turn that into a page-fataling TypeError.
+        // Untyped: a bare [fabricator_form_select] passes an empty string.
         $atts = shortcode_atts(['id' => 0], is_array($atts) ? $atts : []);
         $id   = (int) $atts['id'];
         if ($id <= 0) {
@@ -397,22 +400,24 @@ class FormSelectList
         \FabricatorForms\Utils\Assets::ensureFormSelectAssets();
         \FabricatorForms\Utils\Assets::ensureFrontAssets();
 
-        // Server picks the initially-shown form (falls back to index 0 if none marked
-        // favorite); the front-end script then reads data-fav to preselect the same item
-        $fav_idx = 0;
-        foreach ($fsel->items as $i => $item) {
-            if ($item['favorite']) {
-                $fav_idx = $i;
-                break;
-            }
-        }
-
         // Resolved once and shared by both loops below. Each was calling FormModel::get() for the
         // same item, so a selector at its 200-item cap issued 400 lookups per public page view.
         $fsel_forms = [];
         foreach ($fsel->items as $i => $item) {
             $fsel_forms[$i] = FormModel::get($item['form_id']);
         }
+
+        // The form shown first (data-fav): the favorite, else the first, among forms that actually render.
+        $fav_idx = null;
+        foreach ($fsel->items as $i => $item) {
+            if ($fsel_forms[$i] !== null && ($item['favorite'] || $fav_idx === null)) {
+                $fav_idx = $i;
+                if ($item['favorite']) {
+                    break;
+                }
+            }
+        }
+        $fav_idx ??= 0;
 
         ob_start();
         $uid = 'fsel-' . $id;
@@ -508,9 +513,9 @@ class FormSelectList
             'saveFailed'       => __('The selection could not be saved. Please try again.', 'formfabricator'),
             'deleteFailed'     => __('The selection could not be deleted. Please try again.', 'formfabricator'),
             // translators: %d is replaced client-side with the number of selections that could not be deleted.
-            'bulkDeleteFailed' => __('%d selection(s) could not be deleted. Please try again.', 'formfabricator'),
+            'bulkDeleteFailed' => __('Some of the selected form selections could not be deleted (%d). Please try again.', 'formfabricator'),
             // translators: %d is replaced client-side with the number of selections about to be deleted.
-            'bulkDeleteConfirm' => __('Delete %d selection(s)? This cannot be undone.', 'formfabricator'),
+            'bulkDeleteConfirm' => __('Delete the selected form selections (%d)? This cannot be undone.', 'formfabricator'),
         ];
         wp_localize_script(
             'fabricator-forms-admin-formselect',

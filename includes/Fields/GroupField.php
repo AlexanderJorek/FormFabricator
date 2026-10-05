@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -65,8 +65,8 @@ class GroupField extends BaseField
         array $config,
         array $context
     ): array {
-        // One set of children per group: the renderer names them like top-level fields, and nothing posts copies.
-        if (!is_array($value) || empty($value)) {
+        // One set of children per group. An empty list means display children only, which still map for mail/PDF.
+        if (!is_array($value)) {
             return [];
         }
 
@@ -178,7 +178,7 @@ class GroupField extends BaseField
         if (empty($config['conditions']['rules'])) {
             return '';
         }
-        return ' data-conditions="' . esc_attr(wp_json_encode($config['conditions'])) . '"';
+        return ' data-conditions="' . esc_attr(\FabricatorForms\Utils\Cast::jsonForAttribute($config['conditions'])) . '"';
     }
 
     /**
@@ -192,7 +192,7 @@ class GroupField extends BaseField
     }
 
     /**
-     * Renders the field HTML. Fallback only — not called during normal rendering; FormRenderer uses openTag() and closeTag() directly to inject child fields.
+     * Fallback only: FormRenderer uses openTag() and closeTag() to place the children.
      *
      * @param array  $config   Field configuration.
      * @param string $field_id Unique field identifier.

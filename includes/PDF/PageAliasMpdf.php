@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -26,12 +26,10 @@ defined('ABSPATH') || exit;
 use Mpdf\Mpdf;
 
 /**
- * Stock mPDF replaces {PAGENO}, {nbpg}, {nb} and {DATE ...} across every page body at output time, so a visitor
- * typing "{nbpg}" into a field got the page count printed, and the PDF no longer matched its own sealed text.
- * This subclass only replaces the per-document random aliases Generator puts in the footer.
+ * mPDF that replaces only the per-document random page aliases Generator puts in the footer. Stock mPDF replaces
+ * {PAGENO}, {nbpg} and the like in every page body, so a visitor typing "{nbpg}" would break the sealed text.
  *
- * Loaded on demand by Generator::generate() rather than from Plugin::load(), which would pull the whole mPDF
- * class into every request.
+ * Loaded on demand by Generator::generate(), so mPDF isn't pulled into every request.
  */
 final class PageAliasMpdf extends Mpdf
 {

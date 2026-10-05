@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -46,7 +46,7 @@ class SecureDir
         . '</IfModule>' . self::NL;
 
     /**
-     * Creates the given directories and applies every hardening artifact — replaces four copy-pasted implementations that differed only in their subdirectory list.
+     * Creates the given directories and writes every hardening file.
      *
      * @param string   $base Directory receiving .htaccess and web.config (the tree root).
      * @param string[] $dirs Absolute directories to create and silence; defaults to [$base].
@@ -59,9 +59,7 @@ class SecureDir
         }
         $fs = self::filesystem();
 
-        // Explicit modes, never umask(): umask is process-wide, so under a threaded SAPI a temporary change here
-        // applies to every other request's file creation too. (wp_mkdir_p() also re-chmods new directories to the
-        // parent's mode whenever the umask differs, so a umask never tightened them anyway.)
+        // Explicit modes, never umask(), which is process-wide under a threaded SAPI.
         foreach ($dirs as $dir) {
             if (!is_dir($dir)) {
                 wp_mkdir_p($dir);
@@ -127,7 +125,7 @@ class SecureDir
     }
 
     /**
-     * Writes a plugin-owned file, preferring WP_Filesystem — public counterpart to harden()'s internal write(), so every call site shares the same 'direct'-transport decision.
+     * Writes a plugin-owned file, through WP_Filesystem when that is direct, as harden() does.
      *
      * @param string $path     Absolute path to write.
      * @param string $contents File contents.
@@ -157,7 +155,7 @@ class SecureDir
         if (file_put_contents($path, $contents) === false) {
             return false;
         }
-        // The WP_Filesystem branch applies $mode itself; the direct write must too, or callers asking for 0600 got the umask default.
+        // The WP_Filesystem branch applies $mode itself; the direct write must too, or callers asking for 0600 get the umask default.
         self::chmodPath(null, $path, $mode);
         return true;
     }
@@ -182,10 +180,8 @@ class SecureDir
         }
     }
 
-    // IIS deny rule. Request Filtering, not <authorization>: URL Authorization is an optional IIS role service, and
-    // without it the old rule denied nothing. Request Filtering is part of every IIS 7+ install. allowUnlisted="false"
-    // refuses every file extension; the hidden segment also covers extensionless and directory URLs.
-    // Concatenated strings, not HEREDOC/NOWDOC, per CLAUDE.md's WordPress.org rule.
+    // IIS deny rule via Request Filtering, which every IIS 7+ has (URL Authorization is optional): every extension,
+    // plus extensionless and directory URLs. Concatenated strings: WordPress.org rejects HEREDOC/NOWDOC.
     public const WEB_CONFIG = '<?xml version="1.0" encoding="UTF-8"?>'
         . "\n" .
         '<configuration>'

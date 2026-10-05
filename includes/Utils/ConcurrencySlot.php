@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,19 +24,19 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 /**
- * Byte-weighted admission control for expensive work, shared via wp_options — each holder reserves an estimated memory cost (row format "<expiry>|<bytes>").
+ * Byte-weighted admission control for expensive work, shared via wp_options (rows "<expiry>|<bytes>").
  */
 class ConcurrencySlot
 {
     /**
-     * Reserves $bytes in $bucket via insert-then-check: the row is inserted first, then checked only against rows with a lower option_id, giving simultaneous callers a strict order.
+     * Reserves $bytes in $bucket: insert, then check against rows with a lower option_id, which orders simultaneous
+     * callers strictly.
      *
      * @param string $bucket        Bucket name (hardcoded literal per caller, never request input).
      * @param int    $bytes         Estimated peak memory for this job (see MemoryBudget).
      * @param int    $budget_bytes  Total bytes this bucket may have reserved at once.
      * @param int    $ttl_seconds   How long a reservation is honored before it's abandoned.
-     * @param int    $max_holders   Hard cap on simultaneous holders, so a flood of tiny jobs can't
-     *                               fit under the byte budget in unbounded numbers.
+     * @param int    $max_holders   Hard cap on simultaneous holders, however small their jobs.
      * @return string|false Token to pass to release(), or false when the budget is exhausted.
      */
     public static function reserve(

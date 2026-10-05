@@ -20,8 +20,8 @@ if (!file_exists($poFile)) {
     exit(1);
 }
 
-// Refused rather than derived: with no ".po" suffix to replace, the old preg_replace() returned the input path unchanged,
-// and the binary .mo was written over the source file.
+// Refused rather than derived: with no ".po" suffix to replace, the output path would equal the input, and the binary
+// .mo would be written over the source file.
 if (!str_ends_with($poFile, '.po')) {
     fwrite(STDERR, "Not a .po file: $poFile\n");
     exit(1);
@@ -45,7 +45,7 @@ $fuzzy        = false;
 // 'id', 'id_plural', 'str', or an int (plural index) for 'str[N]'.
 $target = null;
 
-// One left-to-right pass, each escape consumed once: the sequential str_replace() this replaces turned an escaped
+// One left-to-right pass, each escape consumed once: sequential str_replace() calls would turn an escaped
 // backslash followed by "n" (\\n in the .po) into a backslash plus a real newline.
 $unescape = static function (string $s): string {
     return (string) preg_replace_callback(

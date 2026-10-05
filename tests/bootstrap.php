@@ -3,9 +3,9 @@
 /**
  * PHPUnit bootstrap for the unit and perf suites: no WordPress is loaded.
  *
- * Plugin classes are found through Composer's autoload-dev PSR-4 map (FabricatorForms\ => includes/). The plugin's
- * files open with `defined('ABSPATH') || exit;`, so ABSPATH is defined first; WordPress functions a test needs are
- * stubbed per test with Brain Monkey (see Support\TestCase).
+ * Plugin classes are found through Composer's PSR-4 map, as in production. The plugin's files open with
+ * `defined('ABSPATH') || exit;`, so ABSPATH is defined first; WordPress functions a test needs are stubbed per test with
+ * Brain Monkey (see Support\TestCase).
  */
 
 define('ABSPATH', __DIR__ . '/');
@@ -25,6 +25,7 @@ define('WP_MAX_MEMORY_LIMIT', '256M'); // WordPress's default for admin and wp_r
 // What formfabricator.php defines; field classes read their CSS/JS assets from the plugin path.
 define('FABRICATOR_FORMS_PATH', dirname(__DIR__) . '/');
 define('FABRICATOR_FORMS_URL', 'https://example.test/wp-content/plugins/formfabricator/');
+define('FABRICATOR_FORMS_VERSION', '0.0.0-test');
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 

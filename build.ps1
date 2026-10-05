@@ -40,15 +40,10 @@ $buildDir  = Join-Path $root 'build'
 $stageDir  = Join-Path $buildDir 'formfabricator'
 $zipPath   = Join-Path $buildDir 'formfabricator.zip'
 
-# ---- Dev environment. vendor/ is gitignored (composer.json + composer.lock are the source of
-# truth, vendor/pdfjs the one tracked exception), so a fresh clone has no phpcs, no wpcs and no
-# security-audit sniffs -- the first release gate below would fail on a missing vendor\bin\phpcs.bat
-# and say nothing about why. Restoring that is a plain `composer install`, so do it rather than
-# report it: a new contributor's first run of this script should build, not hand them an errand.
+# ---- Dev environment. vendor/ is gitignored (except vendor/pdfjs and vendor/altcha), so a fresh clone has no
+# phpcs: install the dev dependencies instead of failing the first gate.
 
-# Write-Host + exit rather than throw: a missing PHP or Composer is the one failure mode that is
-# reached before anything of this script has run, and a PowerShell error record buries the one
-# sentence that helps under a stack trace.
+# Write-Host + exit rather than throw, so the hint isn't buried under a stack trace.
 function Assert-Tool {
     param([string]$Name, [string]$Hint)
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -60,10 +55,7 @@ function Assert-Tool {
 }
 
 function Install-DevDependencies {
-    # --ignore-platform-req=ext-gd/ext-fileinfo for the reason the staged --no-dev install further
-    # down passes them: a CLI php.ini can leave both off, while every WordPress host has them.
-    # Installing needs neither; the phpunit release gate does, and checks for them itself with a
-    # message naming the php.ini. The extensions stay declared in composer.json for hosts.
+    # A CLI php.ini may lack ext-gd/ext-fileinfo, which installing doesn't need; the phpunit gate checks for them.
     Write-Host "Installing dev dependencies (composer install)..." -ForegroundColor Cyan
     Push-Location $root
     $previousErrorActionPreference = $ErrorActionPreference
@@ -77,11 +69,8 @@ function Install-DevDependencies {
     if ($LASTEXITCODE -ne 0) { throw "composer install failed with exit code $LASTEXITCODE" }
 }
 
-# vendor/ can also be present but stale: a pull that changes composer.lock leaves last week's
-# phpcs and wpcs in place, and a gate that passes on the wrong sniff versions is worth less than
-# no gate. File timestamps cannot answer this -- a checkout rewrites them, and composer leaves
-# installed.json untouched when it has nothing to do -- so compare what the lock pins against what
-# composer recorded as installed. Exact, and therefore safe to act on rather than warn about.
+# vendor/ may be stale after a pull that changed composer.lock: compare the locked versions with installed.json
+# (timestamps can't tell).
 function Get-StalePackages {
     $lock      = Get-Content -Raw -LiteralPath (Join-Path $root 'composer.lock') | ConvertFrom-Json
     $installed = Get-Content -Raw -LiteralPath $installedJson | ConvertFrom-Json
@@ -130,11 +119,8 @@ if (-not $devToolsReady) {
     }
 }
 
-# ---- Release gates (NIST SSDF PW.4/PW.7): the checks CLAUDE.md documents, enforced before anything is staged, so a tree
-# that fails them never produces an archive. Native tools write progress to stderr, so only their exit codes count.
-# Each gate prints its name as it starts and "ok"/"FAILED" with its duration when it ends: the tools' own output is
-# captured (shown only on failure), so without this line a build run from build.cmd sat on "Running release gates..."
-# for minutes with no sign of progress. -Quiet is for gates run in a loop that report as one line (php -l).
+# ---- Release gates (CONTRIBUTING.md), before anything is staged. Only exit codes count; a tool's output is shown
+# only on failure, so each gate prints its name, then "ok"/"FAILED" and its duration. -Quiet is for looped gates.
 function Invoke-ReleaseGate {
     param([string]$Name, [scriptblock]$Command, [switch]$Quiet)
     if (-not $Quiet) { Write-Host "  $Name ... " -NoNewline }
@@ -188,7 +174,7 @@ try {
     $securityRuleset = Join-Path $root '.phpcs-security.xml'
     Invoke-ReleaseGate 'phpcs (.phpcs-security.xml, errors only)' { & (Join-Path $root 'vendor\bin\phpcs.bat') -q -n "--standard=$securityRuleset" }
     Invoke-ReleaseGate 'make-pot --check (languages/formfabricator.pot is current)' { php (Join-Path $root 'languages\make-pot.php') --check }
-    # The unit and perf suites (tests/, phpunit.xml.dist). Perf holds the pathological-PDF shapes from CLAUDE.md
+    # The unit and perf suites (tests/, phpunit.xml.dist). Perf holds the pathological-PDF shapes from CONTRIBUTING.md
     # ("Scanning untrusted PDF bytes"), so a scan that turns quadratic stops the release. The integration suite follows
     # after the JS suite below.
     $missingExtensions = @('gd', 'fileinfo') | Where-Object { -not ((php -r "echo extension_loaded('$_') ? 1 : 0;") -eq '1') }
@@ -244,18 +230,13 @@ if (Test-Path $buildDir) { Remove-Item -Recurse -Force $buildDir }
 New-Item -ItemType Directory -Path $stageDir | Out-Null
 
 Write-Host "Copying plugin files..." -ForegroundColor Cyan
-$exclude = @('.git', '.claude', '.vscode', '.gitignore', '.gitattributes', '.github', 'build', 'node_modules', 'vendor', '.phpcs.xml', '.phpcs-security.xml', 'build.ps1', 'build-testdb.ps1', 'build.cmd', 'CLAUDE.md', 'TESTING.md', 'tests', 'phpunit.xml.dist', 'phpunit-integration.xml.dist', '.phpunit.cache', 'package.json', 'package-lock.json')
+$exclude = @('.git', '.claude', '.vscode', '.gitignore', '.gitattributes', '.github', 'build', 'node_modules', 'vendor', '.phpcs.xml', '.phpcs-security.xml', 'build.ps1', 'build-testdb.ps1', 'build.cmd', 'CLAUDE.md', 'CONTRIBUTING.md', 'TESTING.md', 'tests', 'phpunit.xml.dist', 'phpunit-integration.xml.dist', '.phpunit.cache', 'package.json', 'package-lock.json')
 Get-ChildItem -Path $root -Force | Where-Object { $exclude -notcontains $_.Name } | ForEach-Object {
     Copy-Item -Path $_.FullName -Destination $stageDir -Recurse -Force
 }
 
-# Dev-only files that live inside otherwise-shipped folders (not excludable by top-level name
-# above) — remove them individually from the staged copy.
-#
-# The example field is development tooling: _ExampleField.php is a template that is deliberately
-# absent from FieldRegistry::FIELD_MAP and therefore never loaded. Shipping unreachable code is
-# something WordPress.org's guidelines ask plugins not to do, and it enlarges the review surface
-# for no user-facing benefit. (The tests live in tests/, excluded above by top-level name.)
+# Dev-only files inside shipped folders. The example field is a template that is never loaded, and WordPress.org asks
+# plugins not to ship unreachable code.
 $nestedExclude = @(
     'includes/PDF/templates/HEADER-RENDERING.md',
     'languages/compile-mo.php',
@@ -279,17 +260,11 @@ Get-ChildItem -Path (Join-Path $stageDir 'languages') -Include '*.po', '*.mo' -R
 Write-Host "Installing production-only dependencies (composer install --no-dev)..." -ForegroundColor Cyan
 Push-Location $stageDir
 try {
-    # Composer writes its normal progress output to stderr. With
-    # $ErrorActionPreference = 'Stop' (set at the top of this script), PowerShell
-    # 5.1 wraps each such line in a NativeCommandError and aborts the script even
-    # though composer itself exits 0 — a real failure is still caught below via
-    # $LASTEXITCODE, which composer sets correctly regardless of this quirk.
+    # Composer writes progress to stderr, which 'Stop' would turn into an abort; $LASTEXITCODE decides instead.
     $previousErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        # --ignore-platform-req=ext-gd/ext-fileinfo: your local CLI's php.ini doesn't have these
-        # extensions enabled. A normal WordPress host does (both are listed as requirements), so
-        # this only affects building the zip here, not the plugin at runtime.
+        # A local CLI may lack ext-gd/ext-fileinfo; WordPress hosts have them.
         composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-req=ext-gd --ignore-platform-req=ext-fileinfo
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
@@ -299,71 +274,48 @@ try {
     Pop-Location
 }
 
-# vendor/ above was excluded from the copy and rebuilt by composer install --no-dev,
-# which only manages Composer-declared packages. vendor/pdfjs/ is placed there
-# manually (pdf.js is an npm package, not installable via Composer), so it must
-# be copied in separately or every release build would silently ship without it.
-# Having no lock file, the copy is checked against the SHA-256 list pinned in vendor/pdfjs/VERSION (NIST SSDF PS.3/PW.4):
-# an edited, swapped, half-updated or extra file stops the build instead of shipping under the documented version.
-Write-Host "Verifying manually-vendored pdf.js against its pinned hashes..." -ForegroundColor Cyan
-$pdfjsDir      = (Resolve-Path (Join-Path $root 'vendor\pdfjs')).ProviderPath
-$pdfjsPinned   = @{}
-foreach ($pin in [regex]::Matches((Get-Content -Raw -Path (Join-Path $pdfjsDir 'VERSION')), '(?m)^\s*([0-9a-fA-F]{64})\s+(\S+)\s*$')) {
-    $pdfjsPinned[$pin.Groups[2].Value] = $pin.Groups[1].Value.ToLowerInvariant()
-}
-$pdfjsProblems = @()
-foreach ($file in Get-ChildItem -Path $pdfjsDir -Recurse -File -Force | Where-Object { $_.Name -ne 'VERSION' }) {
-    $rel = $file.FullName.Substring($pdfjsDir.TrimEnd('\').Length + 1).Replace('\', '/')
-    if (-not $pdfjsPinned.ContainsKey($rel)) {
-        $pdfjsProblems += "$rel has no pinned hash"
-        continue
+# The hand-vendored npm packages aren't Composer's, so they are copied in, each checked first against the SHA-256 list
+# in its VERSION file: any edited, missing or extra file stops the build.
+$handVendored = @(
+    @{ Dir = 'pdfjs';  Npm = 'pdfjs-dist'; License = 'Apache-2.0' },
+    @{ Dir = 'altcha'; Npm = 'altcha';     License = 'MIT' }
+)
+foreach ($hv in $handVendored) {
+    Write-Host "Verifying manually-vendored $($hv.Npm) against its pinned hashes..." -ForegroundColor Cyan
+    $hvDir    = (Resolve-Path (Join-Path $root ('vendor\' + $hv.Dir))).ProviderPath
+    $pinned   = @{}
+    foreach ($pin in [regex]::Matches((Get-Content -Raw -Path (Join-Path $hvDir 'VERSION')), '(?m)^\s*([0-9a-fA-F]{64})\s+(\S+)\s*$')) {
+        $pinned[$pin.Groups[2].Value] = $pin.Groups[1].Value.ToLowerInvariant()
     }
-    $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
-    if ($actual -ne $pdfjsPinned[$rel]) {
-        $pdfjsProblems += "$rel is $actual, pinned $($pdfjsPinned[$rel])"
+    $problems = @()
+    foreach ($file in Get-ChildItem -Path $hvDir -Recurse -File -Force | Where-Object { $_.Name -ne 'VERSION' }) {
+        $rel = $file.FullName.Substring($hvDir.TrimEnd('\').Length + 1).Replace('\', '/')
+        if (-not $pinned.ContainsKey($rel)) {
+            $problems += "$rel has no pinned hash"
+            continue
+        }
+        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName).Hash.ToLowerInvariant()
+        if ($actual -ne $pinned[$rel]) {
+            $problems += "$rel is $actual, pinned $($pinned[$rel])"
+        }
     }
-}
-foreach ($rel in $pdfjsPinned.Keys) {
-    if (-not (Test-Path -LiteralPath (Join-Path $pdfjsDir $rel) -PathType Leaf)) {
-        $pdfjsProblems += "$rel is pinned but missing"
+    foreach ($rel in $pinned.Keys) {
+        if (-not (Test-Path -LiteralPath (Join-Path $hvDir $rel) -PathType Leaf)) {
+            $problems += "$rel is pinned but missing"
+        }
     }
+    if ($problems.Count -gt 0 -or $pinned.Count -eq 0) {
+        throw "vendor/$($hv.Dir) does not match the SHA-256 list in its VERSION file: $(if ($pinned.Count -eq 0) { 'no hashes pinned' } else { $problems -join '; ' })"
+    }
+    $hv.Pinned = $pinned
+    Write-Host "Copying manually-vendored $($hv.Npm)..." -ForegroundColor Cyan
+    Copy-Item -Path $hvDir -Destination (Join-Path $stageDir ('vendor\' + $hv.Dir)) -Recurse -Force
 }
-if ($pdfjsProblems.Count -gt 0 -or $pdfjsPinned.Count -eq 0) {
-    throw "vendor/pdfjs does not match the SHA-256 list in its VERSION file: $(if ($pdfjsPinned.Count -eq 0) { 'no hashes pinned' } else { $pdfjsProblems -join '; ' })"
-}
-Write-Host "Copying manually-vendored pdf.js..." -ForegroundColor Cyan
-Copy-Item -Path $pdfjsDir -Destination (Join-Path $stageDir 'vendor\pdfjs') -Recurse -Force
 
-# mpdf/mpdf ships ~80 TTF/OTF font files (DejaVu, FreeFont, and many others for
-# scripts like Devanagari/Khmer/Syriac/etc, ~88MB total) covering every font it
-# ever might need. FormFabricator only ever *selects* one of 4 families — see the
-# font_family match in includes/PDF/templates/layout.php ('dejavusans' [default],
-# 'dejavuserif', 'dejavusansmono', 'freemono') — and mPDF's autoScriptToLang/
-# autoLangToFont/useSubstitutions are all left at their default of false in
-# Generator.php's $mpdf_config, so mPDF never auto-*switches* to a different font
-# family for unsupported scripts.
-#
-# CORRECTION (2026-08-20): an earlier version of this comment claimed that meant
-# mPDF "never touches any font file outside these 4 families" — that turned out
-# to be wrong and caused a real production failure ("Cannot find TTF TrueType
-# font file DejaVuSerifCondensed.ttf") the first time a submission actually
-# exercised it. useSubstitutions genuinely does default to false (verified
-# against vendor/mpdf/mpdf/src/Mpdf.php directly), but that's a different
-# mechanism (missing-glyph fallback) from what actually fired here: mPDF's own
-# built-in font-alias tables (vendor/mpdf/mpdf/src/Config/FontVariables.php,
-# 'serif_fonts'/'sans_fonts') list the Condensed variant of each DejaVu family
-# *before* the plain one, and that alias table is consulted independently of
-# useSubstitutions/autoScriptToLang whenever mPDF resolves a font by role rather
-# than by our literal $forge_font family name. Rather than chase every internal
-# mPDF alias path that could reach a "trimmed away" file, keep the Condensed
-# companions too — they're cheap (~2.5MB combined for both families) next to the
-# ~85MB this step actually saves (which is almost entirely the CJK/Devanagari/
-# Khmer/Syriac/etc script fonts FormFabricator has no path to ever request). Trimming
-# ONLY in the staged release build (never the working vendor/, which a plain
-# `composer install` would just restore anyway, and which stays full for local
-# testing). If you add a fifth selectable PDF font, add its files to $keepFonts
-# below or this step will delete them and PDF generation will fatal on "font
-# file not found."
+# mPDF ships ~88 MB of fonts; the PDF selects only four families (layout.php's font_family match). Their Condensed
+# variants stay too: mPDF's font-alias tables (Config/FontVariables.php) reach them when resolving a font by role.
+# Only the staged copy is trimmed. A new selectable PDF font must be added to $keepFonts, or PDFs fatal on
+# "font file not found".
 Write-Host "Trimming unused mPDF font files..." -ForegroundColor Cyan
 $fontsDir = Join-Path $stageDir 'vendor\mpdf\mpdf\ttfonts'
 $keepFonts = @(
@@ -376,33 +328,21 @@ $keepFonts = @(
     'DejaVuinfo.txt', 'GNUFreeFontinfo.txt'
 )
 if (-not (Test-Path $fontsDir)) {
-    # A silent skip is the expensive failure here: if mPDF ever relocates ttfonts/, roughly 88 MB
-    # of CJK/Devanagari/Khmer faces ship. The 40 MB total ceiling in the verification step would
-    # catch that after the fact; failing here says why, at the step that actually went wrong.
+    # Fail here, where the reason is known, rather than at the size ceiling later.
     throw "mPDF font directory not found at $fontsDir - the trim would silently ship the full font set."
 }
 $before = (Get-ChildItem -Path $fontsDir -File | Measure-Object -Property Length -Sum).Sum
 Get-ChildItem -Path $fontsDir -File | Where-Object { $keepFonts -notcontains $_.Name } | Remove-Item -Force
 $after = (Get-ChildItem -Path $fontsDir -File | Measure-Object -Property Length -Sum).Sum
-# The header comment above warns that removing a needed font makes PDF generation fatal at
-# runtime with "font file not found". This turns that warning into something the build enforces.
+# Every kept font must still be there.
 $missingFonts = @($keepFonts | Where-Object { -not (Test-Path (Join-Path $fontsDir $_)) })
 if ($missingFonts.Count -gt 0) {
     throw "fonts named in `$keepFonts are absent after the trim (upstream renamed them?): $($missingFonts -join ', ')"
 }
 Write-Host ("  {0:N1} MB -> {1:N1} MB" -f ($before / 1MB), ($after / 1MB)) -ForegroundColor Cyan
 
-# Dev-only tooling bundled inside Composer packages themselves (not something
-# `composer install --no-dev` strips, since they ship as regular package files, and
-# `--no-dev` only controls OUR OWN require-dev, not what each dependency chooses to
-# include in its own distributed files): CI workflows/issue templates, static-analysis
-# (PHPStan/Psalm) configs, PHPUnit configs, a phpcs ruleset, .gitignore files, an unused
-# scratch tmp/ dir (mPDF only falls back to vendor/mpdf/mpdf/tmp when no 'tempDir' is
-# passed in config — Generator.php always passes its own, so this is never touched), and
-# a phar-building shell script (WordPress.org's Plugin Check disallows shipping shell
-# scripts) plus the build artifacts/PHP script it invoked. None of this is needed at
-# runtime; none of it is excluded by composer.json's own `require-dev` (that only
-# affects OUR dependency tree, not what upstream packages bundle in their own dist).
+# Dev-only tooling that dependencies bundle in their own dist (--no-dev can't strip it): CI and analysis configs, an
+# unused mPDF tmp/ (Generator always passes a tempDir), and a shell script Plugin Check rejects.
 Write-Host "Removing dev-only tooling bundled inside dependencies..." -ForegroundColor Cyan
 $vendorExclude = @(
     'vendor/paragonie/random_compat/build-phar.sh',
@@ -424,10 +364,7 @@ foreach ($rel in $vendorExclude) {
     if (Test-Path $path) { Remove-Item -Recurse -Force $path }
 }
 
-# Hidden files and folders that upstream packages bundle (.gitattributes, .editorconfig, .php-cs-fixer.dist.php, ...) are
-# never needed at runtime, and Plugin Check reports every hidden file as an error. Only vendor/ is cleaned this way; a
-# hidden file in the plugin's own tree fails the verification below instead of vanishing quietly. Deepest paths first,
-# so a folder's contents are gone before the folder itself.
+# Hidden files in vendor/, which Plugin Check rejects, deepest first. In the plugin's own tree they fail verification.
 Get-ChildItem -Path (Join-Path $stageDir 'vendor') -Recurse -Force |
     Where-Object { $_.Name -like '.*' } |
     Sort-Object { $_.FullName.Length } -Descending |
@@ -436,14 +373,8 @@ Get-ChildItem -Path (Join-Path $stageDir 'vendor') -Recurse -Force |
 Write-Host "Creating zip..." -ForegroundColor Cyan
 if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
 
-# Deliberately NOT Compress-Archive. The Microsoft.PowerShell.Archive that ships with
-# Windows PowerShell 5.1 (1.0.1.0) writes every entry name using the platform separator,
-# i.e. a backslash, and ZIP APPNOTE.TXT 4.4.17.1 requires forward slashes. PHP's dirname()
-# on Linux then finds no directory component in an entry name at all, so WordPress's
-# unzip_file() creates no formfabricator/ folder and drops 800+ flat files -- their
-# separators still embedded in the filenames -- straight into wp-content/plugins/. That
-# makes the archive uninstallable on every non-Windows host, which is every host that
-# matters. Building the entries by hand keeps the separator ours, not the platform's.
+# Not Compress-Archive: under Windows PowerShell 5.1 it writes backslash separators (ZIP APPNOTE 4.4.17.1 requires
+# '/'), which non-Windows hosts unzip as flat files.
 Add-Type -AssemblyName System.IO.Compression | Out-Null
 Add-Type -AssemblyName System.IO.Compression.FileSystem | Out-Null
 
@@ -468,11 +399,7 @@ try {
     $zip.Dispose()
 }
 
-# ---- Verify the artifact instead of trusting that the steps above did what they claim.
-# The exclusion lists are matched against exact names, so anything new landing inside an
-# otherwise-shipped folder passes them silently -- that is how an 81 MB testpdfs/ directory
-# shipped undetected for three rounds, and how the separator defect above survived eleven
-# source-level reviews: nothing ever looked at the output.
+# ---- Verify the artifact itself: the exclusion lists match exact names, so anything new slips past them.
 Write-Host "Verifying archive..." -ForegroundColor Cyan
 $violations = @()
 
@@ -503,9 +430,7 @@ Get-ChildItem -Path $stageDir -Recurse -Force -File | ForEach-Object {
 }
 $ownFiles = @($stagedFiles | Where-Object { $_.Rel -notlike 'vendor/*' })
 
-# Every staged file must appear in the archive under its own name, and the archive must contain
-# nothing else. A count alone would not do: CreateEntryFromFile skipping one locked or unreadable
-# file produces a short archive that satisfies every other check here.
+# Every staged file in the archive under its own name, and nothing else (a skipped locked file would pass a count).
 $expected = @{}
 foreach ($file in $stagedFiles) { $expected['formfabricator/' + $file.Rel] = $true }
 Get-ChildItem -Path $stageDir -Recurse -Force -Directory | Where-Object {
@@ -532,18 +457,14 @@ if ($devLeaks.Count -gt 0) {
     $violations += "dev/test material in package: $(($devLeaks | Select-Object -First 5 | ForEach-Object { $_.Rel }) -join ', ')"
 }
 
-# The exclusion lists above match exact names, so anything new slips past them. Hidden files (Plugin Check rejects them),
-# OS and editor debris, logs and backup copies are caught by pattern instead, anywhere in the package.
+# Hidden files, OS and editor debris, logs and backups, by pattern anywhere in the package.
 $junkPattern = '(?i)(^|/)(\.[^/]+|thumbs\.db|desktop\.ini|__macosx)(/|$)|\.(log|env|bak|swp|swo|tmp|orig|rej)$'
 $junk        = @($stagedFiles | Where-Object { $_.Rel -match $junkPattern })
 if ($junk.Count -gt 0) {
     $violations += "hidden, OS, editor, log or backup files in package: $(($junk | Select-Object -First 5 | ForEach-Object { $_.Rel }) -join ', ')"
 }
 
-# Executables and scripts: Plugin Check rejects them (which is why build-phar.sh is pruned from
-# random_compat above). The lists that keep build.ps1 and build.cmd out match exact names, and
-# an upstream package can start bundling a helper script at any release -- both slip past a name
-# list, neither slips past a pattern over the finished tree.
+# Executables and scripts, which Plugin Check rejects, by pattern over the finished tree.
 $scriptPattern = '(?i)\.(ps1|psm1|psd1|bat|cmd|sh|bash|exe|com|msi|scr|vbs)$'
 $scriptLeaks   = @($stagedFiles | Where-Object { $_.Rel -match $scriptPattern })
 if ($scriptLeaks.Count -gt 0) {
@@ -559,11 +480,20 @@ if ($leftoverTranslations.Count -gt 0) {
     $violations += "$($leftoverTranslations.Count) .po/.mo files still in languages/ (translate.wordpress.org owns these)"
 }
 
-# Size ceilings are the only controls here that catch a mistake nobody predicted, so they have to
-# cover the whole package: vendor/ is ~89% of it, and the step that keeps it small (the mPDF font
-# trim) used to be able to no-op silently. Two ceilings rather than one, because they fail for
-# different reasons -- our own tree grows when something like testpdfs/ slips in, the total grows
-# when a dependency starts shipping more.
+# The hand-vendored packages, which no dependency step would miss, against the same pinned lists.
+foreach ($hv in $handVendored) {
+    foreach ($rel in $hv.Pinned.Keys) {
+        $stagedFile = Join-Path (Join-Path $stageDir ('vendor\' + $hv.Dir)) $rel
+        if (-not (Test-Path -LiteralPath $stagedFile -PathType Leaf)) {
+            $violations += "vendor/$($hv.Dir)/$rel is missing from the package"
+        } elseif ((Get-FileHash -Algorithm SHA256 -LiteralPath $stagedFile).Hash.ToLowerInvariant() -ne $hv.Pinned[$rel]) {
+            $violations += "vendor/$($hv.Dir)/$rel in the package differs from its pinned SHA-256"
+        }
+    }
+}
+
+# Size ceilings catch what nobody predicted: one for the plugin's own tree, one for the whole package (vendor/ is most
+# of it).
 $ownBytes   = ($ownFiles | Measure-Object -Property Length -Sum).Sum
 $totalBytes = ($stagedFiles | Measure-Object -Property Length -Sum).Sum
 $zipBytes   = (Get-Item $zipPath).Length
@@ -575,8 +505,7 @@ if ($totalBytes -gt 40MB) {
 }
 
 if ($violations.Count -gt 0) {
-    # Never leave a rejected archive at the path the success message advertises: the next person
-    # to reach for build/formfabricator.zip would find one and have no way to tell it had failed.
+    # A rejected archive never stays where a good one would be.
     Remove-Item -Force $zipPath -ErrorAction SilentlyContinue
     Write-Host ""
     Write-Host "Build REJECTED -- this package is not shippable:" -ForegroundColor Red
@@ -616,25 +545,27 @@ foreach ($package in $lock.packages) {
     }
     [void]$components.Add($component)
 }
-$pdfjsVersionText = Get-Content -Raw -Path (Join-Path $root 'vendor\pdfjs\VERSION')
-$pdfjsVersion     = ([regex]::Match($pdfjsVersionText, '(?m)^pdfjs-dist\s+([0-9.]+)')).Groups[1].Value
-$pdfjsComponent   = [ordered]@{
-    type     = 'library'
-    name     = 'pdfjs-dist'
-    version  = $pdfjsVersion
-    purl     = "pkg:npm/pdfjs-dist@$pdfjsVersion"
-    licenses = @([ordered]@{ license = [ordered]@{ id = 'Apache-2.0' } })
+foreach ($hv in $handVendored) {
+    $hvVersionText = Get-Content -Raw -Path (Join-Path $root ('vendor\' + $hv.Dir + '\VERSION'))
+    $hvVersion     = ([regex]::Match($hvVersionText, '(?m)^' + [regex]::Escape($hv.Npm) + '\s+([0-9.]+)')).Groups[1].Value
+    $hvComponent   = [ordered]@{
+        type     = 'library'
+        name     = $hv.Npm
+        version  = $hvVersion
+        purl     = "pkg:npm/$($hv.Npm)@$hvVersion"
+        licenses = @([ordered]@{ license = [ordered]@{ id = $hv.License } })
+    }
+    # The npm tarball's integrity hash, recorded in VERSION; the shipped files were checked against its SHA-256 list above.
+    $hvIntegrity = [regex]::Match($hvVersionText, 'Tarball integrity:\s*sha512-([A-Za-z0-9+/=]+)').Groups[1].Value
+    if ($hvIntegrity -ne '') {
+        $hvComponent['externalReferences'] = @([ordered]@{
+            type   = 'distribution'
+            url    = "https://registry.npmjs.org/$($hv.Npm)/-/$($hv.Npm)-$hvVersion.tgz"
+            hashes = @([ordered]@{ alg = 'SHA-512'; content = ([BitConverter]::ToString([Convert]::FromBase64String($hvIntegrity)) -replace '-', '').ToLowerInvariant() })
+        })
+    }
+    [void]$components.Add($hvComponent)
 }
-# The npm tarball's integrity hash, recorded in VERSION; the shipped files were checked against its SHA-256 list above.
-$pdfjsIntegrity = [regex]::Match($pdfjsVersionText, 'Tarball integrity:\s*sha512-([A-Za-z0-9+/=]+)').Groups[1].Value
-if ($pdfjsIntegrity -ne '') {
-    $pdfjsComponent['externalReferences'] = @([ordered]@{
-        type   = 'distribution'
-        url    = "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-$pdfjsVersion.tgz"
-        hashes = @([ordered]@{ alg = 'SHA-512'; content = ([BitConverter]::ToString([Convert]::FromBase64String($pdfjsIntegrity)) -replace '-', '').ToLowerInvariant() })
-    })
-}
-[void]$components.Add($pdfjsComponent)
 $faVersion = ([regex]::Match((Get-Content -Raw -Path (Join-Path $root 'assets\vendor\fontawesome\css\all.min.css')), 'Font Awesome Free ([0-9.]+)')).Groups[1].Value
 [void]$components.Add([ordered]@{
     type     = 'library'

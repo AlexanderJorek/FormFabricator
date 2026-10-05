@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -69,43 +69,42 @@ class FormList
      */
     public static function menu(): void
     {
-        if (\FabricatorForms\Plugin::userCan('view_forms')) {
-            $menuIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">'
-                . '<path fill="#fff" transform="rotate(-45 10 10)" d="'
-                . 'M11.9.39l1.4 1.4c1.61.19 3.5-.74 4.61.37s.18 3 .37 4.61l1.4 1.4c'
-                . '.39.39.39 1.02 0 1.41l-9.19 9.2c-.4.39-1.03.39-1.42 0L1.29 11c'
-                . '-.39-.39-.39-1.02 0-1.42l9.2-9.19c.39-.39 1.02-.39 1.41 0z'
-                . 'm.58 2.25l-.58.58 4.95 4.95.58-.58c-.19-.6-.2-1.22-.15-1.82'
-                . '.02-.31.05-.62.09-.92.12-1 .18-1.63-.17-1.98s-.98-.29-1.98-.17'
-                . 'c-.3.04-.61.07-.92.09-.6.05-1.22.04-1.82-.15z'
-                . 'm4.02.93c.39.39.39 1.03 0 1.42s-1.03.39-1.42 0-.39-1.03 0-1.42 1.03-.39 1.42 0z'
-                . 'm-6.72.36l-.71.7L15.44 11l.7-.71z'
-                . 'M8.36 5.34l-.7.71 6.36 6.36.71-.7z'
-                . 'M6.95 6.76l-.71.7 6.37 6.37.7-.71z'
-                . 'M5.54 8.17l-.71.71 6.36 6.36.71-.71z'
-                . 'M4.12 9.58l-.71.71 6.37 6.37.71-.71z'
-                . '"/></svg>';
-            add_menu_page(
-                __('FormFabricator Form List', 'formfabricator'),
-                __('FormFabricator', 'formfabricator'),
-                \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
-                'fabricator-forms',
-                [self::class, 'render'],
-                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds a data: URI for inline display; the alternative is writing an HTTP-reachable file. Not obfuscation.
-                'data:image/svg+xml;base64,' . base64_encode($menuIconSvg),
-                30
-            );
+        // Registered for everyone (view_forms guards the list page), so users of any one sub-page get the menu too.
+        $menuIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">'
+            . '<path fill="#fff" transform="rotate(-45 10 10)" d="'
+            . 'M11.9.39l1.4 1.4c1.61.19 3.5-.74 4.61.37s.18 3 .37 4.61l1.4 1.4c'
+            . '.39.39.39 1.02 0 1.41l-9.19 9.2c-.4.39-1.03.39-1.42 0L1.29 11c'
+            . '-.39-.39-.39-1.02 0-1.42l9.2-9.19c.39-.39 1.02-.39 1.41 0z'
+            . 'm.58 2.25l-.58.58 4.95 4.95.58-.58c-.19-.6-.2-1.22-.15-1.82'
+            . '.02-.31.05-.62.09-.92.12-1 .18-1.63-.17-1.98s-.98-.29-1.98-.17'
+            . 'c-.3.04-.61.07-.92.09-.6.05-1.22.04-1.82-.15z'
+            . 'm4.02.93c.39.39.39 1.03 0 1.42s-1.03.39-1.42 0-.39-1.03 0-1.42 1.03-.39 1.42 0z'
+            . 'm-6.72.36l-.71.7L15.44 11l.7-.71z'
+            . 'M8.36 5.34l-.7.71 6.36 6.36.71-.7z'
+            . 'M6.95 6.76l-.71.7 6.37 6.37.7-.71z'
+            . 'M5.54 8.17l-.71.71 6.36 6.36.71-.71z'
+            . 'M4.12 9.58l-.71.71 6.37 6.37.71-.71z'
+            . '"/></svg>';
+        add_menu_page(
+            __('FormFabricator Form List', 'formfabricator'),
+            __('FormFabricator', 'formfabricator'),
+            \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
+            'fabricator-forms',
+            [self::class, 'render'],
+            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds a data: URI for inline display; the alternative is writing an HTTP-reachable file. Not obfuscation.
+            'data:image/svg+xml;base64,' . base64_encode($menuIconSvg),
+            30
+        );
 
-            // Rename the auto-generated first submenu entry from "FormFabricator" to "Formular Liste"
-            add_submenu_page(
-                'fabricator-forms',
-                __('FormFabricator Form List', 'formfabricator'),
-                __('Form List', 'formfabricator'),
-                \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
-                'fabricator-forms',
-                [self::class, 'render']
-            );
-        }
+        // Rename the auto-generated first submenu entry from "FormFabricator" to "Form List".
+        add_submenu_page(
+            'fabricator-forms',
+            __('FormFabricator Form List', 'formfabricator'),
+            __('Form List', 'formfabricator'),
+            \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
+            'fabricator-forms',
+            [self::class, 'render']
+        );
     }
 
     /**
@@ -122,13 +121,11 @@ class FormList
         $forms   = FormModel::getAll();
         $new_url = admin_url('admin.php?page=fabricator-forms-editor');
 
-        /* Localized strings consumed by assets/js/admin-formlist.js for
-           dynamically-generated UI text (alerts, toasts, modal messages set
-           from JS) via the wp_localize_script call below. */
+        /* Strings for admin-formlist.js. */
         $list_i18n = [
             'deleteConfirm'      => __('Really delete form?', 'formfabricator'),
             // translators: %d is replaced client-side with the number of selected forms.
-            'deleteConfirmMulti' => __('Really delete %d form(s)?', 'formfabricator'),
+            'deleteConfirmMulti' => __('Really delete the selected forms (%d)?', 'formfabricator'),
             'chooseAction'       => __('Choose action', 'formfabricator'),
             'chooseActionAlert'  => __('Please choose an action.', 'formfabricator'),
             // translators: %d is replaced client-side with the number of selected forms.
@@ -285,7 +282,10 @@ class FormList
         if (!$form_id || !check_ajax_referer('fabricator_forms_delete_' . $form_id, 'nonce', false)) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
-        FormModel::delete($form_id, true);
+        // Reported as it happened: a form that is not ours, or a failed delete, is not "deleted".
+        if (!FormModel::delete($form_id, true)) {
+            wp_send_json_error(['message' => __('The form could not be deleted.', 'formfabricator')], 400);
+        }
         wp_send_json_success(['message' => __('Form deleted.', 'formfabricator')]);
     }
 
@@ -300,7 +300,7 @@ class FormList
         $edit_url  = admin_url('admin.php?page=fabricator-forms-editor&form_id=' . $form->id);
         $shortcode = '[fabricator_form id="' . $form->id . '"]';
         $count     = count($form->fields);
-        // Minted only for users who can actually perform the action; each handler re-checks capability too, but handing a view-only user a nonce is what makes mismatches reachable.
+        // Nonces only for users who may act; each handler re-checks the capability too.
         $can_edit  = \FabricatorForms\Plugin::userCan('edit_forms');
         $del_nonce = $can_edit ? wp_create_nonce('fabricator_forms_delete_' . $form->id) : '';
         $dup_nonce = $can_edit ? wp_create_nonce('fabricator_forms_duplicate_' . $form->id) : '';
@@ -416,8 +416,10 @@ class FormList
             if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_delete_' . $form_id)) {
                 continue;
             }
-            FormModel::delete($form_id, true);
-            $deleted[] = $form_id;
+            // Only what was deleted: the page removes exactly these rows.
+            if (FormModel::delete($form_id, true)) {
+                $deleted[] = $form_id;
+            }
         }
         wp_send_json_success(['deleted' => $deleted]);
     }
@@ -464,7 +466,7 @@ class FormList
      */
     public static function ajaxExport(): void
     {
-        // edit_forms, not view_forms: the export payload carries notification to/cc/bcc/from_email/reply_to and third parties' addresses that view-only users never see in the UI.
+        // edit_forms: the export carries notification addresses view-only users never see.
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
         $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
         $nonce   = sanitize_key($_POST['nonce'] ?? '');
@@ -623,8 +625,10 @@ class FormList
     {
         $out = [];
         foreach ($fields as $field) {
-            $type     = $field['type'] ?? '';
-            $instance = \FabricatorForms\Fields\FieldRegistry::get($type);
+            // An imported "type" that is no string (a list, a number) is no field type: kept as it came, for
+            // sanitizeFields() to drop. Passed on, it would end the import in a TypeError at FieldRegistry::get(string).
+            $type     = is_array($field) && is_string($field['type'] ?? null) ? $field['type'] : '';
+            $instance = $type !== '' ? \FabricatorForms\Fields\FieldRegistry::get($type) : null;
             if (!$instance) {
                 $out[] = $field;
                 continue;
@@ -632,12 +636,8 @@ class FormList
             $defaults = $instance->getDefaultConfig();
             $compact  = [];
             foreach ($field as $k => $v) {
-                // 'cols' (what FormRenderer reads) is kept structurally so a type that later declares a default can't silently strip the layout; 'children' likewise must never be dropped.
-                // date_format is kept too: its default follows the exporting site's date setting, so stripping it would make
-                // the importing site read the field's stored date bounds in a different format.
-                // Text that matches a default is kept as well: a default that is wording — labels, hints, the SEPA
-                // mandate's legal text — is translated into the exporting site's language, so dropping it let the
-                // importing site fill in its own translation and silently change what the form says.
+                // Always kept: 'cols', 'children', 'date_format' (its default follows the site's date setting), and text
+                // equal to a default, since defaults are translated and the importing site's would change the wording.
                 $is_wording = is_string($v) && $v !== '';
                 if ($k === 'type' || $k === 'id' || $k === 'cols' || $k === 'children' || $k === 'date_format') {
                     $compact[$k] = $v;
@@ -660,8 +660,10 @@ class FormList
     {
         $out = [];
         foreach ($fields as $field) {
-            $type     = $field['type'] ?? '';
-            $instance = \FabricatorForms\Fields\FieldRegistry::get($type);
+            // An imported "type" that is no string (a list, a number) is no field type: kept as it came, for
+            // sanitizeFields() to drop. Passed on, it would end the import in a TypeError at FieldRegistry::get(string).
+            $type     = is_array($field) && is_string($field['type'] ?? null) ? $field['type'] : '';
+            $instance = $type !== '' ? \FabricatorForms\Fields\FieldRegistry::get($type) : null;
             if ($instance) {
                 // An export from before the date format setting has no key, and those fields were DD.MM.YYYY; the importing
                 // site's own default must not reinterpret their stored bounds.

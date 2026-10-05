@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -117,7 +117,7 @@ class PageHeaderField extends BaseField
 
         return '<div class="fabricator-page-header"'
             . ' data-show-names="' . ($show_names ? '1' : '0') . '"'
-            . ' data-names="' . esc_attr((string)wp_json_encode($names)) . '"'
+            . ' data-names="' . esc_attr(\FabricatorForms\Utils\Cast::jsonForAttribute($names)) . '"'
             . '></div>';
     }
 
@@ -160,9 +160,9 @@ class PageHeaderField extends BaseField
     }
 
     /**
-     * Returns the default field configuration.
+     * Adds page_names to the plain-text allowlist (sanitize_text_field() rather than the HTML sanitizer).
      *
-     * @return array
+     * @return string[]
      */
     protected function plainTextConfigKeys(): array
     {
@@ -170,6 +170,11 @@ class PageHeaderField extends BaseField
         return array_merge(parent::plainTextConfigKeys(), ['page_names']);
     }
 
+    /**
+     * Returns the default field configuration.
+     *
+     * @return array
+     */
     public function getDefaultConfig(): array
     {
         return [

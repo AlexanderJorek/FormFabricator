@@ -105,6 +105,10 @@ function (root) {
         });
         document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) close(); });
         native.addEventListener('change', syncDisplay);
+        /* Dispatched by front.js after form.reset(), which puts the native select back without a change event: the
+           custom display kept the previous choice, so a second entry could send a value the visitor never saw. */
+        var ownerForm = native.closest('form');
+        if (ownerForm) ownerForm.addEventListener('fabricator:reset', syncDisplay);
         buildOptions();
     });
 }

@@ -6,8 +6,8 @@
 /* FormFabricator — Admin Styles */
 
 /* ================================================================
- * Shared design tokens — consolidates literals that were previously
- * repeated dozens of times across the file (see CSS audit).
+ * Shared design tokens for the colours and other literals used
+ * across the file.
  * ================================================================ */
 :root {
     --fabricator-text: #1d2327;
@@ -106,9 +106,8 @@
 .fabricator-editor-page #wpfooter,
 .fabricator-editor-page #screen-meta,
 .fabricator-editor-page .clear              { display: none !important; }
-/* Admin notices are never hidden (WordPress.org guideline 11: core update prompts and other plugins' warnings must stay
-   visible). Core's common.js moves them into the notice dock the editor prints (Assets::renderNoticeDock()), floated
-   over the builder so they stay readable without changing its full height. */
+/* Admin notices are never hidden (WordPress.org guideline 11). Core's common.js moves them into the notice dock
+   (Assets::renderNoticeDock()), floated over the builder. */
 .fabricator-editor-page .fabricator-notice-dock {
     position: fixed;
     right: 16px;
@@ -1401,12 +1400,8 @@
     outline: none;
 }
 
-/* position:fixed + top/left set by JS (see spInfoIcon in admin-builder.js) —
-   the settings modal has overflow:hidden for its rounded corners, so an
-   absolutely-positioned descendant tooltip gets silently clipped there.
-   Appended directly to <body>, so its z-index must clear .fabricator-modal-backdrop
-   (100000), not just other in-panel content — matches .fabricator-access-dropdown's
-   z-index for the same reason (see FormSettings.php). */
+/* Fixed, positioned by JS and appended to <body> (the modal's overflow:hidden would clip it), so its z-index must
+   clear .fabricator-modal-backdrop, as .fabricator-access-dropdown's does. */
 .fabricator-info-tooltip {
     display: none;
     position: fixed;
@@ -3508,14 +3503,9 @@
     border-radius: 2px;
 }
 
-/* No admin notice is hidden on FormFabricator's screens (WordPress.org guideline 11): core update prompts and other
-   plugins' warnings must stay visible. Core's common.js moves notices into the notice dock on DOM-ready; one that another
-   plugin injects later stays wherever it was put. */
-
 /* ---- Notice dock (Assets::renderNoticeDock()) ----
-   Readable, but deliberately quieter than the page around it: a lighter version of the frosted
-   settings card, a bounded height that scrolls, and compact notices inside. When empty it holds only
-   the hidden anchor and takes no space. */
+   No admin notice is hidden (WordPress.org guideline 11); core moves them here on DOM-ready. Quieter than the page:
+   a lighter frosted card of bounded height that scrolls. Empty, it takes no space. */
 .fabricator-notice-dock {
     flex-shrink: 0;             /* the list and verifier wraps are flex columns and would squeeze it */
     position: relative;
@@ -4191,14 +4181,9 @@
     flex-direction: column;
 }
 
-/* PDF layout, desktop: fit the page to the viewport and let each panel scroll inside it, instead of
-   giving both panels a fixed calc(100vh - 120px). That budget assumed nothing sits between the title
-   pill and the editor, so the notice dock, "Layout saved" and the edit-lock banner all pushed the panels
-   below the fold and gave the whole page a scrollbar. Here the editor takes whatever height is left.
-
-   "not all and (max-width: 1440px)" is the exact complement of the responsive block further down,
-   which deliberately lets this page grow and scroll; min-width: 1441px would leave fractional widths
-   (browser zoom) matched by neither. */
+/* PDF layout, desktop: the page fits the viewport, the editor takes the height left over (notices and banners
+   included), and each panel scrolls inside it. "not all and (max-width: 1440px)" is the exact complement of the
+   responsive block below; min-width: 1441px would miss fractional widths under zoom. */
 @media not all and (max-width: 1440px) {
     .fabricator-list-page .fabricator-list-wrap.wrap.fabricator-pdf-layout-wrap {
         height: calc(100vh - 32px) !important;   /* WP adminbar */
@@ -5037,10 +5022,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     .fabricator-row-actions { opacity: 1; margin-left: auto; }
     #fabricator-field-list { padding: 8px 8px 0 !important; }
 
-    /* Form editor: WP admin bar is 46px on mobile (vs 32px desktop). The editor-page CSS sets
-       overflow:hidden on html/body, suppressing WP's own html{padding-top:46px} clearance — so
-       the editor starts at y=0 and its canvas header (save button + name input) is hidden behind
-       the admin bar. Push the editor down by 46px and shrink its height to match. */
+    /* Form editor: the mobile admin bar is 46px, and overflow:hidden on html/body drops WP's own clearance. */
     #fabricator-editor {
         margin-top: 46px;
         height: calc(100vh - 46px);

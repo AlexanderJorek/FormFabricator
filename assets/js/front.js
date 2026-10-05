@@ -15,7 +15,7 @@
     }
 
     /* ── Field-type init functions ───────────────────────────────────────── */
-    /* Populated by Assets::enqueueFront() from each field's getClientInit(); front.js needs no field-type knowledge. */
+    /* Populated by Assets::frontFieldAssets() from each field's getClientInit(); front.js needs no field-type knowledge. */
 
     /* ── Validator registry ───────────────────────────────────────────────── */
     /* Mirrors each field's PHP validate() — keep both in sync or they'll silently drift. */
@@ -126,14 +126,14 @@
     function initPageBreaks(root) {
         var forms = root.querySelectorAll('.fabricator-form');
         forms.forEach(function (form) {
-            /* Guards against init() running twice on the same form (e.g. script included twice), which would stack a duplicate click listener + step bar. */
+            /* Once per form, even if the script is included twice. */
             if (form.dataset.fabricatorPagesInit) return;
             form.dataset.fabricatorPagesInit = '1';
 
             var pages = Array.from(form.querySelectorAll('.fabricator-form-page'));
             if (!pages.length) return;
 
-            /* Relocate the page-header row to sit before the pages so it stays visible on later pages too (its own init already read its original page position — see PageHeaderField::getClientInit()). */
+            /* The page-header row moves before the pages, to stay visible on every page. */
             var headerEl  = form.querySelector('.fabricator-page-header');
             var headerRow = headerEl && headerEl.closest('.fabricator-row');
             if (headerRow && pages.indexOf(headerRow.parentNode) !== -1) {
@@ -149,10 +149,7 @@
                     p.classList.toggle('fabricator-page-active', i === idx);
                 });
                 if (footer) {
-                    /* A class, not style.display: the submit-button conditions write that same property on this
-                       element, and two writers fought — the button appeared on page 1 as soon as the conditions
-                       matched, and on the last page even while they didn't. Now paging and conditions each own
-                       their own switch and the footer shows only when both allow it. */
+                    /* A class, not style.display, which the submit-button conditions own. */
                     footer.classList.toggle('fabricator-footer-off-page', idx !== pages.length - 1);
                 }
                 if (idx > furthest) furthest = idx;
@@ -183,7 +180,7 @@
                 var shortHeight = document.body.scrollHeight;
                 var gap = tallHeight - shortHeight;
 
-                /* Spacer holds the footer at its current position and shrinks in sync so it descends smoothly instead of snapping to the shorter page height. */
+                /* Spacer that lets the footer descend smoothly to the shorter page's height. */
                 var spacer = document.createElement('div');
                 spacer.style.height = gap + 'px';
                 wrap.parentNode.insertBefore(spacer, wrap.nextSibling);
@@ -258,33 +255,100 @@
             if (form.dataset.fabricatorConditionsInit) return;
             form.dataset.fabricatorConditionsInit = '1';
 
+            /* The conditional elements hidden by the pass being decided; see applyAll(). */
+            var hiddenNow = new Set();
+
+            /* The server compares values after sanitize_text_field() (or the textarea variant), so this mirrors
+               WordPress's _sanitize_text_fields() step by step, checked in condition-parity.test.js. */
+            function phpTrim(s) {
+                return s.replace(/^[ \t\n\r\0\x0B]+|[ \t\n\r\0\x0B]+$/g, '');
+            }
+            function escLikeWp(s) {
+                return s.replace(/&(?![A-Za-z][A-Za-z0-9]*;|#[0-9]+;|#x[0-9A-Fa-f]+;)/g, '&amp;')
+                    .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            }
+            function sanitizeLikeWp(value, keepNewlines) {
+                var s = String(value);
+                if (s.indexOf('<') !== -1) {
+                    s = s.replace(/<[^>]*?((?=<)|>|$)/g, function (m) { return m.indexOf('>') === -1 ? escLikeWp(m) : m; });
+                    s = s.replace(/<(script|style)[^>]*?>[\s\S]*?<\/\1>/gi, '');
+                    s = s.replace(/<!--[\s\S]*?-->/g, '').replace(/<(?![\s<])[^>]*>/g, '');
+                    s = s.split('<\n').join('&lt;\n');
+                }
+                if (!keepNewlines) {
+                    s = s.replace(/[\r\n\t ]+/g, ' ');
+                }
+                s = phpTrim(s);
+                var found = false;
+                var octet;
+                while ((octet = /%[a-f0-9]{2}/i.exec(s)) !== null) {
+                    s = s.split(octet[0]).join('');
+                    found = true;
+                }
+                if (found) {
+                    s = phpTrim(s.replace(/ +/g, ' '));
+                }
+                return s;
+            }
+            function readValue(el) {
+                return sanitizeLikeWp(el.value || '', el.tagName === 'TEXTAREA');
+            }
+
+            /* Inside a conditional element the current pass hides: read as absent (BaseField::hiddenConditionValue()). */
+            function isMasked(el) {
+                var p = el.parentElement;
+                while (p && p !== form) {
+                    if (hiddenNow.has(p)) return true;
+                    p = p.parentElement;
+                }
+                return false;
+            }
+
+            /* Fields without an input named after them, read as BaseField::conditionValue() does: "id[key]" inputs as
+               their non-empty values joined by a space ("_" keys skipped), a CAPTCHA as its reCAPTCHA token. */
+            function getCompositeValue(fieldId) {
+                var prefix = fieldId + '[';
+                var parts  = [];
+                form.querySelectorAll('[name^="' + CSS.escape(prefix) + '"]').forEach(function (el) {
+                    var key = el.name.slice(prefix.length, -1);
+                    if (el.name.slice(-1) !== ']' || key === '' || key.indexOf('[') !== -1 || key.indexOf(']') !== -1) return;
+                    if (key.charAt(0) === '_' || isMasked(el)) return;
+                    var v = readValue(el);
+                    if (v !== '') parts.push(v);
+                });
+                if (parts.length) return parts.join(' ');
+                var wrap = form.querySelector('[data-field-id="' + CSS.escape(fieldId) + '"]');
+                if (wrap && wrap.classList.contains('fabricator-field--captcha') && !isMasked(wrap)) {
+                    var token = wrap.querySelector('[name="g-recaptcha-response"]');
+                    return token ? readValue(token) : '';
+                }
+                return '';
+            }
+
             function getFieldValue(fieldId) {
                 var name = CSS.escape(fieldId);
-                /* CheckboxField uses name="{id}[]"; every other field uses the bare id — match both or checkbox conditions always see an empty value. */
+                /* "{id}[]" for checkboxes, the bare id otherwise. */
                 var all = Array.from(form.querySelectorAll('[name="' + name + '"], [name="' + name + '[]"]'));
-                if (!all.length) return '';
-                /* Treat inputs inside a hidden conditional ancestor as absent */
-                var inputs = all.filter(function (i) {
-                    var p = i.parentElement;
-                    while (p && p !== form) {
-                        if ('conditions' in (p.dataset || {}) && p.style.display === 'none') return false;
-                        p = p.parentElement;
-                    }
-                    return true;
-                });
+                if (!all.length) return getCompositeValue(fieldId);
+                var inputs = all.filter(function (i) { return !isMasked(i); });
                 if (!inputs.length) return all[0].type === 'checkbox' ? [] : '';
                 var first = inputs[0];
+                /* A file input: the number of files chosen, as UploadField::conditionValue() counts them. */
+                if (first.type === 'file') {
+                    var n = first.files ? first.files.length : 0;
+                    return n > 0 ? String(n) : '';
+                }
                 if (first.type === 'radio') {
                     var chk = inputs.find(function (i) { return i.checked; });
-                    return chk ? chk.value : '';
+                    return chk ? readValue(chk) : '';
                 }
                 if (first.type === 'checkbox') {
-                    return inputs.filter(function (i) { return i.checked; }).map(function (i) { return i.value; });
+                    return inputs.filter(function (i) { return i.checked; }).map(readValue);
                 }
                 if (first.tagName === 'SELECT' && first.multiple) {
-                    return Array.from(first.selectedOptions).map(function (o) { return o.value; });
+                    return Array.from(first.selectedOptions).map(readValue);
                 }
-                return first.value;
+                return readValue(first);
             }
 
             /* The shape PHP's is_numeric() accepts, so both sides agree on what counts as a number. */
@@ -320,16 +384,33 @@
                 }
             }
 
+            /* A hidden field reads as empty, which can change another. From "all visible", passes repeat until nothing
+               changes, at most MAX_PASSES, exactly as FormProcessor::resolveVisibility(). */
+            var MAX_PASSES = 64; /* FormProcessor::MAX_CONDITION_PASSES */
+
             function applyAll() {
+                var targets = [];
                 form.querySelectorAll('[data-conditions]').forEach(function (el) {
                     var cond;
                     try { cond = JSON.parse(el.dataset.conditions); } catch (_) { return; }
-                    var rules = cond.rules || [];
-                    if (!rules.length) return;
-                    var pass = cond.match === 'any'
-                        ? rules.some(testRule)
-                        : rules.every(testRule);
-                    el.style.display = (cond.action === 'hide' ? !pass : pass) ? '' : 'none';
+                    if (!cond || !(cond.rules || []).length) return;
+                    targets.push({ el: el, cond: cond });
+                });
+                hiddenNow = new Set();
+                for (var pass = 0; pass < MAX_PASSES; pass++) {
+                    var next = new Set();
+                    targets.forEach(function (t) {
+                        var rules = t.cond.rules;
+                        var match = t.cond.match === 'any' ? rules.some(testRule) : rules.every(testRule);
+                        if (t.cond.action === 'hide' ? match : !match) next.add(t.el);
+                    });
+                    var settled = next.size === hiddenNow.size
+                        && Array.from(next).every(function (el) { return hiddenNow.has(el); });
+                    hiddenNow = next;
+                    if (settled) break;
+                }
+                targets.forEach(function (t) {
+                    t.el.style.display = hiddenNow.has(t.el) ? 'none' : '';
                 });
             }
 
@@ -348,9 +429,7 @@
             if (form.dataset.fabricatorFormsInit) return;
             form.dataset.fabricatorFormsInit = '1';
 
-            /* Rendered disabled (see FormRenderer.php) so a JS-disabled/blocked visitor can't
-               trigger a native POST with an empty nonce field — enabled here now that the
-               submit handler below is actually attached. */
+            /* Rendered disabled, so no native POST happens without JS; enabled once the handler is attached. */
             var initialSubmitBtn = form.querySelector('.fabricator-submit-btn');
             if (initialSubmitBtn) initialSubmitBtn.disabled = false;
 
@@ -385,9 +464,7 @@
                     return;
                 }
 
-                /* Cross-field file count guard.
-                   Sums data-fabricator-file-count across all file-bearing elements.
-                   phpMax reflects PHP's max_file_uploads limit (set via data-max-files). */
+                /* Total file count across fields, against PHP's max_file_uploads (data-max-files). */
                 var overflowDetected = false;
                 (function () {
                     var counters = form.querySelectorAll('[data-fabricator-file-count]');
@@ -482,18 +559,13 @@
                                 || 'Thank you!';
                             msgBox.style.display = '';
                         }
-                        form.reset();
-                        form.dispatchEvent(new Event('change'));
-                        form.dispatchEvent(new Event('fabricator:reset'));
-                        /* Re-init dynamic fields after reset */
-                        var fi = window.FabricatorFieldInits || {};
-                        Object.keys(fi).forEach(function (t) { fi[t](form); });
+                        resetForm(form);
                         /* Scroll to form top so the success message is in view */
                         var scrollTarget = wrap || form;
                         var scrollTop = scrollTarget.getBoundingClientRect().top + window.pageYOffset - 20;
                         window.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' });
 
-                        /* Clear fabricatorSubmitted once the visitor edits the reset form, or a genuinely new entry stays silently blocked until reload. */
+                        /* Editing the reset form clears fabricatorSubmitted, so a new entry can be sent. */
                         if (btn) {
                             var rearmSubmit = function () {
                                 delete btn.dataset.fabricatorSubmitted;
@@ -550,6 +622,9 @@
 
     /* A used or expired token can't be sent again, so every failed submission clears the widget for a fresh one. */
     function resetCaptchas(form) {
+        form.querySelectorAll('altcha-widget').forEach(function (widget) {
+            if (typeof widget.reset === 'function') widget.reset();
+        });
         if (!window.grecaptcha || !window.grecaptcha.reset) return;
         form.querySelectorAll('.fabricator-captcha-gate[data-fabricator-captcha-widget]').forEach(function (gate) {
             try { window.grecaptcha.reset(Number(gate.dataset.fabricatorCaptchaWidget)); } catch (_) { /* widget gone */ }
@@ -633,7 +708,7 @@
 
     function init(root) {
         root = root || document;
-        /* Guards the whole boot sequence against running twice on the document. Field getClientInit() functions must be idempotent anyway (initForms() re-runs them after every successful submit); this keeps the other boot steps from binding twice. */
+        /* Boots once per document. Field inits must be idempotent anyway: initForms() re-runs them after each submit. */
         if (root === document && window.__fabricatorFrontInited) return;
         if (root === document) window.__fabricatorFrontInited = true;
 
@@ -704,9 +779,19 @@
     }
 
     /* Resets stale submitted/message state after a bfcache restore; named so tests can call it directly. */
+    /* Clears a form for the next entry, after a send or a back/forward-cache restore. form.reset() fires no event, so
+       this dispatches change and fabricator:reset for the widgets and conditions, and re-runs the field inits. */
+    function resetForm(form) {
+        form.reset();
+        form.dispatchEvent(new Event('change'));
+        form.dispatchEvent(new Event('fabricator:reset'));
+        var fi = window.FabricatorFieldInits || {};
+        Object.keys(fi).forEach(function (t) { fi[t](form); });
+    }
+
     function resetFormsOnBfcacheRestore() {
         document.querySelectorAll('.fabricator-form').forEach(function (form) {
-            form.reset();
+            resetForm(form);
             var btn = form.querySelector('.fabricator-submit-btn');
             if (btn) delete btn.dataset.fabricatorSubmitted;
             var wrap   = form.closest('.fabricator-form-wrap');

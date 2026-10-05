@@ -40,8 +40,13 @@
                         var show  = !q || title.indexOf(q) !== -1;
                         row.hidden = !show;
                         if (show) visible++;
+                        /* A bulk action works on what the admin can see: a row the search hides is unticked. */
+                        var rowCb = show ? null : row.querySelector('.fabricator-row-check');
+                        if (rowCb) rowCb.checked = false;
                     });
                     if (noResults) noResults.hidden = visible > 0;
+                    if (selectAll) selectAll.checked = false;
+                    updateBulkBar();
                 });
             }
 

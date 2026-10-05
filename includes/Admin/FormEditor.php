@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -31,9 +31,8 @@ use FabricatorForms\Fields\FieldRegistry;
  */
 class FormEditor
 {
-    /* Field types that may never be a group child. Mirrors NO_GROUP_TYPES in
-       admin-builder.js; enforced server-side in sanitizeFields(), because a crafted save
-       or an imported form is not the builder. */
+    /* Field types that may never be a group child. Mirrors NO_GROUP_TYPES in admin-builder.js; enforced in
+       sanitizeFields() for crafted saves and imports. */
     private const NO_GROUP_TYPES = ['group', 'pagebreak', 'page-header'];
 
     /**
@@ -160,7 +159,7 @@ class FormEditor
             \wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
-        // build.ps1 strips the perf-overlay script from release packages, so gate the toolbar button on the file existing — else a shipped copy with WP_DEBUG on renders a 404 button.
+        // Release packages leave the perf-overlay script out, so the button needs the file to exist.
         $perf_mode   = defined('WP_DEBUG') && WP_DEBUG && current_user_can('manage_options')
             && file_exists(FABRICATOR_FORMS_PATH . 'assets/js/fabricator-perf-debug.js');
         $perf_start  = $perf_mode ? microtime(true) : 0.0;
@@ -205,11 +204,12 @@ class FormEditor
         \wp_enqueue_script('heartbeat');
 
         $nonce    = \wp_create_nonce('fabricator_forms_admin_nonce');
-        $data_form    = \wp_json_encode($form_data, JSON_HEX_APOS | JSON_HEX_QUOT);
-        $data_palette = \wp_json_encode($palette, JSON_HEX_APOS | JSON_HEX_QUOT);
+        // Cast::jsonForAttribute(): without JSON_HEX_AMP an escaped "&lt;b&gt;" in a text came back as real markup.
+        $data_form    = \FabricatorForms\Utils\Cast::jsonForAttribute($form_data);
+        $data_palette = \FabricatorForms\Utils\Cast::jsonForAttribute($palette);
         $ajax_url     = \esc_attr(\admin_url('admin-ajax.php'));
 
-        // Safe to localize the 'fabricator-forms-builder' handle here: admin_enqueue_scripts (where Assets::enqueueAdmin() registers it) always fires before this render() callback.
+        // admin_enqueue_scripts, where the handle is registered, always fires before render().
         \wp_localize_script('fabricator-forms-builder', 'FabricatorBuilderI18n', self::builderI18n());
         \wp_localize_script(
             'fabricator-forms-editor-lock',
@@ -362,75 +362,18 @@ class FormEditor
             \wp_send_json_error(['message' => __('Form not found.', 'formfabricator')], 404);
         }
 
-        /* Collect all field-specific CSS (mirrors Assets::enqueueFront). */
-        $field_css = [];
-        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $class) {
-            $css = trim((new $class())->getStyles());
-            if ($css !== '') {
-                $field_css[] = $css;
-            }
-        }
-
-        /* Collect FabricatorFieldInits. */
-        $inits = [];
-        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
-            $fn = (new $class())->getClientInit();
-            if ($fn !== '') {
-                $inits[] = \wp_json_encode($type) . ':' . trim($fn);
-            }
-        }
-
-        /* Collect FabricatorValidators. */
-        $pairs = [];
-        $seen  = [];
-        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $class) {
-            foreach ((new $class())->getClientValidation() as $entry) {
-                $rule = $entry['rule'] ?? '';
-                $fn   = $entry['fn']   ?? '';
-                if ($rule === '' || $fn === '' || isset($seen[$rule])) {
-                    continue;
-                }
-                $seen[$rule] = true;
-                $pairs[]     = \wp_json_encode($rule) . ':' . trim($fn);
-            }
-        }
-
-        /* Collect FabricatorEmptyChecks. */
-        $empty_checks = [];
-        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
-            $entry = (new $class())->getClientEmptyCheck();
-            if (!empty($entry['fn'])) {
-                $empty_checks[] = \wp_json_encode($type) . ':' . trim($entry['fn']);
-            }
-        }
-
-        /* Collect FabricatorSkipValidation. */
-        $skip = [];
-        foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
-            if ((new $class())->skipValidation()) {
-                $skip[] = \wp_json_encode($type);
-            }
-        }
+        /* Exactly what a page with a form gets (Assets::frontFieldAssets() and the front-end localization), except
+           ajaxUrl: the preview never submits. */
+        $front_assets = \FabricatorForms\Utils\Assets::frontFieldAssets();
+        $field_css    = [$front_assets['css']];
 
         $css_url = \FABRICATOR_FORMS_URL . 'assets/css/front.css';
 
-        $globals = 'window.FabricatorForms={'
-            . 'ajaxUrl:"",'
-            // Single source of truth for per-country IBAN length lives in SepaField::IBAN_LEN.
-            . 'ibanLen:' . \wp_json_encode(\FabricatorForms\Fields\SepaField::IBAN_LEN) . ','
-            . 'i18n:{submitting:' . \wp_json_encode(__('Sending…', 'formfabricator')) . ',error_server:' . \wp_json_encode(__('Server error.', 'formfabricator')) . '}'
-            . '};';
-        if (!empty($inits)) {
-            $globals .= 'window.FabricatorFieldInits={' . implode(',', $inits) . '};';
-        }
-        if (!empty($pairs)) {
-            $globals .= 'window.FabricatorValidators={' . implode(',', $pairs) . '};';
-        }
-        if (!empty($empty_checks)) {
-            $globals .= 'window.FabricatorEmptyChecks={' . implode(',', $empty_checks) . '};';
-        }
-        if (!empty($skip)) {
-            $globals .= 'window.FabricatorSkipValidation=[' . implode(',', $skip) . '];';
+        $localization            = \FabricatorForms\Utils\Assets::frontLocalization();
+        $localization['ajaxUrl'] = '';
+        $globals                 = 'window.FabricatorForms=' . \wp_json_encode($localization) . ';';
+        foreach ($front_assets['globals'] as $global_name => $literal) {
+            $globals .= 'window.' . $global_name . '=' . $literal . ';';
         }
 
         $toolbar_css = '
@@ -493,7 +436,7 @@ class FormEditor
             . '}'
             . $toolbar_css;
 
-        // Fresh, isolated WP_Styles/WP_Scripts instances scoped to only this preview's assets, since the global registries can't be reused without dragging in the whole builder page.
+        // Own WP_Styles/WP_Scripts, so the builder page's global registries stay out of the preview.
         $preview_styles = new \WP_Styles();
         $preview_styles->add(
             'fabricator-preview-fontawesome',
@@ -608,8 +551,8 @@ class FormEditor
             wp_set_post_lock($result);
 
             /* Keys are scoped to this form's own notifications, so the narrower 'edit_forms' gate is safe here. */
-            // Under OptionMutex: every form's flags live in this one option, and an unlocked read-modify-write let a form saved
-            // at the same moment undo this save's attach-PDF flags (or the other way round) without any error.
+            // Under OptionMutex: every form's flags live in this one option, and an unlocked read-modify-write would let a form
+            // saved at the same moment undo this save's attach-PDF flags (or the other way round) without any error.
             \FabricatorForms\Utils\OptionMutex::run(
                 'fabricator_forms_pdf_settings',
                 static function () use ($result, $sanitized_notifications): void {
@@ -617,7 +560,7 @@ class FormEditor
                     if (!is_array($pdf_settings)) {
                         $pdf_settings = [];
                     }
-                    // Rebuild THIS form's keys rather than only adding: a renamed/deleted notification would otherwise leave its "<form_id>|<slug>" entry behind forever.
+                    // Rebuilt, not added to, so a removed notification's "<form_id>|<slug>" entry goes too.
                     $prefix = $result . '|';
                     foreach (array_keys($pdf_settings) as $existing_key) {
                         if (strncmp((string) $existing_key, $prefix, strlen($prefix)) === 0) {
@@ -641,11 +584,24 @@ class FormEditor
                 'message'  => __('Form saved.', 'formfabricator'),
                 'form_id'  => $result,
                 'snapshot' => FormModel::snapshot((int) $result),
-                // Saved either way; but FormProcessor refuses a form with nowhere to send it, so say so now, not at submit time.
-                'warning'  => \FabricatorForms\Form\MailSender::hasEnabledNotification($sanitized_notifications)
-                    || apply_filters('fabricator_forms_accept_without_notifications', false, (int) $result)
-                    ? ''
-                    : __('This form has no active notification, so visitors cannot send it. Add or enable a notification in the notification settings of this form.', 'formfabricator'),
+                // Saved either way; but a form with nowhere to send it is refused by FormProcessor, and a mandate without
+                // wording takes no details, so say so now, not when a visitor finds out.
+                'warning'  => trim(
+                    (\FabricatorForms\Form\MailSender::hasEnabledNotification($sanitized_notifications)
+                        || apply_filters('fabricator_forms_accept_without_notifications', false, (int) $result)
+                        ? ''
+                        : __('This form has no active notification, so visitors cannot send it. Add or enable a notification in the notification settings of this form.', 'formfabricator'))
+                    . ' '
+                    . (self::hasMandateWithoutWording($sanitized_fields)
+                        ? __('A Direct Debit Mandate has no mandate text, so visitors cannot give it. Enter the text your bank or payment provider requires in the field\'s settings.', 'formfabricator')
+                        : '')
+                    . ' '
+                    . self::mandateElementsWarning($sanitized_fields)
+                    . ' '
+                    . self::consentPlaceholderWarning($sanitized_fields)
+                    . ' '
+                    . self::signatureDeliveryWarning((int) $result, $sanitized_fields, $sanitized_notifications)
+                ),
                 ]
             );
         } catch (\Throwable $e) {
@@ -667,12 +623,117 @@ class FormEditor
     private const RESERVED_FIELD_IDS = ['action', 'form_id', 'fabricator_nonce', 'fabricator_submission_token', 'fabricator_hp_field'];
 
     /**
+     * The save warning for notifications whose email would carry no signature image, or ''.
+     *
+     * @param int   $form_id       The saved form.
+     * @param array $fields        Sanitized fields.
+     * @param array $notifications Sanitized notifications.
+     * @return string
+     */
+    private static function signatureDeliveryWarning(int $form_id, array $fields, array $notifications): string
+    {
+        $without = \FabricatorForms\Form\MailSender::notificationsWithoutSignatures($form_id, $fields, $notifications);
+        if ($without === []) {
+            return '';
+        }
+        return sprintf(
+            /* translators: %s: notification names, comma-separated. */
+            __('Signatures reach recipients only in the attached PDF, if the PDF Layout shows them, or with "Attach uploaded files". These notifications have neither, so their email only says a signature is present: %s.', 'formfabricator'),
+            implode(', ', $without)
+        );
+    }
+
+    /**
+     * Whether any Direct Debit Mandate in the form, also inside a group, has no wording and so takes no details
+     * (DirectDebitField::lacksWording()).
+     *
+     * @param array $fields Sanitized fields, as sanitizeFields() returns them.
+     * @return bool
+     */
+    private static function hasMandateWithoutWording(array $fields): bool
+    {
+        foreach ($fields as $field) {
+            if (!is_array($field)) {
+                continue;
+            }
+            if (($field['type'] ?? '') === 'directdebit' && \FabricatorForms\Fields\DirectDebitField::lacksWording($field)) {
+                return true;
+            }
+            if (is_array($field['children'] ?? null) && self::hasMandateWithoutWording($field['children'])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The save warning for Direct Debit Mandates that lack what a bank needs to collect
+     * (DirectDebitField::missingMandateElements()), or ''.
+     *
+     * @param array $fields Sanitized fields, as sanitizeFields() returns them.
+     * @return string
+     */
+    private static function mandateElementsWarning(array $fields): string
+    {
+        $missing = [];
+        $walk    = static function (array $fields) use (&$walk, &$missing): void {
+            foreach ($fields as $field) {
+                if (!is_array($field)) {
+                    continue;
+                }
+                if (($field['type'] ?? '') === 'directdebit' && !\FabricatorForms\Fields\DirectDebitField::lacksWording($field)) {
+                    $missing = array_merge($missing, \FabricatorForms\Fields\DirectDebitField::missingMandateElements($field));
+                }
+                if (is_array($field['children'] ?? null)) {
+                    $walk($field['children']);
+                }
+            }
+        };
+        $walk($fields);
+        if ($missing === []) {
+            return '';
+        }
+        return sprintf(
+            /* translators: %s: what the mandate leaves out, comma-separated, e.g. "Creditor name, Mandate reference". */
+            __('A Direct Debit Mandate does not name: %s. Visitors give bank details without knowing who collects, and banks cannot use it. Enter them in the field\'s settings, or ignore this if the mandate text names them.', 'formfabricator'),
+            implode(', ', array_unique($missing))
+        );
+    }
+
+    /**
+     * The save warning for a Consent field still showing its placeholder text, or ''. That text names no purpose and
+     * no way to withdraw, so the consent would not be valid (GDPR Art. 7(3), 4(11)).
+     *
+     * @param array $fields Sanitized fields, as sanitizeFields() returns them.
+     * @return string
+     */
+    private static function consentPlaceholderWarning(array $fields): string
+    {
+        $found = false;
+        $walk  = static function (array $fields) use (&$walk, &$found): void {
+            foreach ($fields as $field) {
+                if (!is_array($field)) {
+                    continue;
+                }
+                if (($field['type'] ?? '') === 'consent' && \FabricatorForms\Fields\ConsentField::usesPlaceholderText($field)) {
+                    $found = true;
+                }
+                if (is_array($field['children'] ?? null)) {
+                    $walk($field['children']);
+                }
+            }
+        };
+        $walk($fields);
+        $message = __('A Consent field still shows its placeholder text, which names no purpose and no way to withdraw, so it is not valid consent. Write what the visitor agrees to and how they can withdraw it.', 'formfabricator');
+        return $found ? $message : '';
+    }
+
+    /**
      * Returns an error listing the field IDs a form can't use, or '' when every ID is usable.
      *
-     * The builder's letters/digits/hyphen rule (admin-builder.js) is client-side only, so an imported or hand-crafted
-     * form could carry a duplicate ID, a name the form posts itself ("action"), or characters PHP rewrites in POST keys
-     * ("." and spaces become "_"). That broke the nonce or routing, emptied values, or let one field's input satisfy
-     * another field's required or consent check. Group children share the POST namespace with top-level fields.
+     * The builder's ID rule is client-side only, so an import could carry a duplicate ID, a name the form posts itself
+     * ("action"), or characters PHP rewrites in POST keys, letting one field's input satisfy another's checks. Group
+     * children share the POST namespace with top-level fields.
      *
      * @param array $fields Sanitized fields, as sanitizeFields() returns them.
      * @return string Translated error message, or ''.
@@ -689,8 +750,8 @@ class FormEditor
                 $id = (string) ($field['id'] ?? '');
                 if ($id !== '') {
                     $ids[] = $id;
-                    // SEPA posts its signature under "<id>-sig"; a field with that ID would replace the mandate's signature.
-                    if (($field['type'] ?? '') === 'sepa') {
+                    // A direct debit mandate posts its signature under "<id>-sig"; a field with that ID would replace it.
+                    if (($field['type'] ?? '') === 'directdebit') {
                         $reserved[$id . '-sig'] = true;
                     }
                 }
@@ -747,16 +808,14 @@ class FormEditor
             $f = [];
             foreach ($field as $k => $v) {
                 $sk = \sanitize_key($k);
-                // A structural or label key is always text. An array here (a crafted save or import) used to be kept as an
-                // array, and the PDF template's typed label then threw a TypeError on every submission of the form.
+                // A structural or label key is always text. An array here (a crafted save or import) would reach the PDF
+                // template's typed label and throw a TypeError on every submission of the form.
                 if (in_array($sk, $plaintext_keys, true) && !is_string($v)) {
                     $f[$sk] = is_scalar($v) ? \sanitize_text_field((string) $v) : '';
                     continue;
                 }
-                // Every other key keeps the kind of value its field declares by default: a list where the default is a
-                // list, a single value where it is one. An array under a single-value key (an imported form's "min", say)
-                // reached esc_attr(), esc_url() or trim() when the form was shown and threw a TypeError, taking down
-                // every page that shows the form. The wrong kind is replaced with the field's default and sanitized on.
+                // Every other key keeps the kind of value (list or single) its default has; an array under a
+                // single-value key would throw a TypeError on render. The wrong kind gets the default.
                 if (array_key_exists($sk, $defaults)) {
                     if (is_array($defaults[$sk]) !== is_array($v)) {
                         $v = $defaults[$sk];
@@ -767,18 +826,18 @@ class FormEditor
                 if (is_string($v)) {
                     $f[$sk] = in_array($sk, $plaintext_keys, true)
                         ? \sanitize_text_field($v)
-                        // $sk, not $k: matching on the raw key would miss e.g. "Mandate_Title" against handlers' lowercased plainTextConfigKeys() and double-encode it as HTML.
+                        // $sk, not $k: plainTextConfigKeys() are lowercase.
                         : ($handler ? $handler->sanitizeConfigValue($sk, $v) : \FabricatorForms\Utils\HtmlSanitizer::sanitize($v));
                 } elseif (is_bool($v) || is_int($v) || is_float($v)) {
                     $f[$sk] = $v;
                 } elseif (is_array($v)) {
-                    // 'conditions'/'children' need purpose-built sanitizers — sanitizeArrayValue()'s HTML sanitizer would break condition matching against sanitize_text_field()'d options.
+                    // 'conditions'/'children' need their own sanitizers; HTML-sanitized rules would stop matching options.
                     if ($sk === 'conditions') {
                         $f[$sk] = self::sanitizeConditions($v);
                     } elseif ($sk === 'children') {
                         $f[$sk] = self::sanitizeFields($v, $depth + 1);
                     } else {
-                        // Needs the same plain-text/HTML split sanitizeConfigValue() applies to strings, else the HTML sanitizer double-encodes textContent-rendered values like page_names.
+                        // The same plain-text/HTML split as sanitizeConfigValue().
                         $f[$sk] = self::sanitizeArrayValue(
                             $v,
                             0,
@@ -789,13 +848,26 @@ class FormEditor
             }
             if (isset($f['options']) && is_array($f['options'])) {
                 $clean_opts = [];
+                $seen       = [];
                 foreach ($f['options'] as $opt) {
                     if (!is_array($opt)) {
                         continue;
                     }
+                    $label = \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($opt['label'] ?? ''));
+                    $value = \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($opt['value'] ?? ''));
+                    // A value is what the form posts and what rules, routing and the email compare: never empty (an
+                    // option valued "" could not satisfy "required"), never shared (two options became one).
+                    if ($value === '') {
+                        $value = self::optionValueFromLabel($label, count($clean_opts) + 1);
+                    }
+                    $base = $value;
+                    for ($n = 2; isset($seen[$value]); $n++) {
+                        $value = $base . '-' . $n;
+                    }
+                    $seen[$value] = true;
                     $clean_opts[] = [
-                        'value'   => \sanitize_text_field($opt['value'] ?? ''),
-                        'label'   => \sanitize_text_field($opt['label'] ?? ''),
+                        'value'   => $value,
+                        'label'   => $label,
                         'default' => !empty($opt['default']),
                     ];
                 }
@@ -807,7 +879,22 @@ class FormEditor
     }
 
     /**
-     * Sanitizes a field-id reference; must match sanitizeFields()'s id sanitization exactly — sanitize_key() lowercases and broke mixed-case ids.
+     * An option value for an option saved without one: the builder's slugify() of its label, or "option-N" when
+     * nothing ASCII is left. Not sanitize_title(), whose percent-encoding the submitted value would lose.
+     *
+     * @param string $label    Sanitized option label.
+     * @param int    $position 1-based position of the option.
+     * @return string
+     */
+    private static function optionValueFromLabel(string $label, int $position): string
+    {
+        $ascii = function_exists('remove_accents') ? \remove_accents($label) : $label;
+        $slug  = trim((string) preg_replace('/-{2,}/', '-', (string) preg_replace('/[^a-z0-9-]/', '', (string) preg_replace('/\s+/', '-', strtolower($ascii)))), '-');
+        return $slug !== '' ? $slug : 'option-' . $position;
+    }
+
+    /**
+     * Sanitizes a field-id reference; must match sanitizeFields()'s id sanitization exactly — sanitize_key() lowercases, which breaks mixed-case ids.
      *
      * @param mixed $raw Raw field-id reference from the builder payload.
      * @return string Sanitized field-id reference.
@@ -895,7 +982,7 @@ class FormEditor
                     'field_id' => self::sanitizeFieldRef($rule['field_id'] ?? null),
                     'operator' => \sanitize_key(\FabricatorForms\Utils\Cast::stringOrDefault($rule['operator'] ?? 'equals', 'equals')),
                     'value'    => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['value'] ?? '')),
-                    // May be a literal address or a {field_id}/{admin_email} placeholder resolved at send time — sanitize_email() would strip the braces, so keep as plain text.
+                    // An address or a placeholder, whose braces sanitize_email() would strip.
                     'email'    => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['email'] ?? '')),
                     'cc'       => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['cc'] ?? '')),
                     'bcc'      => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['bcc'] ?? '')),
@@ -919,7 +1006,7 @@ class FormEditor
                 /* Body is always HTML, authored via the Visual or Code view. */
                 'body'             => self::sanitizeEmailBody(\FabricatorForms\Utils\Cast::stringOrDefault($n['body'] ?? '')),
                 'from_name'        => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['from_name']  ?? '')),
-                'from_email'       => self::sanitizeAddressOrPlaceholder(\FabricatorForms\Utils\Cast::stringOrDefault($n['from_email'] ?? '')),
+                'from_email'       => self::sanitizeFromEmail(\FabricatorForms\Utils\Cast::stringOrDefault($n['from_email'] ?? '')),
                 'cc'               => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['cc']         ?? '')),
                 'bcc'              => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['bcc']        ?? '')),
                 'attach_pdf'       => !empty($n['attach_pdf']),
@@ -931,16 +1018,16 @@ class FormEditor
     }
 
     /**
-     * A single address, or a single {placeholder} MailSender resolves and validates at send time. sanitize_email() alone
-     * stripped the braces, so the default {admin_email} was saved as the non-address "admin_email".
+     * A fixed address, or {admin_email}. Never a form field: mail from a visitor's domain can be silently discarded
+     * under DMARC, losing the submission. Anything else is dropped, and the site's sender applies.
      *
      * @param string $raw Raw sender value from the builder.
-     * @return string Sanitized address or placeholder.
+     * @return string Sanitized address, '{admin_email}', or '' for the site's sender.
      */
-    private static function sanitizeAddressOrPlaceholder(string $raw): string
+    private static function sanitizeFromEmail(string $raw): string
     {
         $raw = trim($raw);
-        if (preg_match('/^\{[A-Za-z0-9_-]+\}$/', $raw)) {
+        if ($raw === '{admin_email}') {
             return $raw;
         }
         return \sanitize_email($raw);
@@ -959,10 +1046,14 @@ class FormEditor
             $out     = '';
             $offset  = 0;
             $removed = 0;
+            // Latched: with no closing tag after one opener there is none after any later one, so the search to the end
+            // runs once. Searched again for every unclosed opener, a body of them took seconds (400 KB: 6.5 s).
+            $no_close = false;
             while (preg_match('/<' . $tag . '\b/i', $html, $m, PREG_OFFSET_CAPTURE, $offset) === 1) {
                 $start = $m[0][1];
                 $out  .= substr($html, $offset, $start - $offset);
-                $close = stripos($html, '</' . $tag, $start);
+                $close = $no_close ? false : stripos($html, '</' . $tag, $start);
+                $no_close = $close === false;
                 $gt    = strpos($html, '>', $close !== false ? $close : $start);
                 $offset = $gt === false ? strlen($html) : $gt + 1;
                 $removed++;
@@ -999,11 +1090,9 @@ class FormEditor
         return [
             'submit_label'      => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($settings['submit_label']    ?? '', __('Submit', 'formfabricator'))),
             'submit_working'    => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($settings['submit_working']   ?? '', __('Sending…', 'formfabricator'))),
-            // sanitize_textarea_field(), not wp_kses_post(): both paths render via .textContent (front.css keeps its line breaks), and wp_kses_post() broke plain "&" into "&amp;".
+            // Plain text: it is shown via .textContent.
             'success_message'   => \sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault($settings['success_message'] ?? '', __('Thank you!', 'formfabricator'))),
-            // No 'enabled' flag: having rules is what switches this on, which is also what the builder's badge shows.
-            // A stored flag nothing reads reads like a kill switch that does nothing — how the whole setting came to
-            // be inert in the first place.
+            // No 'enabled' flag: having rules switches this on.
             'submit_conditions' => [
                 'match'   => in_array($settings['submit_conditions']['match'] ?? '', ['all', 'any'], true)
                     ? $settings['submit_conditions']['match'] : 'all',
@@ -1022,9 +1111,7 @@ class FormEditor
     {
         $before = $html;
 
-        // Active/embeddable content has no legitimate use in an email body and some webmail/desktop clients render it,
-        // so whole elements go, not just attributes. A linear scan: the former unrolled-loop regexes backtracked
-        // quadratically over a body with many unclosed openers.
+        // Embeddable content has no place in an email body, so whole elements go, by a linear scan.
         $html = self::stripElements($html, ['iframe', 'object']);
 
         // No regex below scans unboundedly from a point that may never match: each anchors on a fixed token.
@@ -1036,9 +1123,7 @@ class FormEditor
             // Meta refresh is a classic open-redirect/auto-navigate vector in
             // rendered HTML mail and has no legitimate use in a notification body.
             'meta-refresh'  => '/<meta\b[^>]*http-equiv\s*=\s*["\']?\s*refresh[^>]*>/i',
-            // HTML5 allows "/" as an attribute boundary (e.g. <img/onerror=...>),
-            // not just whitespace — match both so this can't be sidestepped.
-            // Lookbehind rather than a leading [\s\/]+, which restarted over every position of a long whitespace run.
+            // "/" is an attribute boundary too (<img/onerror=...>). A lookbehind, so long whitespace runs don't backtrack.
             'event-handlers' =>
                 '/(?<=[\s\/])on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/i',
             'js-uris'
@@ -1105,7 +1190,7 @@ class FormEditor
                 $decoded = html_entity_decode($val, ENT_QUOTES | ENT_HTML5, 'UTF-8');
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- hardcoded literal pattern stripping CSS comments from the decoded value; no /e modifier.
                 $decoded = preg_replace('#/\*.*?\*/#s', '', $decoded);
-                // Browsers strip ASCII tab/CR/LF before parsing a URL scheme, so "jav\tascript:" still executes — strip these before the keyword check.
+                // Browsers ignore tab/CR/LF in a URL scheme ("jav\tascript:").
                 $decoded = str_replace(["\t", "\n", "\r"], '', (string) $decoded);
                 if (preg_match('/javascript\s*:|vbscript\s*:/i', $decoded)) {
                     \FabricatorForms\fabricator_log(
@@ -1139,7 +1224,7 @@ class FormEditor
             }
         }
 
-        // Layer 2: wp_kses() allow-list, defense-in-depth on top of the regex passes above; DOCTYPE is preserved explicitly since wp_kses doesn't recognize it as a tag.
+        // Layer 2: wp_kses() allow-list. DOCTYPE is kept by hand, as wp_kses doesn't know it.
         $doctype = '';
         if (preg_match('/^\s*<!DOCTYPE[^>]*>/i', $html, $dm)) {
             $doctype = $dm[0];
@@ -1240,7 +1325,7 @@ class FormEditor
             'noscript' => [],
         ];
 
-        // Must hook 'safe_style_css' (allowed-property list), not 'safecss_filter_attr_allow_css' (per-declaration bool verdict) — an array-typed callback there throws a TypeError.
+        // 'safe_style_css' takes the property list; 'safecss_filter_attr_allow_css' would pass a bool.
         $allow_email_css = static function (array $allowed_properties): array {
             return array_unique(
                 array_merge(
@@ -1259,7 +1344,7 @@ class FormEditor
                 )
             );
         };
-        // finally: a throw inside wp_kses() (which runs other plugins' filters) must not strand this closure on the global hook for the rest of the request.
+        // Removed in finally, so a throw inside wp_kses() can't leave it hooked.
         \add_filter('safe_style_css', $allow_email_css);
         try {
             $html = \wp_kses($html, $allowed_email_tags);
@@ -1342,7 +1427,7 @@ class FormEditor
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- hardcoded literal pattern stripping CSS comments; no /e modifier.
         $css = (string) preg_replace('#/\*.*?\*/#s', '', $css);
 
-        // Resolve CSS identifier escapes before any keyword match: a browser reads "@\69 mport"/"expr\65 ssion(" as their unescaped spellings, so matching literal text alone left bypasses.
+        // CSS escapes first: a browser reads "@\69 mport" as "@import".
         $css = self::decodeCssEscapes($css);
 
         // @import pulls a remote stylesheet — a tracking/exfiltration vector in mail, and the
@@ -1420,7 +1505,7 @@ class FormEditor
                 'submitWorking'    => __('Sending…', 'formfabricator'),
                 'successMessage'   => __('Thank you for your submission!', 'formfabricator'),
 
-                /* Builder labels that used to be hard-coded German in admin-builder.js */
+                /* Labels admin-builder.js shows */
                 // translators: %d: running number of the notification being added.
                 'notificationName'    => __('Notification %d', 'formfabricator'),
                 'notificationSubject' => __('New Entry: {form_title}', 'formfabricator'),
@@ -1456,7 +1541,8 @@ class FormEditor
                 /* Field list / rows */
                 'noFieldsFound'       => __('No fields found.', 'formfabricator'),
                 'noFieldsYetTitle'    => __('No fields yet', 'formfabricator'),
-                'addFirstFieldHtml'   => __('Add your first field via', 'formfabricator'),
+                // translators: %s: the "Add field" button's name, shown in bold (substituted client-side).
+                'addFirstFieldHtml'   => __('Add your first field via %s', 'formfabricator'),
                 'noLabel'             => __('(no label)', 'formfabricator'),
                 'edit'                => __('Edit', 'formfabricator'),
                 'duplicate'           => __('Duplicate', 'formfabricator'),
@@ -1502,7 +1588,8 @@ class FormEditor
                 'removeAriaLabel' => __('Remove', 'formfabricator'),
                 'wholeValues'     => __('Whole values', 'formfabricator'),
                 'halfValues'      => __('Half values', 'formfabricator'),
-                'pagePrefix'         => __('Page ', 'formfabricator'),
+                // translators: %d: page number (substituted client-side).
+                'pageNumber'         => __('Page %d', 'formfabricator'),
                 'useEmailsHint'      => __('Use in emails:', 'formfabricator'),
                 'fieldIdLabel'       => __('Field ID', 'formfabricator'),
 
@@ -1517,7 +1604,7 @@ class FormEditor
                 'cssClasses'             => __('CSS class(es)', 'formfabricator'),
                 'separateClassesHint'    => __('Separate multiple classes with spaces.', 'formfabricator'),
 
-                /* SEPA / phone advanced blocks */
+                /* Direct debit / phone advanced blocks */
                 'countryFilter'      => __('Country filter', 'formfabricator'),
                 'countryList'        => __('Country list', 'formfabricator'),
                 'off'                => __('Off', 'formfabricator'),
@@ -1570,15 +1657,15 @@ class FormEditor
                 'format12h'   => __('12h (AM/PM)', 'formfabricator'),
                 'prefillNow'  => __('Prefill now', 'formfabricator'),
 
-                /* Sub-fields accordion (Name, Address, SEPA, …) */
+                /* Sub-fields accordion (Name, Address, …) */
                 'subfieldsSection' => __('Subfields', 'formfabricator'),
                 'enableSubfield'   => __('Enable subfield', 'formfabricator'),
                 'placeholderLabel' => __('Placeholder', 'formfabricator'),
 
                 /* Notifications list + modal */
-                'noNotificationsHtml' => __('No notifications yet. Click', 'formfabricator'),
+                // translators: %s: the "Add notification" button's name, shown in bold (substituted client-side).
+                'noNotificationsHtml' => __('No notifications yet. Click %s.', 'formfabricator'),
                 'addNotification'     => __('Add notification', 'formfabricator'),
-                'notificationPrefix'  => __('Notification ', 'formfabricator'),
                 'routingActive'       => __('Routing active', 'formfabricator'),
                 'noName'              => __('(no name)', 'formfabricator'),
                 'notificationPlaceholder' => __('Notification', 'formfabricator'),
@@ -1612,7 +1699,11 @@ class FormEditor
                 'fromName'            => __('Sender name', 'formfabricator'),
                 'defaultSiteNameHint' => __('{site_name} for default value', 'formfabricator'),
                 'fromEmail'           => __('Sender email address', 'formfabricator'),
-                'defaultAdminEmailHint' => __('{admin_email} for default value', 'formfabricator'),
+                'fromEmailHint'       => __('{admin_email}, or a fixed address of this site.', 'formfabricator'),
+                'fromEmailFieldWarning' => __(
+                    'A form field cannot be the sender: mail claiming to come from a visitor\'s address is often discarded by their provider after sending. It will not be saved. Put the field into "Reply-to email" instead.',
+                    'formfabricator'
+                ),
                 'replyTo'             => __('Reply-to email', 'formfabricator'),
                 'emptyMeansSenderEmail' => __('Empty = sender email', 'formfabricator'),
                 'ccEmails'            => __('CC emails', 'formfabricator'),
@@ -1645,87 +1736,53 @@ class FormEditor
                 'networkError'   => __('Network error.', 'formfabricator'),
             ],
 
-            // SEPA "Länderfilter" country-tag picker: reuses SepaField::ibanCountryOptions()'s exact msgids (already translated) except 'SC' (Seychelles), new here.
+            // SEPA country picker; same msgids as DirectDebitField::ibanCountryOptions().
             'countryNames' => [
                 'AD' => __('Andorra', 'formfabricator'),
-                'AE' => __('United Arab Emirates', 'formfabricator'),
                 'AL' => __('Albania', 'formfabricator'),
                 'AT' => __('Austria', 'formfabricator'),
-                'AZ' => __('Azerbaijan', 'formfabricator'),
-                'BA' => __('Bosnia and Herzegovina', 'formfabricator'),
                 'BE' => __('Belgium', 'formfabricator'),
                 'BG' => __('Bulgaria', 'formfabricator'),
-                'BH' => __('Bahrain', 'formfabricator'),
-                'BR' => __('Brazil', 'formfabricator'),
                 'CH' => __('Switzerland', 'formfabricator'),
-                'CR' => __('Costa Rica', 'formfabricator'),
                 'CY' => __('Cyprus', 'formfabricator'),
                 'CZ' => __('Czechia', 'formfabricator'),
                 'DE' => __('Germany', 'formfabricator'),
-                'DJ' => __('Djibouti', 'formfabricator'),
                 'DK' => __('Denmark', 'formfabricator'),
-                'DO' => __('Dominican Republic', 'formfabricator'),
                 'EE' => __('Estonia', 'formfabricator'),
-                'EG' => __('Egypt', 'formfabricator'),
                 'ES' => __('Spain', 'formfabricator'),
                 'FI' => __('Finland', 'formfabricator'),
                 'FR' => __('France', 'formfabricator'),
                 'GB' => __('United Kingdom', 'formfabricator'),
-                'GE' => __('Georgia', 'formfabricator'),
                 'GI' => __('Gibraltar', 'formfabricator'),
-                'GL' => __('Greenland', 'formfabricator'),
                 'GR' => __('Greece', 'formfabricator'),
-                'GT' => __('Guatemala', 'formfabricator'),
                 'HR' => __('Croatia', 'formfabricator'),
                 'HU' => __('Hungary', 'formfabricator'),
                 'IE' => __('Ireland', 'formfabricator'),
-                'IL' => __('Israel', 'formfabricator'),
-                'IQ' => __('Iraq', 'formfabricator'),
                 'IS' => __('Iceland', 'formfabricator'),
                 'IT' => __('Italy', 'formfabricator'),
-                'JO' => __('Jordan', 'formfabricator'),
-                'KW' => __('Kuwait', 'formfabricator'),
-                'KZ' => __('Kazakhstan', 'formfabricator'),
-                'LB' => __('Lebanon', 'formfabricator'),
-                'LC' => __('St. Lucia', 'formfabricator'),
                 'LI' => __('Liechtenstein', 'formfabricator'),
                 'LT' => __('Lithuania', 'formfabricator'),
                 'LU' => __('Luxembourg', 'formfabricator'),
                 'LV' => __('Latvia', 'formfabricator'),
-                'LY' => __('Libya', 'formfabricator'),
-                'MA' => __('Morocco', 'formfabricator'),
                 'MC' => __('Monaco', 'formfabricator'),
                 'MD' => __('Moldova', 'formfabricator'),
                 'ME' => __('Montenegro', 'formfabricator'),
                 'MK' => __('North Macedonia', 'formfabricator'),
-                'MR' => __('Mauritania', 'formfabricator'),
                 'MT' => __('Malta', 'formfabricator'),
-                'MU' => __('Mauritius', 'formfabricator'),
-                'NI' => __('Nicaragua', 'formfabricator'),
                 'NL' => __('Netherlands', 'formfabricator'),
                 'NO' => __('Norway', 'formfabricator'),
-                'PK' => __('Pakistan', 'formfabricator'),
                 'PL' => __('Poland', 'formfabricator'),
                 'PT' => __('Portugal', 'formfabricator'),
-                'QA' => __('Qatar', 'formfabricator'),
                 'RO' => __('Romania', 'formfabricator'),
                 'RS' => __('Serbia', 'formfabricator'),
-                'SA' => __('Saudi Arabia', 'formfabricator'),
-                'SC' => __('Seychelles', 'formfabricator'),
                 'SE' => __('Sweden', 'formfabricator'),
                 'SI' => __('Slovenia', 'formfabricator'),
                 'SK' => __('Slovakia', 'formfabricator'),
                 'SM' => __('San Marino', 'formfabricator'),
-                'SV' => __('El Salvador', 'formfabricator'),
-                'TN' => __('Tunisia', 'formfabricator'),
-                'TR' => __('Turkey', 'formfabricator'),
-                'UA' => __('Ukraine', 'formfabricator'),
                 'VA' => __('Vatican City', 'formfabricator'),
-                'VG' => __('British Virgin Islands', 'formfabricator'),
-                'XK' => __('Kosovo', 'formfabricator'),
             ],
 
-            // Phone-field "Vorwahlen" tag picker: dial-code region labels, not ISO country names, so a distinct msgid set from countryNames above (e.g. +1 covers multiple countries).
+            // Phone dial-code picker: region labels, not country names (+1 covers several countries).
             'phoneCodes' => [
                 '+1'   => __('USA / Canada', 'formfabricator'),
                 '+7'   => __('Russia', 'formfabricator'),

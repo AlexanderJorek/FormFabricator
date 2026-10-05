@@ -6,10 +6,9 @@ use FabricatorForms\PDF\PdfUtils;
 use FabricatorForms\Tests\Support\TestCase;
 
 /**
- * The single-pass stream scans must find exactly the streams the old strpos-per-stream loops found.
- *
- * The old loops are kept here as the reference: they were slow on hostile files, not wrong on ordinary ones.
- * Their speed and memory on the pathological shapes is covered in Perf\PdfScanPerfTest.
+ * The single-pass stream scans against the strpos-per-stream oracle below, with one deliberate difference (in
+ * nextStreamKeyword()): the "stream" inside a stray "endstream" opens nothing. The generated files include stray
+ * "endstream"s to exercise it. Speed and memory are in Perf\PdfScanPerfTest.
  */
 final class StreamScanTest extends TestCase
 {
@@ -56,6 +55,17 @@ final class StreamScanTest extends TestCase
         self::assertSame(self::oldAll($pdf), PdfUtils::hashAllCompressedStreams($pdf));
     }
 
+    public function testAStrayEndstreamOpensNoStream(): void
+    {
+        // The two shapes the old loops misread, as measured in review (old found 0 and 1, the walk 1 and 0).
+        $data   = gzcompress('BT /F1 12 Tf 72 712 Td (Hi) Tj ET');
+        $before = "%PDF-1.4\nendstream\n1 0 obj\nstream\n" . $data . "\nendstream\nendobj\n";
+        self::assertCount(1, PdfUtils::hashPageContentStreams($before, 2), 'a stray endstream before a real stream');
+
+        $loose = "%PDF-1.4\n% something endstream\n" . $data . "\nendstream\n";
+        self::assertSame([], PdfUtils::hashPageContentStreams($loose, 2), 'loose text ending in endstream opens nothing');
+    }
+
     public function testAFileOfBareKeywordsHasNothingToInflate(): void
     {
         self::assertSame(0, PdfUtils::inflatedStreamBytes(str_repeat("stream\n", 10000), PHP_INT_MAX));
@@ -95,6 +105,14 @@ final class StreamScanTest extends TestCase
                 $pdf .= ($i + 1) . " 0 obj\n<< /Length " . strlen($data) . " >>\nstream" . $eol . $data . "\nendstream\nendobj\n";
                 if (mt_rand(0, 6) === 0) {
                     $pdf .= "% a stream of consciousness, endstream included\n";
+                }
+                // Stray "endstream"s directly followed by a line break, the shape the old loops misread: alone, and
+                // with a compressed body after it.
+                if (mt_rand(0, 9) === 0) {
+                    $pdf .= "endstream\n";
+                }
+                if (mt_rand(0, 9) === 0) {
+                    $pdf .= "% loose endstream\n" . gzcompress($plain) . "\nendstream\n";
                 }
             }
             if (mt_rand(0, 8) === 0) {
@@ -187,13 +205,20 @@ final class StreamScanTest extends TestCase
         return $hashes;
     }
 
+    /**
+     * The old keyword search, plus the one deliberate difference (see the class docblock): a "stream" that ends an
+     * "endstream" is skipped.
+     */
     private static function nextStreamKeyword(string $pdf_raw, int $offset): int|false
     {
-        $crlf = strpos($pdf_raw, "stream\r\n", $offset);
-        $lf   = strpos($pdf_raw, "stream\n", $offset);
-        if ($crlf === false) {
-            return $lf;
+        while (true) {
+            $crlf = strpos($pdf_raw, "stream\r\n", $offset);
+            $lf   = strpos($pdf_raw, "stream\n", $offset);
+            $pos  = $crlf === false ? $lf : (($lf !== false && $lf < $crlf) ? $lf : $crlf);
+            if ($pos === false || substr($pdf_raw, max(0, $pos - 3), 3) !== 'end') {
+                return $pos;
+            }
+            $offset = $pos + 6;
         }
-        return ($lf !== false && $lf < $crlf) ? $lf : $crlf;
     }
 }

@@ -11,11 +11,9 @@ use FabricatorForms\Tests\Integration\TestCase;
 use FabricatorForms\Utils\HtmlSanitizer;
 
 /**
- * Building a PDF makes no request the form author's HTML asks for (TESTING.md §4, HTML block SSRF — 1.0.7), and the
- * SEPA field validates an IBAN without asking anyone (1.0.7: the openiban.com lookup was removed for good).
- *
- * mPDF fetches remote images with its own curl calls, which WordPress's pre_http_request filter never sees, so the
- * "attacker" host here is a local HTTP server that logs every request (Support\RequestRecorder).
+ * Building a PDF makes no request the form author's HTML asks for (TESTING.md §4), and the Direct Debit Mandate
+ * validates an IBAN offline. mPDF's own curl bypasses pre_http_request, so the "attacker" host is a local logging
+ * server (Support\RequestRecorder).
  */
 final class OutboundRequestsTest extends TestCase
 {
@@ -67,7 +65,7 @@ final class OutboundRequestsTest extends TestCase
         self::assertSame([], $this->server->requests(), 'the PDF step fetched from a host the form author named');
     }
 
-    public function testTheSepaFieldValidatesAnIbanWithoutAnyRequest(): void
+    public function testTheDirectDebitFieldValidatesAnIbanWithoutAnyRequest(): void
     {
         $requests = [];
         $record   = static function ($pre, $args, $url) use (&$requests) {
@@ -76,10 +74,13 @@ final class OutboundRequestsTest extends TestCase
         };
         add_filter('pre_http_request', $record, 10, 3);
 
-        $sepa   = FieldRegistry::get('sepa');
-        $config = array_merge($sepa->getDefaultConfig(), ['id' => 'mandate', 'label' => 'Mandate']);
-        $sepa->validate(['iban' => 'DE89370400440532013000', 'bic' => 'COBADEFFXXX', 'holder' => 'Ada Lovelace'], $config);
-        $sepa->validate(['iban' => 'DE00370400440532013000', 'bic' => 'COBADEFFXXX', 'holder' => 'Ada Lovelace'], $config);
+        $field  = FieldRegistry::get('directdebit');
+        $config = array_merge($field->getDefaultConfig(), ['id' => 'mandate', 'label' => 'Mandate']);
+        $field->validate(['iban' => 'DE89370400440532013000', 'bic' => 'COBADEFFXXX', 'holder' => 'Ada Lovelace'], $config);
+        $field->validate(['iban' => 'DE00370400440532013000', 'bic' => 'COBADEFFXXX', 'holder' => 'Ada Lovelace'], $config);
+        // Nor any other scheme's details: a sort code or routing number is checked offline, never looked up.
+        $field->validate(['sort_code' => '123456', 'account' => '12345678', 'holder' => 'Ada Lovelace'], ['scheme' => 'bacs', 'bacs_text' => '<p>Pay Acme Ltd.</p>'] + $config);
+        $field->validate(['routing' => '011000015', 'account' => '123456789', 'account_type' => 'checking', 'holder' => 'Ada Lovelace'], ['scheme' => 'ach', 'ach_text' => '<p>I authorize Acme Inc.</p>'] + $config);
 
         remove_filter('pre_http_request', $record, 10);
         self::assertSame([], $requests);

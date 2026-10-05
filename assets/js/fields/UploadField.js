@@ -47,7 +47,7 @@ function (root) {
                 btn.className = 'fabricator-upload-chip-remove';
                 var _i18n = window.FabricatorForms && window.FabricatorForms.i18n;
                 btn.setAttribute(
-                    'aria-label', ((_i18n && _i18n.upload_remove_prefix) || 'Remove: ') + file.name
+                    'aria-label', ((_i18n && _i18n.upload_remove) || 'Remove %s').replace('%s', function () { return file.name; })
                 );
                 btn.textContent = '×';
                 btn.addEventListener('click', function () {
@@ -101,8 +101,8 @@ function (root) {
             if (!multiple && allowed.length > 1) {
                 allowed = [allowed[0]];
             }
-            /* The browser has already put the new selection in the input, so a rejected one has to be cleared:
-               it used to stay behind and be submitted while the chips still showed the previous selection. */
+            /* The browser has already put the new selection in the input, so a rejected one has to be cleared, or it
+               would be submitted while the chips still show the previous selection. */
             function clearInput() {
                 try {
                     input.files = new DataTransfer().files;

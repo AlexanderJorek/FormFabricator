@@ -65,51 +65,7 @@
         }, 5000);
     }
 
-    /* particle canvas */
-    var canvas = document.getElementById('fabricator-particle-canvas');
-    /* Decorative only, so skipped for anyone whose system asks for reduced motion (WCAG 2.3.3). */
-    var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-    if (canvas && reduceMotion) {
-        canvas.style.display = 'none';
-    }
-    if (canvas && !reduceMotion) {
-        var ctx = canvas.getContext('2d'), mouse = {x:-9999,y:-9999};
-        var _ah=getComputedStyle(document.documentElement).getPropertyValue('--fabricator-admin-accent').trim()||'#2271b1';
-        var _rgb=function(h){return parseInt(h.slice(1,3),16)+','+parseInt(h.slice(3,5),16)+','+parseInt(h.slice(5,7),16);};
-        var DOTS=Math.min(120,Math.max(40,Math.round(innerWidth*innerHeight/26000)));
-        var LINK=150,SPEED=1.0,COLOR=_rgb(_ah),particles=[],paused=false,FRAME_MS=1000/30;
-        /* One pending frame at a time: every switch back to this tab used to start another loop alongside the
-           one already running, so the page's CPU use grew over a session. */
-        var rafId=0,timerId=0;
-        function schedule(){ if(rafId||timerId) return; rafId=requestAnimationFrame(function(){rafId=0;draw();}); }
-        function resize(){ canvas.width=innerWidth; canvas.height=innerHeight; }
-        function rand(a,b){ return a+Math.random()*(b-a); }
-        function initP(){
-            particles=[];
-            for(var i=0;i<DOTS;i++) particles.push({x:rand(0,canvas.width),y:rand(0,canvas.height),vx:rand(-SPEED,SPEED),vy:rand(-SPEED,SPEED),r:rand(2,3.5)});
-        }
-        function draw(){
-            if(paused) return;
-            ctx.clearRect(0,0,canvas.width,canvas.height);
-            for(var i=0;i<particles.length;i++){var p=particles[i];p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>canvas.width)p.vx*=-1;if(p.y<0||p.y>canvas.height)p.vy*=-1;}
-            ctx.lineWidth=1;
-            for(var i=0;i<particles.length;i++){
-                for(var j=i+1;j<particles.length;j++){
-                    var dx=particles[i].x-particles[j].x,dy=particles[i].y-particles[j].y,d=Math.sqrt(dx*dx+dy*dy);
-                    if(d<LINK){ctx.beginPath();ctx.moveTo(particles[i].x,particles[i].y);ctx.lineTo(particles[j].x,particles[j].y);ctx.strokeStyle='rgba('+COLOR+','+(1-d/LINK)*0.3+')';ctx.stroke();}
-                }
-                var mdx=particles[i].x-mouse.x,mdy=particles[i].y-mouse.y,md=Math.sqrt(mdx*mdx+mdy*mdy);
-                if(md<LINK){ctx.beginPath();ctx.moveTo(particles[i].x,particles[i].y);ctx.lineTo(mouse.x,mouse.y);ctx.strokeStyle='rgba('+COLOR+','+(1-md/LINK)*0.55+')';ctx.stroke();}
-            }
-            ctx.fillStyle='rgba('+COLOR+',0.5)';
-            for(var i=0;i<particles.length;i++){ctx.beginPath();ctx.arc(particles[i].x,particles[i].y,particles[i].r,0,Math.PI*2);ctx.fill();}
-            timerId=setTimeout(function(){timerId=0;schedule();},FRAME_MS-2);
-        }
-        document.addEventListener('mousemove',function(e){mouse.x=e.clientX;mouse.y=e.clientY;});
-        document.addEventListener('visibilitychange',function(){paused=document.hidden;if(!paused)schedule();});
-        window.addEventListener('resize',function(){resize();initP();});
-        resize();initP();schedule();
-    }
+    /* The particle background is drawn by admin-editor-canvas.js, as on every other page. */
 
     /* helpers */
     function $(id){ return document.getElementById(id); }
@@ -285,9 +241,7 @@
 
     var PAGE_HEIGHT_PX = 1402; /* A4 at 120dpi (mPDF), matches .fabricator-a4-paper */
 
-    /* Splits buildPreview()'s single (unbounded) HTML output into multiple
-       A4-sized pages by measuring top-level blocks in an offscreen sandbox —
-       mirrors real pagination instead of one ever-growing sheet. */
+    /* Splits buildPreview()'s HTML into A4 pages by measuring top-level blocks offscreen. */
     function paginate(s, fullHtml){
         var inner = fullHtml.replace(/^<div[^>]*>/, '').replace(/<\/div>\s*$/, '');
         var ff  = fontMap[s.font_family]||'Arial,sans-serif';
@@ -376,6 +330,8 @@
                 +'padding:0 '+pRight+' '+pBottom+' '+pLeft+';'
                 +'background:#fff;box-sizing:border-box;">'
                 +footerHtml+'</div>';
+            /* The "Footer" section toggle: hidden here as in Generator (no footer text, no page numbers). */
+            if(s.section_hidden.indexOf('footer')!==-1) footerHtml = '';
 
             pageEl.innerHTML = '<div style="font-family:'+result.ff+';font-size:'+result.fs+';'
                 +'line-height:1.6;color:#222;padding:'+result.pad+';box-sizing:border-box;height:100%;overflow:hidden;">'
@@ -457,9 +413,7 @@
                         try {
                             resp = JSON.parse(text);
                         } catch (e) {
-                            /* Server returned something other than JSON (PHP warning/fatal,
-                               wp_die() on nonce failure, etc.) — surface it instead of
-                               reporting it as a generic network error. */
+                            /* Not JSON (a PHP error, wp_die()): shown, not reported as a network error. */
                             console.error('PDF preview: non-JSON response (HTTP ' + r.status + ')', text);
                             throw new Error(
                                 
@@ -504,9 +458,7 @@
      * ================================================================ */
     var HB_COLS = 42;   /* A4 at 5 mm/cell */
     var HB_CELL = 15;   /* px per cell */
-    /* Localized labels for the header-builder property panel — built server-side
-       so this admin-only editor UI is translated like the rest of the plugin
-       instead of hardcoding a single language. */
+    /* Translated labels for the header-builder property panel. */
     var hbi18n = I18N.hb;
     var hbLayout   = { rows: 8, elements: [] };
     /* Initialize from saved DB value immediately so preview works without opening the modal */
@@ -526,12 +478,10 @@
     var hbProps  = document.getElementById('fabricator-hb-props');
 
     function hbEsc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-    /* Interpolated into a style attribute, so coerce to a number instead of escaping it. Same 6..72 clamp as sanitizeHeaderLayout() applies on save. */
+    /* A number for a style attribute, clamped as sanitizeHeaderLayout() does. */
     function hbSize(v){ var n = parseInt(v, 10); if (!isFinite(n)) { n = 14; } return Math.min(72, Math.max(6, n)); }
-    /* Defense-in-depth for the unsaved preview only — sanitizeHeaderLayout() server-side is the authority on save.
-       Parsed into an inert <template> and walked as a DOM against the same allowlist the save-time wp_kses() uses,
-       instead of regex-stripped: "</script >", entity-encoded handlers and a tab inside "javascript:" all slipped
-       past the old patterns. */
+    /* For the unsaved preview only (sanitizeHeaderLayout() decides on save): parsed into an inert <template> and
+       walked against the save-time allowlist, since regexes are easy to slip past. */
     var HB_PREVIEW_TAGS = { B:1, STRONG:1, I:1, EM:1, U:1, S:1, DEL:1, SUP:1, SUB:1, SPAN:1, BR:1 };
     function hbSanitizePreviewHtml(html){
         var tpl = document.createElement('template');
@@ -874,9 +824,7 @@
             var ta = hbProps.querySelector('textarea[data-p="html"]');
             if(ta){
                 ta.value = el.html||'';
-                /* Not covered by the generic 'input[data-p]' wiring below (that
-                   selector only matches <input>, not <textarea>) — without this,
-                   edits typed here were silently discarded. */
+                /* The 'input[data-p]' wiring below doesn't match a <textarea>. */
                 ta.addEventListener('input', function(){
                     el.html = ta.value;
                     hbRender();
@@ -1203,9 +1151,7 @@
                     /* Render header at builder canvas scale then CSS-scale to the paper's content area, keeping image aspect ratios matched to the builder canvas. */
                     var canvasW   = HB_COLS * HB_CELL;
                     var marginPx  = parseFloat(mm(s.margin_left)) + parseFloat(mm(s.margin_right));
-                    /* Paper is always at its 992px design width (JS forces this on mobile via
-                       p.style.width). Using paper.offsetWidth was fragile — it varied with
-                       stageInner width and broke header scale on mobile. */
+                    /* The paper's 992px design width, which JS also forces on mobile. */
                     var contentW  = Math.max(1, 992 - marginPx);
                     var scale     = contentW / canvasW; /* fills paper content area; height scales proportionally */
                     var hpx = 0;
@@ -1295,9 +1241,7 @@
                     try {
                         data = JSON.parse(text);
                     } catch (e) {
-                        /* Server returned something other than JSON (PHP warning/fatal,
-                           wp_die() on nonce failure, etc.) — surface it instead of
-                           reporting it as a generic network error. */
+                        /* Not JSON (a PHP error, wp_die()): shown, not reported as a network error. */
                         console.error('PDF layout save: non-JSON response (HTTP ' + r.status + ')', text);
                         throw new Error(I18N.unexpectedResponse.replace('%d', r.status));
                     }
@@ -1308,6 +1252,12 @@
                 if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
                 if (data.success) {
                     showNotice(data.data.message, false);
+                    /* Forms whose signatures this layout keeps from some recipients; the server re-checks every save. */
+                    var warn = document.getElementById('fabricator-pdf-signature-warning');
+                    if (warn) {
+                        warn.firstElementChild.textContent = data.data.warning || '';
+                        warn.hidden = !data.data.warning;
+                    }
                     if (data.data.snapshot !== undefined) {
                         var snapInput = form.querySelector('[name="fabricator_pdf_layout_snapshot"]');
                         if (snapInput) { snapInput.value = data.data.snapshot; }

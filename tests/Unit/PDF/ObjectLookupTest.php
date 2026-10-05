@@ -44,6 +44,27 @@ final class ObjectLookupTest extends TestCase
         self::assertSame('9 0 obj', $d['header']);
     }
 
+    public function testEveryReaderEndsANestedObjectAtTheSameByte(): void
+    {
+        // indexObjects() ended an object at the next header, lastObjectDefinition() and the fast index at "endobj": a check
+        // reading a crafted object through one saw other bytes than a check reading it through another.
+        $data = "binary 7 0 obj inside the stream";
+        $pdf  = "%PDF-1.4\n1 0 obj\n<< /A 1 >>\n2 0 obj\n<< /B 2 >>\nendobj\n"
+            . "3 0 obj\n<< /Length " . strlen($data) . " >>\nstream\n" . $data . "\nendstream\nendobj\n";
+        $index = PdfUtils::objectDefinitionIndex($pdf);
+        $table = PdfUtils::indexObjects($pdf);
+
+        foreach (['1', '2'] as $num) {
+            $slow = PdfUtils::lastObjectDefinition($pdf, $num);
+            self::assertSame($slow, PdfUtils::definitionFromIndex($index, $pdf, $num), "object $num: fast and slow index");
+            self::assertSame($slow['body'], $table[(int) $num]['dict'], "object $num: indexObjects()");
+        }
+        self::assertSame("\n<< /A 1 >>\n", PdfUtils::lastObjectDefinition($pdf, '1')['body'], 'object 1 ends where object 2 starts');
+        // Header-like bytes inside a stream do not cut it short.
+        self::assertStringEndsWith("endstream\n", PdfUtils::lastObjectDefinition($pdf, '3')['body']);
+        self::assertSame($data . "\n", $table[3]['stream'], 'the whole stream, up to endstream');
+    }
+
     public function testAnUnclosedTrailingDefinitionIsSkipped(): void
     {
         self::assertSame('<< /A 1 >>', self::body(PdfUtils::lastObjectDefinition("7 0 obj << /A 1 >> endobj\n7 0 obj << /A 2 >>", '7', '0')));

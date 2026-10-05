@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -52,6 +52,16 @@ class CheckboxField extends BaseField
     }
 
     /**
+     * Its inputs are checkboxes named after the field id, which front.js reads as an empty list while hidden.
+     *
+     * @return array
+     */
+    public function hiddenConditionValue(): array
+    {
+        return [];
+    }
+
+    /**
      * Returns the field type label.
      *
      * @return string
@@ -74,6 +84,16 @@ class CheckboxField extends BaseField
     public function getIcon(): string
     {
         return 'fa-solid fa-square-check';
+    }
+
+    /**
+     * Returns client-side initialization JavaScript function body: the "Other" text input's show/hide.
+     *
+     * @return string
+     */
+    public function getClientInit(): string
+    {
+        return self::readFieldAsset('assets/js/fields/CheckboxField.js');
     }
 
     /**
@@ -127,11 +147,17 @@ class CheckboxField extends BaseField
         $min_sel   = (int)($config['min_selections'] ?? 0);
         $max_sel   = (int)($config['max_selections'] ?? 0);
         $sel_attrs = '';
+        // The messages travel with the numbers: the count is known here, so _n() picks the right plural form for every
+        // language, which one localized "%d option(s)" string could not.
         if ($min_sel > 0) {
-            $sel_attrs .= ' data-min-selections="' . $min_sel . '"';
+            // translators: %d: minimum number of options that must be selected.
+            $min_msg    = sprintf(_n('Please select at least %d option.', 'Please select at least %d options.', $min_sel, 'formfabricator'), $min_sel);
+            $sel_attrs .= ' data-min-selections="' . $min_sel . '" data-min-message="' . esc_attr($min_msg) . '"';
         }
         if ($max_sel > 0) {
-            $sel_attrs .= ' data-max-selections="' . $max_sel . '"';
+            // translators: %d: maximum number of options that may be selected.
+            $max_msg    = sprintf(_n('Please select at most %d option.', 'Please select at most %d options.', $max_sel, 'formfabricator'), $max_sel);
+            $sel_attrs .= ' data-max-selections="' . $max_sel . '" data-max-message="' . esc_attr($max_msg) . '"';
         }
 
         // No role="group" here: BaseField::wrap() marks the field wrapper as the group and names it from the
@@ -179,9 +205,9 @@ class CheckboxField extends BaseField
             // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified in FormProcessor::handle(); map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
             ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id]), 200), 'sanitize_text_field')
             : [];
-        // Strings only: map_deep() leaves a nested POST array (x[0][]=a) an array, and "(string) $v" in validate() then warned
-        // "Array to string conversion", which WP_DEBUG_DISPLAY printed straight into the JSON response.
-        $out  = is_array($vals) ? array_values(array_filter($vals, 'is_string')) : [];
+        // Strings only (a nested POST array stays an array), and each value once, so a repeated value can't meet
+        // min_selections.
+        $out  = is_array($vals) ? array_values(array_unique(array_filter($vals, 'is_string'))) : [];
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
         if (in_array('__other__', $out, true) && isset($_POST[$field_id . '_other'])) {
             // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce verified in FormProcessor::handle(); capOtherText() sanitizes/unslashes, WPCS misses the helper form.
@@ -229,11 +255,11 @@ class CheckboxField extends BaseField
         $max      = (int)($config['max_selections'] ?? 0);
         if ($min > 0 && $cnt < $min) {
             // translators: %d: minimum number of options that must be selected.
-            return sprintf(__('Please select at least %d option(s).', 'formfabricator'), $min);
+            return sprintf(_n('Please select at least %d option.', 'Please select at least %d options.', $min, 'formfabricator'), $min);
         }
         if ($max > 0 && $cnt > $max) {
             // translators: %d: maximum number of options that may be selected.
-            return sprintf(__('Please select at most %d option(s).', 'formfabricator'), $max);
+            return sprintf(_n('Please select at most %d option.', 'Please select at most %d options.', $max, 'formfabricator'), $max);
         }
         $allowed = array_map(
             static fn($o) => (string)($o['value'] ?? ''),

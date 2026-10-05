@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -170,114 +170,12 @@ class HtmlField extends BaseField
     {
         // mPDF fetches any non-local <img src>/CSS url() server-side with no host allow-list of its own —
         // this field's HTML is form-builder-authored and unrestricted, so strip remote refs to avoid SSRF.
-        $html = self::stripRemoteResourcesForPdf((string)($field['value'] ?? ''));
+        $html = \FabricatorForms\Utils\HtmlSanitizer::stripRemoteResourcesForPdf((string)($field['value'] ?? ''));
         $desc = $this->pdf($field)->rawHtml($html, true);
         if (empty($field['label'])) {
             $desc->unlabeled();
         }
         return $desc->build();
-    }
-
-    /**
-     * Strips remote <img src>/CSS url() refs before mPDF fetches them server-side, keeping same-origin/data: only.
-     *
-     * @param string $html Already wp_kses()-sanitized HTML (\FabricatorForms\Utils\HtmlSanitizer::sanitize() output).
-     * @return string HTML with disallowed remote resource references stripped.
-     */
-    private static function stripRemoteResourcesForPdf(string $html): string
-    {
-        $home_host = wp_parse_url(home_url(), PHP_URL_HOST) ?: '';
-
-        $is_allowed = static function (string $url) use ($home_host): bool {
-            $url = trim(html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-            if ($url === '' || str_starts_with($url, '#')) {
-                return true;
-            }
-            if (stripos($url, 'data:') === 0) {
-                return true;
-            }
-            // Scheme-less: only relative paths with no ../ traversal or absolute-path escape allowed.
-            if (!preg_match('#^([a-z][a-z0-9+.\-]*:)?//#i', $url) && !preg_match('#^[a-z][a-z0-9+.\-]*:#i', $url)) {
-                // A relative reference is made of URL characters and nothing else. Treating whatever could not be
-                // parsed as a harmless relative path failed open: wp_kses re-encodes the quotes of url("…") inside a
-                // double-quoted style attribute, so "&quot;http://169.254.169.254/&quot;" arrived here looking like a
-                // path while mPDF decodes the entities again before fetching it.
-                // No quote or bracket characters either: mPDF strips those around a CSS url() value, so a decoded
-                // "'http://host/'" would become a remote URL again after this check had passed it as a path.
-                if (preg_match('#^[A-Za-z0-9._~!$&*+,;=:@/?%\#-]+$#', $url) !== 1) {
-                    return false;
-                }
-                $decoded_path = rawurldecode($url);
-                $is_absolute  = str_starts_with($decoded_path, '/')
-                    || str_starts_with($decoded_path, chr(92))
-                    || preg_match('#^[A-Za-z]:[\\\\/]#', $decoded_path) === 1;
-                $has_traversal = preg_match('#(^|[\\\\/])\.\.([\\\\/]|$)#', $decoded_path) === 1;
-                return !$is_absolute && !$has_traversal;
-            }
-            $host = wp_parse_url($url, PHP_URL_HOST);
-            if ($host === null || $home_host === '' || strcasecmp($host, $home_host) !== 0) {
-                return false;
-            }
-            // Host alone let http://own-host:6379/ through, so mPDF could be steered at internal ports on this
-            // machine. Only web schemes, and only the site's own port (or the scheme default when it sets none).
-            $scheme = strtolower((string) wp_parse_url($url, PHP_URL_SCHEME));
-            if (!in_array($scheme, ['', 'http', 'https'], true)) {
-                return false;
-            }
-            $port      = wp_parse_url($url, PHP_URL_PORT);
-            $home_port = wp_parse_url(home_url(), PHP_URL_PORT);
-            if ($port === null || $port === $home_port) {
-                return true;
-            }
-            if ($home_port !== null) {
-                return false;
-            }
-            if ($scheme === 'https') {
-                return $port === 443;
-            }
-            return $scheme === 'http' ? $port === 80 : in_array($port, [80, 443], true);
-        };
-
-        $html = preg_replace_callback(
-            '/<img\b[^>]*>/i',
-            static function ($m) use ($is_allowed) {
-                // (?:(?!\1).)*, not [^"']*: a src="…'…" matched neither quote style, so it kept its remote URL.
-                return preg_replace_callback(
-                    '/\ssrc\s*=\s*(["\'])((?:(?!\1).)*)\1/is',
-                    static function ($sm) use ($is_allowed) {
-                        return $is_allowed($sm[2]) ? $sm[0] : '';
-                    },
-                    $m[0]
-                );
-            },
-            $html
-        );
-
-        $html = preg_replace_callback(
-            '/\bstyle\s*=\s*(["\'])((?:(?!\1).)*)\1/is',
-            static function ($m) use ($is_allowed) {
-                // One branch per quoting style: the single optional-quote form skipped url("…'…") and kept it.
-                // The unquoted branch runs to the closing parenthesis and no sooner — excluding "(" there let
-                // url(http://host/x(y) match nothing at all, so it passed through untouched and mPDF fetched it.
-                // The parenthesis itself is optional so an unterminated url( is read and refused as well: every
-                // url( in the declaration has to come back out either checked or replaced. A quote that does not
-                // open the URL belongs to it, so the unquoted branch runs through it: stopping there left the rest
-                // of the URL behind as stray text after "none".
-                $style = preg_replace_callback(
-                    '/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)]*))\s*\)?/i',
-                    static function ($um) use ($is_allowed) {
-                        $url = ($um[1] ?? '') . ($um[2] ?? '') . ($um[3] ?? '');
-                        return $is_allowed($url) ? $um[0] : 'none';
-                    },
-                    $m[2]
-                );
-                // The match starts at "style", so the whitespace before it is still in place.
-                return 'style=' . $m[1] . $style . $m[1];
-            },
-            $html
-        );
-
-        return $html;
     }
 
     /**
@@ -315,6 +213,8 @@ class HtmlField extends BaseField
                 'key'   => 'html_content',
                 'type'  => 'html_editor',
                 'label' => __('HTML content', 'formfabricator'),
+                // GDPR Art. 13, like RatingField's custom icon: remote content is fetched by every visitor's browser.
+                'hint'  => __('Images, videos or other content from another site are fetched by every visitor, which hands that site their IP address — use files from your Media Library, or name that site in your privacy policy.', 'formfabricator'),
             ],
         ];
     }

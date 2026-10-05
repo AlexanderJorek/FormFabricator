@@ -2,7 +2,7 @@
 
 /*
  * A field hidden by a condition — its own or its group's — is never validated or required-checked, including the
- * specially handled Consent, GDPR and CAPTCHA fields (by design; see CLAUDE.md memory on conditions over consent).
+ * specially handled Consent, GDPR and CAPTCHA fields: a visitor can't answer a field they are not shown.
  * Uses real FormRenderer markup from the fixture: each field is shown only when "country" equals DE.
  */
 

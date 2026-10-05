@@ -11,11 +11,8 @@ use FabricatorForms\Tests\Support\PerfTestCase;
 use PHPUnit\Framework\Attributes\RequiresFunction;
 
 /**
- * The pathological shapes behind CLAUDE.md's "Scanning untrusted PDF bytes": every scan over uploaded bytes must stay
- * linear in time and must not hold memory in proportion to the number of matches.
- *
- * Time is asserted as a growth exponent (see Measure): linear scans come out near 1, the quadratic bugs this suite
- * exists for near 2. MAX_EXPONENT sits between the two.
+ * The pathological shapes behind CONTRIBUTING.md's "Scanning untrusted PDF bytes": every scan stays linear in time
+ * and holds no memory per match. Time is a growth exponent (Measure): linear near 1, quadratic near 2.
  */
 #[RequiresFunction('memory_reset_peak_usage')]
 final class PdfScanPerfTest extends PerfTestCase
@@ -154,6 +151,27 @@ final class PdfScanPerfTest extends PerfTestCase
         self::assertLessThan(2.0, (hrtime(true) - $t0) / 1e9);
     }
 
+    public function testACrossReferenceTableOfTinyEntriesIsRefusedBeforePdfparserHoldsThem(): void
+    {
+        // A million five-byte entries all naming one object: pdfparser keeps an array entry per line, about twenty times
+        // the table's size, before building an object for each. Counted as read, the file is refused at the ceiling.
+        $head  = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n";
+        $count = 1000000;
+        $pdf   = $head . "xref\n0 $count\n" . str_repeat("9 0n\n", $count) . "trailer\n<< /Size $count /Root 1 0 R >>\nstartxref\n"
+            . strlen($head) . "\n%%EOF\n";
+        $run = Measure::run(static function () use ($pdf): string {
+            try {
+                (new \FabricatorForms\PDF\GuardedPdfParser(new \Smalot\PdfParser\Config(), 64 * self::MB))->parseContent($pdf);
+                return 'parsed';
+            } catch (\LengthException $e) {
+                return $e->getMessage();
+            }
+        });
+        self::assertSame('Too many objects: cross-reference entries.', $run['result']);
+        self::assertLessThan(2 * strlen($pdf), $run['peak'], 'no more than the file twice over');
+        self::assertLessThan(5.0, $run['seconds']);
+    }
+
     public function testIndexObjectsAtTheCeilingHasAFixedBound(): void
     {
         $run = Measure::run(static fn() => PdfUtils::indexObjects(self::tinyObjects(PdfUtils::MAX_OBJECTS)));
@@ -186,6 +204,7 @@ final class PdfScanPerfTest extends PerfTestCase
         });
         self::assertLessThan(self::MB, $walk['peak'], 'object walk');
 
+        \Brain\Monkey\Functions\when('__')->returnArg(1); // the overflow marker is a translated label
         $types = Measure::run(static fn() => Reflect::call(Verificationpage::class, 'distinctTypeNames', $tiny));
         self::assertCount(257, $types['result']);
         self::assertLessThan(self::MB, $types['peak'], 'type names');
@@ -219,6 +238,58 @@ final class PdfScanPerfTest extends PerfTestCase
             );
         } finally {
             PdfFixtures::removeTree($dir);
+        }
+    }
+
+    public function testNestedObjectHeadersWithOneEndobjScaleLinearlyAndCopyNoMoreThanTheFile(): void
+    {
+        // Every header searched ahead to the single "endobj" and copied everything up to it: quadratic in time and in
+        // memory (a 2 MB file of this shape peaked at 3.9 GB). The verifier reaches indexObjects() for any file holding
+        // a seal marker, whether or not its HMAC checks out.
+        $build = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("1 0 obj\n<< /A 1 >>\n", $n) . "endobj\n";
+        $this->assertLinear($build, static fn($pdf) => PdfUtils::indexObjects($pdf), 2000, PdfUtils::MAX_OBJECTS / 4);
+
+        $pdf = $build((int) (PdfUtils::MAX_OBJECTS / 2));
+        $run = Measure::run(static fn() => PdfUtils::indexObjects($pdf));
+        self::assertLessThan(2 * strlen($pdf) + 4 * self::MB, $run['peak'], 'peak ' . round($run['peak'] / self::MB, 1) . ' MB');
+    }
+
+    public function testALongContentsListScalesLinearly(): void
+    {
+        // One page whose /Contents lists $n streams, and those $n stream objects: in_array() on the list once per stream
+        // was quadratic (a 4 MB file took 15.5 s).
+        $build = static function (int $n): string {
+            $refs = '';
+            $objs = '';
+            for ($i = 0; $i < $n; $i++) {
+                $refs .= (10 + $i) . ' 0 R ';
+                $objs .= (10 + $i) . " 0 obj\n<< /Length 3 >>\nstream\nq Q\nendstream\nendobj\n";
+            }
+            return "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+                . "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+                . "3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents [" . $refs . "] >>\nendobj\n" . $objs
+                . "trailer\n<< /Root 1 0 R >>\n%%EOF\n";
+        };
+        $this->assertLinear($build, static fn($pdf) => PdfUtils::verifyContentStreams($pdf, [], 'x'), 1000, PdfUtils::MAX_OBJECTS / 4);
+    }
+
+    public function testTheImageDataWalkScalesLinearly(): void
+    {
+        // PdfUtils::imageStreamSpans(), behind the verifier's raw counts and its type scan: images whose /Length is wrong,
+        // so each end is searched for; keywords after ">>" with no line break; image headers with no endstream at all.
+        $wrong_length = static function (int $n): string {
+            $pdf = "%PDF-1.4\n";
+            for ($i = 1; $i <= $n; $i++) {
+                $pdf .= $i . " 0 obj\n<< /Type /XObject /Subtype /Image /Length 999999 >>\nstream\n%%EOF /Type /X\nendstream\nendobj\n";
+            }
+            return $pdf;
+        };
+        $no_break = static fn(int $n): string => "%PDF-1.4\n" . str_repeat('<< /Subtype /Image >>stream ', $n);
+        $unclosed = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("1 0 obj\n<< /Subtype /Image >>\nstream\n", $n);
+        $types    = static fn($pdf) => Reflect::call(Verificationpage::class, 'distinctTypeNames', $pdf);
+        foreach ([$wrong_length, $no_break, $unclosed] as $build) {
+            $this->assertLinear($build, static fn($pdf) => PdfUtils::countOutsideImageData($pdf, '%%EOF'), 5000);
+            $this->assertLinear($build, $types, 5000);
         }
     }
 

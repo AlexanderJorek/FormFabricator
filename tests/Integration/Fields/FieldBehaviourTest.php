@@ -9,10 +9,8 @@ use FabricatorForms\Tests\Integration\TestCase;
 /**
  * Every field type's schema, render, validate, map and sanitize behaviour, in real WordPress.
  *
- * Ported from the former WP_DEBUG admin page (includes/Admin/FieldTestPage.php) without changing a check: each
- * $this->check() closure returns true or a failure message, exactly as it did there. A test method runs all of its
- * checks and then fails once, listing every check that failed — the page showed them all side by side, and stopping
- * at the first would hide the rest.
+ * Each $this->check() closure returns true or a failure message. A test method runs all of its checks, then fails
+ * once listing every failure.
  */
 final class FieldBehaviourTest extends TestCase
 {
@@ -106,7 +104,7 @@ final class FieldBehaviourTest extends TestCase
     }
 
     /**
-     * Asserts an explicit UTC consent timestamp (GDPR Art. 7(1)); matches pattern+date, not current_time('mysql') (site-local, and second-boundary flaky).
+     * Asserts an explicit UTC consent timestamp (GDPR Art. 7(1)), by pattern and date, so second boundaries don't flake.
      *
      * @param mixed  $value  Submitted value.
      * @param array  $config Field configuration.
@@ -346,10 +344,10 @@ final class FieldBehaviourTest extends TestCase
             $c = array_merge($exp, ['mname_enabled'=>true]);
             return self::expectMapContains(['fname'=>'Hans','lname'=>'Müller','mname'=>'Peter'], $c, $h, 'Peter');
         });
-        $this->check('validate prefix_required=true is skipped (select subfield always has a value)', function () use ($h, $cfg) {
-            $c = array_merge($cfg, ['expanded'=>true,'prefix_enabled'=>true,'prefix_required'=>true,'fname_enabled'=>false,'lname_enabled'=>false,'mname_enabled'=>false]);
-            return self::expectOk([], $c, $h);
-        });
+        // Enforced as the browser enforces it: the select is rendered "required", and its first option ("—") is empty.
+        $prefix_required = array_merge($cfg, ['expanded'=>true,'prefix_enabled'=>true,'prefix_required'=>true,'fname_enabled'=>false,'lname_enabled'=>false,'mname_enabled'=>false]);
+        $this->check('validate prefix_required=true refuses "—" (empty)', fn() => self::expectError(['prefix'=>''], $prefix_required, $h));
+        $this->check('validate prefix_required=true accepts a salutation', fn() => self::expectOk(['prefix'=>'mr'], $prefix_required, $h));
         // Salutations post a stable key, so validation doesn't depend on the locale the request runs in.
         $prefix_only = array_merge($cfg, ['expanded'=>true,'prefix_enabled'=>true,'fname_enabled'=>false,'lname_enabled'=>false,'mname_enabled'=>false]);
         $this->check('validate prefix key accepted', fn() => self::expectOk(['prefix'=>'ms'], $prefix_only, $h));
@@ -580,7 +578,7 @@ final class FieldBehaviourTest extends TestCase
         });
         $this->check('validate required empty', fn() => self::expectError('', array_merge($cfg, ['required'=>true]), $h));
         $this->check('validate optional empty', fn() => self::expectOk('', $cfg, $h));
-        // TimeField DOES validate format: a direct POST can bypass the <input type="time"> constraint, and an unchecked value flows into the email and sealed PDF.
+        // TimeField validates the format, as a direct POST bypasses <input type="time">.
         $this->check('validate HH:MM', fn() => self::expectOk('14:30', $cfg, $h));
         $this->check('validate HH:MM:SS', fn() => self::expectOk('14:30:45', $cfg, $h));
         $this->check('validate rejects non-time', fn() => self::expectError('not-a-time', $cfg, $h));
@@ -855,6 +853,23 @@ final class FieldBehaviourTest extends TestCase
         $this->check('validate blocked ext php', fn() => self::expectError(['name'=>'evil.php','tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'text/plain'], $cfg, $h));
         $this->check('validate blocked ext js', fn() => self::expectError(['name'=>'evil.js','tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'text/plain'], $cfg, $h));
         $this->check('validate blocked ext exe', fn() => self::expectError(['name'=>'evil.exe','tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'application/octet-stream'], $cfg, $h));
+        // Blocked even when the admin allows them: macro-enabled Office files, cmd scripts, disk images, and the
+        // binary workbook, add-ins, query files, OneNote, compiled help and internet shortcuts.
+        foreach (['docm', 'xlsm', 'pptm', 'cmd', 'phps', 'iso', 'vhd', 'xlsb', 'xll', 'iqy', 'slk', 'one', 'chm', 'url'] as $ext) {
+            $this->check("validate blocked ext $ext even when allowed", fn() => self::expectError(
+                ['name'=>"evil.$ext",'tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'application/octet-stream'],
+                array_merge($cfg, ['allowed_types' => $ext]),
+                $h
+            ));
+        }
+        // The older Office formats, which can carry macros, are no longer in the default Documents group, but an
+        // admin can still list them per field.
+        $this->check('validate .doc not in the default Documents group', fn() => self::expectError(
+            ['name'=>'old.doc','tmp_name'=>'/tmp/x','error'=>0,'size'=>100,'type'=>'application/msword'],
+            array_merge($cfg, ['allow_documents' => true, 'allowed_types' => '']),
+            $h
+        ));
+        $this->check('render .doc allowed when listed per field', fn() => self::contains($h->render(array_merge($cfg, ['allowed_types' => 'doc']), 'f1'), '.doc'));
         // An allowed extension gets past the type checks. The stub temp path can't be read, so the file is refused by name
         // for the visitor to retry; it used to pass silently and the form went out without it.
         $this->check('validate allowed ext pdf, unreadable temp file refused by name', function () use ($h, $cfg) {
@@ -877,9 +892,11 @@ final class FieldBehaviourTest extends TestCase
         $cfg = array_merge($h->getDefaultConfig(), ['type'=>'signature','label'=>'Unterschrift','export_format'=>'png']);
 
         // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- carries raw binary across a JSON/array boundary between the field handler and the PDF/mail layer. Not obfuscation.
-        $validPng = 'data:image/png;base64,'.base64_encode("\x89PNG\r\n\x1a\n".str_repeat("\x00", 100));
-        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- carries raw binary across a JSON/array boundary between the field handler and the PDF/mail layer. Not obfuscation.
-        $validJpg = 'data:image/jpeg;base64,'.base64_encode("\xff\xd8\xff".str_repeat("\x00", 100));
+        // Real images, as the pad posts them: a signature must have a readable size (BaseField::isValidSignatureImage()).
+        $validPng = self::signatureUri('png');
+        $validJpg = self::signatureUri('jpeg');
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds a test data URI. Not obfuscation.
+        $headerOnly = 'data:image/png;base64,'.base64_encode("\x89PNG\r\n\x1a\n".str_repeat("\x00", 100));
 
         $this->check('schema integrity', fn() => self::schemaIntegrity($h));
         $this->check('render basic', fn() => self::renderBasic($h, $cfg));
@@ -894,6 +911,7 @@ final class FieldBehaviourTest extends TestCase
         $this->check('validate required empty', fn() => self::expectError('', array_merge($cfg, ['required'=>true]), $h));
         $this->check('validate optional empty', fn() => self::expectOk('', $cfg, $h));
         $this->check('validate required valid png', fn() => self::expectOk($validPng, array_merge($cfg, ['required'=>true]), $h));
+        $this->check('validate refuses a PNG signature and header without an image', fn() => self::expectError($headerOnly, $cfg, $h));
         $this->check('validate required jpeg format', function () use ($h, $cfg, $validJpg) {
             return self::expectOk($validJpg, array_merge($cfg, ['required'=>true,'export_format'=>'jpeg']), $h);
         });
@@ -1015,7 +1033,8 @@ final class FieldBehaviourTest extends TestCase
             $c = $h->getDefaultConfig();
             unset($c['consent_text']);
             $c['type'] = 'consent';
-            return self::contains($h->render($c, 'f1'), __('I agree.', 'formfabricator'));
+            // The same default the record names (ConsentField::shownText()); the page once showed "I agree." instead.
+            return self::contains($h->render($c, 'f1'), __('I agree to the terms.', 'formfabricator'));
         });
         $this->check('validate required empty', fn() => self::expectError('', array_merge($cfg, ['required'=>true]), $h));
         $this->check('validate required checked', fn() => self::expectOk('1', array_merge($cfg, ['required'=>true]), $h));
@@ -1152,6 +1171,15 @@ final class FieldBehaviourTest extends TestCase
             self::$lastIn  = 'show_in_output=false';
             self::$lastOut = var_export($r, true);
             return $r === [] ? true : 'expected [], got: ' . var_export($r, true);
+        });
+        // A group of HTML blocks only posts nothing, so its value is []: it used to map to nothing, whatever "Show in
+        // mail/PDF" said.
+        $this->check('mapNormalized in a group of HTML blocks only → still mapped', function () use ($h) {
+            $child = array_merge($h->getDefaultConfig(), ['id'=>'b1','type'=>'html','label'=>'Block','html_content'=>'<p>Hi</p>']);
+            $r     = (new \FabricatorForms\Fields\GroupField())->mapNormalized('g', 'Group', [], ['children' => [$child]], []);
+            self::$lastIn  = 'group [html], value []';
+            self::$lastOut = var_export($r, true);
+            return isset($r['b1']) && str_contains($r['b1']['value'], 'Hi') ? true : 'unexpected result: ' . var_export($r, true);
         });
     }
 
@@ -1296,6 +1324,28 @@ final class FieldBehaviourTest extends TestCase
             return str_contains($html, '<input type="hidden" name="f1[post_title]"')
                 ? true : 'expected hidden input name f1[post_title], got: ' . $html;
         });
+        // The page shows what the server will record: nothing from a private or password-protected post, which
+        // extractValue() treats as absent (the page used to show it, so rules on the field disagreed).
+        foreach (['private' => ['post_status' => 'private'], 'password-protected' => ['post_password' => 'secret']] as $kind => $args) {
+            $this->check("render shows nothing of a $kind post", function () use ($h, $cfg, $args) {
+                $GLOBALS['post'] = get_post(self::factory()->post->create($args + ['post_title' => 'Hidden Title']));
+                try {
+                    $html = $h->render($cfg, 'f1');
+                } finally {
+                    unset($GLOBALS['post']);
+                }
+                return str_contains($html, 'Hidden Title') ? 'the title reached the page: ' . $html : true;
+            });
+        }
+        $this->check('render shows a published post', function () use ($h, $cfg) {
+            $GLOBALS['post'] = get_post(self::factory()->post->create(['post_title' => 'Public Title']));
+            try {
+                $html = $h->render($cfg, 'f1');
+            } finally {
+                unset($GLOBALS['post']);
+            }
+            return str_contains($html, 'Public Title') ? true : 'expected the title: ' . $html;
+        });
         $this->check('map array → imploded values', fn() => self::expectMapContains(['post_title'=>'My Page','post_id'=>'42'], $cfg, $h, 'My Page'));
         $this->check('map excludes fields not selected in post_field', function () use ($h, $cfg) {
             $value = ['post_title'=>'My Page','post_id'=>'42','post_url'=>'https://example.com','post_author'=>'Admin'];
@@ -1325,32 +1375,40 @@ final class FieldBehaviourTest extends TestCase
         $this->check('validate optional empty', fn() => self::expectOk('', $cfg, $h));
         $this->check('validate valid URL', fn() => self::expectOk('https://example.com', $cfg, $h));
         $this->check('validate invalid URL when flag', fn() => self::expectError('not a url', array_merge($cfg, ['validate_url'=>true]), $h));
+        // An internationalised domain passes, as in the browser (FILTER_VALIDATE_URL alone refused it).
+        $this->check('validate umlaut domain when flag', fn() => self::expectOk('https://müller.de/über', array_merge($cfg, ['validate_url'=>true]), $h));
+        $this->check('validate umlaut domain without scheme refused', fn() => self::expectError('müller.de', array_merge($cfg, ['validate_url'=>true]), $h));
+        // Each passed as a plain letter in the ASCII stand-in: a right-to-left override that makes the host read as
+        // another, a zero-width space, a non-breaking space.
+        foreach (["https://exa\u{202E}lpmoc.de", "https://exa\u{200B}mple.de", "https://exa\u{00A0}mple.de"] as $i => $invisible) {
+            $this->check('validate invisible character in host refused #' . $i, fn() => self::expectError($invisible, array_merge($cfg, ['validate_url'=>true]), $h));
+        }
         // validate_url=false: invalid URLs pass (no format check)
         $this->check('validate invalid URL no flag', fn() => self::expectOk('not a url', array_merge($cfg, ['validate_url'=>false]), $h));
         $this->check('map value', fn() => self::expectMap('https://example.com', $cfg, $h, 'https://example.com'));
         $this->check('map empty → Kein Eintrag', fn() => self::expectMapContains('', $cfg, $h, __('[No entry]', 'formfabricator')));
     }
 
-    public function testSepa(): void
+    public function testDirectDebitSepa(): void
     {
-        $this->section('sepa');
-        $h   = new \FabricatorForms\Fields\SepaField();
+        $this->section('directdebit (SEPA)');
+        $h   = new \FabricatorForms\Fields\DirectDebitField();
         $cfg = array_merge($h->getDefaultConfig(), [
-            'type'=>'sepa','label'=>'SEPA-Mandat',
+            'type'=>'directdebit','label'=>'SEPA-Mandat',
             'mandate_title'=>'SEPA Lastschriftmandat',
             'creditor_id'=>'DE98ZZZ09999999999','mandate_ref'=>'MANDAT-001',
         ]);
 
-        // validate() only checks the data-URI prefix, not real image content.
-        $dummySig  = 'data:image/png;base64,iVBORw0KGgo=';
+        // A real image: validate() decodes the signature and checks its declared size.
+        $dummySig  = self::signatureUri('png');
         $validData = ['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'Max Mustermann','sig'=>$dummySig];
 
         $this->check('schema integrity', fn() => self::schemaIntegrity($h));
         $this->check('render basic', fn() => self::renderBasic($h, $cfg));
         $this->check('render mandate title', fn() => self::contains($h->render($cfg, 'f1'), 'SEPA Lastschriftmandat'));
-        $this->check('render IBAN input class', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-sepa-iban'));
-        $this->check('render BIC input class', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-sepa-bic'));
-        $this->check('render holder input class', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-sepa-holder'));
+        $this->check('render IBAN input class', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-debit-iban'));
+        $this->check('render BIC input class', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-debit-bic'));
+        $this->check('render holder input class', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-debit-holder'));
         $this->check('render <canvas for sig', fn() => self::contains($h->render($cfg, 'f1'), '<canvas'));
         $this->check('render creditor_id in output', fn() => self::contains($h->render($cfg, 'f1'), 'DE98ZZZ09999999999'));
         $this->check('render country_filter → data attr present', function () use ($h, $cfg) {
@@ -1393,7 +1451,9 @@ final class FieldBehaviourTest extends TestCase
         $this->check('validate req non-array → error', fn() => self::expectError(null, array_merge($cfg, ['required'=>true]), $h));
         $this->check('validate req empty IBAN → error', fn() => self::expectError(['iban'=>'','bic'=>'COBADEFFXXX','holder'=>'Max','sig'=>$dummySig], array_merge($cfg, ['required'=>true]), $h));
         $this->check('validate req invalid IBAN', fn() => self::expectError(['iban'=>'INVALID','bic'=>'COBADEFFXXX','holder'=>'Max','sig'=>$dummySig], array_merge($cfg, ['required'=>true]), $h));
-        $this->check('validate req empty BIC → error', fn() => self::expectError(['iban'=>'DE89370400440532013000','bic'=>'','holder'=>'Max','sig'=>$dummySig], array_merge($cfg, ['required'=>true]), $h));
+        // The BIC is needed only for IBANs from SEPA countries outside the EEA (DirectDebitField::SEPA_NON_EEA).
+        $this->check('validate req empty BIC, EEA IBAN → true', fn() => self::expectOk(['iban'=>'DE89370400440532013000','bic'=>'','holder'=>'Max','sig'=>$dummySig], array_merge($cfg, ['required'=>true]), $h));
+        $this->check('validate req empty BIC, Swiss IBAN → error', fn() => self::expectError(['iban'=>'CH9300762011623852957','bic'=>'','holder'=>'Max','sig'=>$dummySig], array_merge($cfg, ['required'=>true]), $h));
         // 'TOO' is only 3 chars — fails [A-Z]{6} minimum
         $this->check('validate req invalid BIC', fn() => self::expectError(['iban'=>'DE89370400440532013000','bic'=>'TOO','holder'=>'Max','sig'=>$dummySig], array_merge($cfg, ['required'=>true]), $h));
         $this->check('validate req empty holder', fn() => self::expectError(['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'','sig'=>$dummySig], array_merge($cfg, ['required'=>true]), $h));
@@ -1406,7 +1466,9 @@ final class FieldBehaviourTest extends TestCase
             return self::expectOk(['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'Max','sig'=>$dummySig], $c, $h);
         });
         $this->check('validate req empty signature → error', fn() => self::expectError(['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'Max','sig'=>''], array_merge($cfg, ['required'=>true]), $h));
-        $this->check('validate req non-image signature → error', fn() => self::expectError(['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'Max','sig'=>'not-a-data-uri'], array_merge($cfg, ['required'=>true]), $h));
+        // Text that is no data URI is a name typed instead of a drawing (BaseField::isTypedSignature()); a broken drawing is refused.
+        $this->check('validate req typed-name signature → true', fn() => self::expectOk(['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'Max','sig'=>'Max Mustermann'], array_merge($cfg, ['required'=>true]), $h));
+        $this->check('validate req broken image signature → error', fn() => self::expectError(['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'Max','sig'=>'data:image/png;base64,bm90IGFuIGltYWdl'], array_merge($cfg, ['required'=>true]), $h));
         $this->check('map non-array → No entry', fn() => str_contains($h->map(null, $cfg), __('[No entry]', 'formfabricator')) ? true : 'wrong map');
         $this->check('map valid data contains IBAN', fn() => self::expectMapContains($validData, $cfg, $h, 'IBAN'));
         $this->check('map valid data contains BIC', fn() => self::expectMapContains($validData, $cfg, $h, 'BIC'));
@@ -1423,6 +1485,20 @@ final class FieldBehaviourTest extends TestCase
      * @param mixed  ...$args Method arguments.
      * @return mixed Whatever the method returns.
      */
+    /**
+     * A small drawn line as the signature pad posts it: a PNG or JPEG data URI.
+     */
+    private static function signatureUri(string $format): string
+    {
+        $im = imagecreatetruecolor(40, 20);
+        imagefill($im, 0, 0, (int) imagecolorallocate($im, 255, 255, 255));
+        imageline($im, 2, 10, 38, 12, (int) imagecolorallocate($im, 0, 0, 0));
+        ob_start();
+        $format === 'jpeg' ? imagejpeg($im) : imagepng($im);
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds a test data URI. Not obfuscation.
+        return 'data:image/' . $format . ';base64,' . base64_encode((string) ob_get_clean());
+    }
+
     private static function callPrivate(string $class, string $method, mixed ...$args): mixed
     {
         return (new \ReflectionMethod($class, $method))->invoke(null, ...$args);
@@ -1530,7 +1606,7 @@ final class FieldBehaviourTest extends TestCase
             'text', 'textarea', 'email', 'name', 'phone', 'number', 'address',
             'date', 'time', 'currency', 'select', 'radio', 'checkbox', 'upload',
             'signature', 'rating', 'slider', 'captcha', 'consent', 'gdpr', 'html',
-            'group', 'pagebreak', 'page-header', 'postdata', 'website', 'sepa',
+            'group', 'pagebreak', 'page-header', 'postdata', 'website', 'directdebit',
         ];
 
         $this->check('all registered types are tested', function () use ($registry, $testedTypes) {

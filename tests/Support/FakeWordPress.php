@@ -8,9 +8,8 @@ use Brain\Monkey\Functions;
  * An in-memory stand-in for the parts of WordPress that the plugin's stateful helpers use: options, transients, the
  * object cache, single cron events, the current user and a $wpdb that understands OptionMutex's lock rows.
  *
- * Stored values go through serialize()/unserialize() and scalars come back as strings, as they do from the database on
- * the next request; code that only works while a value is still in PHP's hands would pass against a plain array and
- * fail in production. Install with FakeWordPress::install() in setUp(); Brain Monkey's tearDown removes the stubs.
+ * Values are serialized and scalars come back as strings, as from the database. Install with
+ * FakeWordPress::install() in setUp(); Brain Monkey's tearDown removes the stubs.
  */
 final class FakeWordPress
 {

@@ -10,7 +10,7 @@ use FabricatorForms\Utils\VerifierCleanup;
 /**
  * Uploaded verification PDFs and the images taken from them leave the protected temp folder about 10 minutes after
  * their last use — on the next request, even with WP-Cron off — while a copy a batch is still waiting on is kept alive.
- * (TESTING.md §5, "leave the protected temp folder…" — 1.0.7.)
+ * (TESTING.md §5, "leave the protected temp folder…".)
  */
 final class VerifierCleanupTest extends TestCase
 {

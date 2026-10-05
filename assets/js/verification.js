@@ -4,11 +4,9 @@
  * @license   GPL-3.0-or-later
  */
 
-/* pdf.js 6.x ships ES modules only, so this loads as a <script type="module">. The vendored modules are renamed from
-   .mjs to .js: module imports need a JavaScript MIME type, which many servers don't send for .mjs.
-   Imported lazily from the versioned URL the page hands over: a static import resolves relative to this file and
-   drops its ?ver=, so a browser could pair a cached older pdf.js with a freshly fetched worker, which pdf.js refuses
-   to run. Lazy, not top-level await, so the rest of this module still runs before DOMContentLoaded. */
+/* pdf.js ships ES modules only (vendored as .js, which servers send with a JavaScript MIME type). Imported lazily
+   from the page's versioned URL, so a cached old library is never paired with a new worker, and without top-level
+   await, so the rest still runs before DOMContentLoaded. */
 let _fabricatorPdfjsPromise = null;
 function _fabricatorPdfjs() {
     if (!_fabricatorPdfjsPromise) {
@@ -28,100 +26,7 @@ function _fabricatorPdfjs() {
     return _fabricatorPdfjsPromise;
 }
 
-/* ── Particle canvas on the PHP-rendered canvas element ── */
-document.addEventListener('DOMContentLoaded', function () {
-    var canvas = document.getElementById('fabricator-particle-canvas');
-    if (!canvas) { return; }
-    /* Decorative only, so skipped for anyone whose system asks for reduced motion (WCAG 2.3.3). */
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        canvas.style.display = 'none';
-        return;
-    }
-
-    var ctx   = canvas.getContext('2d');
-    var mouse = { x: -9999, y: -9999 };
-    var _ah   = getComputedStyle(document.documentElement).getPropertyValue('--fabricator-admin-accent').trim() || '#2271b1';
-    var _rgb  = function (h) { return parseInt(h.slice(1,3),16)+','+parseInt(h.slice(3,5),16)+','+parseInt(h.slice(5,7),16); };
-    var COLOR = _rgb(_ah);
-    var LINK  = 150, SPEED = 1.0;
-    var particles = [], paused = false, FRAME_MS = 1000 / 30;
-    /* One pending frame at a time: every switch back to this tab used to start another loop alongside
-       the one already running, so the page's CPU use grew over a session. */
-    var rafId = 0, timerId = 0;
-    function schedule() {
-        if (rafId || timerId) return;
-        rafId = requestAnimationFrame(function () { rafId = 0; draw(); });
-    }
-
-    function resize() {
-        canvas.width  = canvas.offsetWidth  || window.innerWidth;
-        canvas.height = canvas.offsetHeight || window.innerHeight;
-        var DOTS = Math.min(120, Math.max(40, Math.round(canvas.width * canvas.height / 26000)));
-        particles = [];
-        for (var i = 0; i < DOTS; i++) {
-            particles.push({
-                x: Math.random() * canvas.width,  y: Math.random() * canvas.height,
-                vx: (Math.random() - 0.5) * SPEED * 2, vy: (Math.random() - 0.5) * SPEED * 2,
-                r: 2 + Math.random() * 1.5
-            });
-        }
-    }
-
-    function draw() {
-        if (paused) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        for (var i = 0; i < particles.length; i++) {
-            var p = particles[i];
-            p.x += p.vx; p.y += p.vy;
-            if (p.x < 0 || p.x > canvas.width)  { p.vx *= -1; }
-            if (p.y < 0 || p.y > canvas.height) { p.vy *= -1; }
-        }
-        ctx.lineWidth = 1;
-        for (var i = 0; i < particles.length; i++) {
-            for (var j = i + 1; j < particles.length; j++) {
-                var dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y;
-                var d  = Math.sqrt(dx * dx + dy * dy);
-                if (d < LINK) {
-                    ctx.beginPath();
-                    ctx.moveTo(particles[i].x, particles[i].y);
-                    ctx.lineTo(particles[j].x, particles[j].y);
-                    ctx.strokeStyle = 'rgba(' + COLOR + ',' + (1 - d / LINK) * 0.3 + ')';
-                    ctx.stroke();
-                }
-            }
-            var mdx = particles[i].x - mouse.x, mdy = particles[i].y - mouse.y;
-            var md  = Math.sqrt(mdx * mdx + mdy * mdy);
-            if (md < LINK) {
-                ctx.beginPath();
-                ctx.moveTo(particles[i].x, particles[i].y);
-                ctx.lineTo(mouse.x, mouse.y);
-                ctx.strokeStyle = 'rgba(' + COLOR + ',' + (1 - md / LINK) * 0.55 + ')';
-                ctx.stroke();
-            }
-        }
-        ctx.fillStyle = 'rgba(' + COLOR + ', 0.5)';
-        for (var i = 0; i < particles.length; i++) {
-            ctx.beginPath();
-            ctx.arc(particles[i].x, particles[i].y, particles[i].r, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        timerId = setTimeout(function () { timerId = 0; schedule(); }, FRAME_MS - 2);
-    }
-
-    canvas.addEventListener('mousemove', function (e) {
-        var rect = canvas.getBoundingClientRect();
-        mouse.x = e.clientX - rect.left;
-        mouse.y = e.clientY - rect.top;
-    });
-    document.addEventListener('visibilitychange', function () {
-        paused = document.hidden;
-        if (!paused) schedule();
-    });
-    window.addEventListener('resize', resize);
-
-    resize();
-    schedule();
-});
+/* The particle background is drawn by admin-editor-canvas.js, as on every other admin page. */
 
 const Y_THRESHOLD = 3;
 
@@ -150,9 +55,7 @@ function _fabricatorCreateProgressCard(name) {
         '</div>';
     /* Translated strings come from a .mo, which can carry markup: text node, never innerHTML. */
     card.querySelector('.fabricator-vpc__step').textContent = i18n.loading || 'Loading…';
-    // Set via textContent rather than interpolating into the innerHTML string
-    // above — doesn't depend on Verificationpage.php's sanitize_file_name()
-    // upstream remaining the only source of this value forever.
+    // textContent, independent of any upstream sanitizing.
     var nameEl = card.querySelector('.fabricator-vpc__name');
     if (nameEl) nameEl.textContent = name;
     return card;
@@ -229,9 +132,7 @@ function _fabricatorReleaseVerifySlot() {
     if (next) next();
 }
 
-/* Waits out $waitMs, invoking onTick(remainingMs) roughly once a second so the
-   UI can show a live countdown instead of a number that's stale the instant
-   it's shown. */
+/* Waits out waitMs, calling onTick(remainingMs) about once a second for a live countdown. */
 function _fabricatorCountdown(waitMs, onTick) {
     if (waitMs <= 0) { return Promise.resolve(); }
     return new Promise(function (resolve) {
@@ -360,7 +261,8 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
                     loaded += value.length;
                     if (totalBytes) {
                         var frac = Math.min(1, loaded / totalBytes);
-                        var downloadMsg = (i18n.downloading || 'Downloading… (%1$d%%)').replace('%1$d', Math.round(frac * 100));
+                        /* A printf-style string: %% is a literal %, which only sprintf() collapses, so it is done here. */
+                        var downloadMsg = (i18n.downloading || 'Downloading… (%1$d%%)').replace('%1$d', Math.round(frac * 100)).replace(/%%/g, '%');
                         _fabricatorUpdateCard(card, downloadMsg, 2 + Math.round(frac * 10));
                     }
                 }
@@ -373,8 +275,8 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
             } else {
                 pdfBytes = new Uint8Array(await downloadResp.arrayBuffer());
             }
-            // pdf.js 6.x removed eval()/Function() usage entirely, so CVE-2024-4367's isEvalSupported:false
-            // workaround no longer applies (that option no longer exists).
+            // pdf.js 6.x uses no eval()/Function() at all, so CVE-2024-4367's isEvalSupported:false workaround has
+            // nothing to switch off (pdf.js has no such option).
             const pdfjsLib = await _fabricatorPdfjs();
             loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
             pdf = await loadingTask.promise;
@@ -467,7 +369,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
             await _fabricatorAcquireVerifySlot();
             if (queuedForVerify) { card.classList.remove('fabricator-vpc--queued'); }
 
-            // Retry a 429 (clock drift/jitter can still collide slots) instead of failing the file; _fabricatorWidenPushSlotGap() also widens the gap for the rest of the batch.
+            // A 429 is retried, and _fabricatorWidenPushSlotGap() widens the gap for the rest of the batch.
             var res;
             try {
                 var maxAttempts = 5;
@@ -521,7 +423,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
             done();
 
             if (json.success === true && json.data && typeof json.data.html === 'string') {
-                // Already escaped server-side (esc_html()/wp_kses() in Verificationpage.php) — no client-side regex sanitizer, which would be bypassable and add false confidence.
+                // Escaped server-side (Verificationpage.php).
                 const tmp = document.createElement('div');
                 tmp.innerHTML = json.data.html;
                 card.parentNode.replaceChild(tmp.firstElementChild || tmp, card);
@@ -530,7 +432,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
                 card.classList.add('fabricator-vpc--error');
                 var msg = (json.data && json.data.message) || (i18n.unknown_error || 'Unknown server error');
                 var stepEl = card.querySelector('.fabricator-vpc__step');
-                if (stepEl) stepEl.textContent = (i18n.error_prefix || 'Error: ') + msg;
+                if (stepEl) stepEl.textContent = (i18n.error_message || 'Error: %s').replace('%s', function () { return msg; });
             }
         } catch (err) {
             stopPoll();
@@ -544,7 +446,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
     } catch (e) {
         stopPoll();
         console.error('[FormFabricator] Error parsing PDF', pdfUrl, e);
-        _fabricatorUpdateCard(card, (i18n.pdf_load_error || 'PDF load error: ') + e.message, 100);
+        _fabricatorUpdateCard(card, (i18n.pdf_load_error || 'PDF load error: %s').replace('%s', function () { return e.message; }), 100);
         card.classList.add('fabricator-vpc--error');
         done();
         return [];

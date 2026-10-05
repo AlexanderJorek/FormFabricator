@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -92,9 +92,8 @@ class NumberField extends BaseField
     }
 
     /**
-     * Server-side step check, which nothing enforced before (the form is novalidate, so the browser skips it too): the
-     * value must lie on min + k·step, or 0 + k·step without a minimum. A non-numeric or non-positive step disables it.
-     * Mirrored in NumberField.number-range.js.
+     * Step check (the form is novalidate): the value must lie on min + k·step, or k·step without a minimum. A
+     * non-positive step disables it. Mirrored in NumberField.number-range.js.
      *
      * @param float $num      Submitted number.
      * @param mixed $step_raw Configured step.

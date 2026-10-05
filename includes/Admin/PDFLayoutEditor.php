@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -145,9 +145,7 @@ class PDFLayoutEditor
         // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         if (!empty($_POST['settings'])) {
             /* wp_unslash is required — WordPress's wp_magic_quotes() slashes all $_POST values */
-            // json_decode() itself doesn't sanitize — every key read from $raw below is sanitized individually before use.
-            // Decoded before sanitizing, as save() does: sanitize_textarea_field() on the raw JSON stripped every <...>
-            // sequence, so formatted header titles never reached the preview and any '<' corrupted the payload.
+            // Decoded first, as in save(); every key read from $raw is sanitized individually below.
             // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require() above; every key read from $raw is sanitized individually below.
             $raw = json_decode(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['settings'] ?? '')), true);
             if (!is_array($raw)) {
@@ -202,7 +200,7 @@ class PDFLayoutEditor
 
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- internal temp path.
         $data = file_get_contents($path);
-        // Delete immediately after reading — no submission data is ever kept on disk (see CLAUDE.md)
+        // Delete immediately after reading: no submission data is ever kept on disk.
         wp_delete_file($path);
 
         if ($data === false) {
@@ -257,8 +255,7 @@ class PDFLayoutEditor
     /**
      * Saves a posted layout form on the page's load- hook, before any output, then redirects (Post/Redirect/Get).
      *
-     * Saving used to run inside render(), after headers were sent and without a redirect, so reloading the page
-     * afterwards submitted the form again.
+     * The redirect keeps a reload of the page from submitting the form again.
      *
      * @return void
      */
@@ -374,6 +371,10 @@ class PDFLayoutEditor
     <div class="fabricator-title-pill"><i class="fa-solid fa-file-pdf"></i> <?php echo esc_html__('PDF Layout', 'formfabricator'); ?></div>
         <?php \FabricatorForms\Utils\Assets::renderNoticeDock(); ?>
 
+        <?php $signature_warning = self::signatureDeliveryWarning(); ?>
+        <div id="fabricator-pdf-signature-warning" class="notice notice-warning inline" <?php echo $signature_warning === '' ? 'hidden' : ''; ?>>
+            <p><?php echo esc_html($signature_warning); ?></p>
+        </div>
         <?php if ($saved) : ?>
         <div class="fabricator-settings-notice fabricator-settings-notice--success">
             <i class="fa-solid fa-circle-check"></i> <?php echo esc_html__('Layout saved.', 'formfabricator'); ?>
@@ -400,7 +401,7 @@ class PDFLayoutEditor
                 ?>
             </span>
         </div>
-        <?php // Heartbeat lock notice: assets/js/admin-pdflayout-lock.js (enqueued in Utils/Assets.php) -- previously an inline <script> block here. ?>
+        <?php // Heartbeat lock notice: assets/js/admin-pdflayout-lock.js (enqueued in Utils/Assets.php). ?>
 
     <form method="post" id="fabricator-pdf-layout-form">
         <?php wp_nonce_field('fabricator_pdf_layout', 'fabricator_pdf_layout_nonce'); ?>
@@ -408,7 +409,7 @@ class PDFLayoutEditor
         <input type="hidden" name="section_hidden" id="fabricator-section-hidden-input"
             value="<?php echo esc_attr(implode(',', $opts['section_hidden'])); ?>">
         <input type="hidden" name="header_layout_json" id="fabricator-header-layout-input"
-            value="<?php echo esc_attr(wp_json_encode($opts['header_layout'] ?? ['rows' => 8, 'elements' => []])); ?>">
+            value="<?php echo esc_attr(\FabricatorForms\Utils\Cast::jsonForAttribute($opts['header_layout'] ?? ['rows' => 8, 'elements' => []])); ?>">
 
         <div class="fabricator-pdf-editor-wrap">
 
@@ -730,7 +731,44 @@ class PDFLayoutEditor
         if ($error !== '') {
             wp_send_json_error(['message' => $error], 409);
         }
-        wp_send_json_success(['message' => __('Layout saved.', 'formfabricator'), 'snapshot' => self::snapshot()]);
+        wp_send_json_success(
+            [
+                'message'  => __('Layout saved.', 'formfabricator'),
+                'snapshot' => self::snapshot(),
+                'warning'  => self::signatureDeliveryWarning(),
+            ]
+        );
+    }
+
+    /**
+     * The warning for forms whose signatures this layout keeps from some recipients, or ''.
+     *
+     * Hiding "Signatures & Uploads" or "Form fields" takes signatures out of the PDF
+     * (MailSender::notificationsWithoutSignatures()); a layout change reaches every form at once.
+     *
+     * @return string
+     */
+    private static function signatureDeliveryWarning(): string
+    {
+        $layout = (array) get_option('fabricator_forms_pdf_layout', []);
+        if (array_intersect(['signatures', 'fields'], (array) ($layout['section_hidden'] ?? [])) === []) {
+            return '';
+        }
+        $titles = [];
+        foreach (\FabricatorForms\Form\FormModel::getAll() as $form) {
+            $without = \FabricatorForms\Form\MailSender::notificationsWithoutSignatures((int) $form->id, (array) $form->fields, $form->notifications);
+            if ($without !== []) {
+                $titles[] = (string) $form->title !== '' ? (string) $form->title : '#' . (int) $form->id;
+            }
+        }
+        if ($titles === []) {
+            return '';
+        }
+        return sprintf(
+            /* translators: %s: form titles, comma-separated. */
+            __('This layout leaves signatures out of the PDF. These forms take signatures, and the recipients of their notifications without "Attach uploaded files" get none: %s.', 'formfabricator'),
+            implode(', ', $titles)
+        );
     }
 
     /**
@@ -775,15 +813,16 @@ class PDFLayoutEditor
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- callback is an inline closure, not attacker-controlled dispatch.
             array_filter(
                 // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- sanitize_key(), hardcoded.
-                array_map('sanitize_key', explode(',', (string) wp_unslash($_POST['section_hidden'] ?? ''))),
+                array_map('sanitize_key', explode(',', \FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['section_hidden'] ?? '')))),
                 fn($s) => isset($labels[$s])
             )
         );
 
         // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- decoded JSON is fully validated/sanitized below by self::sanitizeHeaderLayout() before use.
-        $header_layout_decoded = json_decode((string) wp_unslash($_POST['header_layout_json'] ?? '{}'), true);
+        $header_layout_decoded = json_decode(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['header_layout_json'] ?? ''), '{}'), true);
 
         self::$sideload_denied = false;
+        self::$image_too_large = false;
         $header_layout         = self::sanitizeHeaderLayout(
             is_array($header_layout_decoded) ? $header_layout_decoded : [],
             true
@@ -791,6 +830,15 @@ class PDFLayoutEditor
         if (self::$sideload_denied) {
             // Refused before anything is written, so the page's snapshot stays valid for the corrected save.
             return __('Images from external URLs can only be imported by users who are allowed to upload files. Choose the image from the Media Library instead.', 'formfabricator');
+        }
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified at the top of this handler.
+        $posted_logo = isset($_POST['logo_url']) ? esc_url_raw(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['logo_url']))) : '';
+        if (self::$image_too_large || ($posted_logo !== '' && !self::fitsPdf($posted_logo))) {
+            return sprintf(
+                // translators: %s: largest image the PDF takes, in megapixels.
+                __('An image is larger than PDFs on this site can take: at most %s megapixels. Choose a smaller image, or scale this one down.', 'formfabricator'),
+                number_format_i18n(floor(\FabricatorForms\PDF\PdfUtils::imagePixelLimit() / 100000) / 10, 1)
+            );
         }
 
         // This form has no logo_url or logo_width input — the logo is placed through the header layout editor — so
@@ -803,14 +851,17 @@ class PDFLayoutEditor
             [
             // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the caller verified the nonce before reaching this write.
             'logo_url'        => isset($_POST['logo_url'])
-                ? esc_url_raw((string) wp_unslash($_POST['logo_url']))
+                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via esc_url_raw(); Cast::stringOrDefault() breaks the sniff's taint trace.
+                ? esc_url_raw(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['logo_url'])))
                 : esc_url_raw((string) ($stored_layout['logo_url'] ?? '')),
             // phpcs:ignore WordPress.Security.NonceVerification.Missing -- see above.
             'logo_width'      => isset($_POST['logo_width'])
                 ? min(400, max(40, absint(wp_unslash($_POST['logo_width']))))
                 : min(400, max(40, (int) ($stored_layout['logo_width'] ?? $defs['logo_width']))),
-            'accent_color'    => sanitize_hex_color((string) wp_unslash($_POST['accent_color']    ?? '')) ?: $defs['accent_color'],
-            'separator_color' => sanitize_hex_color((string) wp_unslash($_POST['separator_color'] ?? '')) ?: $defs['separator_color'],
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_hex_color(); Cast::stringOrDefault() breaks the sniff's taint trace.
+            'accent_color'    => sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['accent_color'] ?? ''))) ?: $defs['accent_color'],
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_hex_color(); Cast::stringOrDefault() breaks the sniff's taint trace.
+            'separator_color' => sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['separator_color'] ?? ''))) ?: $defs['separator_color'],
             'font_family'     => sanitize_key(wp_unslash($_POST['font_family'] ?? 'dejavusans')),
             'font_size_body'  => min(20, max(6, absint(wp_unslash($_POST['font_size_body'] ?? 11)))),
             'title_size'      => min(36, max(10, absint(wp_unslash($_POST['title_size']     ?? 14)))),
@@ -839,7 +890,32 @@ class PDFLayoutEditor
     private static bool $sideload_denied = false;
 
     /**
-     * Resolves an image element's src to a local media-library attachment URL; external URLs are fetched only when $persist is true, via media_sideload_image()'s SSRF-guarded wp_safe_remote_get().
+     * Set by resolveImageSrc() when an image is larger than a submission's PDF can take.
+     *
+     * @var bool
+     */
+    private static bool $image_too_large = false;
+
+    /**
+     * Whether a Media Library image is small enough for every submission's PDF (PdfUtils::imagePixelLimit()). A URL
+     * that is no attachment passes: the PDF never reads one.
+     *
+     * @param string $url Image URL.
+     * @return bool
+     */
+    private static function fitsPdf(string $url): bool
+    {
+        $id = attachment_url_to_postid($url);
+        if (!$id) {
+            return true;
+        }
+        $path = (string) (get_attached_file($id) ?: '');
+        return $path !== '' && \FabricatorForms\PDF\PdfUtils::layoutImageFits($path, \FabricatorForms\PDF\PdfUtils::imagePixelLimit());
+    }
+
+    /**
+     * Resolves an image element's src to a Media Library URL; an external URL is sideloaded (SSRF-guarded) only when
+     * $persist is true.
      *
      * @param string $src     Raw src URL from the layout editor.
      * @param bool   $persist True when called from the final save handler.
@@ -851,7 +927,7 @@ class PDFLayoutEditor
             return '';
         }
         if (attachment_url_to_postid($src)) {
-            return $src;
+            return self::fittingImage($src);
         }
         if (!$persist || !preg_match('#^https?://#i', $src)) {
             return '';
@@ -871,19 +947,18 @@ class PDFLayoutEditor
         require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/image.php';
 
-        // layout.php only ever reads the ORIGINAL file, so suppress the thumbnail/medium/large derivatives — pure decode/encode cost on a synchronous admin save.
+        // layout.php reads only the attached file (WordPress's scaled copy of a large image), so the thumbnail, medium and
+        // large sizes are suppressed: pure decode/encode cost on a synchronous admin save. The scaling itself stays.
         $suppress_sizes = static function (): array {
             return [];
         };
         add_filter('intermediate_image_sizes_advanced', $suppress_sizes, PHP_INT_MAX);
-        add_filter('big_image_size_threshold', '__return_false', PHP_INT_MAX);
         try {
             $attachment_id = media_sideload_image($src, 0, null, 'id');
         } finally {
-            // finally: a sideload throwing must not leave these filters attached for the rest
-            // of the request, where they'd silently break unrelated media uploads.
+            // finally: a sideload throwing must not leave the filter attached for the rest of the request, where it would
+            // silently break unrelated media uploads.
             remove_filter('intermediate_image_sizes_advanced', $suppress_sizes, PHP_INT_MAX);
-            remove_filter('big_image_size_threshold', '__return_false', PHP_INT_MAX);
         }
 
         if (is_wp_error($attachment_id)) {
@@ -894,7 +969,22 @@ class PDFLayoutEditor
             return '';
         }
 
-        return wp_get_attachment_url($attachment_id) ?: '';
+        return self::fittingImage(wp_get_attachment_url($attachment_id) ?: '');
+    }
+
+    /**
+     * $url when the image fits a submission's PDF; otherwise '' and the save is refused (image_too_large).
+     *
+     * @param string $url Media Library image URL.
+     * @return string
+     */
+    private static function fittingImage(string $url): string
+    {
+        if ($url === '' || self::fitsPdf($url)) {
+            return $url;
+        }
+        self::$image_too_large = true;
+        return '';
     }
 
     /**
@@ -909,7 +999,8 @@ class PDFLayoutEditor
      */
     private static function sanitizeHeaderLayout(array $raw, bool $persist = false): array
     {
-        // ACCEPTED RISK, deliberate (don't change without asking): element list is uncapped, so N image URLs means N sideload fetches — requires edit_pdf_layout plus core upload_files, judged acceptable.
+        // The element list is uncapped, so N image URLs means N sideload fetches. That takes edit_pdf_layout plus core
+        // upload_files, an accepted risk.
         $rows = min(30, max(2, (int) ($raw['rows'] ?? 8)));
         $elements = [];
         foreach ((array) ($raw['elements'] ?? []) as $el) {
@@ -930,7 +1021,7 @@ class PDFLayoutEditor
                 'h'    => max(1, min(500, (int) ($el['h'] ?? 4))),
             ];
             if ($type === 'title') {
-                // el.content carries the contenteditable's formatted HTML (el.text is a plain-text fallback); use the same allow-list as PDF-render time or formatting is silently discarded on save.
+                // Formatted HTML (el.text is the plain fallback), with the allow-list the PDF renders with.
                 $raw_content = $el['content'] ?? $el['text'] ?? '{form_title}';
                 $raw_html = is_string($raw_content) ? $raw_content : '{form_title}';
                 $item['content'] = wp_kses($raw_html, [

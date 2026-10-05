@@ -131,8 +131,8 @@ function (root) {
                 document.addEventListener('touchmove', onMove, { passive: false });
                 document.addEventListener('touchend', onUp);
             }
-            /* Keyboard control for each thumb (WCAG 2.1.1): both are focusable role="slider" elements that previously
-               ignored every key. The thumbs never cross, as with dragging. */
+            /* Keyboard control for each thumb (WCAG 2.1.1): both are focusable role="slider" elements. The thumbs never
+               cross, as with dragging. */
             function keyThumb(isFrom, e) {
                 var current = isFrom ? from : to;
                 var target;

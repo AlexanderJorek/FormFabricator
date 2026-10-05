@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,6 +28,28 @@ defined('ABSPATH') || exit;
  */
 class AddressField extends BaseField
 {
+    /**
+     * Expanded: the enabled sub-fields' values in render order (BaseField::joinedSubValues()), as front.js reads them.
+     * Otherwise the single input's text; an array there is a crafted POST, which the browser never sends.
+     *
+     * @param mixed $raw    What extractValue() returned.
+     * @param array $config Field configuration.
+     * @return mixed
+     */
+    public function conditionValue(mixed $raw, array $config): mixed
+    {
+        if (empty($config['expanded'])) {
+            return is_array($raw) ? '' : $raw;
+        }
+        $keys = [];
+        foreach (self::SUBFIELDS as $sf) {
+            if (!$sf['optional'] || !empty($config[$sf['key'] . '_enabled'])) {
+                $keys[] = $sf['key'];
+            }
+        }
+        return self::joinedSubValues($raw, $keys);
+    }
+
     /**
      * Returns the field type label.
      *
@@ -127,7 +149,7 @@ class AddressField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         if (empty($config['expanded'])) {
-            $attrs = $this->inputAttrs($config, $field_id, 'text', ['value' => esc_attr((string)(is_array($value) ? '' : ($value ?? '')))]);
+            $attrs = $this->inputAttrs($config, $field_id, 'text', ['value' => (string)(is_array($value) ? '' : ($value ?? ''))]);
             return $this->wrap($field_id, $config, '<input' . $attrs . '>');
         }
 
@@ -264,6 +286,11 @@ class AddressField extends BaseField
     public function map(mixed $value, array $config): string
     {
         if (!is_array($value)) {
+            // Expanded mode posts sub-fields only. A plain string there is a direct POST that validate() read as empty
+            // sub-fields, past every per-sub-field cap: it is no address.
+            if (!empty($config['expanded'])) {
+                return __('[No entry]', 'formfabricator');
+            }
             // Simple mode posts one text input, so the address arrives as a plain string. Returning "[No entry]" for
             // everything non-array dropped it from the email, the PDF and the seal, and nothing here is stored.
             $scalar = trim((string) ($value ?? ''));

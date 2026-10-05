@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -43,7 +43,7 @@ class PdfUtils
     private const MIN_SAFE_PIXELS = 1_000_000;
 
     /**
-     * Returns a pixel-count ceiling scaled to memory_limit (half reserved for decoding) — a per-decode guard distinct from MemoryBudget's host-wide accounting, both needed.
+     * A per-decode pixel-count ceiling scaled to memory_limit (half reserved for decoding).
      *
      * @return int Maximum total pixel count (width * height) considered safe to decode.
      */
@@ -87,37 +87,118 @@ class PdfUtils
     }
 
     /**
+     * The largest image, in pixels, a submission's PDF takes whatever else is uploaded: within the PDF step's own memory
+     * limit, and within the budget next to 1 MB of files.
+     *
+     * @return int Pixels.
+     */
+    public static function imagePixelLimit(): int
+    {
+        $own    = \FabricatorForms\Utils\MemoryBudget::canRaiseLimit()
+            ? self::safePixelsFor(-1)
+            : self::maxSafePixels();
+        $budget = \FabricatorForms\Utils\MemoryBudget::budgetBytes();
+        $files  = \FabricatorForms\Utils\MemoryBudget::estimateBytes(1024 * 1024);
+        return min(
+            $own,
+            intdiv($budget, self::memoryLimitFor(1)),
+            intdiv(max(0, $budget - $files), self::DECODE_BYTES_PER_PIXEL)
+        );
+    }
+
+    /**
+     * An image file's pixel count, read from its header without decoding it; 0 when the size can't be read.
+     *
+     * @param string $path Image file.
+     * @return int Pixels.
+     */
+    public static function filePixels(string $path): int
+    {
+        if ($path === '') {
+            return 0;
+        }
+        $size = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => wp_getimagesize($path));
+        if (!is_array($size) || (int) ($size[0] ?? 0) <= 0 || (int) ($size[1] ?? 0) <= 0) {
+            return 0;
+        }
+        return (int) $size[0] * (int) $size[1];
+    }
+
+    /**
+     * Whether a PDF layout image is at most $limit pixels by its header. Fails closed on an unreadable raster size; SVG
+     * always fits.
+     *
+     * @param string $path  Image file.
+     * @param int    $limit Pixels.
+     * @return bool
+     */
+    public static function layoutImageFits(string $path, int $limit): bool
+    {
+        if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'svg') {
+            return true;
+        }
+        $pixels = self::filePixels($path);
+        return $pixels > 0 && $pixels <= $limit;
+    }
+
+    /**
+     * The files of the PDF layout's images (logo, header images): Media Library attachments only, never a URL.
+     *
+     * @param array $layout The fabricator_forms_pdf_layout option.
+     * @return string[] File paths.
+     */
+    public static function layoutImagePaths(array $layout): array
+    {
+        $urls = [is_string($layout['logo_url'] ?? null) ? $layout['logo_url'] : ''];
+        $elements = $layout['header_layout']['elements'] ?? [];
+        foreach (is_array($elements) ? $elements : [] as $el) {
+            if (is_array($el) && ($el['type'] ?? '') === 'image' && is_string($el['src'] ?? null)) {
+                $urls[] = $el['src'];
+            }
+        }
+        $paths = [];
+        foreach ($urls as $url) {
+            $id   = $url !== '' ? attachment_url_to_postid($url) : 0;
+            $path = $id ? (string) (get_attached_file($id) ?: '') : '';
+            if ($path !== '') {
+                $paths[] = $path;
+            }
+        }
+        return array_values(array_unique($paths));
+    }
+
+    /**
      * Cheaply checks an image's header dimensions against the safe-pixel cap before GD ever decodes it.
      *
+     * Fails closed: this is the last guard before a decompression bomb is decoded. An unreadable image is not embedded.
+     *
      * @param string $binary Raw binary image data.
-     * @return bool True if the image's declared dimensions are within the safe cap (or unknown), false
-     *              if they exceed it.
+     * @return bool True only if the image's declared dimensions are known and within the safe cap.
      */
     public static function precheckDimensions(string $binary): bool
     {
         $size = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => getimagesizefromstring($binary));
-        if ($size === false || !isset($size[0], $size[1])) {
-            return true;
+        if ($size === false || !isset($size[0], $size[1]) || (int) $size[0] <= 0 || (int) $size[1] <= 0) {
+            return false;
         }
         return ((int) $size[0] * (int) $size[1]) <= self::maxSafePixels();
     }
 
     /**
-     * Lives here (not Generator/Verificationpage) so both derive identical seal-page text from identical bytes — a prior split caused false seal-mismatches on untouched PDFs.
+     * A fingerprint of the seal page's text. Shared by generator and verifier, so both derive it from the same bytes alike.
      *
      * @param string $pdf_raw Raw PDF bytes.
      * @return string SHA-256 of the seal page's visible text, or '' when it cannot be resolved.
      */
     public static function sealPageTextFingerprint(string $pdf_raw): string
     {
-        // Resolves the page tree from the catalog, following nested /Pages and each object's LAST definition, so a
-        // decoy early copy or an intermediate node can't make this read content a viewer never shows.
+        // From the catalog, by each object's LAST definition, so a decoy copy can't supply content a viewer never shows.
         $objects = self::indexObjects($pdf_raw);
         $pages   = self::pageContents($pdf_raw, $objects);
         if ($pages === []) {
             return self::sealPageUnavailable('page tree could not be resolved from the catalog');
         }
-        // /Contents may be a single ref or an array; handling only the single form let an array silently disable this check while verification still ran.
+        // /Contents may be a single ref or an array.
         $contents_objs = end($pages);
         if ($contents_objs === []) {
             return self::sealPageUnavailable('last page has no resolvable /Contents');
@@ -155,31 +236,42 @@ class PdfUtils
     /**
      * Most objects a PDF may declare for the verifier to read it.
      *
-     * Every structure that indexes objects — indexObjects(), the verifier's object walk, pdfparser itself — costs a
-     * fixed amount per object on top of the bytes, and an object can be twenty bytes long, so a file of tiny objects
-     * cost many times its own size and ended in a memory fatal instead of a refusal. A document from this plugin holds
-     * a few thousand objects at most (a few per page, a few per font and per image), so this ceiling refuses nothing
-     * real and turns the per-object cost into a fixed bound.
+     * Every object index costs a fixed amount per object, so a file of tiny objects costs many times its size and ends
+     * in a memory fatal instead of a refusal. A PDF from this plugin holds a few thousand objects at most.
      *
      * @var int
      */
     public const MAX_OBJECTS = 50000;
 
     /**
-     * How many object headers raw PDF bytes declare, counted without building anything.
+     * How many object headers raw PDF bytes declare outside image data, counted without building anything.
      *
-     * Counts "obj" after each whitespace byte PCRE's \s knows, which is every way a header ("12 0 obj") can be written
-     * for the object scans to match it; "endobj" never counts, since "obj" follows "d" there. Anything that merely
-     * looks like a header inside a stream counts too, which only makes the ceiling stricter.
+     * Counts "obj" after each byte PCRE's \s matches, so every header the object scans match counts and "endobj" never
+     * does. Image data is skipped, so an uploaded image can't get a genuine PDF refused. pdfparser's objects are
+     * capped separately, by GuardedRawDataParser.
      *
      * @param string $raw Raw PDF bytes.
      * @return int
      */
     public static function declaredObjectCount(string $raw): int
     {
-        $count = 0;
-        foreach ([' ', "\n", "\r", "\t", "\x0B", "\x0C"] as $space) {
-            $count += substr_count($raw, $space . 'obj');
+        $needles = [' obj', "\nobj", "\robj", "\tobj", "\x0Bobj", "\x0Cobj"];
+        $count   = 0;
+        $cursor  = 0;
+        $between = static function (int $from, int $to) use ($raw, $needles, &$count): void {
+            foreach ($needles as $needle) {
+                $count += substr_count($raw, $needle, $from, $to - $from);
+            }
+        };
+        // One walk over the image spans, in file order; each stretch between them is counted once.
+        foreach (self::imageStreamSpans($raw) as [$start, $end]) {
+            if ($start > $cursor) {
+                $between($cursor, $start);
+            }
+            $cursor = max($cursor, $end);
+        }
+        if ($cursor < strlen($raw)) {
+            $between($cursor, strlen($raw));
         }
         return $count;
     }
@@ -194,37 +286,44 @@ class PdfUtils
     public static function indexObjects(string $pdf_raw): array
     {
         $objects = [];
-        // One forward pass, never a preg_match_all() over the whole file: the offset-capture match array for every
-        // object header measured about 16 times the file's own size, more than the check had reserved.
+        // One forward pass, never a preg_match_all() over the whole file, whose match array would outgrow the budget.
         $pos = 0;
-        // Latched once no "endstream" remains anywhere ahead: without it, a file full of stream headers that never
-        // close would re-scan the tail for each of them.
+        // Latched once no "endstream" remains ahead, so unclosed streams don't each re-scan the tail.
         $endstream_exhausted = false;
         $seen                = 0;
-        while (preg_match('/(?:^|[^0-9])(\d+)\s+0\s+obj\b/', $pdf_raw, $m, PREG_OFFSET_CAPTURE, $pos) === 1) {
-            // Backstop for MAX_OBJECTS: the verifier refuses such a file before reading it, but this index is also
-            // what decides a verdict, so it never grows past the ceiling whoever calls it.
+        $header              = '/(?:^|[^0-9])(\d+)\s+0\s+obj\b/';
+        $cache               = [];
+        // Headers inside image data are no objects (finderOutsideImageData()).
+        $find_header         = self::finderOutsideImageData($pdf_raw, $header);
+        $find_start          = self::finderOutsideImageData($pdf_raw, self::OBJECT_START);
+        $has                 = $find_header($pos, $m);
+        while ($has) {
+            // Backstop for MAX_OBJECTS, whoever calls this.
             if (++$seen > self::MAX_OBJECTS) {
                 throw new \LengthException('Too many objects in one PDF.');
             }
             $start = $m[0][1] + strlen($m[0][0]);
-            $pos   = $start;
-            $end   = strpos($pdf_raw, 'endobj', $start);
+            // The object ends at its "endobj" or the next header, whichever comes first, so copied spans never overlap
+            // (nested headers sharing one "endobj" would otherwise be quadratic in time and memory).
+            $has_next = $find_header($start, $next);
+            $end      = self::nextAt($pdf_raw, 'endobj', $start, $cache);
             if ($end === false) {
                 break; // Nothing closes this object, so nothing closes any later one either.
             }
+            // Any generation, as objectBodyEnd(). The stream is read from the whole file below, so it isn't cut short.
+            if ($find_start($start, $cut) && $cut[0][1] < $end) {
+                $end = $cut[0][1];
+            }
             $body   = substr($pdf_raw, $start, $end - $start);
             $record = ['dict' => $body, 'stream' => null];
-            // Stream bounds from the "stream" keyword to the next "endstream", not from the first "endobj":
-            // compressed bytes can contain that word, and cutting there would hash a truncated stream. The keyword is
-            // looked for inside this object's own bytes — searching the rest of the file for it cost every
-            // stream-less object a scan to the end, which is quadratic on a file made of them.
+            // From "stream" to the next "endstream", not the first "endobj", which compressed bytes can contain. The
+            // keyword is looked for in this object's bytes only, or every stream-less object would scan to the end.
             $has_marker = !$endstream_exhausted
                 && preg_match('/>>\s*stream(\r\n|\n|\r)/', $body, $sm, PREG_OFFSET_CAPTURE) === 1;
             if ($has_marker) {
                 $marker_at  = $start + $sm[0][1];
                 $data_start = $marker_at + strlen($sm[0][0]);
-                $data_end   = strpos($pdf_raw, 'endstream', $data_start);
+                $data_end   = self::nextAt($pdf_raw, 'endstream', $data_start, $cache);
                 if ($data_end === false) {
                     $endstream_exhausted = true;
                 } else {
@@ -233,17 +332,16 @@ class PdfUtils
                 }
             }
             $objects[(int) $m[1][0]] = $record;
+            $has = $has_next;
+            $m   = $has_next ? $next : $m;
         }
         return $objects;
     }
 
     /**
-     * strpos() for a walk whose offsets only move forward: the last answer is reused while it still lies ahead, and an
-     * answer of "none" holds for every later offset, so the whole walk reads each byte about once.
-     *
-     * A plain strpos() per step searched to the end of the file whenever the needle was missing, which made every walk
-     * quadratic on a file built without it (see CLAUDE.md, "Scanning untrusted PDF bytes"). The result is always exactly
-     * strpos()'s: an offset that goes backwards simply searches afresh.
+     * strpos() for a forward walk: the last answer is reused while it lies ahead, and "none" holds for every later
+     * offset, so the walk reads each byte about once instead of being quadratic. Always returns exactly what strpos()
+     * would; a backward offset searches afresh.
      *
      * @param string              $haystack Bytes to search.
      * @param string              $needle   Non-empty needle.
@@ -265,14 +363,9 @@ class PdfUtils
     }
 
     /**
-     * Every object's last definition, indexed in one forward pass, for lookups that would otherwise search the whole file
-     * each time.
-     *
-     * The verifier resolves a reference (a /Width, a palette, a mask, a nested XObject) once per reference it meets, and
-     * lastObjectDefinition() searches the whole file for each. The number of references is the uploader's choice, so the
-     * lookups together cost that number times the file. This finds, for every object number, exactly what
-     * lastObjectDefinition() would return — the last header with that number whose body closes — and definitionFromIndex()
-     * then answers each lookup at once.
+     * Every object's last definition, indexed in one forward pass: exactly what lastObjectDefinition() would return,
+     * which definitionFromIndex() then answers in O(1). A whole-file search per reference costs "references × file
+     * size", and the uploader picks the number of references.
      *
      * @param string $pdf_raw Raw PDF bytes.
      * @return array{by_ref: array<string, array{0: string, 1: int, 2: int}>, by_num: array<string, array{0: string, 1: int, 2: int}>}
@@ -286,11 +379,13 @@ class PdfUtils
         $after_cache = []; // "endobj" after a stream: these offsets follow the stream ends, not the headers
         $pos         = 0;
         $seen        = 0;
-        // Its own cursor for the stream marker, found by regex rather than strpos() but with the same idea: the answer
-        // for one object serves every later one until they pass it, and "none" holds for good.
+        // The stream marker's own forward cursor, as nextAt() but by regex.
         $marker_from  = -1;
         $marker_found = null;
-        while (preg_match('/(?<![0-9])(\d+)\s+(\d+)\s+obj\b/', $pdf_raw, $m, PREG_OFFSET_CAPTURE, $pos) === 1) {
+        // Headers inside image data are no objects (finderOutsideImageData()).
+        $find_header  = self::finderOutsideImageData($pdf_raw, '/(?<![0-9])(\d+)\s+(\d+)\s+obj\b/');
+        $find_start   = self::finderOutsideImageData($pdf_raw, self::OBJECT_START);
+        while ($find_header($pos, $m)) {
             if (++$seen > self::MAX_OBJECTS) {
                 throw new \LengthException('Too many objects in one PDF.');
             }
@@ -302,18 +397,24 @@ class PdfUtils
             if ($end === false) {
                 continue; // no body closes here; objectBodyEnd() returned null, so this header defines nothing
             }
+            $next = $find_start($start, $nm) ? $nm[0][1] : null;
             if ($marker_from < 0 || ($marker_found !== false && $marker_found[0] < $start)) {
                 $marker_found = preg_match('/>>\s*stream(\r\n|\n|\r)/', $pdf_raw, $sm, PREG_OFFSET_CAPTURE, $start) === 1
                     ? [$sm[0][1], $sm[0][1] + strlen($sm[0][0])]
                     : false;
                 $marker_from  = $start;
             }
-            if ($marker_found !== false && $marker_found[0] < $end) {
+            $past_stream = false;
+            if ($marker_found !== false && $marker_found[0] < $end && ($next === null || $marker_found[0] < $next)) {
                 $data_end = self::nextAt($pdf_raw, 'endstream', $marker_found[1], $cache);
                 $after    = $data_end === false ? false : self::nextAt($pdf_raw, 'endobj', $data_end + 9, $after_cache);
                 if ($after !== false) {
-                    $end = $after;
+                    $end         = $after;
+                    $past_stream = true;
                 }
+            }
+            if (!$past_stream && $next !== null && $next < $end) {
+                $end = $next;
             }
 
             $num   = ltrim($m[1][0], '0') ?: '0';
@@ -352,9 +453,7 @@ class PdfUtils
     /**
      * Finds the LAST definition of one object, for the verifier's single-object lookups.
      *
-     * Same rules as indexObjects(): the last definition is the one a viewer resolves after an incremental update, and
-     * the number is digit-bounded, so object 12 never resolves to "112 0 obj". Leading zeros are allowed, as a PDF
-     * reader parses the number as an integer. Unlike indexObjects(), nothing else in the file is copied.
+     * The number is digit-bounded (12 never matches "112 0 obj"); leading zeros are allowed, as a reader parses an int.
      *
      * @param string      $pdf_raw Bytes to search.
      * @param string      $num     Object number (digits).
@@ -369,27 +468,30 @@ class PdfUtils
         }
         $gen_re  = $gen === null ? '\d+' : '0*' . (ltrim($gen, '0') ?: '0');
         $pattern = '/(?<![0-9])0*' . (ltrim($num, '0') ?: '0') . '\s+' . $gen_re . '\s+obj\b/';
-        if (!preg_match_all($pattern, $pdf_raw, $m, PREG_OFFSET_CAPTURE)) {
-            return null;
+        // Every header of this object outside image data (finderOutsideImageData()), in file order; the last that closes wins.
+        $find    = self::finderOutsideImageData($pdf_raw, $pattern);
+        $headers = [];
+        $from    = 0;
+        while ($find($from, $hm)) {
+            $headers[] = $hm[0];
+            $from      = $hm[0][1] + strlen($hm[0][0]);
         }
-        for ($i = count($m[0]) - 1; $i >= 0; $i--) {
-            $start = $m[0][$i][1] + strlen($m[0][$i][0]);
+        for ($i = count($headers) - 1; $i >= 0; $i--) {
+            $start = $headers[$i][1] + strlen($headers[$i][0]);
             $end   = self::objectBodyEnd($pdf_raw, $start);
             if ($end !== null) {
-                return ['header' => $m[0][$i][0], 'body' => substr($pdf_raw, $start, $end - $start)];
+                return ['header' => $headers[$i][0], 'body' => substr($pdf_raw, $start, $end - $start)];
             }
         }
         return null;
     }
 
     /**
-     * Reads one text entry (such as /Title) from a dictionary and decodes it: a literal string with its escapes
-     * resolved and nested parentheses balanced, or a hex string. UTF-16BE with a byte-order mark becomes UTF-8; other
-     * bytes are returned as they are.
+     * Reads one text entry (such as /Title) from a dictionary and decodes it: a literal string (escapes resolved,
+     * nested parentheses balanced) or a hex string. UTF-16BE with a byte-order mark becomes UTF-8.
      *
-     * mPDF writes /Title, /Author and /Creator as UTF-16BE literal strings in which "(", ")", "\" and CR are escaped,
-     * so reading up to the first ")" garbled any value containing one of those bytes. Strings are skipped while
-     * looking for the key, so a "/Title" inside another value never matches; for a repeated key the last one wins.
+     * Strings are skipped while looking for the key, so a "/Title" inside another value never matches; for a repeated
+     * key the last one wins.
      *
      * @param string $dict_source Text starting with the dictionary ("<<", optionally after whitespace).
      * @param string $key         Key name without the slash.
@@ -529,11 +631,210 @@ class PdfUtils
     }
 
     /**
-     * Every "[FABRICATOR_PDF_FIELD_<id>]…[FABRICATOR_PDF_FIELD_END]" span in extracted PDF text, in the shape that
-     * preg_match_all('/\[FABRICATOR_PDF_FIELD_([^\]]+)\](.*?)\[FABRICATOR_PDF_FIELD_END\]/s', …, PREG_SET_ORDER) returned.
+     * Extracted PDF text as the verifier compares it (NFKC, entities decoded, ligatures expanded, whitespace folded).
+     * reservedMarker() checks submitted text after this step too, so typed text can't become a marker here.
      *
-     * Found with strpos(): once no end marker followed, that lazy regex rescanned the rest of the text from every later
-     * start marker, which a crafted PDF could turn into a quadratic comparison.
+     * @param string $s Text.
+     * @return string
+     */
+    public static function normalizeText(string $s): string
+    {
+        if (class_exists('Normalizer')) {
+            $n = \Normalizer::normalize($s, \Normalizer::NFKC);
+            if ($n !== false) {
+                $s = $n;
+            }
+        }
+        $s = html_entity_decode($s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // Expand common OpenType ligatures substituted by mPDF (U+FB00–FB06)
+        $lig_from = ["\xEF\xAC\x80", "\xEF\xAC\x81", "\xEF\xAC\x82", "\xEF\xAC\x83", "\xEF\xAC\x84", "\xEF\xAC\x85", "\xEF\xAC\x86"];
+        $lig_to   = ['ff', 'fi', 'fl', 'ffi', 'ffl', 'st', 'st'];
+        $s = str_replace($lig_from, $lig_to, $s);
+        $s = (string) preg_replace('/[\x00-\x1F\x7F]/u', '', $s); // remove control chars
+        $s = str_replace(["\xC2\xA0", "\xAD"], ' ', $s);        // NBSP + soft hyphen
+        $s = (string) preg_replace('/\s+/u', ' ', $s);            // normalize whitespace
+        $s = (string) preg_replace('/([,;])\s*/u', '$1 ', $s);    // one space after , and ;
+        return trim($s);
+    }
+
+    /**
+     * $s without the explicit bidi controls: the embeddings and overrides U+202A–U+202E and the isolates U+2066–U+2069.
+     *
+     * In mPDF's left-to-right paragraphs no bidi reordering can assemble a marker from Latin text, except through these
+     * controls: after U+202E, a typed "[DNE_DLEIF_FDP_ROTACIRBAF]" renders as a field marker. The marks U+200E, U+200F
+     * and U+061C stay (each acts as one strong character). Invalid UTF-8 is scrubbed first so no control hides in it.
+     *
+     * @param string $s Submitted text.
+     * @return string
+     */
+    public static function stripBidiControls(string $s): string
+    {
+        if (!mb_check_encoding($s, 'UTF-8')) {
+            $s = mb_scrub($s, 'UTF-8');
+        }
+        return (string) preg_replace('/[\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $s);
+    }
+
+    /**
+     * The marker text in $text that the verifier reads as structure: a field marker ("[FABRICATOR_PDF_…") or a seal
+     * delimiter. Typed into an answer, it would let a submitter make their own genuine PDF report "Modified". Checked
+     * as typed and after normalizeText().
+     *
+     * @param string $text Submitted text.
+     * @return string|null The marker found, or null.
+     */
+    public static function reservedMarker(string $text): ?string
+    {
+        foreach ([$text, self::normalizeText($text)] as $candidate) {
+            foreach (['[FABRICATOR_PDF_', self::SEAL_BEGIN, self::SEAL_END] as $marker) {
+                if (str_contains($candidate, $marker)) {
+                    return $marker;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The byte spans [start, end) of image stream data in raw PDF bytes, in file order.
+     *
+     * Image data is the uploader's own bytes and can hold "%%EOF", a seal delimiter or "/Type /…", so structure counts
+     * skip these spans.
+     *
+     * A stream ends at its direct /Length when "endstream" follows there, else at the next "endstream". One forward
+     * walk: each window read lies after the previous stream.
+     *
+     * @param string $raw Raw PDF bytes.
+     * @return \Generator<int, array{0: int, 1: int}>
+     */
+    public static function imageStreamSpans(string $raw): \Generator
+    {
+        $len    = strlen($raw);
+        $resume = 0;
+        $cursor = 0;
+        $cache  = [];
+        while (($kw = self::nextAt($raw, 'stream', $cursor, $cache)) !== false) {
+            $cursor = $kw + 6;
+            // Only "stream" right after a dictionary's ">>" and before a line break opens a body.
+            $before = rtrim(substr($raw, max($resume, $kw - 64), $kw - max($resume, $kw - 64)));
+            if (!str_ends_with($before, '>>')) {
+                continue;
+            }
+            $body_start = $kw + 6;
+            if (($raw[$body_start] ?? '') === "\r") {
+                $body_start++;
+            }
+            if (($raw[$body_start] ?? '') !== "\n") {
+                continue;
+            }
+            $body_start++;
+
+            // The dictionary: from the last "obj" after the previous stream up to this keyword.
+            $window   = substr($raw, $resume, $kw - $resume);
+            $obj_at   = strrpos($window, 'obj');
+            $dict     = $obj_at === false ? $window : substr($window, $obj_at + 3);
+            unset($window);
+            $is_image = preg_match('#/Subtype\s*/Image\b#', $dict) === 1;
+
+            $body_end = null;
+            if (preg_match('#/Length\s+(\d{1,12}+)(?!\s+\d+\s+R)#', $dict, $m) === 1) {
+                $candidate = $body_start + (int) $m[1];
+                $after     = ltrim(substr($raw, $candidate, 16), "\r\n \t");
+                if ($candidate <= $len && str_starts_with($after, 'endstream')) {
+                    $body_end = $candidate;
+                }
+            }
+            if ($body_end === null) {
+                $found = self::nextAt($raw, 'endstream', $body_start, $cache);
+                if ($found === false) {
+                    if ($is_image) {
+                        yield [$body_start, $len]; // unterminated: the rest of the file is its data
+                    }
+                    return;
+                }
+                $body_end = $found;
+            }
+            if ($is_image) {
+                yield [$body_start, $body_end];
+            }
+            $resume = $body_end;
+            $cursor = $body_end;
+        }
+    }
+
+    /**
+     * A preg_match() over raw PDF bytes that skips matches inside image stream data (imageStreamSpans()). Every
+     * whole-file search for structure goes through it: an uploaded image may hold its own "12 0 obj … endobj" or
+     * "/Annots [3 0 R]", which would take over the page tree or invent annotations.
+     *
+     * Returns a function ($from, &$m): bool for one forward walk ($from never decreases). A match is inside image data
+     * when its last byte is.
+     *
+     * @param string $raw   Raw PDF bytes.
+     * @param string $regex The pattern.
+     * @return \Closure(int, mixed): bool
+     */
+    public static function finderOutsideImageData(string $raw, string $regex): \Closure
+    {
+        $spans = self::imageStreamSpans($raw);
+        return static function (int $from, &$m) use ($raw, $regex, $spans): bool {
+            while (preg_match($regex, $raw, $m, PREG_OFFSET_CAPTURE, $from) === 1) {
+                $at = $m[0][1] + strlen($m[0][0]) - 1;
+                while ($spans->valid() && $spans->current()[1] <= $at) {
+                    $spans->next();
+                }
+                if ($spans->valid() && $spans->current()[0] <= $at) {
+                    $from = $spans->current()[1]; // inside image data: look again after it
+                    continue;
+                }
+                return true;
+            }
+            return false;
+        };
+    }
+
+    /**
+     * The number of "/Type /Page" entries outside image data: the page count generator and verifier both use.
+     *
+     * @param string $raw Raw PDF bytes.
+     * @return int
+     */
+    public static function countPageObjects(string $raw): int
+    {
+        $find  = self::finderOutsideImageData($raw, '/\/Type\s*\/Page\b/');
+        $count = 0;
+        $at    = 0;
+        while ($find($at, $m)) {
+            $count++;
+            $at = $m[0][1] + strlen($m[0][0]);
+        }
+        return $count;
+    }
+
+    /**
+     * How often $needle occurs in raw PDF bytes outside image stream data (imageStreamSpans()).
+     *
+     * @param string $raw    Raw PDF bytes.
+     * @param string $needle What to count.
+     * @return int
+     */
+    public static function countOutsideImageData(string $raw, string $needle): int
+    {
+        $count  = 0;
+        $cursor = 0;
+        foreach (self::imageStreamSpans($raw) as [$start, $end]) {
+            if ($start > $cursor) {
+                $count += substr_count($raw, $needle, $cursor, $start - $cursor);
+            }
+            $cursor = max($cursor, $end);
+        }
+        return $cursor < strlen($raw) ? $count + substr_count($raw, $needle, $cursor) : $count;
+    }
+
+    /**
+     * Every "[FABRICATOR_PDF_FIELD_<id>]…[FABRICATOR_PDF_FIELD_END]" span in extracted PDF text, as
+     * preg_match_all('/\[FABRICATOR_PDF_FIELD_([^\]]+)\](.*?)\[FABRICATOR_PDF_FIELD_END\]/s', …, PREG_SET_ORDER) finds
+     * them, but linear: that lazy regex is quadratic on unclosed markers.
      *
      * @param string $text Normalized PDF text.
      * @return array<int, array{0: string, 1: string, 2: string}> Full span, field id, enclosed text.
@@ -570,15 +871,10 @@ class PdfUtils
     }
 
     /**
-     * Every "<<dictionary>> stream … endstream" block in raw PDF bytes, in the shape that
-     * preg_match_all('/<<([^>]*)>>\s*stream\r?\n([\s\S]*?)\nendstream/m', …, PREG_SET_ORDER) returned: [1] the dictionary,
-     * [2] the stream bytes ([0] stays empty, nothing reads it).
-     *
-     * Found with strpos(): under the verifier's raised backtrack limit, a file without a closing "endstream" made that lazy
-     * regex rescan the rest of the file from every later dictionary.
-     *
-     * Yielded one block at a time, not returned as a list: a file of many small blocks held one entry per block, several
-     * times the file's own size, more than the memory the check had reserved.
+     * Every "<<dictionary>> stream … endstream" block in raw PDF bytes, as
+     * preg_match_all('/<<([^>]*)>>\s*stream\r?\n([\s\S]*?)\nendstream/m', …, PREG_SET_ORDER) finds them: [1] the
+     * dictionary, [2] the stream bytes ([0] stays empty). Linear, and yielded one at a time so a file of many small
+     * blocks can't outgrow the memory reserved.
      *
      * @param string $raw Raw PDF bytes.
      * @return \Generator<int, array{0: string, 1: string, 2: string}>
@@ -586,11 +882,9 @@ class PdfUtils
     public static function rawStreamBlocks(string $raw): \Generator
     {
         $len     = strlen($raw);
-        $resume  = 0; // the regex resumed after the previous match, so no block may start before this
+        $resume  = 0; // the end of the previous block: no block may start before it
         $keyword = 0;
-        // The first "<<" at or after $open_from, or false when there is none. The positions asked for only ever grow, so
-        // one answer serves every later request until the request passes it: searching afresh for each keyword re-scanned
-        // the same stretch — all the way to the end of the file when no "<<" followed — which was quadratic.
+        // The first "<<" at or after $open_from, or false: a forward cursor, as nextAt().
         $open_from  = -1;
         $open_found = false;
         while (($keyword = strpos($raw, 'stream', $keyword)) !== false) {
@@ -633,8 +927,8 @@ class PdfUtils
     }
 
     /**
-     * Most bytes one compressed stream is inflated to. The seal scan and the verifier's PDF parser both stop there, and
-     * inflatedStreamBytes() counts with it, so the memory reserved for a check covers what the parser can decode.
+     * Most bytes one compressed stream is inflated to, by the seal scan, the verifier's parser and inflatedStreamBytes()
+     * alike, so the memory reserved covers what the parser can decode.
      *
      * @var int
      */
@@ -643,10 +937,8 @@ class PdfUtils
     /**
      * Total bytes the zlib-compressed stream bodies in raw PDF bytes inflate to, each counted up to INFLATE_STREAM_CAP.
      *
-     * Every body counts, whatever its dictionary says (nested dictionaries, as mPDF writes for PNG images, are easy to
-     * misread), so the total is an upper bound of what the verifier's PDF reader unpacks. That reader only unpacks
-     * single Flate streams, within this total (GuardedRawDataParser). Inflated in small steps whose output is thrown
-     * away, so a decompression bomb costs time here, not memory.
+     * Every body counts, whatever its dictionary says, so the total bounds what the verifier's parser unpacks. Output is
+     * thrown away in small steps, so a decompression bomb costs time here, not memory.
      *
      * @param string $raw   Raw PDF bytes.
      * @param int    $limit Counting stops once the total passes this; the caller refuses the file then anyway.
@@ -654,8 +946,7 @@ class PdfUtils
      */
     public static function inflatedStreamBytes(string $raw, int $limit): int
     {
-        // The same bodies streamBodies() hands the hashing passes, delimited the same way: counting them with a
-        // different delimiter meant the reserved allowance described streams other than the ones actually unpacked.
+        // The same bodies, with the same delimiter, that streamBodies() hands the hashing passes.
         $total  = 0;
         $resume = 0;
         while (($body = self::nextStreamBody($raw, $resume, 'endstream')) !== null) {
@@ -699,10 +990,7 @@ class PdfUtils
 
     /**
      * The "---BEGIN-SEAL---…---END-SEAL---" blocks in text, as preg_match_all('/---BEGIN-SEAL---(.*?)---END-SEAL---/s')
-     * found them: each is [offset, length, enclosed text].
-     *
-     * Found with strpos(): once no end marker followed, that lazy regex rescanned the rest of the text from every later
-     * start marker, quadratic on a crafted PDF full of them.
+     * finds them, but linear: [offset, length, enclosed text].
      *
      * @param string $text Text that may contain seal blocks.
      * @return array<int, array{0: int, 1: int, 2: string}>
@@ -724,7 +1012,8 @@ class PdfUtils
     }
 
     /**
-     * $text without its seal blocks, as preg_replace('/---BEGIN-SEAL---.*?---END-SEAL---/s', '', …) returned it.
+     * $text without its seal blocks: what preg_replace('/---BEGIN-SEAL---.*?---END-SEAL---/s', '', …) returns, found
+     * by a linear scan.
      *
      * @param string $text Text that may contain seal blocks.
      * @return string
@@ -741,8 +1030,10 @@ class PdfUtils
     }
 
     /**
-     * Offset of the "endobj" closing an object whose body starts at $start. Past a stream it is the first "endobj"
-     * after "endstream", since compressed bytes can contain that word (the same reasoning as in indexObjects()).
+     * Where an object whose body starts at $start ends; the one rule every object reader here follows.
+     *
+     * At its "endobj", or at the next object header if that comes first, so one header can't swallow the objects after
+     * it. With a stream, at the first "endobj" after "endstream", since compressed bytes can contain either word.
      *
      * @param string $pdf_raw Raw PDF bytes.
      * @param int    $start   Offset just past the object header.
@@ -754,15 +1045,25 @@ class PdfUtils
         if ($end === false) {
             return null;
         }
-        if (preg_match('/>>\s*stream(\r\n|\n|\r)/', $pdf_raw, $sm, PREG_OFFSET_CAPTURE, $start) === 1 && $sm[0][1] < $end) {
+        $next = self::finderOutsideImageData($pdf_raw, self::OBJECT_START)($start, $nm) ? $nm[0][1] : null;
+        if (preg_match('/>>\s*stream(\r\n|\n|\r)/', $pdf_raw, $sm, PREG_OFFSET_CAPTURE, $start) === 1 && $sm[0][1] < $end
+            && ($next === null || $sm[0][1] < $next)
+        ) {
             $data_end = strpos($pdf_raw, 'endstream', $sm[0][1] + strlen($sm[0][0]));
             $after    = $data_end === false ? false : strpos($pdf_raw, 'endobj', $data_end + 9);
             if ($after !== false) {
                 return $after;
             }
         }
-        return $end;
+        return ($next !== null && $next < $end) ? $next : $end;
     }
+
+    /**
+     * An object header of any generation, digit-bounded: what ends the object before it (objectBodyEnd()).
+     *
+     * @var string
+     */
+    private const OBJECT_START  = '/(?<![0-9])\d+\s+\d+\s+obj\b/';
 
     /**
      * Lists each page's /Contents object numbers in display order, walking the page tree from the document catalog.
@@ -773,11 +1074,11 @@ class PdfUtils
      */
     public static function pageContents(string $pdf_raw, array $objects): array
     {
-        // The last /Root wins, as with the last object definition: an incremental update appends a new trailer. Only the
-        // last is kept while walking forward; preg_match_all() held every one, and a file can repeat it at will.
-        $root    = null;
-        $root_at = 0;
-        while (preg_match('#/Root\s+(\d+)\s+0\s+R#', $pdf_raw, $rm, PREG_OFFSET_CAPTURE, $root_at) === 1) {
+        // The last /Root outside image data wins: an incremental update appends a new trailer.
+        $root      = null;
+        $root_at   = 0;
+        $find_root = self::finderOutsideImageData($pdf_raw, '#/Root\s+(\d+)\s+0\s+R#');
+        while ($find_root($root_at, $rm)) {
             $root    = $rm[1][0];
             $root_at = $rm[0][1] + strlen($rm[0][0]);
         }
@@ -840,9 +1141,7 @@ class PdfUtils
 
     /**
      * gzuncompress() (or, with $raw, gzinflate()) that stops as soon as the output passes $cap, so a decompression bomb
-     * never takes more than $cap bytes: unlimited, gzuncompress() inflated a small crafted stream to gigabytes before any
-     * caller could check the size. No warning on input that isn't such data; most streams a scan meets aren't, so false
-     * is the normal outcome and the caller handles it.
+     * never takes more. No warning on input that isn't such data; false is a normal outcome.
      *
      * @param string $data Candidate zlib bytes, or bare DEFLATE bytes with $raw.
      * @param int    $cap  Most output bytes allowed.
@@ -871,9 +1170,8 @@ class PdfUtils
                 return $out;
             }
         }
-        // PHP's own gzuncompress()/gzinflate() hand zlib one NUL byte more than the data (the string's terminator), which
-        // now and then completes a stream. The same byte here keeps every result as it was, down to the hashes sealed by
-        // earlier versions. Still unfinished after it, the data is incomplete, which those functions reject as well.
+        // gzuncompress()/gzinflate() hand zlib the string's NUL terminator too, which can complete a stream; the same
+        // byte here keeps results (and sealed hashes) identical to theirs.
         $part = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => inflate_add($ctx, "\0", ZLIB_SYNC_FLUSH));
         if ($part === false) {
             return false;
@@ -885,9 +1183,8 @@ class PdfUtils
         if (inflate_get_status($ctx) !== ZLIB_STREAM_END) {
             return false;
         }
-        // gzinflate() also gives up on some incomplete bare-DEFLATE data this accepts: in the round where its output
-        // buffer fills just as the input runs out. Now that the output is known to fit $cap, its own answer decides,
-        // so that raw fallback results stay what they were. (zlib data ends before that NUL, so it never gets there.)
+        // gzinflate() rejects some incomplete bare-DEFLATE data this accepts; with the output known to fit $cap, its
+        // own answer decides.
         return $raw ? \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => gzinflate($data)) : $out;
     }
 
@@ -897,7 +1194,7 @@ class PdfUtils
      * @param string $body         Raw stream bytes.
      * @param int    $raw_offset   Where the bare-DEFLATE attempt starts (2 skips a zlib header whose checksum failed).
      * @param bool   $retry_empty  Whether an empty or "0" zlib result also gets the bare-DEFLATE attempt, as the
-     *                             `gzuncompress() ?: gzinflate()` idiom this replaces did.
+     *                             `gzuncompress() ?: gzinflate()` idiom does.
      * @return string|false|null As inflateWithin().
      */
     public static function inflateEither(string $body, int $raw_offset = 0, bool $retry_empty = true): string|false|null
@@ -910,8 +1207,8 @@ class PdfUtils
     }
 
     /**
-     * Whether the PDF step can show an image of this type: JPEG, PNG, GIF and BMP, and WEBP where GD supports it (mPDF
-     * converts WEBP with GD). Any other image, TIFF above all, is handled like a document: named in the PDF and attached.
+     * Whether the PDF can show an image of this type (WEBP only where GD supports it). Any other image is attached like
+     * a document.
      *
      * @param string $mime MIME type.
      * @return bool
@@ -947,16 +1244,12 @@ class PdfUtils
     private const FONT_FILE_REF = '/\/FontFile[23]?\s+(\d+)\s+\d+\s+R/';
 
     /**
-     * Hashes every embedded font program (the /FontFile, /FontFile2 or /FontFile3 stream of each FontDescriptor),
-     * sorted so object order doesn't matter. Generator seals these hashes and the verifier recomputes them, so both
-     * call this one implementation.
+     * Hashes every embedded font program (each FontDescriptor's /FontFile, /FontFile2 or /FontFile3 stream), sorted so
+     * object order doesn't matter. Generator seals these hashes and the verifier recomputes them with this same code.
      *
-     * Returns exactly what these lazy regexes returned: every match of
-     * '/\d+\s+\d+\s+obj\s*<<([\s\S]*?\/Type\s*\/FontDescriptor[\s\S]*?)>>\s*endobj/', then for each referenced
-     * object N the first match of '/N\s+\d+\s+obj[\s\S]*?stream\r?\n([\s\S]*?)\r?\nendstream/'. The first rescanned
-     * the rest of the file from every later object header once no FontDescriptor followed, and the second rescanned
-     * the file once per font: quadratic on a crafted PDF, under a 256 MB backtrack limit. Here every scan only moves
-     * forward, and the per-font lookups use indexes built in one pass each.
+     * Same result as every match of '/\d+\s+\d+\s+obj\s*<<([\s\S]*?\/Type\s*\/FontDescriptor[\s\S]*?)>>\s*endobj/', then
+     * for each referenced object N the first match of '/N\s+\d+\s+obj[\s\S]*?stream\r?\n([\s\S]*?)\r?\nendstream/',
+     * but in forward-only scans instead of those quadratic lazy regexes.
      *
      * @param string $pdf_raw Raw PDF bytes.
      * @return string[] Sorted SHA-256 hex digests.
@@ -968,8 +1261,7 @@ class PdfUtils
             return [];
         }
         $header_ends = self::firstHeaderEndBySuffix($pdf_raw, $font_objects);
-        // Walked in file order with one cursor instead of indexing every keyword in the file: the index cost several
-        // times the file's size in memory. Each font's stream follows its header, so ascending order needs one pass.
+        // One cursor in file order: each font's stream follows its header, so ascending order needs one pass.
         asort($header_ends);
         $cursor = 0;
 
@@ -1012,14 +1304,17 @@ class PdfUtils
         $numbers = [];
         $ref     = null; // [start, end, number] of the leftmost font-program reference at or after the last search start
         $pos     = 0;
-        while (preg_match(self::OBJECT_HEADER, $pdf_raw, $m, PREG_OFFSET_CAPTURE, $pos)) {
+        // Headers and descriptors outside image data only, each finder walking forward.
+        $find_header     = self::finderOutsideImageData($pdf_raw, self::OBJECT_HEADER);
+        $find_descriptor = self::finderOutsideImageData($pdf_raw, '#/FontDescriptor#');
+        while ($find_header($pos, $m)) {
             $pos        = $m[0][1] + strlen($m[0][0]);
             $body_start = $pos + strspn($pdf_raw, self::PCRE_SPACE, $pos);
             if (substr($pdf_raw, $body_start, 2) !== '<<') {
                 continue;
             }
             $body_start += 2;
-            $descriptor  = self::fontDescriptorEnd($pdf_raw, $body_start);
+            $descriptor  = self::fontDescriptorEnd($pdf_raw, $body_start, $find_descriptor);
             $object_end  = $descriptor === null ? null : self::descriptorObjectEnd($pdf_raw, $descriptor);
             if ($object_end === null) {
                 // No FontDescriptor, or no ">> endobj" after it, so none can follow a later header either.
@@ -1027,8 +1322,7 @@ class PdfUtils
             }
             [$body_end, $pos] = $object_end;
 
-            // Only the first reference inside the body counts. A search result still ahead of this body is the leftmost
-            // one from here too, so it is reused rather than rescanning the file for every descriptor.
+            // Only the first reference inside the body counts; a result still ahead of this body is reused.
             if ($ref === null || $ref[0] < $body_start) {
                 $ref = preg_match(self::FONT_FILE_REF, $pdf_raw, $r, PREG_OFFSET_CAPTURE, $body_start)
                     ? [$r[0][1], $r[0][1] + strlen($r[0][0]), (int) $r[1][0]]
@@ -1044,14 +1338,16 @@ class PdfUtils
     /**
      * Position just past the first "/Type /FontDescriptor" (any \s run between the names) starting at or after $from.
      *
-     * @param string $pdf_raw Raw PDF bytes.
-     * @param int    $from    Earliest start offset.
+     * @param string   $pdf_raw Raw PDF bytes.
+     * @param int      $from    Earliest start offset.
+     * @param \Closure $find    finderOutsideImageData() for "/FontDescriptor", walked forward across calls.
      * @return int|null
      */
-    private static function fontDescriptorEnd(string $pdf_raw, int $from): ?int
+    private static function fontDescriptorEnd(string $pdf_raw, int $from, \Closure $find): ?int
     {
         $at = $from;
-        while (($name = strpos($pdf_raw, '/FontDescriptor', $at)) !== false) {
+        while ($find($at, $dm)) {
+            $name = $dm[0][1];
             $type = self::spaceRunStart($pdf_raw, $name) - 5;
             if ($type >= $from && substr($pdf_raw, $type, 5) === '/Type') {
                 return $name + 15;
@@ -1083,7 +1379,7 @@ class PdfUtils
 
     /**
      * For each wanted object number, the offset just past "obj" in the first header whose first number ends in its
-     * digits. The replaced regex had no boundary before N, so "112 0 obj" matched N = 12 as well.
+     * digits. Without a boundary before N, "112 0 obj" would match N = 12 as well.
      *
      * @param string $pdf_raw Raw PDF bytes.
      * @param int[]  $numbers Wanted object numbers.
@@ -1094,11 +1390,11 @@ class PdfUtils
         $wanted = array_fill_keys($numbers, true);
         $found  = [];
         $pos    = 0;
-        while (count($found) < count($wanted) && preg_match(self::OBJECT_HEADER, $pdf_raw, $m, PREG_OFFSET_CAPTURE, $pos)) {
+        $find   = self::finderOutsideImageData($pdf_raw, self::OBJECT_HEADER); // headers outside image data only
+        while (count($found) < count($wanted) && $find($pos, $m)) {
             $pos    = $m[0][1] + strlen($m[0][0]);
             $digits = $m[1][0];
-            // A PHP int prints as at most 19 digits, so a longer suffix is never wanted. A suffix with a leading zero
-            // stays a string key and so never matches an int, just as "012" never equalled the "12" in the regex.
+            // An int has at most 19 digits. A suffix with a leading zero stays a string key and never matches an int.
             for ($len = min(strlen($digits), 20); $len >= 1; $len--) {
                 $suffix = substr($digits, -$len);
                 if (isset($wanted[$suffix]) && !isset($found[$suffix])) {
@@ -1108,10 +1404,6 @@ class PdfUtils
         }
         return $found;
     }
-
-    /* streamKeywords(), positionsOf() and firstIndexAtOrAfter() are gone: indexing every keyword in the file cost
-       several times the file's own size in memory, more than the check had reserved. nextStreamBody() walks the
-       file with a cursor instead, in the same single pass and without the arrays. */
 
     /**
      * Start of the run of PCRE \s bytes that ends just before $pos ($pos itself when there is none).
@@ -1131,9 +1423,8 @@ class PdfUtils
     /**
      * Hashes every compressed stream that is not a content stream, for catch-all stream-injection detection.
      *
-     * Generator seals these hashes and the verifier recomputes them, so both call this one implementation (each used
-     * to keep its own copy, where a fix to only one would turn into false "tampered" or "verified" results). Content
-     * streams are left out because they change between PASS 1 and PASS 2; verifyContentStreams() checks those.
+     * Generator seals these hashes and the verifier recomputes them with this same code. Content streams change between
+     * PASS 1 and PASS 2, so verifyContentStreams() checks those instead.
      *
      * @param string $pdf_raw Raw PDF bytes.
      * @return string[] Sorted SHA-256 hex digests.
@@ -1156,15 +1447,8 @@ class PdfUtils
     }
 
     /**
-     * Every stream body in the file, as [start, end] byte offsets, in one forward pass.
-     *
-     * Walking the file with a fresh strpos() per stream re-scanned to the end of the file on every round: once for
-     * the line-ending form the file does not use, and again for each "endstream" it could not find. A crafted file of
-     * a few hundred kilobytes took tens of seconds that way.
-     *
-     * Yielded one at a time rather than returned as a list: a file of many small streams holds one array entry per
-     * stream, which measured several times the file's own size — more than the memory the check reserved for the
-     * whole job, and enough for a crafted upload to end the request in a memory fatal instead of a refusal.
+     * Every stream body in the file, as [start, end] byte offsets, in one forward pass. Yielded one at a time, so a
+     * file of many small streams can't outgrow the memory reserved.
      *
      * @param string $pdf_raw Raw PDF bytes.
      * @return \Generator<int, array{0: int, 1: int}> Body start, and the offset of the "endstream" that closes it.
@@ -1179,11 +1463,8 @@ class PdfUtils
     }
 
     /**
-     * The first stream body at or after $from, as [start, end] byte offsets; null when the file holds no more.
-     *
-     * Scanning forward from a cursor rather than indexing every keyword first: a list of offsets costs several times
-     * the file's own size in memory, which a crafted upload could turn into a fatal before the check ever reserved
-     * the memory it planned to use. Each call resumes where the last one ended, so a full walk stays linear.
+     * The first stream body at or after $from, as [start, end] byte offsets; null when the file holds no more. Each
+     * call resumes where the last one ended, so a full walk stays linear.
      *
      * @param string $pdf_raw    Raw PDF bytes.
      * @param int    $from       Offset to resume at.
@@ -1217,8 +1498,6 @@ class PdfUtils
     /**
      * Hashes every decoded page content stream: the counterpart of hashAllCompressedStreams().
      *
-     * Generator seals these and the verifier recomputes them, so both use this one implementation.
-     *
      * @param string $pdf_raw    Raw PDF bytes.
      * @param int    $raw_offset Offset handed to inflateEither(); the Generator reads its own PASS-1 bytes with 2.
      * @return string[] Sorted SHA-256 hex digests.
@@ -1241,8 +1520,7 @@ class PdfUtils
     }
 
     /**
-     * Reports whether decoded bytes look like drawing operators. The Generator uses this same function when sealing,
-     * so every stream it hashed is recognised identically here.
+     * Reports whether decoded bytes look like drawing operators. Shared by generator and verifier.
      *
      * @param string $decoded Decoded stream bytes.
      * @return bool True when the bytes look like a content stream.
@@ -1263,10 +1541,9 @@ class PdfUtils
     /**
      * Checks every displayed content stream against the PASS-1 hashes sealed in the document.
      *
-     * A stream is checked when it is a page's /Contents, a Form XObject or a tiling pattern (all drawn, whatever the
-     * heuristic says about their first bytes), or when it looks like drawing operators. Exactly one stream may carry
-     * the seal, and it must be one of the last page's /Contents. That stream is rebuilt into its PASS-1 form, and the
-     * live streams must then equal the sealed hashes as a multiset: none unrecognised, none left over.
+     * Checked: every page /Contents, Form XObject and tiling pattern, plus any stream that looks like drawing operators.
+     * Exactly one stream, among the last page's /Contents, may carry the seal; it is rebuilt into its PASS-1 form, and
+     * the streams must then equal the sealed hashes as a multiset.
      *
      * @param string $pdf_raw       Raw PDF bytes.
      * @param array  $sealed_hashes content_streams from the seal.
@@ -1278,8 +1555,9 @@ class PdfUtils
         $result   = ['rows' => [], 'problems' => [], 'mismatch' => false, 'seal_obj' => null, 'rebuilt' => false];
         $objects  = self::indexObjects($pdf_raw);
         $pages    = self::pageContents($pdf_raw, $objects);
-        $contents = $pages === [] ? [] : array_merge(...array_values($pages));
-        $last     = $pages === [] ? [] : end($pages);
+        // As sets: the uploader decides how long a /Contents list is, so in_array() per stream would be quadratic.
+        $contents = $pages === [] ? [] : array_flip(array_merge(...array_values($pages)));
+        $last     = $pages === [] ? [] : array_flip(end($pages));
 
         $pool = [];
         foreach ($sealed_hashes as $hash) {
@@ -1292,9 +1570,14 @@ class PdfUtils
             if ($obj['stream'] === null) {
                 continue;
             }
-            $required = in_array($num, $contents, true)
+            $required = isset($contents[$num])
                 || preg_match('#/Subtype\s*/Form\b#', $obj['dict']) === 1
                 || preg_match('#/Type\s*/Pattern\b#', $obj['dict']) === 1;
+            // Image data is the uploader's own bytes and may read like a seal or operators; the image hashes cover it.
+            // A page's /Contents is checked whatever its dictionary claims.
+            if (!$required && preg_match('#/Subtype\s*/Image\b#', $obj['dict']) === 1) {
+                continue;
+            }
             $bytes = self::streamContent($obj['stream']);
             if ($bytes === null) {
                 if ($required) {
@@ -1313,7 +1596,7 @@ class PdfUtils
 
         // Exactly one stream may carry the seal, and only one of the last page's own /Contents.
         foreach ($marker_objs as $num) {
-            if ($result['seal_obj'] === null && in_array($num, $last, true)) {
+            if ($result['seal_obj'] === null && isset($last[$num])) {
                 $result['seal_obj'] = $num;
                 continue;
             }
@@ -1349,8 +1632,7 @@ class PdfUtils
             $result['mismatch'] = true;
         }
 
-        // A seal page that failed to rebuild leaves its one PASS-1 hash unmatched, already reported as seal_page_mismatch
-        // above; any other sealed stream still unmatched is missing from the PDF.
+        // A seal page that failed to rebuild leaves one hash unmatched (already reported); any other is missing.
         $allowed = ($result['seal_obj'] !== null && !$result['rebuilt']) ? 1 : 0;
         $left    = array_sum($pool);
         if ($left > $allowed) {
@@ -1364,9 +1646,8 @@ class PdfUtils
     /**
      * Rebuilds the seal page's PASS-1 stream and returns the sealed hash it matches.
      *
-     * PASS 2 differs from PASS 1 only by the seal text lines and the state-only lines mPDF wrote around them, so
-     * those are removed and the result must hash to a sealed value exactly. Nothing visible can hide in what is
-     * removed: only lines that paint nothing qualify, and the removed text must be exactly this document's seal.
+     * PASS 2 adds only the seal text lines and the state-only lines around them. Those are removed, so nothing
+     * visible can hide in what is removed, and the rest must hash to a sealed value exactly.
      *
      * @param string $stream    Decoded seal-page content stream.
      * @param string $seal_text The seal text extracted from the PDF, markers included.
@@ -1423,12 +1704,11 @@ class PdfUtils
     private const SEAL_REBUILD_MAX_BYTES = 268435456;
 
     /**
-     * Tries every way of dropping 0..$before state-only lines ahead of the seal text and 0..$after after it, in the same
-     * order as the nested loop it replaces, and returns the first sealed hash one of them produces.
+     * Tries every way of dropping 0..$before state-only lines ahead of the seal text and 0..$after after it, and
+     * returns the first sealed hash one of them produces.
      *
-     * That loop re-joined and re-hashed the whole page for each of up to 17 x 17 combinations, so one crafted 64 MB
-     * stream could hold a worker for minutes. Here each head is a hash context extended from the next-shorter head,
-     * only the tails are hashed again per combination, and those tail bytes are bounded before any work starts.
+     * Each head's hash context extends the next-shorter head's, so only the tails are re-hashed per combination, and
+     * their total is bounded before any work starts.
      *
      * @param string[] $lines  Stream split on LF.
      * @param int      $first  Index of the first seal text line.
@@ -1440,8 +1720,8 @@ class PdfUtils
      */
     private static function firstTrimmedMatch(array $lines, int $first, int $last, int $before, int $after, array $pool): ?string
     {
-        // Tail j is every line after the seal text minus its first j lines, i.e. a suffix of one joined string. Its size
-        // is worked out from the line lengths, so an oversized tail is refused before it is ever joined or copied.
+        // Tail j: the lines after the seal text minus the first j, a suffix of one joined string. Sized from the line
+        // lengths, so an oversized tail is refused before it is joined.
         $tail_lines = array_slice($lines, $last + 1);
         $tail_count = count($tail_lines);
         $tail_len   = $tail_count === 0 ? 0 : array_sum(array_map('strlen', $tail_lines)) + $tail_count - 1;
@@ -1567,7 +1847,7 @@ class PdfUtils
     }
 
     /**
-     * Records why the seal-page fingerprint could not be produced — without it, bail-outs are silent and indistinguishable from a legitimate pre-feature seal.
+     * Logs why the seal-page fingerprint could not be produced.
      *
      * @param string $reason Short description of which structural lookup failed.
      * @return string Always '' — the "not recorded" marker the verifier understands.
@@ -1582,14 +1862,15 @@ class PdfUtils
     }
 
     /**
-     * Not a general PDF text extractor — must only be deterministic and identical between Generator and Verificationpage, so it ignores anything the two could disagree about (cmaps, kerning, encoding).
+     * Fingerprints a page's literal text. Not a general text extractor: it only has to be deterministic, so it ignores
+     * cmaps, kerning and encoding.
      *
      * @param string $content Decompressed page content stream.
      * @return string SHA-256 of the normalized visible text.
      */
     public static function pageTextFingerprint(string $content): string
     {
-        // Hand-rolled literal scan, not regex: PDF literals nest parens/escapes badly for regex, and this must match Verificationpage exactly.
+        // Hand-rolled: PDF literals nest parentheses and escapes, which a regex handles badly.
         $backslash = chr(92);
         $pieces = [];
         $depth  = 0;
@@ -1605,7 +1886,7 @@ class PdfUtils
                 continue;
             }
             if ($ch === $backslash) {
-                // Decode the escape rather than skipping it: skipping made differently-escaped literals fingerprint identically, narrowing detection on this page.
+                // Decoded, not skipped, so differently-escaped literals fingerprint differently.
                 $next = $content[$i + 1] ?? '';
                 if ($next === '') {
                     break;
@@ -1652,7 +1933,7 @@ class PdfUtils
         }
         $text = implode(' ', $pieces);
 
-        // Drop the seal itself (verifier sees it, Generator's PASS 1 never did); NULs stripped first since mPDF writes UTF-16BE.
+        // Drop the seal, which PASS 1 never had; NULs first, as mPDF writes UTF-16BE.
         $text = str_replace(chr(0), '', $text);
         $text = self::withoutSealBlocks($text);
         $text = trim(preg_replace('/\s+/', ' ', $text) ?? $text);
@@ -1682,7 +1963,7 @@ class PdfUtils
         if ($gd === false) {
             return null;
         }
-        // Backstop for formats getimagesizefromstring() couldn't pre-check.
+        // Backstop: the decoded size must agree with the header precheckDimensions() read.
         if (imagesx($gd) * imagesy($gd) > self::maxSafePixels()) {
             // No imagedestroy(): a no-op since PHP 8.0 and deprecated in 8.5; $gd is freed on return.
             return null;
@@ -1702,7 +1983,7 @@ class PdfUtils
             imagesy($gd)
         );
         $pixels = '';
-        // Masking the low 3 bits coarsens channels so GD re-encoding jitter between the seal's two passes doesn't flip the hash.
+        // Masking the low 3 bits absorbs GD re-encoding jitter between the two passes.
         for ($ty = 0; $ty < 8; $ty++) {
             for ($tx = 0; $tx < 8; $tx++) {
                 $c       = imagecolorat($thumb, $tx, $ty);

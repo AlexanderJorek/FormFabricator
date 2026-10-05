@@ -6,10 +6,12 @@
 # Restore a working tree with: composer install
 /vendor/*
 
-# EXCEPTION: pdf.js is vendored by hand, not by Composer (it is an npm package,
-# not a PHP one), so nothing can regenerate it from composer.lock — build.ps1
-# copies it straight out of the working tree. It must stay tracked.
+# EXCEPTION: pdf.js and the ALTCHA widget are vendored by hand, not by Composer
+# (they are npm packages, not PHP ones), so nothing can regenerate them from
+# composer.lock — build.ps1 copies them straight out of the working tree, each
+# checked against the hashes pinned in its VERSION file. They must stay tracked.
 !/vendor/pdfjs/
+!/vendor/altcha/
 
 ### Node
 # Dependencies

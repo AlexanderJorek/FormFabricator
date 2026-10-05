@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -34,33 +34,33 @@ class FieldRegistry
      * @var array<string, string>
      */
     public const FIELD_MAP = [
-        'TextField'       => 'input:text',
-        'TextareaField'   => 'input:textarea',
-        'EmailField'      => 'input:email',
-        'PhoneField'      => 'input:phone',
-        'NumberField'     => 'input:number',
-        'WebsiteField'    => 'input:website',
-        'SelectField'     => 'choice:select',
-        'RadioField'      => 'choice:radio',
-        'CheckboxField'   => 'choice:checkbox',
-        'NameField'       => 'personal:name',
-        'AddressField'    => 'personal:address',
-        'DateField'       => 'personal:date',
-        'TimeField'       => 'personal:time',
-        'CurrencyField'   => 'advanced:currency',
-        'RatingField'     => 'advanced:rating',
-        'SliderField'     => 'advanced:slider',
-        'UploadField'     => 'advanced:upload',
-        'SignatureField'  => 'advanced:signature',
-        'SepaField'       => 'advanced:sepa',
-        'HtmlField'       => 'layout:html',
-        'GroupField'      => 'layout:group',
-        'PageBreakField'  => 'layout:pagebreak',
-        'PageHeaderField' => 'layout:page-header',
-        'ConsentField'    => 'system:consent',
-        'GdprField'       => 'system:gdpr',
-        'CaptchaField'    => 'system:captcha',
-        'PostDataField'   => 'system:postdata',
+        'TextField'        => 'input:text',
+        'TextareaField'    => 'input:textarea',
+        'EmailField'       => 'input:email',
+        'PhoneField'       => 'input:phone',
+        'NumberField'      => 'input:number',
+        'WebsiteField'     => 'input:website',
+        'SelectField'      => 'choice:select',
+        'RadioField'       => 'choice:radio',
+        'CheckboxField'    => 'choice:checkbox',
+        'NameField'        => 'personal:name',
+        'AddressField'     => 'personal:address',
+        'DateField'        => 'personal:date',
+        'TimeField'        => 'personal:time',
+        'CurrencyField'    => 'advanced:currency',
+        'RatingField'      => 'advanced:rating',
+        'SliderField'      => 'advanced:slider',
+        'UploadField'      => 'advanced:upload',
+        'SignatureField'   => 'advanced:signature',
+        'DirectDebitField' => 'advanced:directdebit',
+        'HtmlField'        => 'layout:html',
+        'GroupField'       => 'layout:group',
+        'PageBreakField'   => 'layout:pagebreak',
+        'PageHeaderField'  => 'layout:page-header',
+        'ConsentField'     => 'system:consent',
+        'GdprField'        => 'system:gdpr',
+        'CaptchaField'     => 'system:captcha',
+        'PostDataField'    => 'system:postdata',
     ];
 
     /**

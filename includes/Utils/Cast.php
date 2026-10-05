@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.7
+ * @version   1.0.8
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -24,7 +24,7 @@ namespace FabricatorForms\Utils;
 defined('ABSPATH') || exit;
 
 /**
- * Shape guards, not sanitizers — prevents a POSTed array from TypeErroring a strictly-typed WP sanitizer; must sit closest to the superglobal, never replace one.
+ * Shape guards, not sanitizers: keep a POSTed array from reaching a strictly-typed sanitizer. Never a replacement for one.
  */
 class Cast
 {
@@ -40,9 +40,8 @@ class Cast
     }
 
     /**
-     * Runs $fn with PHP warnings captured instead of emitted, for calls whose failure is an expected return
-     * value (gzuncompress() on a stream that isn't zlib, an image probe on a non-image). Unlike @, the scope
-     * is exactly this one call and the caller still has to handle the false it gets back.
+     * Runs $fn with PHP warnings suppressed, for calls whose failure is an expected return value. Unlike @, scoped to
+     * exactly this call.
      *
      * @param callable $fn Zero-argument callable.
      * @return mixed Whatever $fn returns.
@@ -56,5 +55,45 @@ class Cast
         } finally {
             restore_error_handler();
         }
+    }
+
+    /**
+     * JSON for an HTML attribute: pass the result through esc_attr(), as usual.
+     *
+     * esc_attr() doesn't double-encode, so an entity in the JSON would be decoded by the browser. With &, <, >, ' and "
+     * as \u escapes, nothing in the JSON is decoded.
+     *
+     * @param mixed $value Value to encode.
+     * @return string JSON, or '' when it cannot be encoded.
+     */
+    public static function jsonForAttribute(mixed $value): string
+    {
+        return (string) wp_json_encode($value, JSON_HEX_AMP | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
+    }
+
+    /**
+     * Whether a $_FILES entry has the shapes the form's own inputs produce: every key a scalar (name="f") or a list
+     * of scalars (name="f[]"), never nested deeper.
+     *
+     * @param mixed $file One $_FILES entry.
+     * @return bool
+     */
+    public static function isFlatFilesEntry(mixed $file): bool
+    {
+        if (!is_array($file)) {
+            return false;
+        }
+        foreach ($file as $value) {
+            if (is_array($value)) {
+                foreach ($value as $item) {
+                    if (!is_scalar($item) && $item !== null) {
+                        return false;
+                    }
+                }
+            } elseif (!is_scalar($value) && $value !== null) {
+                return false;
+            }
+        }
+        return true;
     }
 }

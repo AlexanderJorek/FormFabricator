@@ -82,6 +82,7 @@ final class VerifierScansTest extends TestCase
 
     private static function typeNames(string $pdf): array
     {
+        \Brain\Monkey\Functions\when('__')->returnArg(1); // the overflow marker is a translated label
         return Reflect::call(Verificationpage::class, 'distinctTypeNames', $pdf);
     }
 

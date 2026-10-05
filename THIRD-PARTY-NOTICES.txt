@@ -6,7 +6,7 @@ GPL-compatible license:
 
 | Library                          | License        | Purpose                          |
 |-----------------------------------|----------------|-----------------------------------|
-| mpdf/mpdf                        | GPL-2.0        | PDF generation                    |
+| mpdf/mpdf                        | GPL-2.0-only   | PDF generation                    |
 | setasign/fpdi                    | MIT            | PDF import (used by mPDF)         |
 | smalot/pdfparser                 | LGPL-3.0       | Reading/parsing uploaded PDFs      |
 | myclabs/deep-copy                | MIT            | Object cloning (mPDF dependency)  |
@@ -37,6 +37,19 @@ file headers of `vendor/pdfjs/pdf.js` and `vendor/pdfjs/pdf.worker.js` (the upst
 full Apache-2.0 text in `vendor/pdfjs/LICENSE`. Apache-2.0 is GPL-compatible
 (one-way, per the FSF's license-compatibility list) and requires no
 relicensing to bundle here.
+
+FormFabricator also bundles the ALTCHA widget under `vendor/altcha/` (placed
+there manually for the same reason: it is an npm package). CAPTCHA fields set to
+ALTCHA load it in the visitor's browser; the challenge it solves comes from the
+site itself, and the site checks the answer (no third-party service):
+
+| Library              | Version | License | Purpose                          |
+|----------------------|---------|---------|----------------------------------|
+| ALTCHA               | 3.3.0   | MIT     | Self-hosted proof-of-work CAPTCHA widget |
+
+The exact file and provenance are recorded in `vendor/altcha/VERSION` (altcha
+3.3.0, `dist/main/altcha.min.js`, unmodified), with the full MIT license text in
+`vendor/altcha/LICENSE.txt`. MIT is GPL-compatible.
 
 FormFabricator also bundles Font Awesome Free under `assets/vendor/fontawesome/`
 (placed there manually, not installed via Composer/npm), used for admin-UI
