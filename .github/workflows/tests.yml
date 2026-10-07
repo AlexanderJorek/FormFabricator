@@ -111,6 +111,8 @@ jobs:
   e2e:
     name: E2E (Chromium, Firefox, WebKit)
     runs-on: ubuntu-latest
+    # A stalled step fails the job instead of holding the runner for GitHub's six-hour limit.
+    timeout-minutes: 40
     services:
       mysql:
         image: mysql:8.0
@@ -139,7 +141,34 @@ jobs:
       - run: composer install --no-interaction --no-progress
       - run: npm ci --no-audit --no-fund
       # The runner's Google Chrome serves as Chromium (tests/e2e/support/browsers.js); Firefox and WebKit, Safari's
-      # engine, are Playwright's own builds, with the system libraries they need.
-      - run: npx playwright install --with-deps firefox webkit
+      # engine, are Playwright's own builds, kept between runs for the Playwright version package-lock.json pins.
+      - name: Playwright version
+        id: playwright
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-firefox-webkit
+      # The system libraries Firefox and WebKit need, through apt. A package mirror can stall a download without ever
+      # timing out, so apt gives up on a silent connection after 30 s, and the whole install is capped and retried.
+      - name: System libraries for Firefox and WebKit
+        timeout-minutes: 20
+        run: |
+          echo 'Acquire::Retries "3"; Acquire::http::Timeout "30"; Acquire::https::Timeout "30"; DPkg::Lock::Timeout "60";' \
+            | sudo tee /etc/apt/apt.conf.d/99-fabricator-timeouts > /dev/null
+          # timeout runs as root, so a stalled apt (root's) is stopped too and leaves no lock for the next attempt.
+          for attempt in 1 2 3; do
+            sudo env "PATH=$PATH" timeout --kill-after=15s 6m npx playwright install-deps firefox webkit && exit 0
+            echo "::warning::Installing the browsers' system libraries failed or stalled (attempt $attempt of 3)."
+            sleep 10
+          done
+          exit 1
+      - name: Firefox and WebKit
+        timeout-minutes: 10
+        run: npx playwright install firefox webkit
       # The site is installed afresh on this MySQL (tables prefixed e2e_) and served by `php -S`.
-      - run: npx playwright test -c tests/e2e
+      - name: E2E suite
+        timeout-minutes: 20
+        run: npx playwright test -c tests/e2e
