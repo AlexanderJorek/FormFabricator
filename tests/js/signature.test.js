@@ -11,15 +11,66 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { fixture, loadPage } = require('./support/page');
 
-/* jsdom draws nothing: the pad's 2D context is a stand-in that accepts the calls clearing it makes. */
-function padPage(html) {
+/* jsdom draws nothing: the pad's 2D context is a stand-in that accepts the calls clearing it makes, and the picture a
+   finished stroke hands over is a fixed PNG data URL. */
+function padPage(html, init = 'signature') {
     const page = loadPage(html);
     page.window.HTMLCanvasElement.prototype.getContext = () => ({
         fillRect() {}, scale() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, drawImage() {},
     });
-    page.window.FabricatorFieldInits.signature(page.document);
+    page.window.HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,iVBORw0KGgo=';
+    page.window.FabricatorFieldInits[init](page.document);
     return page;
 }
+
+/* A pointer on the pad: a mouse button, or a finger, with the coordinates the pad reads from the event. */
+function press(page, canvas, kind, moves) {
+    const at = { clientX: 20, clientY: 30 };
+    const fire = (target, type) => {
+        const e = new page.window.Event(type, { bubbles: true, cancelable: true });
+        Object.assign(e, kind === 'touch' ? { touches: [at] } : at);
+        target.dispatchEvent(e);
+    };
+    fire(canvas, kind === 'touch' ? 'touchstart' : 'mousedown');
+    for (let i = 0; i < moves; i++) {
+        at.clientX += 5;
+        fire(canvas, kind === 'touch' ? 'touchmove' : 'mousemove');
+    }
+    fire(kind === 'touch' ? canvas : page.document, kind === 'touch' ? 'touchend' : 'mouseup');
+}
+
+/* A tap is no signature, with a mouse or a finger; a stroke is. */
+function assertTapIsNoSignature(page, wrap) {
+    const canvas = wrap.querySelector('.fabricator-signature-canvas');
+    const hidden = wrap.querySelector('input[type="hidden"]');
+    for (const kind of ['mouse', 'touch']) {
+        press(page, canvas, kind, 0);
+        assert.equal(hidden.value, '', kind + ': a single tap leaves the signature empty');
+        press(page, canvas, kind, 3);
+        assert.match(hidden.value, /^data:image\/png;base64,/, kind + ': a stroke is the signature');
+        wrap.querySelector('.fabricator-signature-clear').click();
+        assert.equal(hidden.value, '');
+    }
+}
+
+test('signature: a single tap on the pad, without drawing, is no signature', () => {
+    const page = padPage(fixture.signature.html);
+    const field = page.document.querySelector('[data-field-id="sg"]');
+    assertTapIsNoSignature(page, page.document.querySelector('.fabricator-signature-wrap'));
+    page.document.querySelector('.fabricator-signature-canvas').dispatchEvent(new page.window.Event('mousedown', { cancelable: true }));
+    page.document.dispatchEvent(new page.window.Event('mouseup'));
+    assert.equal(page.window.FabricatorEmptyChecks.signature(field), true, 'a required signature is still missing');
+    assert.deepEqual(page.errors, []);
+});
+
+test('direct debit: a single tap on the mandate pad is no signature, whichever field script set the pad up', () => {
+    // Both scripts take the mandate pad (the first to run marks it as set up), so both must refuse a tap.
+    for (const init of ['directdebit', 'signature']) {
+        const page = padPage(fixture.debitExtras.html, init);
+        assertTapIsNoSignature(page, page.document.querySelector('.fabricator-debit-mandate .fabricator-signature-wrap'));
+        assert.deepEqual(page.errors, [], init);
+    }
+});
 
 function typeName(page, wrap, name) {
     const input = wrap.querySelector('.fabricator-signature-typed');

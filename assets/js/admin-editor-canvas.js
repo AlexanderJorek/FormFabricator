@@ -8,14 +8,13 @@
     var canvas = document.getElementById('fabricator-particle-canvas');
     if (!canvas) return;
     var rootStyle = getComputedStyle(document.documentElement);
-    /* Switched off under Settings → Editor: the canvas stays, as the page's background, with nothing drawn on it. */
-    if (rootStyle.getPropertyValue('--fabricator-particles').trim() === 'off') return;
     var ctx = canvas.getContext('2d');
     if (!ctx) return;
-    /* Decorative only. For anyone whose system asks for reduced motion (WCAG 2.3.3) it is a still picture: drawn once
-       and again on resize, never moving and never following the mouse. */
+    /* Decorative only. A still picture, drawn once and again on resize, never moving and never following the mouse:
+       when set to Static under Settings → Editor, and for anyone whose system asks for reduced motion (WCAG 2.3.3). */
+    var staticSetting = rootStyle.getPropertyValue('--fabricator-particles').trim() === 'static';
     var motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-    var still = !!(motionQuery && motionQuery.matches);
+    var still = staticSetting || !!(motionQuery && motionQuery.matches);
     var mouse = { x: -9999, y: -9999 };
     var _ah = rootStyle.getPropertyValue('--fabricator-admin-accent').trim() || '#2271b1';
     var _rgb = function (h) { return parseInt(h.slice(1, 3), 16) + ',' + parseInt(h.slice(3, 5), 16) + ',' + parseInt(h.slice(5, 7), 16); };
@@ -90,7 +89,7 @@
     /* Follows a change of the system setting while the page is open: a still picture, or moving again. */
     if (motionQuery && motionQuery.addEventListener) {
         motionQuery.addEventListener('change', function (e) {
-            still = e.matches;
+            still = staticSetting || e.matches;
             mouse.x = mouse.y = -9999;
             schedule();
         });

@@ -52,7 +52,7 @@ final class SettingsSaveTest extends AjaxTestCase
         update_option('fabricator_forms_hover_color', '#010203', false);
         update_option('fabricator_forms_admin_accent', '#0a0b0c', false);
         update_option('fabricator_forms_field_layout', 'inline', false);
-        update_option('fabricator_forms_particles', 'off', false);
+        update_option('fabricator_forms_particles', 'static', false);
         update_option('fabricator_forms_recaptcha_site_key', 'site-key-kept', false);
         update_option('fabricator_forms_recaptcha_secret_key', 'secret-kept', false);
 
@@ -65,31 +65,31 @@ final class SettingsSaveTest extends AjaxTestCase
         self::assertSame('#010203', get_option('fabricator_forms_hover_color'));
         self::assertSame('#0a0b0c', get_option('fabricator_forms_admin_accent'));
         self::assertSame('inline', get_option('fabricator_forms_field_layout'));
-        self::assertSame('off', get_option('fabricator_forms_particles'));
+        self::assertSame('static', get_option('fabricator_forms_particles'));
         self::assertSame('site-key-kept', get_option('fabricator_forms_recaptcha_site_key'));
         self::assertSame('secret-kept', get_option('fabricator_forms_recaptcha_secret_key'), 'an empty secret field keeps the secret');
     }
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
-    public function testTheParticleBackgroundCanBeSwitchedOffAndThePagesAreTold(): void
+    public function testTheParticleBackgroundCanBeSetToStaticAndThePagesAreTold(): void
     {
         // Its own process: the admin CSS variables are written once per request.
-        $r = $this->saveSettings(['particles' => 'off'], self::settingsSnapshot());
+        $r = $this->saveSettings(['particles' => 'static'], self::settingsSnapshot());
         self::assertTrue($r['success'], wp_json_encode($r));
-        self::assertSame('off', get_option('fabricator_forms_particles'));
+        self::assertSame('static', get_option('fabricator_forms_particles'));
 
         ob_start();
         FormSettings::renderSettingsPage();
-        self::assertMatchesRegularExpression('/name="particles" value="off"\s+checked/', (string) ob_get_clean());
+        self::assertMatchesRegularExpression('/name="particles" value="static"\s+checked/', (string) ob_get_clean());
 
         wp_register_style('fabricator-forms-admin', false, [], '1');
         Reflect::call(Assets::class, 'addAdminCssVars');
-        self::assertStringContainsString('--fabricator-particles: off', implode('', (array) wp_styles()->get_data('fabricator-forms-admin', 'after')));
+        self::assertStringContainsString('--fabricator-particles: static', implode('', (array) wp_styles()->get_data('fabricator-forms-admin', 'after')));
 
-        $on = $this->saveSettings(['particles' => 'anything else'], $r['data']['snapshot']);
-        self::assertTrue($on['success'], wp_json_encode($on));
-        self::assertSame('on', get_option('fabricator_forms_particles'), 'anything but "off" is on');
+        $animated = $this->saveSettings(['particles' => 'anything else'], $r['data']['snapshot']);
+        self::assertTrue($animated['success'], wp_json_encode($animated));
+        self::assertSame('animated', get_option('fabricator_forms_particles'), 'anything but "static" is animated');
     }
 
     public function testAnInvalidTrustedProxyEntryRefusesTheWholeSaveNamingIt(): void

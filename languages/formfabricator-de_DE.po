@@ -1204,10 +1204,6 @@ msgstr "FormFabricator PDF-Layout"
 msgid "PDF Layout"
 msgstr "PDF-Layout"
 
-#: includes/Admin/PDFLayoutEditor.php:147
-msgid "Layout Preview"
-msgstr "Layout-Vorschau"
-
 #: includes/Admin/PDFLayoutEditor.php:243
 msgid "DejaVu Sans (Default, sans-serif)"
 msgstr "DejaVu Sans (Standard, serifenlos)"
@@ -5030,15 +5026,6 @@ msgstr "Ein Mandat nennt auch die Anschrift des Zahlungspflichtigen und den Ort 
 msgid "Particle background"
 msgstr "Partikel-Hintergrund"
 
-msgid "On"
-msgstr "An"
-
-msgid "Moving, or a still picture when the system asks for reduced motion."
-msgstr "Bewegt, oder als stilles Bild, wenn das System reduzierte Bewegung wünscht."
-
-msgid "A plain background on every FormFabricator page."
-msgstr "Ein schlichter Hintergrund auf allen FormFabricator-Seiten."
-
 msgid "Each mandate gets its own reference: this prefix, the date and a random part. Up to 15 characters of the SEPA set (letters, digits, spaces, / ? : ( ) . , ' + -); accents are dropped, other characters left out."
 msgstr "Jedes Mandat erhält eine eigene Referenz: dieses Präfix, das Datum und einen Zufallsteil. Bis zu 15 Zeichen aus dem SEPA-Zeichensatz (Buchstaben, Ziffern, Leerzeichen, / ? : ( ) . , ' + -); Akzente und Umlautpunkte entfallen (auf einer deutschen Website wird Ä zu Ae), andere Zeichen werden weggelassen."
 
@@ -5374,3 +5361,12 @@ msgstr "Diese Datei ist beschädigt oder unvollständig, ihr Inhalt konnte daher
 #: includes/Admin/Verificationpage.php:4232
 msgid "An internal error stopped the check; the file itself may be fine. The details were written to the PHP error log."
 msgstr "Ein interner Fehler hat die Prüfung abgebrochen; die Datei selbst ist womöglich in Ordnung. Die Einzelheiten stehen im PHP-Fehlerprotokoll."
+
+msgid "Animated"
+msgstr "Animiert"
+
+msgid "Static"
+msgstr "Statisch"
+
+msgid "When your system asks for reduced motion, it is always static."
+msgstr "Wenn Ihr System reduzierte Bewegung verlangt, ist er immer statisch."

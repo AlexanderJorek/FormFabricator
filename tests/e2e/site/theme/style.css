@@ -1,0 +1,6 @@
+/*
+Theme Name: FormFabricator E2E
+Description: The smallest classic theme that shows a page as WordPress builds it (wp_head, the content, wp_footer), for the E2E site. Dev-only, never shipped.
+Version: 1.0
+*/
+body { font-family: sans-serif; margin: 0 auto; max-width: 960px; padding: 16px; }

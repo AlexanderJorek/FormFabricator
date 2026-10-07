@@ -10,6 +10,7 @@ use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\PDF\PdfUtils;
 use FabricatorForms\Tests\Integration\TestCase;
 use FabricatorForms\Tests\Support\Reflect;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * A real sealed PDF from a real submission, through the real verifier: authentic as generated, and caught when its
@@ -17,6 +18,7 @@ use FabricatorForms\Tests\Support\Reflect;
  *
  * The verdict is read from the class the verifier puts on its summary line (fabricator-pdf-verdict-pass/-fail/-warn).
  */
+#[Group('package')]
 final class SealRoundTripTest extends TestCase
 {
     private const FIELDS = [
@@ -177,6 +179,50 @@ final class SealRoundTripTest extends TestCase
         self::assertContains(self::verdict($html), ['pass', 'fail', 'warn'], 'the check ran to a verdict');
     }
 
+    public function testASoftMaskSmallerThanItsImageShapesThePreviewAndIsNoMismatch(): void
+    {
+        // TESTING.md §5. A mask smaller than its image: a 2×2 mask, transparent top left and bottom right, must shape the
+        // preview's corners and leave the image's check alone.
+        $pdf = $this->sealedPdf();
+        preg_match('/xref\n0 (\d+)\n/', $pdf, $header, 0, (int) strrpos($pdf, "\nxref\n"));
+        $num = (int) $header[1];
+        $pdf = (string) preg_replace('#(/Subtype\s*/Image)(?![^>]*/SMask)#', '$1 /SMask ' . $num . ' 0 R', $pdf, 1, $hits);
+        self::assertSame(1, $hits, 'the PDF holds an image without a mask');
+        $mask   = (string) gzcompress("\x00\xff\xff\x00");
+        $object = $num . " 0 obj\n<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray"
+            . " /BitsPerComponent 8 /Filter /FlateDecode /Length " . strlen($mask) . " >>\nstream\n" . $mask . "\nendstream\nendobj\n";
+        $xrefAt = (int) strrpos($pdf, "\nxref\n") + 1;
+        $pdf    = substr($pdf, 0, $xrefAt) . $object . substr($pdf, $xrefAt);
+        $pdf    = str_replace("xref\n0 $num\n", "xref\n0 " . ($num + 1) . "\n", $pdf);
+        $pdf    = (string) preg_replace('/\/Size ' . $num . '\b/', '/Size ' . ($num + 1), $pdf);
+
+        $html  = $this->verify(self::rebuildXref($pdf), 'small-mask.pdf');
+        $cards = self::imageCards($html);
+        self::assertNotSame([], $cards);
+        self::assertSame(['pass'], array_values(array_unique(array_column($cards, 0))), 'no image is a mismatch');
+        self::assertStringNotContainsString('MISMATCH', $html);
+
+        $previews = array_filter(array_map(
+            static fn(array $card): string => preg_match('#src=["\']data:image/png;base64,([^"\']+)#', $card[2], $m) ? (string) base64_decode($m[1]) : '',
+            $cards
+        ));
+        $masked = null;
+        foreach ($previews as $png) {
+            $im = imagecreatefromstring($png);
+            if ($im !== false && (imagecolorat($im, 0, 0) >> 24) > 0) {
+                $masked = $im;
+            }
+        }
+        self::assertNotNull($masked, 'a preview carries the mask\'s transparency');
+        $alpha = static fn(int $x, int $y): int => (imagecolorat($masked, $x, $y) >> 24) & 0x7F;
+        [$w, $h] = [imagesx($masked), imagesy($masked)];
+        self::assertSame(
+            [127, 0, 0, 127],
+            [$alpha(0, 0), $alpha($w - 1, 0), $alpha(0, $h - 1), $alpha($w - 1, $h - 1)],
+            'each quarter of the image takes its sample of the 2×2 mask'
+        );
+    }
+
     public function testAnAppendedIncrementalUpdateIsCaught(): void
     {
         // TESTING.md §5: tampering via an incremental update ("PDF shadow attack") must be caught, not just direct edits.
@@ -196,7 +242,8 @@ final class SealRoundTripTest extends TestCase
     public function testAPdfThisPluginNeverSealedIsNotVerified(): void
     {
         // TESTING.md §5: an arbitrary PDF is reported "Not Verifiable" — not a false pass, not a crash.
-        $mpdf = new \Mpdf\Mpdf(['tempDir' => $this->dir]);
+        // A font the release keeps: mPDF's default is one the build trims (tools/build-config.php).
+        $mpdf = new \Mpdf\Mpdf(['tempDir' => $this->dir, 'default_font' => 'dejavusans']);
         $mpdf->WriteHTML('<p>Some other document</p>');
         $html = $this->verify($mpdf->Output('', 'S'), 'foreign.pdf');
 

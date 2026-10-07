@@ -32,6 +32,14 @@ defined('ABSPATH') || exit;
 class Generator
 {
     /**
+     * How the metadata block dates a PDF (wp_date()): site-local time plus UTC offset, readable and unambiguous at the
+     * daylight-saving changeover. The layout editor's preview shows its sample date the same way.
+     *
+     * @var string
+     */
+    public const METADATA_DATE_FORMAT = 'Y-m-d H:i:s P';
+
+    /**
      * Most different font names sealed as allowed. A document from this plugin uses a handful.
      *
      * @var int
@@ -103,8 +111,7 @@ class Generator
         }
 
         $metadata = [
-            // Site-local time plus UTC offset: readable, and unambiguous at the daylight-saving changeover.
-            'generated' => wp_date('Y-m-d H:i:s P'),
+            'generated' => wp_date(self::METADATA_DATE_FORMAT),
             'nonce'     => bin2hex(random_bytes(16)),
             'form_id'   => $form_id,
             'form_name' => $title,

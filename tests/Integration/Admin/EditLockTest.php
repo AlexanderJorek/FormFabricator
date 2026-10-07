@@ -64,7 +64,13 @@ final class EditLockTest extends AjaxTestCase
         wp_set_current_user($this->first);
         $this->ajax('fabricator_forms_unlock_form', ['form_id' => (string) $form, 'nonce' => wp_create_nonce('fabricator_forms_admin_nonce')]);
 
+        // The second admin's open tab: its next heartbeat carries no conflict (admin-editor-lock.js then hides the
+        // notice), and the lock is now its own.
         wp_set_current_user($this->second);
+        $beat = FormEditor::heartbeatReceived([], ['fabricator_forms_lock' => $form]);
+        self::assertArrayNotHasKey('fabricator_forms_lock_conflict', $beat);
+        $lock = explode(':', (string) get_post_meta($form, '_edit_lock', true));
+        self::assertSame($this->second, (int) ($lock[1] ?? 0), 'the lock is now this admin\'s');
         self::assertStringNotContainsString('Currently being edited by', $this->editor($form), 'the notice is gone once the first tab closed');
     }
 

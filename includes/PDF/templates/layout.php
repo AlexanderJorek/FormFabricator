@@ -280,7 +280,8 @@ return [
             <strong>' . esc_html__('Metadata', 'formfabricator') . '</strong><br>
             ' . esc_html__('Created:', 'formfabricator') . ' ' . esc_html($metadata['generated'] ?? '') . '<br>
             ' . esc_html__('Form:', 'formfabricator') . ' ' . esc_html($metadata['form_name'] ?? '')
-            . ' (ID: ' . esc_html((string) ($metadata['form_id'] ?? '')) . ')
+            // A form's PDF names its ID; the layout editor's preview, made for no form, has none (0).
+            . ((int) ($metadata['form_id'] ?? 0) > 0 ? ' (ID: ' . (int) $metadata['form_id'] . ')' : '') . '
         </div>';
     },
 

@@ -111,3 +111,32 @@ test('access matrix: a save refused as changed elsewhere shows the server\'s mes
     assert.equal(doc.getElementById('fabricator-access-error').textContent, message);
     assert.equal(doc.getElementById('fabricator-access-overlay').hidden, false, 'left open to reload from');
 });
+
+test('rotating the key: "The old master key is lost" is sent only when ticked', async () => {
+    // The checkbox as FormSettings prints it while the configured master key does not open the stored keys
+    // (SealKeyCardTest checks the server prints it then, and what it accepts with and without it).
+    const rotations = [];
+    const page = loadSettings((url, body) => {
+        if (body && body.action === 'fabricator_forms_rotate_key') {
+            rotations.push(body);
+        }
+        return { success: false, data: { message: 'Nothing was changed.' } };
+    });
+    const doc = page.document;
+    doc.querySelector('.fabricator-key-rotate-fields').insertAdjacentHTML('beforeend',
+        '<label class="fabricator-reset-check-wrap"><input type="checkbox" id="fabricator_key_master_lost" value="1">'
+        + '<span>The old master key is lost</span></label>');
+
+    doc.getElementById('fabricator-rotate-key-trigger').click();
+    doc.getElementById('fabricator-key-confirm').click();
+    await until(page, () => rotations.length === 1);
+    assert.equal(rotations[0].master_key_lost, undefined, 'unticked: the server refuses to bury the key');
+    assert.equal(rotations[0].key_compromised, '0');
+
+    doc.getElementById('fabricator_key_master_lost').checked = true;
+    await until(page, () => !doc.getElementById('fabricator-key-confirm').disabled);
+    doc.getElementById('fabricator-key-confirm').click();
+    await until(page, () => rotations.length === 2);
+    assert.equal(rotations[1].master_key_lost, '1');
+    assert.deepEqual(page.errors, []);
+});

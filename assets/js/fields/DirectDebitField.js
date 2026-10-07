@@ -146,6 +146,16 @@ function (root) {
         var drawing = false;
         var drew    = false;
         var lastW   = 0;
+        var lastH   = 0;
+        /* Turning a phone resizes the pad twice while the snapshot still loads: the second resize reuses that snapshot,
+           and only the latest one paints. */
+        var pendingSnap = null;
+        var resizeGen   = 0;
+        /* Clearing the pad: a redraw still loading must not paint the old drawing back. */
+        function cancelRedraw() {
+            pendingSnap = null;
+            resizeGen++;
+        }
         function resize() {
             var rect  = canvas.getBoundingClientRect();
             var ratio = window.devicePixelRatio || 1;
@@ -153,9 +163,11 @@ function (root) {
             var fallH = parseFloat(canvas.getAttribute('height') || '160');
             var cssH  = rect.height || canvas.offsetHeight || fallH;
             if (!cssW || !cssH) return;
+            if (cssW === lastW && cssH === lastH) return; // nothing to redraw
             /* Resizing clears the canvas but not the hidden input, so redraw, as SignatureField.js does. */
-            var snap = lastW ? canvas.toDataURL() : null;
+            var snap = pendingSnap || (lastW ? canvas.toDataURL() : null);
             lastW = cssW;
+            lastH = cssH;
             canvas.width  = Math.round(cssW * ratio);
             canvas.height = Math.round(cssH * ratio);
             ctx.scale(ratio, ratio);
@@ -165,9 +177,16 @@ function (root) {
             ctx.lineWidth   = stroke;
             ctx.lineCap     = 'round';
             ctx.lineJoin    = 'round';
+            var gen = ++resizeGen;
+            pendingSnap = null;
             if (snap && snap !== 'data:,' && input.value) {
+                pendingSnap = snap;
                 var img = new Image();
-                img.onload = function () { ctx.drawImage(img, 0, 0, cssW, cssH); };
+                img.onload = function () {
+                    if (gen !== resizeGen) return; // a later resize paints it at the newer size
+                    ctx.drawImage(img, 0, 0, cssW, cssH);
+                    pendingSnap = null;
+                };
                 img.src = snap;
             }
         }
@@ -212,6 +231,7 @@ function (root) {
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 input.value = '';
                 drew        = false;
+                cancelRedraw();
                 wrap.dataset.fabricatorFileCount = '0';
             });
         }
@@ -222,6 +242,7 @@ function (root) {
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 input.value = '';
                 drew        = false;
+                cancelRedraw();
             });
         }
         resize();

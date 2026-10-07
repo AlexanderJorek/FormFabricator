@@ -127,7 +127,7 @@ Deactivating keeps everything. Deleting removes all forms, settings, seal keys a
 * New: the SEPA field is now the Direct Debit Mandate, with SEPA, Bacs (UK) or ACH (US) per field. Account details are checked on your site, and every text the mandate shows can be changed; only SEPA comes with default wording. The creditor's name and address, the type of payment, the debtor's address and the place of signing can be added.
 * New: CAPTCHA fields can use ALTCHA, which runs on your own site: no outside service, no keys. It is the default; Google reCAPTCHA stays available. ALTCHA needs HTTPS.
 * New: every signature can be given by typing the name instead of drawing, for visitors who cannot use a mouse, finger or pen.
-* New: the moving background of the admin pages can be switched off under Settings → Editor; with reduced motion it shows as a still picture.
+* New: the moving background of the admin pages can be set to Static under Settings → Editor; when your system asks for reduced motion, it is always static.
 * Changed: a notification's sender address can no longer be a form field (providers often discard such mail); use "Reply-to email" instead.
 * Changed: one visitor address can send at most 50 forms in 5 minutes across the site, one IPv6 network at most 200.
 * Changed: macro-enabled Office files, disk images and more risky file types are always refused; .doc, .xls, .ppt and .rtf left the default "Documents" group.
@@ -142,6 +142,9 @@ Deactivating keeps everything. Deleting removes all forms, settings, seal keys a
 * Fixed: a visitor could make their own sealed PDF fail the check later, through hidden markers in an answer or a crafted image; genuine PDFs with long answers were refused.
 * Fixed: hiding "Signatures & Uploads" in the PDF layout removed every field; the "Footer" switch now works.
 * Fixed: IBANs from outside SEPA or with impossible check digits were accepted; web addresses with umlauts were refused.
+* Fixed: the "Currently being edited by" notice stayed after the other administrator had left, until the page was reloaded.
+* Fixed: a signature disappeared from the pad when the phone was turned while signing.
+* Fixed: in Safari, text typed into the HTML block's and a notification's editor was not saved unless a toolbar button was used afterwards; placing two fields side by side by dragging could fail.
 * Fixed: many smaller problems with fields, the form and selection lists, the builder, emails, PDFs and translations.
 
 = 1.0.7 =

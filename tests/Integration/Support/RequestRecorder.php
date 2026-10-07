@@ -3,7 +3,8 @@
 namespace FabricatorForms\Tests\Integration\Support;
 
 /**
- * A throwaway HTTP server on 127.0.0.1 that answers every request with a 404 and writes its path to a log.
+ * A throwaway HTTP server on 127.0.0.1 that answers every request with a 404 and writes its path to a log. Given a
+ * document root, it serves the files there instead, as the site's own web server would, and 404s the rest.
  *
  * For code that fetches URLs outside WordPress's HTTP API (mPDF uses its own curl calls), where pre_http_request sees
  * nothing. It answers at once, so a regression that does fetch fails the test instead of hanging it: a silent listener
@@ -19,7 +20,7 @@ final class RequestRecorder
 
     public readonly string $host;
 
-    public function __construct()
+    public function __construct(?string $docroot = null)
     {
         // A free port: bind to 0, read the port back, release it for the server.
         $probe = stream_socket_server('tcp://127.0.0.1:0');
@@ -28,11 +29,15 @@ final class RequestRecorder
 
         $this->log    = tempnam(sys_get_temp_dir(), 'ff-requests');
         $this->router = tempnam(sys_get_temp_dir(), 'ff-router') . '.php';
+        // Returning false hands the request to the built-in server, which serves the file from the document root.
+        $serve = $docroot === null ? '' : 'if (is_file(' . var_export(rtrim($docroot, '/\\'), true)
+            . ' . parse_url($_SERVER["REQUEST_URI"] ?? "", PHP_URL_PATH))) { return false; } ';
         file_put_contents($this->router, '<?php file_put_contents(' . var_export($this->log, true)
-            . ', ($_SERVER["REQUEST_URI"] ?? "?") . "\n", FILE_APPEND); http_response_code(404); return true;');
+            . ', ($_SERVER["REQUEST_URI"] ?? "?") . "\n", FILE_APPEND); ' . $serve . 'http_response_code(404); return true;');
 
         $null          = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
-        $this->process = proc_open([PHP_BINARY, '-S', $this->host, $this->router], [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes);
+        $command       = [PHP_BINARY, '-S', $this->host, ...($docroot === null ? [] : ['-t', $docroot]), $this->router];
+        $this->process = proc_open($command, [1 => ['file', $null, 'w'], 2 => ['file', $null, 'w']], $pipes);
         if (!is_resource($this->process)) {
             throw new \RuntimeException('could not start the request recorder');
         }

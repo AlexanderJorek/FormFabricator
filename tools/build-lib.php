@@ -91,15 +91,16 @@ function fabbuildTool(string $tool, array $args = []): array
 }
 
 /**
- * Runs a command without a shell (an argument list, so nothing is re-parsed) and waits for it.
+ * Starts a command without a shell (an argument list, so nothing is re-parsed), its output going to $log, or to this
+ * terminal when $log is null. Its standard input is closed.
  *
- * @param string[]                  $command Program and arguments.
- * @param string|null               $cwd     Working directory; the current one when null.
+ * @param string[]                   $command Program and arguments.
+ * @param string|null                $cwd     Working directory; the current one when null.
  * @param array<string, string|null> $env     Variables to set, or with null to remove, on top of this process's own.
- * @param bool                      $capture True: the output is collected and returned; false: it goes to this terminal.
- * @return array{code: int, output: string}
+ * @param string|null                $log     File for the output.
+ * @return resource The process, for proc_close() or proc_get_status().
  */
-function fabbuildRun(array $command, ?string $cwd = null, array $env = [], bool $capture = true): array
+function fabbuildStart(array $command, ?string $cwd, array $env, ?string $log)
 {
     $environment = getenv();
     foreach ($env as $name => $value) {
@@ -109,14 +110,10 @@ function fabbuildRun(array $command, ?string $cwd = null, array $env = [], bool 
             $environment[$name] = $value;
         }
     }
-    $log = null;
-    if ($capture) {
-        $log  = (string) tempnam(sys_get_temp_dir(), 'fabbuild');
-        $pipes = [0 => ['pipe', 'r'], 1 => ['file', $log, 'w'], 2 => ['redirect', 1]];
-    } else {
-        $pipes = [0 => STDIN, 1 => STDOUT, 2 => STDERR];
-    }
-    $line = $command;
+    $pipes = $log !== null
+        ? [0 => ['pipe', 'r'], 1 => ['file', $log, 'w'], 2 => ['redirect', 1]]
+        : [0 => ['pipe', 'r'], 1 => STDOUT, 2 => STDERR];
+    $line    = $command;
     $options = [];
     if (PHP_OS_FAMILY === 'Windows' && ($command[0] ?? '') === 'cmd') {
         // cmd.exe parses its own command line: /s /c "<command>" with each part quoted that needs it, so a batch file
@@ -133,16 +130,80 @@ function fabbuildRun(array $command, ?string $cwd = null, array $env = [], bool 
     if (!is_resource($process)) {
         fabbuildFail('Could not start: ' . implode(' ', $command));
     }
-    if (isset($handles[0])) {
-        fclose($handles[0]);
-    }
-    $code   = proc_close($process);
+    fclose($handles[0]);
+    return $process;
+}
+
+/**
+ * Runs a command without a shell and waits for it.
+ *
+ * @param string[]                   $command Program and arguments.
+ * @param string|null                $cwd     Working directory; the current one when null.
+ * @param array<string, string|null> $env     Variables to set, or with null to remove, on top of this process's own.
+ * @param bool                       $capture True: the output is collected and returned; false: it goes to this terminal.
+ * @return array{code: int, output: string}
+ */
+function fabbuildRun(array $command, ?string $cwd = null, array $env = [], bool $capture = true): array
+{
+    $log    = $capture ? (string) tempnam(sys_get_temp_dir(), 'fabbuild') : null;
+    $code   = proc_close(fabbuildStart($command, $cwd, $env, $log));
     $output = '';
     if ($log !== null) {
         $output = (string) file_get_contents($log);
         unlink($log);
     }
     return ['code' => $code, 'output' => $output];
+}
+
+/**
+ * Runs gates at the same time, each in a process of its own, and waits for all of them. Each is reported as it ends; a
+ * failed one with its output, after which the build stops. Only for gates that share nothing they write: their own
+ * tables, files and ports.
+ *
+ * @param array<string, array{command: string[], env: array<string, string|null>}> $gates Gate name => command and env.
+ */
+function fabbuildParallel(array $gates, string $cwd): void
+{
+    fabbuildSay('  running at once: ' . implode('; ', array_keys($gates)), 'grey');
+    $running = [];
+    foreach ($gates as $name => $gate) {
+        $log = (string) tempnam(sys_get_temp_dir(), 'fabbuild');
+        $running[$name] = [
+            'process' => fabbuildStart($gate['command'], $cwd, $gate['env'], $log),
+            'log'     => $log,
+            'started' => microtime(true),
+        ];
+    }
+    $failed = [];
+    while ($running !== []) {
+        foreach ($running as $name => $run) {
+            $status = proc_get_status($run['process']);
+            if ($status['running']) {
+                continue;
+            }
+            // proc_get_status() reports the exit code once, when it first sees the process gone; proc_close() then can't.
+            $code = (int) $status['exitcode'];
+            proc_close($run['process']);
+            $output = (string) file_get_contents($run['log']);
+            unlink($run['log']);
+            unset($running[$name]);
+            if ($code === 0) {
+                fabbuildSay('  ' . $name . ' ... ok (' . fabbuildDuration($run['started']) . ')', 'green');
+            } else {
+                fabbuildSay('  ' . $name . ' ... FAILED (exit code ' . $code . ', ' . fabbuildDuration($run['started']) . ')', 'red');
+                $failed[$name] = $output;
+            }
+        }
+        usleep(250000);
+    }
+    foreach ($failed as $name => $output) {
+        fabbuildSay('');
+        fabbuildSay('--- ' . $name . ' ---', 'red');
+        fabbuildSay(rtrim($output), 'red');
+    }
+    if ($failed !== []) {
+        fabbuildFail('Release gate failed: ' . implode('; ', array_keys($failed)) . '.');
+    }
 }
 
 /**
@@ -178,7 +239,7 @@ function fabbuildFiles(string $dir, array $skip = []): array
             }
             $child = $rel === '' ? $name : $rel . '/' . $name;
             $path  = $base . '/' . $child;
-            if (is_link($path)) {
+            if (fabbuildIsLink($path)) {
                 continue;
             }
             if (is_dir($path)) {
@@ -212,7 +273,7 @@ function fabbuildEmptyDirs(string $dir): array
             }
             $child = $rel === '' ? $name : $rel . '/' . $name;
             $path  = $dir . '/' . $child;
-            if (is_dir($path) && !is_link($path)) {
+            if (is_dir($path) && !fabbuildIsLink($path)) {
                 $holdsFile = $walk($child) || $holdsFile;
             } else {
                 $holdsFile = true;
@@ -233,7 +294,7 @@ function fabbuildEmptyDirs(string $dir): array
  */
 function fabbuildCopy(string $from, string $to): void
 {
-    if (is_link($from)) {
+    if (fabbuildIsLink($from)) {
         return;
     }
     if (!is_dir($from)) {
@@ -256,11 +317,28 @@ function fabbuildCopy(string $from, string $to): void
 }
 
 /**
+ * Whether $path is a link: a symbolic link, or on Windows also a junction (the E2E site links the plugin in with one).
+ * PHP reports a junction as existing but as neither link, file nor directory, whether or not its target is there.
+ * readlink() can't tell: on Windows it resolves an ordinary directory too.
+ */
+function fabbuildIsLink(string $path): bool
+{
+    return is_link($path) || (PHP_OS_FAMILY === 'Windows' && file_exists($path) && !is_dir($path) && !is_file($path));
+}
+
+/**
  * Removes a file or a whole directory. A link is removed itself, never what it points to.
  */
 function fabbuildRemove(string $path): void
 {
-    if (is_link($path) || is_file($path)) {
+    if (fabbuildIsLink($path)) {
+        // A junction or directory link on Windows goes with rmdir(); a file link, and any link elsewhere, with unlink().
+        if (!(PHP_OS_FAMILY === 'Windows' && @rmdir($path)) && !@unlink($path) && fabbuildIsLink($path)) {
+            fabbuildFail('Could not remove the link ' . $path);
+        }
+        return;
+    }
+    if (is_file($path)) {
         // Windows refuses to delete a read-only file (git marks some of its objects so).
         if (PHP_OS_FAMILY === 'Windows') {
             @chmod($path, 0666);

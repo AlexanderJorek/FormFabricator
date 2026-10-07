@@ -5,6 +5,8 @@ namespace FabricatorForms\Tests\Integration\Admin;
 use FabricatorForms\Admin;
 use FabricatorForms\Plugin;
 use FabricatorForms\Tests\Integration\TestCase;
+use PHPUnit\Framework\Attributes\PreserveGlobalState;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 
 /**
  * Who may reach which FormFabricator screen (TESTING.md §7). The admin pages are registered with
@@ -71,6 +73,49 @@ final class AccessControlTest extends TestCase
         self::assertContains('fabricator-forms', array_column($GLOBALS['menu'], 2), 'the top-level menu is registered');
         $subs = array_column($GLOBALS['submenu']['fabricator-forms'] ?? [], 1);
         self::assertContains(Plugin::ACCESS_CAP_PREFIX . 'use_verifier', $subs, 'with the verifier page this user may open');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testWordPressLeadsAUserAllowedOnlyTheVerifierFromTheMenuToTheVerifier(): void
+    {
+        // TESTING.md §3. WordPress builds the menu a user sees in wp-admin/includes/menu.php: a top-level entry whose own
+        // page the user may not open points at the first page below it they may open, and the page is checked
+        // against the user's rights. Its own process: menu.php fires admin_menu and fills globals no later test may see.
+        global $menu, $submenu, $_wp_real_parent_file, $_wp_submenu_nopriv, $_wp_menu_nopriv, $admin_page_hooks,
+            $_registered_pages, $_parent_pages, $pagenow, $plugin_page, $typenow, $parent_file;
+        $menu    = [];
+        $submenu = [];
+        $editor  = self::factory()->user->create(['role' => 'editor']);
+        update_option('fabricator_forms_access', ['roles' => ['editor' => ['use_verifier' => true]]]);
+        wp_set_current_user($editor);
+        set_current_screen('dashboard');
+        // Registered on admin_menu, which menu.php fires between its two passes over the menu, in the plugin's order.
+        add_action('admin_menu', [Admin\FormList::class, 'menu']);
+        add_action('admin_menu', [Admin\FormEditor::class, 'menu']);
+        add_action('admin_menu', [Admin\FormSelectList::class, 'menu']);
+        add_action('admin_menu', [Admin\FormSettings::class, 'addSettingsPage']);
+        add_action('admin_menu', [Admin\PDFLayoutEditor::class, 'addPage']);
+        add_action('admin_menu', [Admin\Verificationpage::class, 'menu']);
+
+        // Opening the verifier's own address, admin.php?page=fabricator-pdf-verification.
+        $pagenow       = 'admin.php';
+        $plugin_page   = 'fabricator-pdf-verification';
+        $_GET['page']  = $plugin_page;
+        $typenow       = '';
+        require ABSPATH . 'wp-admin/includes/menu.php';
+
+        $entry = array_values(array_filter($menu, static fn(array $item): bool => str_contains((string) ($item[0] ?? ''), 'FormFabricator')));
+        self::assertCount(1, $entry, 'the page was not refused, and the menu has one FormFabricator entry');
+        self::assertSame(['fabricator-pdf-verification'], array_column($submenu[$entry[0][2]] ?? [], 2), 'holding only the verifier');
+
+        // The menu as WordPress prints it: an entry whose own page the user may not open links to its first page below.
+        $self = 'fabricator-pdf-verification';
+        ob_start();
+        require ABSPATH . 'wp-admin/menu-header.php';
+        $html = (string) ob_get_clean();
+        self::assertMatchesRegularExpression('#<li[^>]*toplevel_page_fabricator-forms[^>]*><a href=["\']admin\.php\?page=fabricator-pdf-verification["\']#', $html);
+        self::assertStringNotContainsString('href=\'admin.php?page=fabricator-forms\'', $html, 'never to the form list this user may not open');
     }
 
     public function testCreatingFormsIsAnsweredForTheUserAskedAbout(): void

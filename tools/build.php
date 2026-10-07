@@ -1,10 +1,11 @@
 <?php
 
 /**
- * The release build: runs every release gate, then builds a clean, WordPress.org-ready copy of the plugin into
- * build/formfabricator/, zips it to build/formfabricator.zip, verifies the archive and writes a CycloneDX SBOM next to
- * it. The working tree's vendor/ (with the dev tools) is never touched: production dependencies are installed into the
- * staged copy only. Runs on Windows, macOS and Linux; build.cmd and build.sh in the repository root start it.
+ * The release build: runs the quick release gates (lint, unit, perf, JS, audit), then builds a clean, WordPress.org-ready
+ * copy of the plugin into build/formfabricator/, zips it to build/formfabricator.zip, verifies the archive, runs the slow
+ * suites at the same time (the integration suite as a single site and as a network, its "package" group and the E2E
+ * suite against the plugin unpacked from the zip), and writes a CycloneDX SBOM next to the zip. Production dependencies go into the staged copy only; the working tree's vendor/ is never
+ * touched. Runs on Windows, macOS and Linux; build.cmd and build.sh start it.
  *
  * Usage:
  *   php tools/build.php                full release build
@@ -82,6 +83,12 @@ function fabbuildMain(string $root, string $buildDir, string $stageDir, string $
         } elseif (!fabtestdbExternal()) {
             fabbuildSay('  For the integration suite, set WP_TESTS_DB_HOST (and _NAME, _USER, _PASSWORD) to a MySQL or MariaDB server.', 'yellow');
         }
+        // The E2E suite's browsers, once `npm install` has brought Playwright.
+        if (is_file($root . '/node_modules/@playwright/test/cli.js')) {
+            fabbuildGate('Playwright browsers for the E2E suite', fabbuildTool('node', [$root . '/tests/e2e/support/browsers.js', '--install']), $root);
+        } else {
+            fabbuildSay('  For the E2E suite, run `npm install`, then this setup again.', 'yellow');
+        }
         fabbuildSay('');
         fabbuildSay('Dev environment ready. Run the build again to produce a release.', 'green');
         return;
@@ -98,6 +105,13 @@ function fabbuildMain(string $root, string $buildDir, string $stageDir, string $
     fabbuildPruneVendor($stageDir, $config['vendorExclude']);
     fabbuildZip($stageDir, $zipPath);
     fabbuildVerify($stageDir, $zipPath, $config, $pinned);
+    try {
+        fabbuildSuiteGates($root, $buildDir, $zipPath, $skipAudit);
+    } catch (RuntimeException $e) {
+        // A zip the suites refused never stays where a good one would be.
+        fabbuildRemove($zipPath);
+        throw $e;
+    }
     $sbomPath = fabbuildSbom($root, $buildDir, $config['handVendored']);
 
     fabbuildSay('');
@@ -242,7 +256,6 @@ function fabbuildGates(string $root, bool $skipAudit): void
     fabbuildGate('npm ci (JS test dependencies)', fabbuildTool('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund']), $root);
     fabbuildGate('npm test (JS suite)', fabbuildTool('npm', ['test']), $root);
 
-    fabbuildIntegrationGates($root, $phpunit, $skipAudit);
 
     if ($skipAudit) {
         fabbuildSay('  composer audit skipped (--skip-audit)', 'yellow');
@@ -253,49 +266,74 @@ function fabbuildGates(string $root, bool $skipAudit): void
 }
 
 /**
- * The WordPress integration suite, once as a single site and once as a multisite network, against the named server or
- * the portable one. Offline without a database set up yet, it is skipped rather than downloaded.
+ * The slow suites, all at the same time once the release zip is verified: the WordPress integration suite as a single
+ * site and as a multisite network, its "package" group and the E2E suite (Chromium, Firefox, WebKit), the last two
+ * against the plugin unpacked from the zip, so packaging faults show. Started together they take as long as the
+ * slowest, not all four in a row.
  *
- * @param string[] $phpunit
+ * The E2E suite runs once per browser, each on a site of its own. Every run shares the test database server and
+ * nothing it writes: each PHPUnit run has a table prefix and a content folder (uploads) of its own
+ * (tests/Integration/wp-tests-config.php), each E2E site its own port, prefix, content folder and logins
+ * (tests/e2e/playwright.config.js), and no run caches PHPUnit's results. Browsers are downloaded first unless the build is offline.
  */
-function fabbuildIntegrationGates(string $root, array $phpunit, bool $offline): void
+function fabbuildSuiteGates(string $root, string $buildDir, string $zipPath, bool $offline): void
 {
-    $config = [...$phpunit, '-c', $root . '/tests/phpunit-integration.xml.dist', '--no-progress'];
-    $iniDir = fabtestdbMysqliIniDir();
-    // Through PHP_INI_SCAN_DIR, not -d: WordPress installs the test site in a child PHP process, which needs it too.
-    $base = $iniDir !== null ? ['PHP_INI_SCAN_DIR' => $iniDir] : [];
-
-    if (fabtestdbExternal()) {
-        fabbuildGate('phpunit integration (single site, ' . getenv('WP_TESTS_DB_HOST') . ')', $config, $root, $base + ['WP_MULTISITE' => '0']);
-        fabbuildGate('phpunit integration (multisite, ' . getenv('WP_TESTS_DB_HOST') . ')', $config, $root, $base + ['WP_MULTISITE' => '1']);
-        return;
+    $unpacked = $buildDir . '/package-test';
+    $content  = $buildDir . '/test-content';
+    fabbuildRemove($unpacked);
+    fabbuildRemove($content);
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath, ZipArchive::RDONLY) !== true || !$zip->extractTo($unpacked) || !$zip->close()) {
+        fabbuildFail('Could not unpack ' . $zipPath . ' for the packaged-plugin tests.');
     }
-    if (!fabtestdbPortable()) {
-        $hint = 'Set WP_TESTS_DB_HOST (and _NAME, _USER, _PASSWORD) to a MySQL or MariaDB server whose database the tests may wipe, '
-            . 'e.g. one started with: docker run -d -p 3306:3306 -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=wordpress_test mariadb:11.4';
-        if ($offline) {
-            fabbuildSay('  integration suite SKIPPED: no test database named. ' . $hint, 'yellow');
-            return;
-        }
-        fabbuildFail('Release gate failed: the integration suite needs a database. ' . $hint);
-    }
-    if (!fabtestdbInitialize($offline)) {
-        fabbuildSay('  integration suite SKIPPED: no test database yet, and --skip-audit (offline) does not download one.', 'yellow');
-        fabbuildSay('  Run a full build or --setup once to set it up.', 'yellow');
-        return;
-    }
-    $server = fabtestdbStart($iniDir);
+    $phpunit = [PHP_BINARY, $root . '/vendor/bin/phpunit', '-c', $root . '/tests/phpunit-integration.xml.dist', '--no-progress', '--do-not-cache-result'];
+    $own     = static fn(string $run): array => [
+        'FABRICATOR_TESTS_TABLE_PREFIX' => 'wpt' . $run . '_',
+        'FABRICATOR_TESTS_CONTENT_DIR'  => $content . '/' . $run,
+    ];
     try {
-        $env = $base + [
-            'WP_TESTS_DB_HOST'     => '127.0.0.1:' . $server['port'],
-            'WP_TESTS_DB_NAME'     => 'wordpress_test',
-            'WP_TESTS_DB_USER'     => 'root',
-            'WP_TESTS_DB_PASSWORD' => FABTESTDB_ROOT_PW,
-        ];
-        fabbuildGate('phpunit integration (single site)', $config, $root, $env + ['WP_MULTISITE' => '0']);
-        fabbuildGate('phpunit integration (multisite)', $config, $root, $env + ['WP_MULTISITE' => '1']);
+        if (!$offline) {
+            fabbuildGate('Playwright browsers (Firefox, WebKit; Chromium unless Chrome is installed)', fabbuildTool('node', [$root . '/tests/e2e/support/browsers.js', '--install']), $root);
+        }
+        fabbuildWithTestDb($offline, 'integration, package and E2E suites', static function (array $env, string $where) use ($root, $phpunit, $own, $unpacked, $buildDir): void {
+            // One E2E run per browser, each a site of its own: its own port, tables, content folder and logins.
+            $e2e = [];
+            foreach (['chromium' => 'Chromium', 'firefox' => 'Firefox', 'webkit' => 'WebKit'] as $project => $browser) {
+                $state = $buildDir . '/e2e-' . $project;
+                $e2e['E2E suite: ' . $browser . ' (the release zip' . $where . ')'] = [
+                    'command' => fabbuildTool('node', [$root . '/node_modules/@playwright/test/cli.js', 'test', '-c', $root . '/tests/e2e', '--project=' . $project]),
+                    'env'     => $env + [
+                        'FABRICATOR_E2E_PLUGIN'       => $unpacked . '/formfabricator',
+                        'FABRICATOR_E2E_PHP'          => PHP_BINARY,
+                        'FABRICATOR_E2E_PORT'         => (string) fabtestdbFreePort(),
+                        'FABRICATOR_E2E_STATE'        => $state,
+                        'FABRICATOR_E2E_CONTENT'      => $state . '/wp-content',
+                        'FABRICATOR_E2E_TABLE_PREFIX' => 'e2e' . $project . '_',
+                    ],
+                ];
+            }
+            fabbuildParallel([
+                'phpunit integration (single site' . $where . ')' => [
+                    'command' => $phpunit,
+                    'env'     => $env + $own('single') + ['WP_MULTISITE' => '0'],
+                ],
+                'phpunit integration (multisite' . $where . ')' => [
+                    'command' => $phpunit,
+                    'env'     => $env + $own('multi') + ['WP_MULTISITE' => '1'],
+                ],
+                'phpunit package group (the release zip' . $where . ')' => [
+                    'command' => [...$phpunit, '--group', 'package'],
+                    'env'     => $env + $own('pkg') + ['WP_MULTISITE' => '0', 'FABRICATOR_TESTS_PACKAGE' => $unpacked . '/formfabricator'],
+                ],
+            ] + $e2e, $root);
+        });
     } finally {
-        fabtestdbStop($server);
+        // The E2E sites first: each links the unpacked plugin into its wp-content.
+        foreach (['chromium', 'firefox', 'webkit'] as $project) {
+            fabbuildRemove($buildDir . '/e2e-' . $project);
+        }
+        fabbuildRemove($unpacked);
+        fabbuildRemove($content);
     }
 }
 
@@ -427,7 +465,7 @@ function fabbuildPruneVendor(string $stageDir, array $exclude): void
             $path = $dir . '/' . $name;
             if ($name[0] === '.') {
                 fabbuildRemove($path);
-            } elseif (is_dir($path) && !is_link($path)) {
+            } elseif (is_dir($path) && !fabbuildIsLink($path)) {
                 $hidden($path);
             }
         }

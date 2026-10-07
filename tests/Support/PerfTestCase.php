@@ -9,6 +9,9 @@ namespace FabricatorForms\Tests\Support;
  * for tens of minutes. PHPUnit's own time limits need pcntl, which Windows lacks, so each test gets a fresh PHP time
  * limit instead: a regression then ends the run with "Maximum execution time exceeded" pointing at the test, rather
  * than hanging the build. The clean suite takes well under a second per test.
+ *
+ * Measure needs memory_reset_peak_usage() (PHP 8.2+). Checked here rather than by #[RequiresFunction] on each class,
+ * since attributes aren't inherited.
  */
 abstract class PerfTestCase extends TestCase
 {
@@ -19,6 +22,9 @@ abstract class PerfTestCase extends TestCase
 
     protected function setUp(): void
     {
+        if (!function_exists('memory_reset_peak_usage')) {
+            self::markTestSkipped('The perf suite measures peak memory, which needs memory_reset_peak_usage() (PHP 8.2+).');
+        }
         parent::setUp();
         self::$running = static::class . '::' . $this->name();
         if (!self::$shutdownHooked) {

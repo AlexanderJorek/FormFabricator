@@ -589,8 +589,8 @@ class Assets
         $hb = hexdec(substr($hover, 5, 2));
         $hover_lum = (0.299 * $hr + 0.587 * $hg + 0.114 * $hb) / 255;
         $hover_fg  = $hover_lum > 0.55 ? '#1d2327' : $hover;
-        // Read by admin-editor-canvas.js, as the accent is: 'off' leaves the particle background undrawn.
-        $particles = \get_option('fabricator_forms_particles', 'on') === 'off' ? 'off' : 'on';
+        // Read by admin-editor-canvas.js, as the accent is: 'static' draws the particle background as a still picture.
+        $particles = \get_option('fabricator_forms_particles', 'animated') === 'static' ? 'static' : 'animated';
 
         \wp_add_inline_style(
             'fabricator-forms-admin',

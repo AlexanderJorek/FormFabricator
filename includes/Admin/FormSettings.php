@@ -187,7 +187,7 @@ class FormSettings
         $border_color      = get_option('fabricator_forms_border_color', '#c9cdd4');
         $admin_accent      = get_option('fabricator_forms_admin_accent', '#2271b1');
         $field_layout_mode = get_option('fabricator_forms_field_layout', 'block');
-        $particles         = get_option('fabricator_forms_particles', 'on') === 'off' ? 'off' : 'on';
+        $particles         = get_option('fabricator_forms_particles', 'animated') === 'static' ? 'static' : 'animated';
         $wp_admin_email    = get_option('admin_email');
         $setup_done_early = (bool) get_option('fabricator_forms_seal_setup_done', false);
         // Plugin-access-only users (not real WP admins) don't see PDF-seal/recaptcha/user-access tiles.
@@ -529,11 +529,12 @@ class FormSettings
                         <div class="fabricator-settings-field">
                             <label for="recaptcha_secret"><?php echo esc_html__('Secret Key', 'formfabricator'); ?></label>
                             <?php /* Write-only: the saved secret is never echoed back into the page, where screenshots, page source,
-                                     browser extensions and form caches could all read it. Submitting it empty keeps the saved one. */ ?>
-                            <input type="password" id="recaptcha_secret" name="recaptcha_secret"
+                                     browser extensions and form caches could all read it. Submitting it empty keeps the saved one. A
+                                     text field, not a password one, so what is pasted can be checked before saving. */ ?>
+                            <input type="text" id="recaptcha_secret" name="recaptcha_secret"
                                    value=""
                                    placeholder="<?php echo (string) $recaptcha_secret !== '' ? esc_attr__('Saved (leave empty to keep)', 'formfabricator') : '6Le…'; ?>"
-                                   autocomplete="new-password" data-lpignore="true"
+                                   autocomplete="off" data-lpignore="true"
                                    data-1p-ignore data-bwignore spellcheck="false">
                             <?php if ((string) $recaptcha_secret !== '') : ?>
                             <label class="fabricator-settings-field--inline">
@@ -667,26 +668,23 @@ class FormSettings
                             <label><?php echo esc_html__('Particle background', 'formfabricator'); ?></label>
                             <div class="fabricator-card-radio-group">
                                 <label class="fabricator-card-radio">
-                                    <input type="radio" name="particles" value="on" <?php checked($particles, 'on'); ?>>
+                                    <input type="radio" name="particles" value="animated" <?php checked($particles, 'animated'); ?>>
                                     <span class="fabricator-card-radio-head">
                                         <i class="fa-solid fa-circle-nodes"></i>
-                                        <strong><?php echo esc_html__('On', 'formfabricator'); ?></strong>
-                                    </span>
-                                    <span class="fabricator-card-radio-desc">
-                                        <?php echo esc_html__('Moving, or a still picture when the system asks for reduced motion.', 'formfabricator'); ?>
+                                        <strong><?php echo esc_html__('Animated', 'formfabricator'); ?></strong>
                                     </span>
                                 </label>
                                 <label class="fabricator-card-radio">
-                                    <input type="radio" name="particles" value="off" <?php checked($particles, 'off'); ?>>
+                                    <input type="radio" name="particles" value="static" <?php checked($particles, 'static'); ?>>
                                     <span class="fabricator-card-radio-head">
-                                        <i class="fa-solid fa-ban"></i>
-                                        <strong><?php echo esc_html__('Off', 'formfabricator'); ?></strong>
-                                    </span>
-                                    <span class="fabricator-card-radio-desc">
-                                        <?php echo esc_html__('A plain background on every FormFabricator page.', 'formfabricator'); ?>
+                                        <i class="fa-solid fa-image"></i>
+                                        <strong><?php echo esc_html__('Static', 'formfabricator'); ?></strong>
                                     </span>
                                 </label>
                             </div>
+                            <p class="fabricator-settings-hint">
+                                <?php echo esc_html__('When your system asks for reduced motion, it is always static.', 'formfabricator'); ?>
+                            </p>
                         </div>
                     </div>
 
@@ -1436,7 +1434,7 @@ class FormSettings
             get_option('fabricator_forms_border_color', '#c9cdd4'),
             get_option('fabricator_forms_admin_accent', '#2271b1'),
             get_option('fabricator_forms_field_layout', 'block'),
-            get_option('fabricator_forms_particles', 'on'),
+            get_option('fabricator_forms_particles', 'animated'),
             get_option('fabricator_forms_trusted_proxies', ''),
         ];
         return md5(wp_json_encode($values));
@@ -1544,7 +1542,7 @@ class FormSettings
 
         // Only when the request carries it, as for the colours above.
         if (isset($_POST['particles'])) {
-            update_option('fabricator_forms_particles', sanitize_key(wp_unslash($_POST['particles'])) === 'off' ? 'off' : 'on', false);
+            update_option('fabricator_forms_particles', sanitize_key(wp_unslash($_POST['particles'])) === 'static' ? 'static' : 'animated', false);
         }
 
         // Same rule: a request without the field leaves the stored layout as it is.

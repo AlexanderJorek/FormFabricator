@@ -284,3 +284,46 @@ function fabtestdbStop(array $server): void
     }
     proc_close($server['process']);
 }
+
+/**
+ * Runs $run with the environment for a test database: the named server, or the portable one, started for the run and
+ * stopped after it. Offline without a database set up yet, $what is skipped rather than downloaded.
+ *
+ * @param callable(array<string, string>, string): void $run Gets the environment and ", <host>" for a named server.
+ */
+function fabbuildWithTestDb(bool $offline, string $what, callable $run): void
+{
+    $iniDir = fabtestdbMysqliIniDir();
+    // Through PHP_INI_SCAN_DIR, not -d: WordPress installs the test site in a child PHP process, which needs it too.
+    $base = $iniDir !== null ? ['PHP_INI_SCAN_DIR' => $iniDir] : [];
+
+    if (fabtestdbExternal()) {
+        $run($base, ', ' . getenv('WP_TESTS_DB_HOST'));
+        return;
+    }
+    if (!fabtestdbPortable()) {
+        $hint = 'Set WP_TESTS_DB_HOST (and _NAME, _USER, _PASSWORD) to a MySQL or MariaDB server whose database the tests may wipe, '
+            . 'e.g. one started with: docker run -d -p 3306:3306 -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=wordpress_test mariadb:11.4';
+        if ($offline) {
+            fabbuildSay('  ' . $what . ' SKIPPED: no test database named. ' . $hint, 'yellow');
+            return;
+        }
+        fabbuildFail('Release gate failed: the ' . $what . ' needs a database. ' . $hint);
+    }
+    if (!fabtestdbInitialize($offline)) {
+        fabbuildSay('  ' . $what . ' SKIPPED: no test database yet, and --skip-audit (offline) does not download one.', 'yellow');
+        fabbuildSay('  Run a full build or --setup once to set it up.', 'yellow');
+        return;
+    }
+    $server = fabtestdbStart($iniDir);
+    try {
+        $run($base + [
+            'WP_TESTS_DB_HOST'     => '127.0.0.1:' . $server['port'],
+            'WP_TESTS_DB_NAME'     => 'wordpress_test',
+            'WP_TESTS_DB_USER'     => 'root',
+            'WP_TESTS_DB_PASSWORD' => FABTESTDB_ROOT_PW,
+        ], '');
+    } finally {
+        fabtestdbStop($server);
+    }
+}

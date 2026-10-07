@@ -12,8 +12,12 @@
         hbData.fabricator_settings_lock = 1;
     });
     $(document).on('heartbeat-tick', function (e, hbData) {
-        if (!hbData.fabricator_settings_lock_conflict) { return; }
         var notice = document.getElementById('fabricator-lock-notice');
+        /* No conflict: the other administrator has left, and the server gave this page the lock. */
+        if (!hbData.fabricator_settings_lock_conflict) {
+            if (notice) { notice.style.display = 'none'; }
+            return;
+        }
         var text   = document.getElementById('fabricator-lock-notice-text');
         /* Function replacement: a user name containing $& or $' would otherwise be expanded by String.replace. */
         var msg    = (data.i18n.lockConflict || '').replace('%s', function () { return hbData.fabricator_settings_lock_conflict; });

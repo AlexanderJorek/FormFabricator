@@ -26,13 +26,14 @@ lives here. It is dev-only, like everything in `docs/` and `tools/`: the release
 On a fresh clone, run `build -Setup` on Windows or `./build.sh --setup` on macOS and Linux (or menu item 3 of either).
 It installs the Composer dev dependencies and, on Windows, downloads the throwaway test database for the integration
 suite; on macOS and Linux, point `WP_TESTS_DB_*` at a database (see [Integration suite](#integration-suite)). Run
-`npm install` once for the JS suite.
+`npm install` once for the JS and E2E suites, then the setup again: it downloads the E2E suite's browsers.
 
 | What | Command |
 |---|---|
 | Unit + perf tests | `composer test` |
 | Integration tests (real WordPress + DB) | `composer test:integration` |
 | JS tests | `npm test` |
+| E2E tests (Chromium, Firefox, WebKit) | `npm run test:e2e` (`php tools/e2e.php`) |
 | Style linter (PSR-1/PSR-2) | `vendor/bin/phpcs` |
 | Security linter | `vendor/bin/phpcs --standard=.phpcs-security.xml` |
 | Regenerate the `.pot` | `php languages/make-pot.php` |
@@ -372,11 +373,13 @@ form, whether or not the form uses those fields.
 
 | Suite | Command | Loads WordPress? | Release gate in the build | CI |
 |---|---|---|---|---|
-| `unit` + `perf` | `composer test` | No (Brain Monkey stubs) | Yes | PHP 8.1–8.4, with the phpcs gates; 8.1 skips `perf` |
-| `integration` | `composer test:integration` | Yes, real WordPress + DB | Yes, single site and multisite | Against a MySQL 8 service |
-| JS | `npm test` | No (jsdom) | Yes | Own job |
+| `unit` + `perf` | `composer test` | No (Brain Monkey stubs) | Yes | PHP 8.1–8.4; 8.1 skips `perf` |
+| `integration` | `composer test:integration` | Yes, real WordPress + DB | Yes, single site and multisite, and its `package` group against the release zip | PHP 8.1 and 8.3, single site and multisite, against a MySQL 8 service |
+| JS | `npm test` | No (jsdom) | Yes | Node 22 and 24 |
+| E2E | `npm run test:e2e` | Yes, a real site served by `php -S` | Yes, against the release zip | Chromium (the runner's Chrome), Firefox, WebKit |
 
-The PHP 8.1 job skips `perf` because `memory_reset_peak_usage()` needs PHP 8.2+.
+The PHP 8.1 job skips `perf` because `memory_reset_peak_usage()` needs PHP 8.2+. The phpcs gates and the `.pot` check
+run in a job of their own on PHP 8.3. `php -l`, `composer audit` and the package build run only in the release build.
 
 ### Unit and perf suites
 
@@ -414,6 +417,12 @@ Configured in `tests/phpunit-integration.xml.dist`, tests in `tests/Integration/
   | `WP_TESTS_DB_PASSWORD` | `root` |
 
 - `WP_MULTISITE=1` runs it as a network.
+- Runs side by side need their own tables and uploads: `FABRICATOR_TESTS_TABLE_PREFIX` (default `wptests_`) and
+  `FABRICATOR_TESTS_CONTENT_DIR` (default WordPress's own `wp-content`). The release build sets both for each of its
+  runs, which it starts at the same time once the zip is verified: the suite as a single site and as a network, the
+  `package` group, and the E2E suite once per browser, each on a site of its own (see [E2E suite](#e2e-suite)). They
+  take as long as the slowest of them, not all in a row. The quick gates (lint, unit, perf, JS) run before, one by one: the perf
+  tests measure time and need the machine to themselves.
 
 **The database during a build** (`tools/testdb.php`):
 
@@ -442,15 +451,28 @@ Configured in `tests/phpunit-integration.xml.dist`, tests in `tests/Integration/
 - **Uploads.** The bootstrap loads `tests/Support/namespace-overrides.php`, where `is_uploaded_file()` accepts exactly
   the temp files a test lists in `Support\Overrides::$uploadedFiles` (reset after every test). Uploads therefore go
   through the real submission and verifier handlers.
+- **Built-ins a test cannot reach otherwise**, in the same file and reset the same way:
+  - `function_exists()` (in `FabricatorForms\Admin` and `\PDF`) denies the functions in `Overrides::$missingFunctions`,
+    as a PHP built without openssl would.
+  - `register_shutdown_function()` (in `FabricatorForms\Form`) holds the callbacks back while
+    `Overrides::$shutdownFunctions` is an array; `Overrides::runShutdownFunctions()` then plays the end of the request.
+    Callbacks a test never ran go to PHP at reset, so nothing they remove outlives the run.
+  - An override catches only unqualified calls in its namespace: `\function_exists()` in the plugin bypasses it.
 - **Constants and `WP_DEBUG`.** A test that needs `FABRICATOR_SEAL_MASTER_KEY` defined, or `WP_DEBUG` off
   (`FABRICATOR_TESTS_WP_DEBUG=0`, read by `wp-tests-config.php`), runs with `#[RunInSeparateProcess]`, so no later test
   sees the constant. The bootstrap sets `WP_TESTS_SKIP_INSTALL=1` after installing, so the child process reuses the
   tables instead of dropping them.
 - **Outgoing HTTP from mPDF.** mPDF fetches URLs with its own curl, which `pre_http_request` doesn't see.
   `Support\RequestRecorder` is a local HTTP server that logs what reaches it. It answers immediately; a silent listener
-  would leave mPDF waiting forever.
+  would leave mPDF waiting forever. Given a document root, it serves the files there, as the site's own web server.
 - **Uninstall.** `uninstall.php` declares a global function, so `UninstallTest` must stay the only test that includes
-  it.
+  it. It includes the loaded plugin's copy (`FABRICATOR_FORMS_PATH`).
+- **The `package` group.** The release build runs the classes marked `#[Group('package')]` once more, against the plugin
+  unpacked from the zip it just verified (`FABRICATOR_TESTS_PACKAGE`, `Support\Package`): the plugin's classes, its
+  libraries and its trimmed fonts then load from the package. `PackageTest` fails if they don't. A test in that group
+  reads the plugin's files through `FABRICATOR_FORMS_PATH`, never the repository's, and builds PDFs only with fonts the
+  build keeps (`tools/build-config.php`). Run it by hand with `FABRICATOR_TESTS_PACKAGE=build/formfabricator` (the
+  folder, or the zip when PHP has the zip extension) and `--group package`.
 - `Fields\FieldBehaviourTest` is the former WP_DEBUG field test page, ported check for check.
 
 ### JS suite
@@ -463,6 +485,10 @@ real `assets/js/front.js` into a fresh jsdom page.
 
 `Assets::frontFieldAssets()` is the **one** place the per-field JS is assembled. Production and the test fixture both
 call it. Don't rebuild the globals anywhere else.
+
+A test that needs the server's answer to what a script produced at test time runs PHP itself:
+`builder-conditions.test.js` hands the form the builder saved to `tests/js/render-form.php`, which runs the save's
+`FormEditor::sanitizeFields()`, `FormRenderer` and `FormProcessor::resolveVisibility()` on it.
 
 #### Front-end and server must agree on conditions
 
@@ -498,8 +524,9 @@ submitted. Both sides must reach the same result.
 #### Admin scripts
 
 The admin scripts load in `support/admin-page.js` with what WordPress hands them, from the same fixture:
-`FormEditor::render()`'s markup and `builderI18n()` for the builder, and `FormList::render()` and
-`FormSettings::renderSettingsPage()` with the objects they localize.
+`FormEditor::render()`'s markup and `builderI18n()` for the builder, and `FormList::render()`,
+`FormSelectList::render()`, `FormSettings::renderSettingsPage()`, `PDFLayoutEditor::render()` and
+`Verificationpage::render()` with the objects they localize (`fixture.admin`, the edit locks' objects included).
 
 - Drive the scripts through their own controls and check what they send (a stubbed `fetch()`), not through test hooks.
 - Work an admin script defers to animation frames (jsdom paces them at display rate) is awaited with `until()`, not a
@@ -508,9 +535,49 @@ The admin scripts load in `support/admin-page.js` with what WordPress hands them
 #### jsdom quirks
 
 - jsdom lacks `CSS.escape()`. `support/page.js` supplies the spec algorithm only when it is missing.
-- Browser APIs jsdom doesn't have (canvas drawing, layout) are out of reach here and belong to the E2E tier.
+- Browser APIs jsdom doesn't have (canvas drawing, layout) are out of reach here and belong to the [E2E suite](#e2e-suite).
 - front.js boots on `DOMContentLoaded`, which jsdom fires *after* `loadPage()` returns. A test that needs the booted
   page (whole forms from `fixture.forms`) awaits it first; see `open()` in `form-flow.test.js`.
+
+### E2E suite
+
+Specs in `tests/e2e/specs/`, run with Playwright in Chromium, Firefox and WebKit, Safari's engine. Dev-only; nothing ships.
+
+**What it runs against** (`tests/e2e/site/`)
+
+- The real WordPress in `vendor/roots/wordpress-no-content`, served by `php -S` through `router.php`. The site's
+  `wp-content` is a folder of the run's own in the temp dir: a minimal theme, a test mu-plugin, and the plugin as a
+  link (a junction on Windows) to the repository, or to the plugin unpacked from the release zip
+  (`FABRICATOR_E2E_PLUGIN`, which the build sets).
+- The integration suite's database, with tables of its own (prefix `e2e_`). `install.php` installs the site from
+  scratch on every run, before the server starts, dropping only its own tables; `php tools/e2e.php` (`npm run test:e2e`) starts the portable test
+  database when no server is named, as the build does.
+- The test mu-plugin writes every mail to an outbox folder instead of sending it, answers reCAPTCHA's `siteverify`
+  ("e2e-pass" passes), and adds an admin notice on every screen for the notice dock checks.
+- Browsers: the installed Google Chrome as Chromium where there is one, Playwright's own Firefox and WebKit
+  (`tests/e2e/support/browsers.js`; `--install` downloads what is missing, which the build and its setup do).
+
+**Writing specs**
+
+- **Data through the CLI helper.** `support/site.js` `wp()` runs one `site/wp.php` command (a form, a page, an
+  option), loading WordPress as WP-CLI would. A form gets each field type's defaults, as one added from the palette.
+  The site has no test-only HTTP endpoint.
+- **One site, one worker.** Every spec shares the site, and on Windows `php -S` answers one request at a time.
+  Browsers run in parallel only as separate sites: the release build starts one run per browser (`--project=…`), each
+  with its own `FABRICATOR_E2E_PORT`, `FABRICATOR_E2E_TABLE_PREFIX`, `FABRICATOR_E2E_STATE` (logins, results) and
+  `FABRICATOR_E2E_CONTENT`. A spec
+  creates its own forms and pages under `uniqueName()`, and resets what it changes globally (an option, a lock).
+- **Logins** come from `auth.setup.js` (`auth.admin`, `auth.admin2`). Mail is read with `mailWithSubject()`.
+- **Heartbeats are asked for**, `wp.heartbeat.connectNow()`, not waited for.
+- **Drag like a hand.** Move in steps and rest at the drop point before letting go (`dragRow()` in
+  `builder.spec.js`): the builder places its drop line on the animation frame after a dragover, and Playwright's
+  WebKit reports drag positions that trail the pointer until it rests.
+- **Close a tab with `page.close()`**, not `{ runBeforeUnload: true }`: Playwright's WebKit then leaves the page open
+  and no pagehide fires. Close pages one by one before their context: closing a context sends no beacon.
+- **A page that is navigating can't be looked at.** To check what a form submission shows before the next page, stop
+  the real submission with a submit listener added after the page's own (see the verifier overlay spec).
+- WebKit runs no event listener in a sandboxed document that may not run scripts (the rich-text editors' iframes);
+  code that must notice edits there uses a MutationObserver.
 
 ### Manual checks
 

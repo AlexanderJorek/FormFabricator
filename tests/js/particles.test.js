@@ -17,7 +17,7 @@ const SCRIPT = fs.readFileSync(path.join(__dirname, '..', '..', 'assets', 'js', 
 /**
  * Loads the script on a page with the given setting and reduced-motion answer, and returns the recorded drawing.
  */
-function run({ particles = 'on', reduceMotion = false } = {}) {
+function run({ particles = 'animated', reduceMotion = false } = {}) {
     const dom = new JSDOM(
         '<!doctype html><html><head><style>:root{--fabricator-admin-accent:#2271b1;--fabricator-particles:' + particles + '}</style></head>'
             + '<body><canvas id="fabricator-particle-canvas"></canvas></body></html>',
@@ -47,7 +47,7 @@ function run({ particles = 'on', reduceMotion = false } = {}) {
 
 const ticks = (w, ms) => new Promise((resolve) => w.setTimeout(resolve, ms));
 
-test('particles on: the background moves, frame after frame, and follows the mouse', async () => {
+test('particles animated: the background moves, frame after frame, and follows the mouse', async () => {
     const { w, calls } = run();
     w.document.dispatchEvent(new w.MouseEvent('mousemove', { clientX: 300, clientY: 200 }));
     await ticks(w, 300);
@@ -56,7 +56,7 @@ test('particles on: the background moves, frame after frame, and follows the mou
     w.close();
 });
 
-test('particles on, reduced motion asked for: one still picture, redrawn on resize, never following the mouse', async () => {
+test('particles animated, reduced motion asked for: one still picture, redrawn on resize, never following the mouse', async () => {
     const { w, calls } = run({ reduceMotion: true });
     w.document.dispatchEvent(new w.MouseEvent('mousemove', { clientX: 300, clientY: 200 }));
     await ticks(w, 300);
@@ -70,7 +70,7 @@ test('particles on, reduced motion asked for: one still picture, redrawn on resi
     w.close();
 });
 
-test('particles on: a change of the system setting while the page is open is followed', async () => {
+test('particles animated: a change of the system setting while the page is open is followed', async () => {
     const { w, calls, listeners } = run({ reduceMotion: true });
     await ticks(w, 100);
     assert.equal(calls.frames, 1);
@@ -80,11 +80,15 @@ test('particles on: a change of the system setting while the page is open is fol
     w.close();
 });
 
-test('particles off: nothing is drawn, and the canvas stays as the page background', async () => {
-    const { w, calls } = run({ particles: 'off' });
+test('particles static: one still picture, never following the mouse, and still when the system allows motion again', async () => {
+    const { w, calls, listeners } = run({ particles: 'static' });
+    w.document.dispatchEvent(new w.MouseEvent('mousemove', { clientX: 300, clientY: 200 }));
     await ticks(w, 300);
-    assert.equal(calls.contexts, 0);
-    assert.equal(calls.frames, 0);
-    assert.notEqual(w.document.getElementById('fabricator-particle-canvas').style.display, 'none');
+    assert.equal(calls.frames, 1, 'drawn once');
+    assert.equal(calls.mouseLines, 0);
+
+    listeners.forEach((fn) => fn({ matches: false }));
+    await ticks(w, 300);
+    assert.equal(calls.frames, 2, 'drawn again, and still');
     w.close();
 });

@@ -3,12 +3,14 @@
 namespace FabricatorForms\Tests\Integration;
 
 use FabricatorForms\Form\FormModel;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * Deleting the plugin leaves nothing behind (TESTING.md §8), on every site of a network with WP_MULTISITE=1.
  *
  * uninstall.php declares a global function, so this must stay the only test that includes it.
  */
+#[Group('package')]
 final class UninstallTest extends TestCase
 {
     private const OPTIONS = [
@@ -51,7 +53,8 @@ final class UninstallTest extends TestCase
         if (!defined('WP_UNINSTALL_PLUGIN')) {
             define('WP_UNINSTALL_PLUGIN', 'formfabricator/formfabricator.php');
         }
-        require dirname(__DIR__, 2) . '/uninstall.php';
+        // The loaded plugin's own: the repository's, or the release zip's (Support\Package).
+        require FABRICATOR_FORMS_PATH . 'uninstall.php';
 
         foreach ($sites as $site) {
             $this->onSite($site, fn() => $this->assertNothingLeft('site ' . $site));

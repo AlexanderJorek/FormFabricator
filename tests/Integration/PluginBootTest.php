@@ -2,9 +2,12 @@
 
 namespace FabricatorForms\Tests\Integration;
 
+use PHPUnit\Framework\Attributes\Group;
+
 /**
  * The plugin loads into a real WordPress the way WordPress loads it, and registers what the rest of the suite uses.
  */
+#[Group('package')]
 final class PluginBootTest extends TestCase
 {
     public function testThePluginIsLoadedAndInitialised(): void

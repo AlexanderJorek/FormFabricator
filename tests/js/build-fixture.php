@@ -508,19 +508,21 @@ Brain\Monkey\Functions\when('esc_html_e')->alias(static function (string $s): vo
 Brain\Monkey\Functions\when('esc_attr_e')->alias(static function (string $s): void {
     echo htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 });
-ob_start();
-\FabricatorForms\Admin\FormEditor::render();
-$admin = [
-    'editor'      => (string) ob_get_clean(),
-    'builderI18n' => Reflect::call(\FabricatorForms\Admin\FormEditor::class, 'builderI18n'),
-];
-
-// The form list (FormList::render()) with four saved forms, and the object it localizes for admin-formlist.js.
+// What each admin page hands its scripts through wp_localize_script(), by object name.
 $localized = [];
 Brain\Monkey\Functions\when('wp_localize_script')->alias(static function ($handle, $name, $data) use (&$localized): bool {
     $localized[$name] = $data;
     return true;
 });
+ob_start();
+\FabricatorForms\Admin\FormEditor::render();
+$admin = [
+    'editor'      => (string) ob_get_clean(),
+    'builderI18n' => Reflect::call(\FabricatorForms\Admin\FormEditor::class, 'builderI18n'),
+    'editorLock'  => $localized['FabricatorEditorLock'] ?? null,
+];
+
+// The form list (FormList::render()) with four saved forms, and the object it localizes for admin-formlist.js.
 Brain\Monkey\Functions\when('get_posts')->alias(static fn(array $args): array => $args['offset'] > 0 ? [] : array_map(
     static fn(int $id, string $title): object => (object) ['ID' => $id, 'post_title' => $title],
     [11, 12, 13, 14],
@@ -557,6 +559,44 @@ ob_start();
 \FabricatorForms\Admin\FormSettings::renderSettingsPage();
 $admin['settings']     = (string) ob_get_clean();
 $admin['settingsPage'] = $localized['FabricatorSettingsPage'] ?? null;
+$admin['settingsLock'] = $localized['FabricatorSettingsLock'] ?? null;
+
+// FormFabricator → Form Selection (FormSelectList::render()) with four saved selections, and its localized object.
+$formSelects = array_map(
+    static fn(int $id, string $title): array => ['id' => $id, 'title' => $title, 'items' => [['form_id' => 11, 'label' => '', 'description' => '', 'favorite' => false]]],
+    [1, 2, 3, 4],
+    ['Contact', 'Callback request', 'Newsletter', 'Contact (archive)']
+);
+Brain\Monkey\Functions\when('get_option')->alias(static fn($key, $default = false) => match ($key) {
+    'fabricator_forms_seal_setup_done' => true,
+    'fabricator_form_selects'          => $formSelects,
+    default                            => $default,
+});
+ob_start();
+\FabricatorForms\Admin\FormSelectList::render();
+$admin['formSelect']     = (string) ob_get_clean();
+$admin['formSelectPage'] = $localized['FabricatorFormSelectPage'] ?? null;
+
+// FormFabricator → PDF Verification (Verificationpage::render()) before any upload.
+Brain\Monkey\Functions\when('get_transient')->justReturn(false);
+ob_start();
+\FabricatorForms\Admin\Verificationpage::render();
+$admin['verifier'] = (string) ob_get_clean();
+
+// FormFabricator → PDF Layout (PDFLayoutEditor::render()) with the default layout, and the objects it localizes. The
+// preview's dates are fixed, as wp_date() would write them for the site.
+foreach (['wp_enqueue_media', 'wp_enqueue_script'] as $noop) {
+    Brain\Monkey\Functions\when($noop)->justReturn(null);
+}
+Brain\Monkey\Functions\when('wp_date')->alias(static fn(string $format): string => match ($format) {
+    \FabricatorForms\PDF\Generator::METADATA_DATE_FORMAT => '2026-10-07 09:30:00 +02:00',
+    default                                               => '7 October 2026',
+});
+ob_start();
+\FabricatorForms\Admin\PDFLayoutEditor::render();
+$admin['pdfLayout']     = (string) ob_get_clean();
+$admin['pdfLayoutPage'] = $localized['FabricatorPdfLayoutPage'] ?? null;
+$admin['pdfLayoutLock'] = $localized['FabricatorPdfLayoutLock'] ?? null;
 
 // ALTCHA: a challenge with a small answer, that answer, and the server's verdicts on it (accepted, refused as used,
 // refused when tampered). The JS suite checks ALTCHA's own solver and verifier agree.

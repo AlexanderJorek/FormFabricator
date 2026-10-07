@@ -984,6 +984,13 @@ function initDragDrop() {
     var list = document.getElementById('fabricator-field-list');
     if (!list) return;
 
+    /* A drop target cancels dragenter as well as dragover, or WebKit never delivers the drop. Covers the group zones
+       and child lists inside the list too. */
+    list.addEventListener('dragenter', function (e) {
+        if (dragSrcIdx === null && dragChildSrc === null) return;
+        e.preventDefault();
+    });
+
     list.addEventListener('dragover', function (e) {
         if (dragSrcIdx === null && dragChildSrc === null) return;
         e.preventDefault();
@@ -3424,6 +3431,14 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
             img.addEventListener('load', resize);
             img.addEventListener('error', resize);
         });
+
+        /* WebKit runs no event listener in a sandboxed document without allow-scripts, so the input listener above
+           misses edits there; a MutationObserver sees them in every browser. Set up last, so the scaffolding is no edit. */
+        if (window.MutationObserver) {
+            new MutationObserver(emitChange).observe(doc.documentElement, {
+                childList: true, subtree: true, characterData: true, attributes: true,
+            });
+        }
 
         resize();
     }

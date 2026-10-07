@@ -8,12 +8,14 @@ use FabricatorForms\Form\FormModel;
 use FabricatorForms\PDF\Generator;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\Tests\Integration\TestCase;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * FormFabricator → PDF Layout settings in a generated PDF (TESTING.md §6, §10): fonts, colours, margins, a Media Library
  * logo, the footer on every page, and hiding the footer. Read from the PDF itself — its fonts, its drawing operators and
  * its text per page. Whether the result looks right stays a person's call.
  */
+#[Group('package')]
 final class PdfLayoutTest extends TestCase
 {
     /** mm to PDF points. */

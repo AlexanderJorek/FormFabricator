@@ -21,8 +21,10 @@ ini_set('error_log', sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'formfabricator-
 $fabricator_tests_dir = getenv('WP_PHPUNIT__DIR');
 require_once $fabricator_tests_dir . '/includes/functions.php';
 
-tests_add_filter('muplugins_loaded', static function () use ($fabricator_root): void {
-    require $fabricator_root . '/formfabricator.php';
+// The repository's plugin, or the release zip's when FABRICATOR_TESTS_PACKAGE names one (Support\Package).
+$fabricator_plugin_file = \FabricatorForms\Tests\Integration\Support\Package::pluginFile($fabricator_root);
+tests_add_filter('muplugins_loaded', static function () use ($fabricator_plugin_file): void {
+    require $fabricator_plugin_file;
 });
 
 // Builtins the plugin calls unqualified that no real request can satisfy in a test (is_uploaded_file()); see the file.

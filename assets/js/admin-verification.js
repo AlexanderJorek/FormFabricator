@@ -75,19 +75,23 @@
         var uploadOverlay = document.getElementById('fabricator-pdf-upload-overlay');
 
         /* Deliberately NOT XHR-driven: document.write()-swapping the response would collide with still-alive const/let bindings and throw. */
-        // Scope to #wpcontent, not the full viewport (same pattern as admin-settings.js).
+        /* Covers #wpcontent, not the admin menu (same pattern as admin-settings.js). The overlay is position: fixed, so
+           it takes the area's place in the viewport: from its top edge, or the window's once scrolled past it, down
+           to the bottom of the window. */
         function positionUploadOverlay() {
             if (!uploadOverlay) { return; }
             var wpc = document.getElementById('wpcontent');
             if (!wpc) { return; }
-            var r = wpc.getBoundingClientRect();
-            uploadOverlay.style.top    = r.top  + window.scrollY + 'px';
-            uploadOverlay.style.left   = r.left + window.scrollX + 'px';
+            var r   = wpc.getBoundingClientRect();
+            var top = Math.max(0, r.top);
+            uploadOverlay.style.top    = top + 'px';
+            uploadOverlay.style.left   = r.left + 'px';
             uploadOverlay.style.width  = r.width + 'px';
-            uploadOverlay.style.height = Math.max(r.height, window.innerHeight - r.top) + 'px';
+            uploadOverlay.style.height = (window.innerHeight - top) + 'px';
         }
         positionUploadOverlay();
         window.addEventListener('resize', positionUploadOverlay);
+        window.addEventListener('scroll', positionUploadOverlay, { passive: true });
 
         var showUploadingOverlay = function () {
             var idle = document.getElementById('fabricator-pdf-idle-state');
@@ -95,6 +99,8 @@
             if (idle) idle.style.display = 'none';
             if (more) more.classList.add('fabricator-pdf-visible');
             if (uploadOverlay) {
+                /* Moved out of .fabricator-verification-wrap, a stacking context of its own, so it lies above the page. */
+                if (uploadOverlay.parentNode !== document.body) document.body.appendChild(uploadOverlay);
                 positionUploadOverlay();
                 uploadOverlay.classList.add('fabricator-pdf-open');
             }

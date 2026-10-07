@@ -6,12 +6,14 @@ use FabricatorForms\Admin\FormSettings;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\Plugin;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * The one-time PDF seal key setup and what a broken key does afterwards (TESTING.md §1): every FormFabricator screen
  * leads to Settings until the key exists, the new key is offered for backup, and a missing or damaged key warns the
  * admin and refuses sealed submissions until "Rotate PDF key" replaces it.
  */
+#[Group('package')]
 final class FirstRunTest extends AjaxTestCase
 {
     // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- overrides WP_UnitTestCase's snake_case fixture method.

@@ -28,4 +28,10 @@ define('WPLANG', '');
 // On, except in a test process started with FABRICATOR_TESTS_WP_DEBUG=0 (Form\DebugOffTest: what a live site logs).
 define('WP_DEBUG', getenv('FABRICATOR_TESTS_WP_DEBUG') !== '0');
 
-$table_prefix = 'wptests_'; // phpcs:ignore -- read by the WordPress test bootstrap as a local variable
+// Runs side by side (the release build starts the suites at once) each get their own tables, by prefix, and their own
+// uploads, in a content folder of their own. Unset, a run uses wptests_ and WordPress's own wp-content.
+if (getenv('FABRICATOR_TESTS_CONTENT_DIR') !== false) {
+    define('WP_CONTENT_DIR', (string) getenv('FABRICATOR_TESTS_CONTENT_DIR'));
+}
+
+$table_prefix = $fabricator_env('FABRICATOR_TESTS_TABLE_PREFIX', 'wptests_'); // phpcs:ignore -- read by the WordPress test bootstrap as a local variable

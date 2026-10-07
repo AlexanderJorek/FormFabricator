@@ -13,12 +13,14 @@ use FabricatorForms\Utils\MemoryBudget;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * The verifier page around the checks SealRoundTripTest covers (TESTING.md §5): what it lists when a part of the file is
  * compressed in a way this plugin never writes, what it leaves in the protected folder once a check is done, how it
  * answers while the memory budget is taken, and a file far past the object ceiling on a host with little memory.
  */
+#[Group('package')]
 final class VerifierPageTest extends AjaxTestCase
 {
     // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- overrides WP_UnitTestCase's snake_case fixture method.

@@ -1,15 +1,17 @@
 {
   "name": "formfabricator-dev",
   "private": true,
-  "description": "Dev-only tooling for FormFabricator: the JS test suite (tests/js/). Nothing here ships; the release build excludes it.",
+  "description": "Dev-only tooling for FormFabricator: the JS test suite (tests/js/) and the E2E suite (tests/e2e/). Nothing here ships; the release build excludes it.",
   "license": "GPL-3.0-or-later",
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
-    "test": "php tests/js/build-fixture.php && node --test \"tests/js/**/*.test.js\""
+    "test": "php tests/js/build-fixture.php && node --test \"tests/js/**/*.test.js\"",
+    "test:e2e": "php tools/e2e.php"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "altcha": "3.3.0",
     "jsdom": "^29.1.1"
   }

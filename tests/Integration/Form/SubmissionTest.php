@@ -4,11 +4,13 @@ namespace FabricatorForms\Tests\Integration\Form;
 
 use FabricatorForms\Tests\Integration\AjaxTestCase;
 use FabricatorForms\Utils\SingleUseToken;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * A submission end to end — nonce, one-time token, rate limit, validation, conditions, mail — through the same AJAX
  * action the browser posts to. The TESTING.md §3 items these replace are named on each test.
  */
+#[Group('package')]
 final class SubmissionTest extends AjaxTestCase
 {
     private const FIELDS = [

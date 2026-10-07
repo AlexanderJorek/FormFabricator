@@ -3,11 +3,13 @@
 namespace FabricatorForms\Tests\Integration;
 
 use FabricatorForms\Plugin;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * Activation and deactivation, single site and network (TESTING.md §0): activation schedules the sweeps (network
  * sites on their first admin page); deactivation clears every event on every site and sweeps once more.
  */
+#[Group('package')]
 final class ActivationTest extends TestCase
 {
     private const ALL_HOOKS = [...Plugin::CRON_HOOKS, ...Plugin::ONE_OFF_CRON_HOOKS];

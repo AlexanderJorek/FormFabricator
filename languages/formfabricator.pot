@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-07T00:20:28+00:00\n"
+"POT-Creation-Date: 2026-10-07T10:47:26+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: FormFabricator languages/make-pot.php\n"
 "X-Domain: formfabricator\n"
@@ -51,7 +51,7 @@ msgstr ""
 #: includes/Admin/FormSettings.php:79
 #: includes/Admin/FormSettings.php:201
 #: includes/Admin/PDFLayoutEditor.php:110
-#: includes/Admin/PDFLayoutEditor.php:333
+#: includes/Admin/PDFLayoutEditor.php:334
 msgid "another user"
 msgstr ""
 
@@ -73,7 +73,7 @@ msgstr ""
 #: includes/Admin/FormList.php:118
 #: includes/Admin/FormSelectList.php:89
 #: includes/Admin/FormSettings.php:169
-#: includes/Admin/PDFLayoutEditor.php:284
+#: includes/Admin/PDFLayoutEditor.php:285
 msgid "Permission denied."
 msgstr ""
 
@@ -99,8 +99,8 @@ msgstr ""
 #: includes/Admin/FormEditor.php:273
 #: includes/Admin/FormSettings.php:215
 #: includes/Admin/FormSettings.php:238
-#: includes/Admin/PDFLayoutEditor.php:347
-#: includes/Admin/PDFLayoutEditor.php:396
+#: includes/Admin/PDFLayoutEditor.php:348
+#: includes/Admin/PDFLayoutEditor.php:402
 #, php-format
 msgid "Currently being edited by %s. Saving may conflict."
 msgstr ""
@@ -129,8 +129,8 @@ msgstr ""
 #: includes/Admin/FormSelectList.php:224
 #: includes/Admin/FormSelectList.php:507
 #: includes/Admin/FormSettings.php:441
-#: includes/Admin/FormSettings.php:1282
-#: includes/Admin/PDFLayoutEditor.php:577
+#: includes/Admin/FormSettings.php:1280
+#: includes/Admin/PDFLayoutEditor.php:583
 msgid "Save"
 msgstr ""
 
@@ -391,7 +391,7 @@ msgstr ""
 #: includes/Admin/FormEditor.php:1548
 #: includes/Admin/FormSettings.php:124
 #: includes/Admin/FormSettings.php:438
-#: includes/Admin/FormSettings.php:1388
+#: includes/Admin/FormSettings.php:1386
 msgid "Settings"
 msgstr ""
 
@@ -463,7 +463,7 @@ msgid "Use"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1570
-#: includes/Admin/PDFLayoutEditor.php:663
+#: includes/Admin/PDFLayoutEditor.php:669
 msgid "Image URL:"
 msgstr ""
 
@@ -472,22 +472,22 @@ msgid "Enter link URL:"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1574
-#: includes/Admin/PDFLayoutEditor.php:691
+#: includes/Admin/PDFLayoutEditor.php:697
 msgid "Bold"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1575
-#: includes/Admin/PDFLayoutEditor.php:692
+#: includes/Admin/PDFLayoutEditor.php:698
 msgid "Italic"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1576
-#: includes/Admin/PDFLayoutEditor.php:693
+#: includes/Admin/PDFLayoutEditor.php:699
 msgid "Underline"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1577
-#: includes/Admin/FormSettings.php:1384
+#: includes/Admin/FormSettings.php:1382
 msgid "List"
 msgstr ""
 
@@ -566,7 +566,6 @@ msgid "Country list"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1604
-#: includes/Admin/FormSettings.php:683
 #: includes/Fields/EmailField.php:203
 msgid "Off"
 msgstr ""
@@ -774,7 +773,7 @@ msgid "→ To:"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1677
-#: includes/Admin/PDFLayoutEditor.php:1079
+#: includes/Admin/PDFLayoutEditor.php:1085
 #: includes/Fields/EmailField.php:43
 msgid "Email"
 msgstr ""
@@ -806,12 +805,12 @@ msgid "→ Bcc:"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1686
-#: includes/Admin/PDFLayoutEditor.php:1091
+#: includes/Admin/PDFLayoutEditor.php:1097
 msgid "Subject"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1687
-#: includes/Admin/PDFLayoutEditor.php:1099
+#: includes/Admin/PDFLayoutEditor.php:1105
 msgid "Message"
 msgstr ""
 
@@ -836,7 +835,7 @@ msgid "All file uploads from the form are forwarded as attachments."
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1693
-#: includes/Admin/FormSettings.php:631
+#: includes/Admin/FormSettings.php:632
 msgid "Sender name"
 msgstr ""
 
@@ -925,8 +924,8 @@ msgid "conditional"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1723
-#: includes/Admin/FormSettings.php:1402
-#: includes/Admin/PDFLayoutEditor.php:676
+#: includes/Admin/FormSettings.php:1400
+#: includes/Admin/PDFLayoutEditor.php:682
 msgid "Saving…"
 msgstr ""
 
@@ -940,7 +939,7 @@ msgstr ""
 
 #: includes/Admin/FormEditor.php:1726
 #: includes/Admin/FormList.php:133
-#: includes/Admin/FormSettings.php:1372
+#: includes/Admin/FormSettings.php:1370
 #: includes/Admin/Verificationpage.php:4815
 #: includes/Utils/Assets.php:551
 msgid "Error"
@@ -1393,7 +1392,7 @@ msgid "no address"
 msgstr ""
 
 #: includes/Admin/FormList.php:140
-#: includes/Admin/FormSettings.php:1052
+#: includes/Admin/FormSettings.php:1050
 msgid "Copied!"
 msgstr ""
 
@@ -1409,7 +1408,7 @@ msgid "Copy"
 msgstr ""
 
 #: includes/Admin/FormList.php:157
-#: includes/Admin/FormSettings.php:1385
+#: includes/Admin/FormSettings.php:1383
 #: includes/Plugin.php:674
 msgid "Forms"
 msgstr ""
@@ -1430,7 +1429,7 @@ msgstr ""
 
 #: includes/Admin/FormList.php:183
 #: includes/Admin/FormSelectList.php:122
-#: includes/Admin/PDFLayoutEditor.php:632
+#: includes/Admin/PDFLayoutEditor.php:638
 msgid "Apply"
 msgstr ""
 
@@ -1476,22 +1475,22 @@ msgid "Copy this string. It contains all fields, notifications and settings."
 msgstr ""
 
 #: includes/Admin/FormList.php:250
-#: includes/Admin/FormSettings.php:976
-#: includes/Admin/FormSettings.php:1055
-#: includes/Admin/PDFLayoutEditor.php:603
+#: includes/Admin/FormSettings.php:974
+#: includes/Admin/FormSettings.php:1053
+#: includes/Admin/PDFLayoutEditor.php:609
 #: includes/Admin/Verificationpage.php:701
 msgid "Close"
 msgstr ""
 
 #: includes/Admin/FormList.php:261
 #: includes/Admin/FormSelectList.php:235
-#: includes/Admin/FormSettings.php:869
-#: includes/Admin/FormSettings.php:1104
-#: includes/Admin/FormSettings.php:1181
-#: includes/Admin/FormSettings.php:1221
-#: includes/Admin/FormSettings.php:1280
-#: includes/Admin/PDFLayoutEditor.php:630
-#: includes/Admin/PDFLayoutEditor.php:652
+#: includes/Admin/FormSettings.php:867
+#: includes/Admin/FormSettings.php:1102
+#: includes/Admin/FormSettings.php:1179
+#: includes/Admin/FormSettings.php:1219
+#: includes/Admin/FormSettings.php:1278
+#: includes/Admin/PDFLayoutEditor.php:636
+#: includes/Admin/PDFLayoutEditor.php:658
 #: includes/Fields/CaptchaField.php:121
 msgid "Cancel"
 msgstr ""
@@ -1685,7 +1684,7 @@ msgid "FormFabricator Settings"
 msgstr ""
 
 #: includes/Admin/FormSettings.php:222
-#: includes/Admin/FormSettings.php:1419
+#: includes/Admin/FormSettings.php:1417
 msgid "Settings saved."
 msgstr ""
 
@@ -1736,7 +1735,7 @@ msgid "Stored unencrypted in the database. Anyone with database access, for exam
 msgstr ""
 
 #: includes/Admin/FormSettings.php:319
-#: includes/Admin/FormSettings.php:719
+#: includes/Admin/FormSettings.php:717
 msgid "Encrypted"
 msgstr ""
 
@@ -1747,7 +1746,7 @@ msgid "AES-256-GCM — requires a master key in %s."
 msgstr ""
 
 #: includes/Admin/FormSettings.php:340
-#: includes/Admin/FormSettings.php:1157
+#: includes/Admin/FormSettings.php:1155
 msgid "Set up master key"
 msgstr ""
 
@@ -1792,7 +1791,7 @@ msgid "Back"
 msgstr ""
 
 #: includes/Admin/FormSettings.php:395
-#: includes/Admin/FormSettings.php:1183
+#: includes/Admin/FormSettings.php:1181
 msgid "Entered — Continue"
 msgstr ""
 
@@ -1866,662 +1865,662 @@ msgstr ""
 msgid "Secret Key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:535
+#: includes/Admin/FormSettings.php:536
 msgid "Saved (leave empty to keep)"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:541
+#: includes/Admin/FormSettings.php:542
 msgid "Remove the saved secret key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:549
+#: includes/Admin/FormSettings.php:550
 msgid "Trusted proxies"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:552
+#: includes/Admin/FormSettings.php:553
 msgid "Proxy IP addresses or ranges"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:557
+#: includes/Admin/FormSettings.php:558
 msgid "Only needed if this site runs behind a proxy, load balancer or CDN (for example Cloudflare). Enter its addresses, one per line."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:558
+#: includes/Admin/FormSettings.php:559
 msgid "For requests from these addresses, the visitor's real address is then read from the X-Forwarded-For header. Leave empty otherwise."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:563
+#: includes/Admin/FormSettings.php:564
 msgid "The FABRICATOR_TRUSTED_PROXIES constant in wp-config.php is set as well; its entries apply in addition to these."
 msgstr ""
 
 #. translators: %s: comma-separated list of the trusted proxy ranges concerned, e.g. "0.0.0.0/0".
-#: includes/Admin/FormSettings.php:574
+#: includes/Admin/FormSettings.php:575
 #, php-format
 msgid "%s trusts a large part of the internet as a proxy: any visitor from there can claim another address and so get past the sending limit. Enter only the addresses of your own proxy or CDN."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:586
-#: includes/Admin/FormSettings.php:986
+#: includes/Admin/FormSettings.php:587
+#: includes/Admin/FormSettings.php:984
 msgid "Privacy Policy Text"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:590
+#: includes/Admin/FormSettings.php:591
 msgid "If you use the CAPTCHA field (Google reCAPTCHA), your privacy policy needs to disclose that."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:597
+#: includes/Admin/FormSettings.php:598
 msgid "Show example text"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:603
+#: includes/Admin/FormSettings.php:604
 msgid "Backend"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:608
+#: includes/Admin/FormSettings.php:609
 msgid "Email delivery"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:612
+#: includes/Admin/FormSettings.php:613
 msgid "Sender email"
 msgstr ""
 
 #. translators: %s: admin e-mail address
-#: includes/Admin/FormSettings.php:623
+#: includes/Admin/FormSettings.php:624
 #, php-format
 msgid "Leave blank to use the WordPress admin email (%s)."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:642
+#: includes/Admin/FormSettings.php:643
 msgid "Editor"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:646
+#: includes/Admin/FormSettings.php:647
 msgid "Admin accent color"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:653
+#: includes/Admin/FormSettings.php:654
 msgid "Color for buttons, sliders, and toggles in the admin area."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:658
+#: includes/Admin/FormSettings.php:659
 msgid "Hover color"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:667
+#: includes/Admin/FormSettings.php:668
 msgid "Particle background"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:673
-msgid "On"
+#: includes/Admin/FormSettings.php:674
+msgid "Animated"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:676
-msgid "Moving, or a still picture when the system asks for reduced motion."
+#: includes/Admin/FormSettings.php:681
+msgid "Static"
 msgstr ""
 
 #: includes/Admin/FormSettings.php:686
-msgid "A plain background on every FormFabricator page."
+msgid "When your system asks for reduced motion, it is always static."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:711
+#: includes/Admin/FormSettings.php:709
 msgid "Security"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:721
+#: includes/Admin/FormSettings.php:719
 msgid "Keys are secured with AES-256-GCM."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:727
+#: includes/Admin/FormSettings.php:725
 msgid "Encrypted — master key missing"
 msgstr ""
 
 #. translators: 1: FABRICATOR_SEAL_MASTER_KEY as a code element, 2: wp-config.php as a code element.
-#: includes/Admin/FormSettings.php:732
+#: includes/Admin/FormSettings.php:730
 #, php-format
 msgid "The keys are stored encrypted, but %1$s is no longer in %2$s, so none of them can be read. Put the line back from your backup."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:746
+#: includes/Admin/FormSettings.php:744
 msgid "Standard — unencrypted"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:747
+#: includes/Admin/FormSettings.php:745
 msgid "Click to switch to AES-256-GCM"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:760
+#: includes/Admin/FormSettings.php:758
 msgid "View PDF keys"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:770
-#: includes/Admin/FormSettings.php:1194
+#: includes/Admin/FormSettings.php:768
+#: includes/Admin/FormSettings.php:1192
 msgid "Add legacy key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:780
-#: includes/Admin/FormSettings.php:826
+#: includes/Admin/FormSettings.php:778
+#: includes/Admin/FormSettings.php:824
 msgid "Rotate PDF key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:789
+#: includes/Admin/FormSettings.php:787
 msgid "Miscellaneous"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:799
-#: includes/Admin/FormSettings.php:1238
+#: includes/Admin/FormSettings.php:797
+#: includes/Admin/FormSettings.php:1236
 msgid "User access"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:809
+#: includes/Admin/FormSettings.php:807
 msgid "Reset to factory defaults"
 msgstr ""
 
 #. translators: %s: the separately translated word "rotated" as an em element (the status name shown for such PDFs).
-#: includes/Admin/FormSettings.php:832
+#: includes/Admin/FormSettings.php:830
 #, php-format
 msgid "Generates a new random key. PDFs sealed with the previous key remain verifiable and are marked as %s."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:833
+#: includes/Admin/FormSettings.php:831
 msgid "rotated"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:842
+#: includes/Admin/FormSettings.php:840
 msgid "compromised"
 msgstr ""
 
 #. translators: %s: the separately translated word "compromised" as a strong element.
-#: includes/Admin/FormSettings.php:845
+#: includes/Admin/FormSettings.php:843
 #, php-format
 msgid "Mark the previous key as %s"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:853
+#: includes/Admin/FormSettings.php:851
 msgid "PDFs sealed with the previous key will be shown as compromised during verification."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:859
+#: includes/Admin/FormSettings.php:857
 msgid "The old master key is lost"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:863
+#: includes/Admin/FormSettings.php:861
 msgid "Tick only if the master key your seal keys were encrypted with is gone for good. Keys encrypted with it stay unreadable, and their PDFs can no longer be checked."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:871
+#: includes/Admin/FormSettings.php:869
 msgid "Rotate key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:885
+#: includes/Admin/FormSettings.php:883
 msgid "PDF keys"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:893
+#: includes/Admin/FormSettings.php:891
 msgid "Fingerprint"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:894
+#: includes/Admin/FormSettings.php:892
 msgid "Status"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:895
+#: includes/Admin/FormSettings.php:893
 #: includes/Fields/DateField.php:65
 #: includes/Fields/DateField.php:259
 msgid "Date"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:896
+#: includes/Admin/FormSettings.php:894
 msgid "By"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:903
-#: includes/Admin/FormSettings.php:946
-#: includes/Admin/FormSettings.php:1125
+#: includes/Admin/FormSettings.php:901
+#: includes/Admin/FormSettings.php:944
+#: includes/Admin/FormSettings.php:1123
 msgid "UUID:"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:911
+#: includes/Admin/FormSettings.php:909
 msgid "ACTIVE"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:914
+#: includes/Admin/FormSettings.php:912
 msgid "in use"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:929
-#: includes/Admin/FormSettings.php:941
+#: includes/Admin/FormSettings.php:927
+#: includes/Admin/FormSettings.php:939
 msgid "ROTATED"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:930
-#: includes/Admin/FormSettings.php:934
+#: includes/Admin/FormSettings.php:928
+#: includes/Admin/FormSettings.php:932
 msgid "LEGACY"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:933
-#: includes/Admin/FormSettings.php:937
+#: includes/Admin/FormSettings.php:931
+#: includes/Admin/FormSettings.php:935
 msgid "COMPROMISED"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:941
+#: includes/Admin/FormSettings.php:939
 msgid "ROTATED (initial key)"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:970
+#: includes/Admin/FormSettings.php:968
 msgid "No key created yet."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:990
+#: includes/Admin/FormSettings.php:988
 msgid "Here is an example disclaimer you should add to your privacy policy if you use the CAPTCHA field (Google reCAPTCHA)."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:994
+#: includes/Admin/FormSettings.php:992
 msgid "This example is provided for convenience only — it is not legal advice, may be incomplete or out of date, and is not a substitute for your own review."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:998
+#: includes/Admin/FormSettings.php:996
 msgid "You are solely responsible for the accuracy and completeness of your privacy policy."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1002
+#: includes/Admin/FormSettings.php:1000
 msgid "Copy it in yourself wherever it belongs — nothing here is added automatically."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1024
+#: includes/Admin/FormSettings.php:1022
 msgid "Language:"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1049
+#: includes/Admin/FormSettings.php:1047
 msgid "Copy to clipboard"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1068
+#: includes/Admin/FormSettings.php:1066
 msgid "Confirm reset"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1069
+#: includes/Admin/FormSettings.php:1067
 msgid "This action cannot be undone."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1073
+#: includes/Admin/FormSettings.php:1071
 msgid "The following settings will be permanently deleted:"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1075
+#: includes/Admin/FormSettings.php:1073
 msgid "Email sender (address & name)"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1076
+#: includes/Admin/FormSettings.php:1074
 msgid "reCAPTCHA Site- & Secret Key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1077
+#: includes/Admin/FormSettings.php:1075
 msgid "Display colors"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1078
+#: includes/Admin/FormSettings.php:1076
 msgid "PDF layout settings"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1080
+#: includes/Admin/FormSettings.php:1078
 msgid "User management & access rights"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1086
+#: includes/Admin/FormSettings.php:1084
 msgid "not"
 msgstr ""
 
 #. translators: %s: the separately translated word "not" as a strong element.
-#: includes/Admin/FormSettings.php:1089
+#: includes/Admin/FormSettings.php:1087
 #, php-format
 msgid "PDF seal keys will %s be deleted."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1098
+#: includes/Admin/FormSettings.php:1096
 msgid "Delete forms & selection groups"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1099
+#: includes/Admin/FormSettings.php:1097
 msgid "All forms and form selection groups will be permanently removed."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1106
-#: includes/Admin/FormSettings.php:1370
+#: includes/Admin/FormSettings.php:1104
+#: includes/Admin/FormSettings.php:1368
 msgid "Reset"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1117
+#: includes/Admin/FormSettings.php:1115
 msgid "Back up key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1121
+#: includes/Admin/FormSettings.php:1119
 msgid "A new PDF seal key has been created. Download the key file and store it securely — e.g. in a password manager. You will need it to re-verify old PDFs after a total server loss."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1128
-#: includes/Admin/PDFLayoutEditor.php:654
+#: includes/Admin/FormSettings.php:1126
+#: includes/Admin/PDFLayoutEditor.php:660
 #: includes/PDF/templates/layout.php:281
 msgid "Created:"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1129
+#: includes/Admin/FormSettings.php:1127
 msgid "Fingerprint:"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1136
+#: includes/Admin/FormSettings.php:1134
 msgid "Download key file"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1140
+#: includes/Admin/FormSettings.php:1138
 msgid "Saved — Continue"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1144
+#: includes/Admin/FormSettings.php:1142
 msgid "You must download the file before you can continue."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1147
+#: includes/Admin/FormSettings.php:1145
 msgid "Note: uninstalling the plugin wipes all seal keys from the server. This file is then the only copy."
 msgstr ""
 
 #. translators: 1: wp-config.php as a code element, 2: the separately translated word "before" as a strong element.
-#: includes/Admin/FormSettings.php:1163
+#: includes/Admin/FormSettings.php:1161
 #, php-format
 msgid "Add this line to your %1$s %2$s clicking \"Continue\". The key never leaves the server — it lives only in your configuration file."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1165
+#: includes/Admin/FormSettings.php:1163
 msgid "before"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1174
+#: includes/Admin/FormSettings.php:1172
 msgid "If you lose this line, all stored keys become unrecoverable. Keep it as safe as a password."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1197
+#: includes/Admin/FormSettings.php:1195
 msgid "Paste the full contents of the saved key file."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1203
+#: includes/Admin/FormSettings.php:1201
 msgid "Status of this key:"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1207
+#: includes/Admin/FormSettings.php:1205
 msgid "Rotated — key was regularly replaced"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1212
+#: includes/Admin/FormSettings.php:1210
 msgid "Compromised — key was classified as unsafe"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1224
+#: includes/Admin/FormSettings.php:1222
 msgid "Import anyway"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1227
-#: includes/Admin/FormSettings.php:1400
+#: includes/Admin/FormSettings.php:1225
+#: includes/Admin/FormSettings.php:1398
 msgid "Add"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1240
+#: includes/Admin/FormSettings.php:1238
 msgid "Administrators always have full access. User exceptions grant access in addition to the role; they cannot revoke access the role already allows."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1243
+#: includes/Admin/FormSettings.php:1241
 #: includes/Fields/CaptchaField.php:126
 #: includes/Utils/Assets.php:536
 msgid "Loading…"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1246
+#: includes/Admin/FormSettings.php:1244
 msgid "Roles"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1254
+#: includes/Admin/FormSettings.php:1252
 msgid "User exceptions"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1261
+#: includes/Admin/FormSettings.php:1259
 msgid "No user exceptions configured."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1270
+#: includes/Admin/FormSettings.php:1268
 msgid "Add user…"
 msgstr ""
 
 #. translators: %d: the ID of a user account that no longer exists.
-#: includes/Admin/FormSettings.php:1308
+#: includes/Admin/FormSettings.php:1306
 #, php-format
 msgid "Unknown user (#%d)"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1365
+#: includes/Admin/FormSettings.php:1363
 msgid "Resetting…"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1366
+#: includes/Admin/FormSettings.php:1364
 msgid "Error — try again"
 msgstr ""
 
 #. translators: %d is the countdown, in seconds, before the reset confirmation button becomes clickable.
-#: includes/Admin/FormSettings.php:1368
+#: includes/Admin/FormSettings.php:1366
 #, php-format
 msgid "Are you sure? (%d)"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1369
+#: includes/Admin/FormSettings.php:1367
 msgid "Yes, reset"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1371
+#: includes/Admin/FormSettings.php:1369
 msgid "Success"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1373
-#: includes/Admin/PDFLayoutEditor.php:675
+#: includes/Admin/FormSettings.php:1371
+#: includes/Admin/PDFLayoutEditor.php:681
 #: includes/Utils/Assets.php:548
 msgid "Network error"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1374
+#: includes/Admin/FormSettings.php:1372
 msgid "wp-config.php already holds FABRICATOR_SEAL_MASTER_KEY, so no new line is issued. Confirm to store keys encrypted with it."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1375
+#: includes/Admin/FormSettings.php:1373
 msgid "These stored keys are not encrypted, so they are refused now. Tick only keys whose fingerprint is in one of your key backup files: they are encrypted and used again. Unticked keys stay refused."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1379
+#: includes/Admin/FormSettings.php:1377
 msgid "If you leave the active key unticked, rotate the PDF key afterwards so forms can seal again."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1380
+#: includes/Admin/FormSettings.php:1378
 msgid "active key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1381
+#: includes/Admin/FormSettings.php:1379
 msgid "retired key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1382
+#: includes/Admin/FormSettings.php:1380
 msgid "set-aside damaged key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1383
+#: includes/Admin/FormSettings.php:1381
 msgid "key waiting for download"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1386
-#: includes/Admin/PDFLayoutEditor.php:245
-#: includes/Admin/PDFLayoutEditor.php:371
+#: includes/Admin/FormSettings.php:1384
+#: includes/Admin/PDFLayoutEditor.php:246
+#: includes/Admin/PDFLayoutEditor.php:377
 msgid "PDF Layout"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1387
+#: includes/Admin/FormSettings.php:1385
 msgid "Verifier"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1390
+#: includes/Admin/FormSettings.php:1388
 msgid "View only:\n- See the form list\n- Open a form read-only\nNo creating, editing, deleting, importing or exporting."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1392
+#: includes/Admin/FormSettings.php:1390
 msgid "Full control of forms:\n- Create, edit, duplicate and delete forms\n- Set notification recipients (To, CC, BCC and routing rules) - this site then sends mail to any address entered\n- Write rich text (HTML block, consent and mandate texts) with links, formatting, images and SVG; form elements such as input fields are always removed\n- Export a form, including its recipient addresses"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1393
+#: includes/Admin/FormSettings.php:1391
 msgid "PDF appearance:\n- Header, logo and title\n- Fonts, colours and margins\n- Which sections are shown or hidden\n- Footer text"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1394
+#: includes/Admin/FormSettings.php:1392
 msgid "Document verification:\n- Upload a PDF to the verification page\n- See the result, including the original field values recorded in the document's seal"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1396
+#: includes/Admin/FormSettings.php:1394
 msgid "Plugin settings:\n- General, mail and PDF settings\nThe access matrix, trusted proxies, seal-key rotation and the CAPTCHA keys also require \"manage_options\"."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1397
+#: includes/Admin/FormSettings.php:1395
 msgid "User"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1398
+#: includes/Admin/FormSettings.php:1396
 msgid "Role"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1399
+#: includes/Admin/FormSettings.php:1397
 msgid "Click to remove"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1401
-#: includes/Admin/PDFLayoutEditor.php:655
+#: includes/Admin/FormSettings.php:1399
+#: includes/Admin/PDFLayoutEditor.php:661
 msgid "Error saving."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1467
-#: includes/Admin/FormSettings.php:2254
+#: includes/Admin/FormSettings.php:1465
+#: includes/Admin/FormSettings.php:2252
 msgid "Settings were changed elsewhere since this page loaded. Please reload and try again."
 msgstr ""
 
 #. translators: %s: comma-separated list of the rejected entries.
-#: includes/Admin/FormSettings.php:1479
+#: includes/Admin/FormSettings.php:1477
 #, php-format
 msgid "Not saved: these trusted proxy entries are not valid IP addresses or CIDR ranges: %s"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1495
+#: includes/Admin/FormSettings.php:1493
 msgid "Please enter a valid sender email address, or leave the field blank."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1630
+#: includes/Admin/FormSettings.php:1628
 msgid "Nothing was changed: FABRICATOR_SEAL_MASTER_KEY in wp-config.php does not open your seal keys. Put the right master key back, or, if it is lost for good, tick \"The old master key is lost\" and rotate."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1658
-#: includes/Admin/FormSettings.php:1957
-#: includes/Admin/FormSettings.php:2113
+#: includes/Admin/FormSettings.php:1656
+#: includes/Admin/FormSettings.php:1955
+#: includes/Admin/FormSettings.php:2111
 msgid "Another change to the seal key is in progress. Nothing was changed; please try again in a moment."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1665
+#: includes/Admin/FormSettings.php:1663
 msgid "The seal key could not be rotated. Please check the server log."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1670
+#: includes/Admin/FormSettings.php:1668
 msgid "Key rotated successfully."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1694
-#: includes/Admin/FormSettings.php:1740
-#: includes/Admin/FormSettings.php:1885
+#: includes/Admin/FormSettings.php:1692
+#: includes/Admin/FormSettings.php:1738
+#: includes/Admin/FormSettings.php:1883
 msgid "Seal key setup is already complete."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1700
+#: includes/Admin/FormSettings.php:1698
 msgid "FABRICATOR_SEAL_MASTER_KEY is set in wp-config.php, so keys must be stored encrypted. Choose encrypted storage, or remove that line from wp-config.php to use Standard storage."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1710
-#: includes/Admin/FormSettings.php:1849
+#: includes/Admin/FormSettings.php:1708
+#: includes/Admin/FormSettings.php:1847
 msgid "No pending key download found."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1725
+#: includes/Admin/FormSettings.php:1723
 msgid "Encrypted key storage needs the PHP openssl extension, which this server does not have. Ask your host to enable it, or keep Standard storage."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1770
+#: includes/Admin/FormSettings.php:1768
 msgid "Please complete the seal key setup first."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1774
+#: includes/Admin/FormSettings.php:1772
 msgid "Key encryption is already enabled."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1913
+#: includes/Admin/FormSettings.php:1911
 msgid "FABRICATOR_SEAL_MASTER_KEY not found. Please check wp-config.php and try again."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1924
+#: includes/Admin/FormSettings.php:1922
 msgid "Setup session expired. Please start again."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1932
+#: includes/Admin/FormSettings.php:1930
 msgid "The entered master key does not match the expected value. Please check wp-config.php."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:1985
+#: includes/Admin/FormSettings.php:1983
 msgid "Setup complete, but no download entry found. Please rotate the key to generate a download."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2009
+#: includes/Admin/FormSettings.php:2007
 msgid "No content pasted."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2015
+#: includes/Admin/FormSettings.php:2013
 msgid "Invalid JSON format."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2023
+#: includes/Admin/FormSettings.php:2021
 msgid "Missing required fields: uuid and key."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2027
+#: includes/Admin/FormSettings.php:2025
 msgid "UUID has invalid format."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2031
+#: includes/Admin/FormSettings.php:2029
 msgid "Key value must be exactly 64 hex characters."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2041
+#: includes/Admin/FormSettings.php:2039
 msgid "The fingerprint in this key file does not match its key. The file is damaged or was changed."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2056
-#: includes/Admin/FormSettings.php:2067
+#: includes/Admin/FormSettings.php:2054
+#: includes/Admin/FormSettings.php:2065
 msgid "A seal key with this UUID is already stored."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2083
+#: includes/Admin/FormSettings.php:2081
 msgid "Plugin name does not match."
 msgstr ""
 
 #. translators: %s: the plugin field value from the uploaded JSON
-#: includes/Admin/FormSettings.php:2087
+#: includes/Admin/FormSettings.php:2085
 #, php-format
 msgid "The \"plugin\" field reads \"%s\" — this does not appear to be a key from this plugin."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2090
+#: includes/Admin/FormSettings.php:2088
 msgid "Are you sure you want to import this key?"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2120
+#: includes/Admin/FormSettings.php:2118
 msgid "The key could not be imported. Please check the server log."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:2123
+#: includes/Admin/FormSettings.php:2121
 msgid "Legacy key added successfully."
 msgstr ""
 
@@ -2546,7 +2545,7 @@ msgid "Legal notice"
 msgstr ""
 
 #: includes/Admin/PDFLayoutEditor.php:49
-#: includes/Admin/PDFLayoutEditor.php:553
+#: includes/Admin/PDFLayoutEditor.php:559
 msgid "Footer"
 msgstr ""
 
@@ -2554,226 +2553,223 @@ msgstr ""
 msgid "Please wait before requesting another preview."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:194
-msgid "Layout Preview"
+#: includes/Admin/PDFLayoutEditor.php:195
+#: includes/Admin/PDFLayoutEditor.php:678
+msgid "Sample form"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:198
+#: includes/Admin/PDFLayoutEditor.php:199
 msgid "PDF generation failed."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:207
+#: includes/Admin/PDFLayoutEditor.php:208
 msgid "PDF could not be read."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:244
+#: includes/Admin/PDFLayoutEditor.php:245
 msgid "FormFabricator PDF Layout"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:304
+#: includes/Admin/PDFLayoutEditor.php:305
 msgid "DejaVu Sans (Default, sans-serif)"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:305
+#: includes/Admin/PDFLayoutEditor.php:306
 msgid "DejaVu Serif (with serifs)"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:306
+#: includes/Admin/PDFLayoutEditor.php:307
 msgid "DejaVu Sans Mono (Fixed-width)"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:307
+#: includes/Admin/PDFLayoutEditor.php:308
 msgid "FreeMono (Typewriter)"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:380
-#: includes/Admin/PDFLayoutEditor.php:736
+#: includes/Admin/PDFLayoutEditor.php:386
+#: includes/Admin/PDFLayoutEditor.php:742
 msgid "Layout saved."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:420
+#: includes/Admin/PDFLayoutEditor.php:426
 msgid "Header"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:423
+#: includes/Admin/PDFLayoutEditor.php:429
 msgid "Arrange titles, logos and other content via drag & drop."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:427
-#: includes/Admin/PDFLayoutEditor.php:534
-#: includes/Admin/PDFLayoutEditor.php:601
+#: includes/Admin/PDFLayoutEditor.php:433
+#: includes/Admin/PDFLayoutEditor.php:540
+#: includes/Admin/PDFLayoutEditor.php:607
 msgid "Edit header"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:433
+#: includes/Admin/PDFLayoutEditor.php:439
 msgid "Colors"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:437
+#: includes/Admin/PDFLayoutEditor.php:443
 msgid "Accent color (thick dividers)"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:438
+#: includes/Admin/PDFLayoutEditor.php:444
 msgid "Divider color (thin lines)"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:457
+#: includes/Admin/PDFLayoutEditor.php:463
 msgid "Typography"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:460
+#: includes/Admin/PDFLayoutEditor.php:466
 msgid "Font"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:471
+#: includes/Admin/PDFLayoutEditor.php:477
 msgid "Base font size:"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:472
-#: includes/Admin/PDFLayoutEditor.php:481
+#: includes/Admin/PDFLayoutEditor.php:478
+#: includes/Admin/PDFLayoutEditor.php:487
 msgid "pt"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:480
+#: includes/Admin/PDFLayoutEditor.php:486
 msgid "Title size:"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:490
+#: includes/Admin/PDFLayoutEditor.php:496
 msgid "Page margins (mm)"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:495
+#: includes/Admin/PDFLayoutEditor.php:501
 msgid "Top"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:496
-#: includes/Admin/PDFLayoutEditor.php:704
+#: includes/Admin/PDFLayoutEditor.php:502
+#: includes/Admin/PDFLayoutEditor.php:710
 msgid "Right"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:497
+#: includes/Admin/PDFLayoutEditor.php:503
 msgid "Bottom"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:498
-#: includes/Admin/PDFLayoutEditor.php:702
+#: includes/Admin/PDFLayoutEditor.php:504
+#: includes/Admin/PDFLayoutEditor.php:708
 msgid "Left"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:520
+#: includes/Admin/PDFLayoutEditor.php:526
 msgid "Sections"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:523
+#: includes/Admin/PDFLayoutEditor.php:529
 msgid "Eye icon to show/hide."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:538
+#: includes/Admin/PDFLayoutEditor.php:544
 msgid "Show/Hide"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:548
+#: includes/Admin/PDFLayoutEditor.php:554
 msgid "Hiding a section changes only what is shown. The submitted text is always part of the verification seal and can be reconstructed from the PDF file."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:555
+#: includes/Admin/PDFLayoutEditor.php:561
 msgid "Footer text"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:557
+#: includes/Admin/PDFLayoutEditor.php:563
 msgid "e.g. Company name · Address · Phone"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:574
+#: includes/Admin/PDFLayoutEditor.php:580
 msgid "Preview (A4)"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:580
+#: includes/Admin/PDFLayoutEditor.php:586
 msgid "Open PDF"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:608
-#: includes/Admin/PDFLayoutEditor.php:715
+#: includes/Admin/PDFLayoutEditor.php:614
+#: includes/Admin/PDFLayoutEditor.php:721
 #: includes/Admin/Verificationpage.php:4032
 #: includes/Fields/PostDataField.php:247
 msgid "Title"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:610
-#: includes/Admin/PDFLayoutEditor.php:716
+#: includes/Admin/PDFLayoutEditor.php:616
+#: includes/Admin/PDFLayoutEditor.php:722
 #: includes/Fields/RatingField.php:331
 msgid "Image"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:612
+#: includes/Admin/PDFLayoutEditor.php:618
 msgid "Height (rows of 5 mm):"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:616
+#: includes/Admin/PDFLayoutEditor.php:622
 msgid "← Drag to position · Corners to resize · Del to delete"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:625
-#: includes/Admin/PDFLayoutEditor.php:710
+#: includes/Admin/PDFLayoutEditor.php:631
+#: includes/Admin/PDFLayoutEditor.php:716
 msgid "Select element"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:625
-#: includes/Admin/PDFLayoutEditor.php:711
+#: includes/Admin/PDFLayoutEditor.php:631
+#: includes/Admin/PDFLayoutEditor.php:717
 msgid "to edit"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:651
+#: includes/Admin/PDFLayoutEditor.php:657
 msgid "Add image"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:653
-#: includes/Admin/PDFLayoutEditor.php:690
+#: includes/Admin/PDFLayoutEditor.php:659
+#: includes/Admin/PDFLayoutEditor.php:696
 msgid "Choose from media library"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:656
+#: includes/Admin/PDFLayoutEditor.php:662
 msgid "External URL"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:657
+#: includes/Admin/PDFLayoutEditor.php:663
 msgid "Better to add the image to this site's media library first — an external URL is downloaded into the library on save anyway, and a slow or unreachable host will delay that save."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:661
+#: includes/Admin/PDFLayoutEditor.php:667
 #: includes/PDF/templates/layout.php:282
 msgid "Form:"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:662
+#: includes/Admin/PDFLayoutEditor.php:668
 msgid "Generating…"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:664
+#: includes/Admin/PDFLayoutEditor.php:670
 msgid "Insert"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:665
-#: includes/PDF/templates/layout.php:304
+#: includes/Admin/PDFLayoutEditor.php:671
+#: includes/PDF/templates/layout.php:305
 msgid "Legal Notice:"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:666
-#: includes/PDF/templates/layout.php:301
+#: includes/Admin/PDFLayoutEditor.php:672
+#: includes/PDF/templates/layout.php:302
 msgid "This document represents the original. Any change, manipulation, or modification invalidates this document. This document was issued in electronic form and must be kept exclusively in electronic form. Any printout is merely a copy and has no legal validity."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:670
+#: includes/Admin/PDFLayoutEditor.php:676
 #: includes/PDF/templates/layout.php:280
 msgid "Metadata"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:672
-msgid "Sample form"
-msgstr ""
-
-#: includes/Admin/PDFLayoutEditor.php:673
-#: includes/Admin/PDFLayoutEditor.php:1107
+#: includes/Admin/PDFLayoutEditor.php:679
+#: includes/Admin/PDFLayoutEditor.php:1113
 #: includes/Fields/DirectDebitField.php:240
 #: includes/Fields/DirectDebitField.php:833
 #: includes/Fields/DirectDebitField.php:1253
@@ -2784,222 +2780,222 @@ msgstr ""
 msgid "Signature"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:674
-#: includes/Admin/PDFLayoutEditor.php:1117
+#: includes/Admin/PDFLayoutEditor.php:680
+#: includes/Admin/PDFLayoutEditor.php:1123
 msgid "Attachment"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:677
+#: includes/Admin/PDFLayoutEditor.php:683
 msgid "Select image"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:678
+#: includes/Admin/PDFLayoutEditor.php:684
 msgid "The PDF could not be generated."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:679
+#: includes/Admin/PDFLayoutEditor.php:685
 msgid "The request could not reach the server. Please check your connection and try again."
 msgstr ""
 
 #. translators: %d is the HTTP status code returned by the server.
-#: includes/Admin/PDFLayoutEditor.php:681
+#: includes/Admin/PDFLayoutEditor.php:687
 #, php-format
 msgid "Unexpected server response (HTTP %d). See browser console for details."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:682
+#: includes/Admin/PDFLayoutEditor.php:688
 msgid "or"
 msgstr ""
 
 #. translators: %1$s is the current page number, %2$s is the total page count.
 #. translators: %1$s: current page number placeholder, %2$s: total page count placeholder (both substituted by mPDF at render time).
-#: includes/Admin/PDFLayoutEditor.php:684
-#: includes/PDF/Generator.php:539
+#: includes/Admin/PDFLayoutEditor.php:690
+#: includes/PDF/Generator.php:546
 #, php-format
 msgid "Page %1$s of %2$s"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:686
+#: includes/Admin/PDFLayoutEditor.php:692
 msgid "Width"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:687
+#: includes/Admin/PDFLayoutEditor.php:693
 msgid "Height"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:688
+#: includes/Admin/PDFLayoutEditor.php:694
 msgid "No image selected"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:689
+#: includes/Admin/PDFLayoutEditor.php:695
 msgid "Change image"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:694
+#: includes/Admin/PDFLayoutEditor.php:700
 msgid "Underline style"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:695
+#: includes/Admin/PDFLayoutEditor.php:701
 msgid "Solid"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:696
+#: includes/Admin/PDFLayoutEditor.php:702
 msgid "Double"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:697
+#: includes/Admin/PDFLayoutEditor.php:703
 msgid "Dotted"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:698
+#: includes/Admin/PDFLayoutEditor.php:704
 msgid "Dashed"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:699
+#: includes/Admin/PDFLayoutEditor.php:705
 msgid "Strikethrough"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:700
+#: includes/Admin/PDFLayoutEditor.php:706
 msgid "Superscript"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:701
+#: includes/Admin/PDFLayoutEditor.php:707
 msgid "Subscript"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:703
+#: includes/Admin/PDFLayoutEditor.php:709
 msgid "Center"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:705
+#: includes/Admin/PDFLayoutEditor.php:711
 msgid "Font size"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:706
+#: includes/Admin/PDFLayoutEditor.php:712
 msgid "Color"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:707
+#: includes/Admin/PDFLayoutEditor.php:713
 #: includes/Fields/TextField.php:43
 msgid "Text"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:708
+#: includes/Admin/PDFLayoutEditor.php:714
 msgid "HTML code"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:709
+#: includes/Admin/PDFLayoutEditor.php:715
 msgid "HTML is rendered directly. No script tag."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:712
+#: includes/Admin/PDFLayoutEditor.php:718
 msgid "Delete element"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:713
+#: includes/Admin/PDFLayoutEditor.php:719
 msgid "or enter a URL …"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:717
+#: includes/Admin/PDFLayoutEditor.php:723
 msgid "HTML"
 msgstr ""
 
 #. translators: %s: form titles, comma-separated.
-#: includes/Admin/PDFLayoutEditor.php:769
+#: includes/Admin/PDFLayoutEditor.php:775
 #, php-format
 msgid "This layout leaves signatures out of the PDF. These forms take signatures, and the recipients of their notifications without \"Attach uploaded files\" get none: %s."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:793
+#: includes/Admin/PDFLayoutEditor.php:799
 #: includes/Admin/Verificationpage.php:474
 #: includes/Admin/Verificationpage.php:645
 #: includes/Form/FormModel.php:120
 msgid "Insufficient permissions."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:798
+#: includes/Admin/PDFLayoutEditor.php:804
 #: includes/Form/FormModel.php:123
 msgid "Security check failed. Please reload and try again."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:806
+#: includes/Admin/PDFLayoutEditor.php:812
 msgid "The PDF layout was changed elsewhere since this page loaded. Please reload and try again."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:832
+#: includes/Admin/PDFLayoutEditor.php:838
 msgid "Images from external URLs can only be imported by users who are allowed to upload files. Choose the image from the Media Library instead."
 msgstr ""
 
 #. translators: %s: largest image the PDF takes, in megapixels.
-#: includes/Admin/PDFLayoutEditor.php:839
+#: includes/Admin/PDFLayoutEditor.php:845
 #, php-format
 msgid "An image is larger than PDFs on this site can take: at most %s megapixels. Choose a smaller image, or scale this one down."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1063
+#: includes/Admin/PDFLayoutEditor.php:1069
 msgid "Sample text for the PDF preview. This paragraph demonstrates how longer free-text entries wrap in the finished document and how much room they take up. It contains several sentences so the preview covers a realistic amount of text, of the kind real form submissions produce."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1068
+#: includes/Admin/PDFLayoutEditor.php:1074
 msgid "Here follows another sample paragraph with additional notes, so that the preview spans several pages and layout settings such as margins, font size and section order can be judged realistically."
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1075
+#: includes/Admin/PDFLayoutEditor.php:1081
 #: includes/Fields/NameField.php:128
 #: includes/Fields/NameField.php:377
 msgid "First name"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1075
+#: includes/Admin/PDFLayoutEditor.php:1081
 msgid "Jane"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1076
+#: includes/Admin/PDFLayoutEditor.php:1082
 #: includes/Fields/NameField.php:130
 #: includes/Fields/NameField.php:385
 msgid "Last name"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1076
+#: includes/Admin/PDFLayoutEditor.php:1082
 msgid "Doe"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1082
+#: includes/Admin/PDFLayoutEditor.php:1088
 #: includes/Fields/PhoneField.php:43
 msgid "Phone"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1085
+#: includes/Admin/PDFLayoutEditor.php:1091
 #: includes/Fields/AddressField.php:65
 #: includes/Fields/AddressField.php:241
 msgid "Address"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1086
+#: includes/Admin/PDFLayoutEditor.php:1092
 msgid "123 Example Street, 10115 Springfield"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1088
+#: includes/Admin/PDFLayoutEditor.php:1094
 msgid "Date of birth"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1092
+#: includes/Admin/PDFLayoutEditor.php:1098
 msgid "Membership application"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1096
+#: includes/Admin/PDFLayoutEditor.php:1102
 msgid "Membership type"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1097
+#: includes/Admin/PDFLayoutEditor.php:1103
 msgid "Supporting member"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1102
+#: includes/Admin/PDFLayoutEditor.php:1108
 msgid "Additional notes"
 msgstr ""
 
-#: includes/Admin/PDFLayoutEditor.php:1108
+#: includes/Admin/PDFLayoutEditor.php:1114
 msgid "[Sample signature]"
 msgstr ""
 
@@ -5840,7 +5836,7 @@ msgstr ""
 msgid "New Submission"
 msgstr ""
 
-#: includes/PDF/Generator.php:87
+#: includes/PDF/Generator.php:95
 msgid "Form submission"
 msgstr ""
 

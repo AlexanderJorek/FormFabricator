@@ -191,7 +191,8 @@ class PDFLayoutEditor
 
         // Unsealed: form_id 0 alone signalled nothing to Generator/HashSeal, so previews were signed with the production
         // key and verified as authentic, letting any edit_pdf_layout holder mint "authentic" PDFs with arbitrary text.
-        $path = \FabricatorForms\PDF\Generator::generate($dummy, 0, __('Layout Preview', 'formfabricator'), false);
+        // The same sample form name as the editor's live preview (pdfLayoutI18n()'s sampleFormName).
+        $path = \FabricatorForms\PDF\Generator::generate($dummy, 0, __('Sample form', 'formfabricator'), false);
 
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $path is the return value of PDF\Generator::generate(), an internally-computed temp-file path, not attacker input.
         if (!$path || !file_exists($path)) {
@@ -362,6 +363,11 @@ class PDFLayoutEditor
                 'dummyText'       => $dummy_text,
                 'dummyUpload'     => $dummy_upload,
                 'fieldLayoutMode' => $field_layout_mode,
+                // Dates as the PDF writes them, in the site's time zone, so the live preview matches the PDF: the
+                // metadata's creation time (Generator::METADATA_DATE_FORMAT) and the footer's {date} (the site's
+                // date format, as layout.php fills it in).
+                'createdDate'     => wp_date(\FabricatorForms\PDF\Generator::METADATA_DATE_FORMAT),
+                'footerDate'      => (string) wp_date((string) (get_option('date_format') ?: 'Y-m-d')),
             ],
             ]
         );

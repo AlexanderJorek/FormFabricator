@@ -9,12 +9,14 @@ use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\Tests\Integration\Support\RequestRecorder;
 use FabricatorForms\Tests\Integration\TestCase;
 use FabricatorForms\Utils\HtmlSanitizer;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * Building a PDF makes no request the form author's HTML asks for (TESTING.md §4), and the Direct Debit Mandate
  * validates an IBAN offline. mPDF's own curl bypasses pre_http_request, so the "attacker" host is a local logging
  * server (Support\RequestRecorder).
  */
+#[Group('package')]
 final class OutboundRequestsTest extends TestCase
 {
     private RequestRecorder $server;
@@ -39,7 +41,8 @@ final class OutboundRequestsTest extends TestCase
     {
         // Control: mPDF on its own does fetch a remote <img>. Without this, "no connection" below would prove nothing.
         $tmp  = get_temp_dir() . 'fabricator-mpdf-' . wp_generate_password(6, false);
-        $mpdf = new \Mpdf\Mpdf(['tempDir' => $tmp, 'curlTimeout' => 2, 'curlExecutionTimeout' => 5]);
+        // A font the release keeps: mPDF's default is one the build trims (tools/build-config.php).
+        $mpdf = new \Mpdf\Mpdf(['tempDir' => $tmp, 'curlTimeout' => 2, 'curlExecutionTimeout' => 5, 'default_font' => 'dejavusans']);
         $mpdf->WriteHTML('<img src="http://' . $this->server->host . '/control.png">');
         $mpdf->Output('', 'S');
 
@@ -63,6 +66,51 @@ final class OutboundRequestsTest extends TestCase
         self::assertIsString($path, 'the PDF is still built');
         wp_delete_file($path);
         self::assertSame([], $this->server->requests(), 'the PDF step fetched from a host the form author named');
+    }
+
+    public function testAnImageFromTheMediaLibraryAndARelativeOneInAnHtmlBlockAppearInThePdf(): void
+    {
+        // TESTING.md §4. The site's own images stay: one from the Media Library (an absolute URL on the site's host) and
+        // a relative one, which mPDF resolves against the address of the request (admin-ajax.php) as a browser would.
+        // The site is served by a local web server holding both files.
+        $docroot = get_temp_dir() . 'fabricator-site-' . wp_generate_password(6, false);
+        $png     = self::png();
+        wp_mkdir_p($docroot . '/wp-content/uploads/2026/10');
+        wp_mkdir_p($docroot . '/wp-admin/images');
+        file_put_contents($docroot . '/wp-content/uploads/2026/10/logo.png', $png);
+        file_put_contents($docroot . '/wp-admin/images/logo.png', $png);
+        $site = new RequestRecorder($docroot);
+        $server_before = $_SERVER;
+        try {
+            update_option('home', 'http://' . $site->host);
+            update_option('siteurl', 'http://' . $site->host);
+            $_SERVER['HTTP_HOST']   = $site->host;
+            $_SERVER['SCRIPT_NAME'] = '/wp-admin/admin-ajax.php';
+            $images = static function (string $html): int {
+                $fields = [['id' => 'block', 'type' => 'html', 'label' => '', 'html_content' => $html, 'show_in_output' => true]];
+                $form   = FormModel::save(['title' => 'Images', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0, true);
+                $path   = Generator::generate(FieldRegistry::mapSubmission($fields, [], [], []), (int) $form, 'Images');
+                self::assertIsString($path, 'the PDF is built');
+                $count = preg_match_all('#/Subtype\s*/Image\b#', (string) file_get_contents($path));
+                wp_delete_file($path);
+                return (int) $count;
+            };
+
+            $none = $images('<p>No pictures</p>');
+            $both = $images('<p><img src="http://' . $site->host . '/wp-content/uploads/2026/10/logo.png" width="40"></p>'
+                . '<p><img src="images/logo.png" width="40"></p>');
+
+            // Each of the PDF's two layout passes fetches them again.
+            $fetched = array_values(array_unique($site->requests()));
+            sort($fetched);
+            self::assertSame(['/wp-admin/images/logo.png', '/wp-content/uploads/2026/10/logo.png'], $fetched, 'from the site itself');
+            self::assertSame($none + 2, $both, 'both images are drawn in the PDF');
+        } finally {
+            $_SERVER = $server_before;
+            $site->stop();
+            \FabricatorForms\Form\MailSender::removeTempTree($docroot);
+            @rmdir($docroot);
+        }
     }
 
     public function testTheDirectDebitFieldValidatesAnIbanWithoutAnyRequest(): void
@@ -95,5 +143,17 @@ final class OutboundRequestsTest extends TestCase
         self::assertStringContainsString('#icon-star', $kept);
         self::assertStringNotContainsString('data:', $stripped);
         self::assertStringNotContainsString('evil.example', $stripped);
+    }
+
+    /**
+     * A small real PNG, as a logo would be.
+     */
+    private static function png(): string
+    {
+        $im = imagecreatetruecolor(16, 16);
+        imagefill($im, 0, 0, (int) imagecolorallocate($im, 30, 90, 200));
+        ob_start();
+        imagepng($im);
+        return (string) ob_get_clean();
     }
 }

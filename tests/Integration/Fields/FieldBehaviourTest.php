@@ -3,6 +3,7 @@
 namespace FabricatorForms\Tests\Integration\Fields;
 
 use FabricatorForms\Tests\Integration\TestCase;
+use PHPUnit\Framework\Attributes\Group;
 
 // phpcs:disable Generic.Files.LineLength -- ported verbatim from the former WP_DEBUG field test page; see class docblock.
 
@@ -12,6 +13,7 @@ use FabricatorForms\Tests\Integration\TestCase;
  * Each $this->check() closure returns true or a failure message. A test method runs all of its checks, then fails
  * once listing every failure.
  */
+#[Group('package')]
 final class FieldBehaviourTest extends TestCase
 {
     /** Side-channel the helpers fill for a failure message: the input a check used and what it got back. */

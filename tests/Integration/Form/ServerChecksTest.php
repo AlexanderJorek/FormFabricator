@@ -6,12 +6,15 @@ use FabricatorForms\Form\FormRenderer;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
 use FabricatorForms\Tests\Support\Overrides;
 use FabricatorForms\Utils\MemoryBudget;
+use FabricatorForms\Utils\SingleUseToken;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * What the server itself refuses or records when the browser's checks never ran (JavaScript off, a direct POST), and
  * what uploads cost (TESTING.md §3, §4). Uploaded files go through the real submission action; is_uploaded_file() accepts
  * exactly the temp files a test creates (Support\Overrides), as PHP would for a real multipart request.
  */
+#[Group('package')]
 final class ServerChecksTest extends AjaxTestCase
 {
     /** @var string[] */
@@ -260,6 +263,83 @@ final class ServerChecksTest extends AjaxTestCase
         $text = (new \Smalot\PdfParser\Parser())->parseFile($byRecipient['pdf@example.org'][0])->getText();
         $text = str_replace(["\u{FB00}", "\u{FB01}", "\u{FB02}"], ['ff', 'fi', 'fl'], $text); // the font's ligatures
         self::assertStringContainsString('scan.tiff', $text, 'the PDF lists the TIFF by name');
+    }
+
+    public function testThePdfAndTheAttachedCopiesAreGoneWhenTheRequestEnds(): void
+    {
+        // TESTING.md §5. No submission data stays on disk: the generated PDF and the copies of uploads the notification
+        // attaches are removed by shutdown functions registered the moment they exist, which PHP runs when the request
+        // ends, after a memory or time fatal too. The test holds them back and plays the end of the request.
+        Overrides::$shutdownFunctions = [];
+        $form = $this->createForm(
+            [self::uploadField('doc', 'Document')],
+            [self::notification(['attach_pdf' => true, 'attach_uploads' => true])]
+        );
+        wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
+        \FabricatorForms\PDF\HashSeal::createInitialKey();
+        $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
+
+        $r = $this->submit($form, []);
+
+        self::assertTrue($r['success'], wp_json_encode($r));
+        $attached = $this->mailed[0]['attachments'];
+        self::assertSame(['Entry', 'terms.pdf'], [substr(basename($attached[0]), 0, 5), basename($attached[1])]);
+        $copies = dirname($attached[1], 2);
+        foreach ($attached as $path) {
+            self::assertFileExists($path, 'still there until the request ends');
+        }
+
+        Overrides::runShutdownFunctions();
+
+        foreach ($attached as $path) {
+            self::assertFileDoesNotExist($path);
+        }
+        self::assertDirectoryDoesNotExist($copies, 'the attachment copies\' own folder too');
+    }
+
+    public function testRunningOutOfMemoryOverTheFilesAsksForSmallerOnesAndLetsTheVisitorRetry(): void
+    {
+        // TESTING.md §3. A submission with files that runs out of memory gets the files message, not WordPress's
+        // critical-error page, and its token back. The test lets the submission finish, then plays the fatal-error
+        // handler as if the request had died there.
+        Overrides::$shutdownFunctions = [];
+        $form  = $this->createForm([self::uploadField('doc', 'Document')], [self::notification()]);
+        $token = SingleUseToken::issue($form);
+        $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
+        self::assertTrue($this->submit($form, [], $token)['success']);
+        $oom   = ['type' => E_ERROR, 'message' => 'Allowed memory size of 134217728 bytes exhausted (tried to allocate 20480 bytes)'];
+        $other = ['type' => E_ERROR, 'message' => 'Call to undefined function nope()'];
+
+        self::assertSame('critical', apply_filters('wp_php_error_message', 'critical', $other), 'other errors keep WordPress\'s page');
+        self::assertFalse($this->submit($form, [], $token)['success'], 'and keep the token claimed');
+
+        $answer = json_decode((string) apply_filters('wp_php_error_message', 'critical', $oom), true);
+        self::assertSame(['success' => false, 'data' => ['message' => 'The attached files are too large in total. Please attach fewer or smaller files.']], $answer);
+        self::assertSame(413, apply_filters('wp_php_error_args', [], $oom)['response']);
+
+        $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
+        $retry  = $this->submit($form, [], $token);
+        self::assertTrue($retry['success'], 'the retry is no duplicate: ' . wp_json_encode($retry));
+    }
+
+    public function testWithWordPresssFatalErrorHandlerOffTheShutdownFunctionGivesTheSameAnswer(): void
+    {
+        Overrides::$shutdownFunctions = [];
+        $form  = $this->createForm([self::uploadField('doc', 'Document')], [self::notification()]);
+        $token = SingleUseToken::issue($form);
+        $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
+        self::assertTrue($this->submit($form, [], $token)['success']);
+        add_filter('wp_fatal_error_handler_enabled', '__return_false');
+
+        // What error_get_last() holds after the fatal (only its message counts), for the shutdown function to read.
+        @trigger_error('Allowed memory size of 134217728 bytes exhausted (tried to allocate 20480 bytes)', E_USER_WARNING);
+        ob_start();
+        Overrides::runShutdownFunctions();
+        $printed = (string) ob_get_clean();
+
+        self::assertStringContainsString('"The attached files are too large in total. Please attach fewer or smaller files."', $printed);
+        $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
+        self::assertTrue($this->submit($form, [], $token)['success'], 'the token was released');
     }
 
     /**

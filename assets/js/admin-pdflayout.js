@@ -218,7 +218,7 @@
                 /* Labels mirror layout.php's real metadata block so this preview matches the generated PDF. */
                 out+='<div style="margin:12px 0;padding:8px 10px;background:#f9f9f9;border:1px solid #e0e0e0;border-radius:4px;font-size:'+pt(8)+';color:#555;">';
                 out+='<strong>' + escHtml(I18N.metadata) + '</strong><br>';
-                out+=escHtml(I18N.created) + ' '+escHtml(new Date().toLocaleString())+'<br>';
+                out+=escHtml(I18N.created) + ' '+escHtml(DATA.createdDate || '')+'<br>';
                 out+=escHtml(I18N.formLabel) + ' '+escHtml(sampleFormName());
                 out+='</div>';
             }
@@ -293,7 +293,7 @@
         var footerBase = (result.footerText||'')
             .replace(/\{site_name\}/g, DATA.siteName)
             .replace(/\{site_url\}/g,  DATA.siteUrl)
-            .replace(/\{date\}/g, new Date().toLocaleDateString())
+            .replace(/\{date\}/g, DATA.footerDate || '')
             .replace(/\{nbpg\}/g, total);
 
         stage.innerHTML = '';

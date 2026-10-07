@@ -15,8 +15,9 @@
 
     <exclude-pattern>vendor/*</exclude-pattern>
     <exclude-pattern>assets/*</exclude-pattern>
-    <!-- The Node test suite; phpcs would read it as PHP-style JS, as it would assets/. -->
+    <!-- The Node and E2E test suites; phpcs would read them as PHP-style JS, as it would assets/. -->
     <exclude-pattern>tests/js/*.js</exclude-pattern>
+    <exclude-pattern>tests/e2e/*.js</exclude-pattern>
 
     <!--
         Every plugin file starts with `defined('ABSPATH') || exit;` before its

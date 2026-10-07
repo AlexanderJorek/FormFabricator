@@ -5,12 +5,14 @@ namespace FabricatorForms\Tests\Integration\Form;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\Tests\Integration\TestCase;
 use FabricatorForms\Utils\Assets;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * A form placed anywhere a shortcode runs brings its scripts and styles along (TESTING.md §2): a post, a text
  * widget, a block template (the Shortcode block). Page builders stay a manual check. A broken shortcode leaves the page
  * rendering.
  */
+#[Group('package')]
 final class EmbedTest extends TestCase
 {
     private int $form = 0;
