@@ -3,7 +3,7 @@
 FormFabricator is a WordPress form plugin with a drag-and-drop builder, PDF generation and email delivery.
 
 This file explains **the rules the code follows and why**. Code comments state a rule where it applies; the background
-lives here. It is dev-only: `build.ps1` leaves it out of the release package.
+lives here. It is dev-only, like everything in `docs/` and `tools/`: the release build leaves it out of the package.
 
 **Contents**
 
@@ -23,8 +23,10 @@ lives here. It is dev-only: `build.ps1` leaves it out of the release package.
 
 ## Getting started
 
-On a fresh clone, run `build -Setup` (or menu item 3 of `build.cmd`). It installs the Composer dev dependencies and
-downloads the throwaway test database for the integration suite. Run `npm install` once for the JS suite.
+On a fresh clone, run `build -Setup` on Windows or `./build.sh --setup` on macOS and Linux (or menu item 3 of either).
+It installs the Composer dev dependencies and, on Windows, downloads the throwaway test database for the integration
+suite; on macOS and Linux, point `WP_TESTS_DB_*` at a database (see [Integration suite](#integration-suite)). Run
+`npm install` once for the JS suite.
 
 | What | Command |
 |---|---|
@@ -36,11 +38,12 @@ downloads the throwaway test database for the integration suite. Run `npm instal
 | Regenerate the `.pot` | `php languages/make-pot.php` |
 | Check the `.pot` is up to date | `php languages/make-pot.php --check` |
 | Compile a `.po` to `.mo` | `php languages/compile-mo.php languages/formfabricator-de_DE.po` |
-| Release build (all gates) | `build -y` or `.\build.ps1` |
-| Offline release build | `build -SkipAudit` |
+| Release build (all gates) | `build -y` (Windows), `./build.sh -y` (macOS, Linux), or `php tools/build.php` |
+| Offline release build | `build -SkipAudit`, `./build.sh --skip-audit`, or `php tools/build.php --skip-audit` |
 
-`build.cmd` is a launcher for `build.ps1` that sidesteps Windows' default script execution policy for that one process.
-Run without arguments, it shows a menu.
+The build is PHP (`tools/build.php`), the same on every system. `build.cmd` and `build.sh` only launch it; run without
+arguments, they show a menu. What the package leaves out, keeps and checks is data in `tools/build-config.php`, which
+the build, `languages/make-pot.php` and the font-trim test all read.
 
 ---
 
@@ -67,9 +70,15 @@ The short version. Each point links to its full explanation.
 assets/                 CSS, JS front-end assets
 includes/               PHP plugin source (Admin, Fields, Form, PDF, Utils)
 includes/PDF/templates/ mPDF layout templates
-vendor/                 Composer dependencies + manually-vendored pdf.js and ALTCHA widget
+languages/              .pot (ships), German .po/.mo and the translation tools (don't ship)
+vendor/                 Composer dependencies + the manually-vendored ALTCHA widget
 formfabricator.php      plugin entry point
 uninstall.php           cleanup on uninstall
+
+docs/                   CONTRIBUTING.md, TESTING.md                    (dev-only)
+tests/                  the test suites and their phpunit*.xml.dist    (dev-only)
+tools/                  the release build and its test database        (dev-only)
+build.cmd, build.sh     launchers for tools/build.php                  (dev-only)
 ```
 
 ### How classes load
@@ -137,7 +146,7 @@ A composite field: account details, account holder, a static creditor info block
 One provider per field, picked by the admin:
 
 - **ALTCHA** (the default; also what a field without the setting reads as). A proof-of-work check with no third
-  party. The widget is `vendor/altcha/`, an unmodified npm release pinned by its `VERSION` file like pdf.js. The
+  party. The widget is `vendor/altcha/`, an unmodified npm release pinned by its `VERSION` file. The
   server side is `Utils\Altcha`: it signs each challenge with a secret derived from the site's salts, and checks an
   answer with two HMACs (no key is derived again). Each challenge counts once (`SingleUseToken`).
   `tests/js/altcha.test.js` checks the server against ALTCHA's own solver and verifier, from the npm dev dependency
@@ -186,8 +195,26 @@ markers with the value stored in the seal.
 - **Hiding is not redacting.** The seal carries every answer, including those the PDF Layout hides ("Signatures &
   Uploads", "Form fields"), each flagged `shown` true or false. The verifier pairs only the shown answers with the
   PDF's field markers, in order. A hidden field has no markers.
+- **The PDF draws exactly what the seal records.** The verifier reads the text back with pdfparser, so the generator
+  writes only text that reads back as itself (`Generator::drawableText()`, applied to the values both the PDF and the
+  seal are made from; the mail keeps what was sent):
+  - A character no shipped font draws becomes U+FFFD, or its plain form ("𝔏" as "L") when that can be drawn.
+    FreeSerif.ttf, then Quivira.otf, draw what the layout font lacks (`Generator::FALLBACK_FONTS`), but only below
+    U+FFFF: beyond it, mPDF's text doesn't read back.
+  - Ligatures and glyph composition are off for the whole document (`layout.php`): they read back as other characters.
+  - pdfparser unescapes string bytes twice, so a character ending in byte 0x5C before one from U+2000–U+29FF gets an
+    invisible U+034F between them (`separateEscapePairs()`).
+  - The seal is written in lines of `SEAL_LINE_CHARS`, without ligatures.
+  - The verifier compares a field's text without whitespace (`Verificationpage::comparableText()`): pdfparser loses
+    a space at a line wrap and adds one at a font switch. With the intl extension, Unicode normalization also sorts
+    combining marks across a lost space, so the text is normalized again once the spaces are gone. CI runs with intl,
+    a local run usually without: both paths get tested.
 - **One shared size cap.** Generator and verifier both use `HashSeal::MAX_SEAL_BLOCK_BYTES`, so the verifier never
   refuses a genuine PDF.
+- **Names are read as spelled.** A viewer decodes `#xx` escapes in names (`/Ann#6Fts` is `/Annots`); the checks
+  don't. mPDF spells every name this plugin's PDFs use plainly, so a file with an escaped name anywhere in its syntax
+  fails (`PdfUtils::escapedName()`). Finding a key means finding a name token (`PdfUtils::nameTokens()`), not its
+  spelling inside a string, such as a link's address.
 
 ### Submitters must not be able to forge structure
 
@@ -343,7 +370,7 @@ form, whether or not the form uses those fields.
 
 ### The suites at a glance
 
-| Suite | Command | Loads WordPress? | Release gate in `build.ps1` | CI |
+| Suite | Command | Loads WordPress? | Release gate in the build | CI |
 |---|---|---|---|---|
 | `unit` + `perf` | `composer test` | No (Brain Monkey stubs) | Yes | PHP 8.1–8.4, with the phpcs gates; 8.1 skips `perf` |
 | `integration` | `composer test:integration` | Yes, real WordPress + DB | Yes, single site and multisite | Against a MySQL 8 service |
@@ -353,7 +380,7 @@ The PHP 8.1 job skips `perf` because `memory_reset_peak_usage()` needs PHP 8.2+.
 
 ### Unit and perf suites
 
-Configured in `phpunit.xml.dist`, tests in `tests/`. WordPress functions are stubbed per test with Brain Monkey.
+Configured in `tests/phpunit.xml.dist`, tests in `tests/`. WordPress functions are stubbed per test with Brain Monkey.
 `tests/Support/FakeWordPress.php` is an in-memory options/transients/cron/`$wpdb` for the stateful helpers (HashSeal,
 OptionMutex, VerifierCleanup).
 
@@ -372,7 +399,7 @@ OptionMutex, VerifierCleanup).
 
 ### Integration suite
 
-Configured in `phpunit-integration.xml.dist`, tests in `tests/Integration/`.
+Configured in `tests/phpunit-integration.xml.dist`, tests in `tests/Integration/`.
 
 **What it runs against**
 
@@ -388,10 +415,16 @@ Configured in `phpunit-integration.xml.dist`, tests in `tests/Integration/`.
 
 - `WP_MULTISITE=1` runs it as a network.
 
-**The local test database.** `build.ps1` runs the suite against a throwaway portable MariaDB. `build-testdb.ps1`
-downloads it once (pinned SHA-256) into `%LOCALAPPDATA%\FormFabricator\test-db` (about 100 MB), and the build starts
-it only for that step. An offline build (`-SkipAudit`) that doesn't have the database yet skips the suite with a
-warning.
+**The database during a build** (`tools/testdb.php`):
+
+- A server named by `WP_TESTS_DB_HOST` (and `_NAME`, `_USER`, `_PASSWORD`) is used on any system: a local MySQL or
+  MariaDB, or a container (`docker run -d -p 3306:3306 -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=wordpress_test
+  mariadb:11.4`, then `WP_TESTS_DB_HOST=127.0.0.1:3306`). Every table in that database is dropped.
+- Otherwise, on Windows, a throwaway portable MariaDB: downloaded once (pinned SHA-256) into
+  `%LOCALAPPDATA%\FormFabricator\test-db` (about 100 MB), and started only for that step.
+- On macOS and Linux MariaDB publishes no portable build to pin, so a full build without a named server stops and says
+  how to provide one.
+- An offline build (`--skip-audit`) without a database skips the suite with a warning.
 
 **Local PHP setup.** PHP needs `mysqli` in the child process that installs WordPress too, so enable it through
 `php.ini` or `PHP_INI_SCAN_DIR`, not `-d`. The build does the latter when `php.ini` doesn't load it.
@@ -516,7 +549,7 @@ OWASP ASVS and GDPR are checklist/compliance frameworks with no linter. Evaluate
 `wp-coding-standards/wpcs`'s security sniffs (including `WordPress.PHP.IniSet`) and `pheromone/phpcs-security-audit`,
 both dev dependencies. Run `vendor/bin/phpcs --standard=.phpcs-security.xml`.
 
-- **Errors are a release gate.** `build.ps1` runs it with `-n` (errors only), because WordPress.org's Plugin Check
+- **Errors are a release gate.** The build runs it with `-n` (errors only), because WordPress.org's Plugin Check
   rejects the same errors.
 - **Warnings are review material, not a gate.** The security-audit sniffs flag *any* filesystem or callback call with a
   non-literal argument. That is a heuristic, not proof of a real issue. For a confirmed false positive, add a targeted
@@ -540,7 +573,7 @@ The `.po`/`.mo` don't ship because WordPress loads them itself: since WP 4.6, co
 from `wp-content/languages/plugins/` the first time its text domain is used, once the plugin is approved and a
 translation is published there. Nothing in the plugin's own code loads a bundled `.mo` at runtime.
 
-`build.ps1` strips the `.po`/`.mo` and both tools from the package, and its verification step fails the build if a
+The release build strips the `.po`/`.mo` and both tools from the package, and its verification step fails the build if a
 tool slips in.
 
 **Updating the `.pot`.** The `.pot` is generated, never hand-edited. `languages/make-pot.php` stands in for

@@ -6,10 +6,11 @@
     <file>uninstall.php</file>
     <file>includes</file>
     <!-- Dev tooling lives outside includes/ and was covered by neither ruleset, so it
-         inherited zero linting. build.ps1 strips it from the package; it is still code
+         inherited zero linting. The release build strips it from the package; it is still code
          in this repository and should hold the same bar. -->
     <file>languages/compile-mo.php</file>
     <file>languages/make-pot.php</file>
+    <file>tools</file>
     <file>tests</file>
 
     <exclude-pattern>vendor/*</exclude-pattern>

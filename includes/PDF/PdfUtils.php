@@ -427,6 +427,54 @@ class PdfUtils
     }
 
     /**
+     * The objects for which a viewer (through the cross-reference table at the last startxref) and the checks (each
+     * object's last definition, objectDefinitionIndex()) read different definitions: a planted second definition. In a
+     * file from this plugin they agree. Only the classic table this plugin writes is read; without one, "unreadable".
+     *
+     * @param string $pdf_raw Raw PDF bytes.
+     * @param array  $index   objectDefinitionIndex() of $pdf_raw.
+     * @return string[] Object numbers, and "unreadable" when the table can't be read.
+     * @throws \LengthException When the table lists more entries than MAX_OBJECTS.
+     */
+    public static function xrefConflicts(string $pdf_raw, array $index): array
+    {
+        $at = strrpos($pdf_raw, 'startxref');
+        if ($at === false || preg_match('/\Gstartxref\s+(\d+)/', $pdf_raw, $m, 0, $at) !== 1
+            || preg_match('/\Gxref\s+/', $pdf_raw, $x, 0, (int) $m[1]) !== 1
+        ) {
+            return ['unreadable'];
+        }
+        $pos       = (int) $m[1] + strlen($x[0]);
+        $conflicts = [];
+        $seen      = 0;
+        // Subsections ("first count", then count entries of exactly "offset generation n|f" and a two-byte end of line),
+        // read forward from one anchored position each, so the walk is linear in the table's size.
+        while (preg_match('/\G(\d+)[ \t]+(\d+)[ \t]*\r?\n/', $pdf_raw, $sub, 0, $pos) === 1) {
+            $pos  += strlen($sub[0]);
+            $first = (int) $sub[1];
+            for ($k = 0, $count = (int) $sub[2]; $k < $count; $k++) {
+                if (++$seen > self::MAX_OBJECTS) {
+                    throw new \LengthException('Too many objects: cross-reference entries.');
+                }
+                if (preg_match('/\G(\d{10}) \d{5} ([nf])(?: \r| \n|\r\n)/', $pdf_raw, $e, 0, $pos) !== 1) {
+                    $conflicts[] = 'unreadable';
+                    return $conflicts;
+                }
+                $pos += strlen($e[0]);
+                if ($e[2] !== 'n') {
+                    continue;
+                }
+                $num   = (string) ($first + $k);
+                $entry = $index['by_num'][$num] ?? null;
+                if ($entry === null || $entry[1] - strlen($entry[0]) !== (int) $e[1]) {
+                    $conflicts[] = $num;
+                }
+            }
+        }
+        return $seen === 0 ? ['unreadable'] : $conflicts;
+    }
+
+    /**
      * lastObjectDefinition()'s answer, read from objectDefinitionIndex() instead of searching the file again.
      *
      * @param array       $index   From objectDefinitionIndex() over these same bytes.
@@ -561,6 +609,362 @@ class PdfUtils
     }
 
     /**
+     * Most bytes an annotation dictionary may have for linkTarget() to read it. mPDF's link dictionaries take about
+     * 200; the cap keeps the generator's walk over every object of its own file small.
+     */
+    private const MAX_LINK_DICT_BYTES = 65536;
+
+    /**
+     * A dictionary's top-level entries as their raw value source (a name, a string as written, a nested dictionary or
+     * array, a number, a reference). Values are skipped whole, so a key spelled inside one is never taken for a key;
+     * for a repeated key the last one wins, as in dictTextEntry().
+     *
+     * @param string $dict_source Text starting with the dictionary ("<<", optionally after whitespace).
+     * @return array<string, string>|null Keys without the slash; null when the text is no well-formed dictionary.
+     */
+    public static function dictEntries(string $dict_source): ?array
+    {
+        $len     = strlen($dict_source);
+        $i       = strspn($dict_source, self::PCRE_SPACE);
+        $entries = [];
+        if (substr($dict_source, $i, 2) !== '<<') {
+            return null;
+        }
+        $i += 2;
+        while (true) {
+            $i = self::skipSpaceAndComments($dict_source, $i);
+            if ($i >= $len) {
+                return null;
+            }
+            if (substr($dict_source, $i, 2) === '>>') {
+                return $entries;
+            }
+            if ($dict_source[$i] !== '/') {
+                return null;
+            }
+            $key_end = $i + 1 + strcspn($dict_source, self::PCRE_SPACE . '()<>[]{}/%', $i + 1);
+            $key     = substr($dict_source, $i + 1, $key_end - $i - 1);
+            $start   = self::skipSpaceAndComments($dict_source, $key_end);
+            $end     = self::valueEnd($dict_source, $start);
+            if ($end === null) {
+                return null;
+            }
+            $entries[$key] = substr($dict_source, $start, $end - $start);
+            $i             = $end;
+        }
+    }
+
+    /**
+     * Every name in the file's syntax, each with the offset just past it, in one forward walk. Never one spelled inside
+     * a string, a comment or stream data (delimited as in imageStreamSpans()), where a viewer reads none either.
+     *
+     * @param string $raw Raw PDF bytes.
+     * @return \Generator<int, array{0: string, 1: int}> The name as spelled, without its slash, and the offset after it.
+     */
+    public static function nameTokens(string $raw): \Generator
+    {
+        $len        = strlen($raw);
+        $i          = 0;
+        $depth      = 0;
+        $dict_start = 0;
+        $cache      = [];
+        while ($i < $len) {
+            $i += strcspn($raw, '()<>/%', $i);
+            if ($i >= $len) {
+                return;
+            }
+            $c = $raw[$i];
+            if ($c === '(') {
+                $i = self::literalStringEnd($raw, $i);
+            } elseif ($c === '%') {
+                $i += strcspn($raw, "\r\n", $i);
+            } elseif ($c === '<' && ($raw[$i + 1] ?? '') === '<') {
+                $dict_start = $depth === 0 ? $i : $dict_start;
+                $depth++;
+                $i += 2;
+            } elseif ($c === '<') {
+                // A hex string: only hex digits and whitespace up to its ">".
+                $close = self::nextAt($raw, '>', $i, $cache);
+                if ($close === false) {
+                    return;
+                }
+                $i = $close + 1;
+            } elseif ($c === '>' && ($raw[$i + 1] ?? '') === '>') {
+                $i += 2;
+                if ($depth > 0 && --$depth === 0) {
+                    // A top-level dictionary closed: stream data may follow, which holds no syntax.
+                    $data_end = self::streamDataEnd($raw, $dict_start, $i, $cache);
+                    $i        = $data_end ?? $i;
+                }
+            } elseif ($c === '/') {
+                $end = $i + 1 + strcspn($raw, self::PCRE_SPACE . '()<>[]{}/%', $i + 1);
+                yield [substr($raw, $i + 1, $end - $i - 1), $end];
+                $i = $end;
+            } else {
+                $i++; // a stray ">" or ")", outside any string: nothing to read
+            }
+        }
+    }
+
+    /**
+     * Offset just past the literal string starting at the "(" at $start, as skipLiteralString() ends it, without
+     * copying the string: an unterminated one runs to the end of the file.
+     *
+     * @param string $source Bytes containing the string.
+     * @param int    $start  Offset of the opening parenthesis.
+     * @return int
+     */
+    private static function literalStringEnd(string $source, int $start): int
+    {
+        $len   = strlen($source);
+        $depth = 1;
+        $i     = $start + 1;
+        while ($i < $len) {
+            $i += strcspn($source, '()\\', $i);
+            if ($i >= $len) {
+                break;
+            }
+            $c = $source[$i];
+            if ($c === '\\') {
+                $i += 2; // the escaped byte is never a parenthesis that counts
+                continue;
+            }
+            $i++;
+            if ($c === '(') {
+                $depth++;
+            } elseif (--$depth === 0) {
+                return $i;
+            }
+        }
+        return $len;
+    }
+
+    /**
+     * Where the data of a stream ends, when the dictionary from $dict_start to $dict_end opens one: "stream" and a line
+     * break right after it. Read as imageStreamSpans() reads it: the direct /Length when "endstream" follows there,
+     * else the next "endstream", else the end of the file.
+     *
+     * @param string              $raw        Raw PDF bytes.
+     * @param int                 $dict_start Offset of the dictionary's "<<".
+     * @param int                 $dict_end   Offset just past its ">>".
+     * @param array<string,array> $cache      The walk's nextAt() cache.
+     * @return int|null Null when no stream follows the dictionary.
+     */
+    private static function streamDataEnd(string $raw, int $dict_start, int $dict_end, array &$cache): ?int
+    {
+        $len = strlen($raw);
+        $kw  = $dict_end + strspn($raw, self::PCRE_SPACE . "\0", $dict_end);
+        if (substr($raw, $kw, 6) !== 'stream') {
+            return null;
+        }
+        $body = $kw + 6;
+        $body += ($raw[$body] ?? '') === "\r" ? 1 : 0;
+        if (($raw[$body] ?? '') !== "\n") {
+            return null;
+        }
+        $body++;
+        $length = self::dictEntries(substr($raw, $dict_start, $dict_end - $dict_start))['Length'] ?? '';
+        if (preg_match('/^\d{1,12}$/', $length) === 1) {
+            $candidate = $body + (int) $length;
+            if ($candidate <= $len && str_starts_with(ltrim(substr($raw, $candidate, 16), "\r\n \t"), 'endstream')) {
+                return $candidate;
+            }
+        }
+        $found = self::nextAt($raw, 'endstream', $body, $cache);
+        return $found === false ? $len : $found;
+    }
+
+    /**
+     * The first name the file spells with a "#xx" escape, or null. A viewer reads "/Ann#6Fts" as /Annots while the
+     * checks read names as spelled; this plugin's PDFs spell every name plainly.
+     *
+     * @param string $raw Raw PDF bytes.
+     * @return string|null The name as spelled, without its slash.
+     */
+    public static function escapedName(string $raw): ?string
+    {
+        foreach (self::nameTokens($raw) as [$name]) {
+            if (str_contains($name, '#')) {
+                return $name;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Offset past whitespace and comments from $i.
+     *
+     * @param string $source Bytes to read.
+     * @param int    $i      Where to start.
+     * @return int
+     */
+    public static function skipSpaceAndComments(string $source, int $i): int
+    {
+        $len = strlen($source);
+        while ($i < $len) {
+            $i += strspn($source, self::PCRE_SPACE, $i);
+            if (($source[$i] ?? '') !== '%') {
+                break;
+            }
+            $i += strcspn($source, "\r\n", $i);
+        }
+        return $i;
+    }
+
+    /**
+     * Offset just past the value starting at $i: a whole string, nested dictionary or array, a name, a number, or an
+     * indirect reference ("3 0 R", read as one value).
+     *
+     * @param string $source Bytes to read.
+     * @param int    $i      Offset of the value's first byte.
+     * @return int|null Null for a malformed or unterminated value.
+     */
+    private static function valueEnd(string $source, int $i): ?int
+    {
+        $len = strlen($source);
+        if ($i >= $len) {
+            return null;
+        }
+        $c = $source[$i];
+        if ($c === '(') {
+            $end = self::skipLiteralString($source, $i)[1];
+            return $end <= $len && $source[$end - 1] === ')' ? $end : null;
+        }
+        if ($c === '<' && ($source[$i + 1] ?? '') !== '<') {
+            $close = strpos($source, '>', $i);
+            return $close === false ? null : $close + 1;
+        }
+        if ($c === '<' || $c === '[') {
+            // A nested dictionary or array, its strings and comments skipped whole; brackets must pair up.
+            $stack = [];
+            while ($i < $len) {
+                $i += strcspn($source, '()<>[]%', $i);
+                if ($i >= $len) {
+                    return null;
+                }
+                $c = $source[$i];
+                if ($c === '(') {
+                    $end = self::skipLiteralString($source, $i)[1];
+                    if ($end > $len || $source[$end - 1] !== ')') {
+                        return null;
+                    }
+                    $i = $end;
+                } elseif ($c === '%') {
+                    $i += strcspn($source, "\r\n", $i);
+                } elseif ($c === '<' && ($source[$i + 1] ?? '') === '<') {
+                    $stack[] = '>>';
+                    $i      += 2;
+                } elseif ($c === '<') {
+                    $close = strpos($source, '>', $i);
+                    if ($close === false) {
+                        return null;
+                    }
+                    $i = $close + 1;
+                } elseif ($c === '[') {
+                    $stack[] = ']';
+                    $i++;
+                } else {
+                    $closer = $c === '>' ? (($source[$i + 1] ?? '') === '>' ? '>>' : '>') : $c;
+                    if ($closer !== end($stack)) {
+                        return null;
+                    }
+                    array_pop($stack);
+                    $i += strlen($closer);
+                    if ($stack === []) {
+                        return $i;
+                    }
+                }
+            }
+            return null;
+        }
+        if ($c === '/') {
+            return $i + 1 + strcspn($source, self::PCRE_SPACE . '()<>[]{}/%', $i + 1);
+        }
+        $token_end = $i + strcspn($source, self::PCRE_SPACE . '()<>[]{}/%', $i);
+        if ($token_end === $i) {
+            return null;
+        }
+        // "3 0 R" is one value.
+        if (ctype_digit(substr($source, $i, $token_end - $i))
+            && preg_match('/\G[' . preg_quote(self::PCRE_SPACE, '/') . ']+\d+[' . preg_quote(self::PCRE_SPACE, '/') . ']+R(?![^' . preg_quote(self::PCRE_SPACE, '/') . '()<>\[\]{}\/%])/', $source, $ref, 0, $token_end) === 1
+        ) {
+            return $token_end + strlen($ref[0]);
+        }
+        return $token_end;
+    }
+
+    /**
+     * The target of an annotation that is exactly a link as mPDF writes one, drawing nothing: /Link, no /AP, no visible
+     * border, and a URI action or an in-document destination ("#"). Anything else has none. The verifier accepts only
+     * annotations whose target the generator sealed (linkTargets()).
+     *
+     * @param string $body The annotation object's body, starting with its dictionary.
+     * @return string|null
+     */
+    public static function linkTarget(string $body): ?string
+    {
+        if (strlen($body) > self::MAX_LINK_DICT_BYTES) {
+            $body = substr($body, 0, self::MAX_LINK_DICT_BYTES);
+        }
+        $entries = self::dictEntries($body);
+        if ($entries === null || isset($entries['AP']) || isset($entries['BS'])) {
+            return null;
+        }
+        if (isset($entries['Border']) && preg_match('/^\[\s*0*\.?0*\s+0*\.?0*\s+0*\.?0*\s*\]$/', $entries['Border']) !== 1) {
+            return null;
+        }
+        return self::linkAddress($body);
+    }
+
+    /**
+     * Where a link annotation leads, however it is drawn (unlike linkTarget()): the URI, or "#" for an in-document
+     * destination. Tells a sealed link drawn differently from an added one.
+     *
+     * @param string $body The annotation object's body, starting with its dictionary.
+     * @return string|null Null for anything but a /Link with one of those targets.
+     */
+    public static function linkAddress(string $body): ?string
+    {
+        if (strlen($body) > self::MAX_LINK_DICT_BYTES) {
+            $body = substr($body, 0, self::MAX_LINK_DICT_BYTES);
+        }
+        $entries = self::dictEntries($body);
+        if ($entries === null || ($entries['Subtype'] ?? '') !== '/Link' || ($entries['Type'] ?? '/Annot') !== '/Annot') {
+            return null;
+        }
+        if (isset($entries['A'])) {
+            $action = self::dictEntries($entries['A']);
+            if ($action === null) {
+                return null;
+            }
+            if (($action['S'] ?? '') === '/URI') {
+                return self::dictTextEntry($entries['A'], 'URI');
+            }
+            return ($action['S'] ?? '') === '/GoTo' && isset($action['D']) ? '#' : null;
+        }
+        return isset($entries['Dest']) ? '#' : null;
+    }
+
+    /**
+     * The targets of every link in $pdf_raw that linkTarget() accepts, sorted: what the generator seals.
+     *
+     * @param string $pdf_raw Raw PDF bytes, the generator's own.
+     * @return string[]
+     */
+    public static function linkTargets(string $pdf_raw): array
+    {
+        $targets = [];
+        foreach (self::objectDefinitionIndex($pdf_raw)['by_ref'] as [, $start, $end]) {
+            $target = self::linkTarget(substr($pdf_raw, $start, min($end - $start, self::MAX_LINK_DICT_BYTES)));
+            if ($target !== null) {
+                $targets[] = $target;
+            }
+        }
+        sort($targets, SORT_STRING);
+        return $targets;
+    }
+
+    /**
      * Parses a PDF literal string starting at the "(" at $start.
      *
      * @param string $source Bytes containing the string.
@@ -631,6 +1035,29 @@ class PdfUtils
     }
 
     /**
+     * Reads a PDF date string ("D:YYYYMMDDHHmmSSOHH'mm'", ISO 32000-1 7.9.4) as a Unix timestamp. Every part after the
+     * year is optional, as the standard allows, and missing parts take their lowest value; an absent offset reads as UTC.
+     *
+     * @param string $value The date as read from the document, such as /CreationDate.
+     * @return int|null Null when $value is no valid PDF date.
+     */
+    public static function pdfDateTimestamp(string $value): ?int
+    {
+        if (preg_match("/^(?:D:)?(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?(?:([Zz+-])(?:(\d{2})'?(?:(\d{2})'?)?)?)?$/D", trim($value), $m) !== 1) {
+            return null;
+        }
+        $part = static fn(int $i, int $default): int => isset($m[$i]) && $m[$i] !== '' ? (int) $m[$i] : $default;
+        [$year, $month, $day] = [(int) $m[1], $part(2, 1), $part(3, 1)];
+        [$hour, $minute, $second] = [$part(4, 0), $part(5, 0), $part(6, 0)];
+        [$offset_hours, $offset_minutes] = [$part(8, 0), $part(9, 0)];
+        if (!checkdate($month, $day, $year) || $hour > 23 || $minute > 59 || $second > 59 || $offset_hours > 23 || $offset_minutes > 59) {
+            return null;
+        }
+        $offset = ($offset_hours * 3600 + $offset_minutes * 60) * (($m[7] ?? '') === '-' ? -1 : 1);
+        return gmmktime($hour, $minute, $second, $month, $day, $year) - $offset;
+    }
+
+    /**
      * Extracted PDF text as the verifier compares it (NFKC, entities decoded, ligatures expanded, whitespace folded).
      * reservedMarker() checks submitted text after this step too, so typed text can't become a marker here.
      *
@@ -651,7 +1078,8 @@ class PdfUtils
         $lig_to   = ['ff', 'fi', 'fl', 'ffi', 'ffl', 'st', 'st'];
         $s = str_replace($lig_from, $lig_to, $s);
         $s = (string) preg_replace('/[\x00-\x1F\x7F]/u', '', $s); // remove control chars
-        $s = str_replace(["\xC2\xA0", "\xAD"], ' ', $s);        // NBSP + soft hyphen
+        // NBSP and soft hyphen, each as its UTF-8 sequence: a lone 0xAD byte is part of other characters ("í" is C3 AD).
+        $s = str_replace(["\xC2\xA0", "\xC2\xAD"], ' ', $s);
         $s = (string) preg_replace('/\s+/u', ' ', $s);            // normalize whitespace
         $s = (string) preg_replace('/([,;])\s*/u', '$1 ', $s);    // one space after , and ;
         return trim($s);

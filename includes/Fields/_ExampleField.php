@@ -29,7 +29,7 @@ defined('ABSPATH') || exit;
  * ════════════════════════════════════════════════════════════
  *
  * This file is a teaching document and never loads: Plugin::load() loads only the classes FieldRegistry::FIELD_MAP
- * names, and the file name doesn't match its class for the autoloader either. build.ps1 leaves it out of the package.
+ * names, and the file name doesn't match its class for the autoloader either. The release build leaves it out of the package.
  * CONTRIBUTING.md ("Fields", "Coding rules", "JS suite") holds the rules referred to below.
  *
  * QUICK START

@@ -840,10 +840,12 @@ class DirectDebitField extends BaseField
             ];
         } else {
             $materialized = $sig_val !== '' ? self::materializeSignature($sig_val, 'mandate-signature.png') : [];
+            // The mail reads the text, as for a Signature field; the PDF draws only the image, and the seal records the
+            // image by hash, not this text.
             $entries[$field_id . '_sig'] = [
                 'label'              => $sig_label,
                 'type'               => 'signature',
-                'value'              => $materialized ? '' : __('[No entry]', 'formfabricator'),
+                'value'              => $materialized ? __('[Signature present]', 'formfabricator') : __('[No entry]', 'formfabricator'),
                 'materialized_files' => $materialized,
             ];
         }
@@ -917,7 +919,10 @@ class DirectDebitField extends BaseField
      */
     private static function mandateReference(array $config): string
     {
-        $prefix = (string) preg_replace("#[^A-Za-z0-9/?:().,'+ -]#", '', self::configText($config, 'mandate_ref_prefix', ''));
+        // Accented letters as their base letters, as WordPress writes them for the site's language (Ä as "Ae" in German),
+        // so a name keeps its letters; whatever else lies outside the SEPA set is left out.
+        $prefix = remove_accents(self::configText($config, 'mandate_ref_prefix', ''));
+        $prefix = (string) preg_replace("#[^A-Za-z0-9/?:().,'+ -]#", '', $prefix);
         $prefix = rtrim(substr(trim($prefix), 0, 15), ' -');
         // The site's date, as the date of signing is written: both name the same day in the record.
         $unique = wp_date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(5)));
@@ -1184,29 +1189,6 @@ class DirectDebitField extends BaseField
     }
 
     /**
-     * Maps the field value to a human-readable string for email and PDF output.
-     *
-     * @param mixed $value  Submitted value.
-     * @param array $config Field configuration.
-     * @return string Human-readable representation.
-     */
-    public function map(mixed $value, array $config): string
-    {
-        if (!is_array($value)) {
-            return __('[No entry]', 'formfabricator');
-        }
-        $parts = [];
-        foreach (self::parts($config) as $part) {
-            $shown = self::formatPart($part, $value[$part] ?? '', $config);
-            if ($shown !== '') {
-                $label   = rtrim(self::partLabel($part, $config), ': ');
-                $parts[] = $label . ': ' . $shown;
-            }
-        }
-        return $parts ? implode(' | ', $parts) : __('[No entry]', 'formfabricator');
-    }
-
-    /**
      * Returns the default field configuration.
      *
      * @return array
@@ -1361,7 +1343,8 @@ class DirectDebitField extends BaseField
             'key'        => 'mandate_ref_prefix',
             'type'       => 'text',
             'label'      => __('Mandate reference prefix', 'formfabricator'),
-            'hint'       => __('Each mandate gets its own reference: this prefix, the date and a random part.', 'formfabricator'),
+            // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
+            'hint'       => __('Each mandate gets its own reference: this prefix, the date and a random part. Up to 15 characters of the SEPA set (letters, digits, spaces, / ? : ( ) . , \' + -); accents are dropped, other characters left out.', 'formfabricator'),
             'depends_on' => $by_mode('generated'),
         ];
         $schema[] = [

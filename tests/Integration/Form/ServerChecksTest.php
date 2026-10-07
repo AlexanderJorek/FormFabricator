@@ -195,6 +195,26 @@ final class ServerChecksTest extends AjaxTestCase
         self::assertSame('The attached files are too large in total. Please attach fewer or smaller files.', $r['data']['message']);
     }
 
+    public function testAFormWhoseHtmlBlocksAloneExceedTheBudgetIsRefusedAsTooLargeForItsPdf(): void
+    {
+        // mPDF lays an HTML block's text out in its cell and again inside the seal, at many times its size in memory.
+        // The estimate counts it, here inside a group, though no visitor typed it: 536 KB is beyond a 512 MB budget.
+        self::setBudget(512);
+        $block  = ['id' => 'terms', 'type' => 'html', 'label' => '', 'html_content' => str_repeat('<p>' . str_repeat('Terms and conditions. ', 20) . '</p>', 1200)];
+        $fields = [
+            ['id' => 'name', 'type' => 'text', 'label' => 'Name'],
+            ['id' => 'grp', 'type' => 'group', 'label' => 'Terms', 'children' => [$block]],
+        ];
+
+        $r = $this->submit($this->createForm($fields, [self::notification(['attach_pdf' => true])]), ['name' => 'Ada']);
+        self::assertFalse($r['success']);
+        self::assertSame('This form is too large for the server to create its PDF. Please let the site operator know.', $r['data']['message']);
+        self::assertSame([], self::sentMail());
+
+        $without_pdf = $this->createForm($fields, [self::notification()]);
+        self::assertTrue($this->submit($without_pdf, ['name' => 'Ada'])['success'], 'without a PDF nothing lays the block out');
+    }
+
     public function testASingle103MbFileGoesThroughOnAFormWithoutAPdf(): void
     {
         self::setBudget(512);

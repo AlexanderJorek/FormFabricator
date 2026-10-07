@@ -198,21 +198,6 @@ class SignatureField extends BaseField
     }
 
     /**
-     * Maps the field value to a human-readable string for email and PDF output.
-     *
-     * @param mixed $value  Submitted value.
-     * @param array $config Field configuration.
-     * @return string Human-readable representation.
-     */
-    public function map(mixed $value, array $config): string
-    {
-        if (self::isTypedSignature($value)) {
-            return self::typedSignatureRecord((string) $value);
-        }
-        return empty($value) ? __('[No entry]', 'formfabricator') : '';
-    }
-
-    /**
      * Returns a normalized entry with the materialized signature image.
      *
      * @param string $field_id Field identifier.

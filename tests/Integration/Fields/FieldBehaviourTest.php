@@ -531,10 +531,10 @@ final class FieldBehaviourTest extends TestCase
         $this->check('validate MM/DD/YYYY format', fn() => self::expectOk('07/10/2026', array_merge($cfg, ['date_format'=>'mdy']), $h));
         $this->check('validate YYYY-MM-DD format', fn() => self::expectOk('2026-07-10', array_merge($cfg, ['date_format'=>'ymd']), $h));
         $this->check('validate DD.MM.YYYY rejected in YYYY-MM-DD field', fn() => self::expectError('10.07.2026', array_merge($cfg, ['date_format'=>'ymd']), $h));
-        $this->check('validate config without date_format keeps DD.MM.YYYY', function () use ($h, $cfg) {
-            $legacy = $cfg;
-            unset($legacy['date_format']);
-            return self::expectOk('10.07.2026', $legacy, $h);
+        $this->check('validate config without date_format reads DD.MM.YYYY', function () use ($h, $cfg) {
+            $without = $cfg;
+            unset($without['date_format']);
+            return self::expectOk('10.07.2026', $without, $h);
         });
         $this->check('map non-empty returns value', fn() => self::expectMap('10.07.2026', $cfg, $h, '10.07.2026'));
         $this->check('map empty → Kein Eintrag', fn() => self::expectMapContains('', $cfg, $h, __('[No entry]', 'formfabricator')));
@@ -781,6 +781,8 @@ final class FieldBehaviourTest extends TestCase
         $this->check('validate optional empty []', fn() => self::expectOk([], $cfg, $h));
         $this->check('validate valid selection', fn() => self::expectOk(['one'], $cfg, $h));
         $this->check('validate below min_selections', fn() => self::expectError(['one'], array_merge($cfg, ['min_selections'=>2]), $h));
+        $this->check('validate optional empty [] with min_selections passes', fn() => self::expectOk([], array_merge($cfg, ['min_selections'=>1,'max_selections'=>3]), $h));
+        $this->check('validate required empty [] with min_selections', fn() => self::expectError([], array_merge($cfg, ['required'=>true,'min_selections'=>2]), $h));
         $this->check('validate above max_selections', fn() => self::expectError(['one','two'], array_merge($cfg, ['max_selections'=>1]), $h));
         $this->check('validate exact at min_selections passes', fn() => self::expectOk(['one','two'], array_merge($cfg, ['min_selections'=>2]), $h));
         $this->check('validate exact at max_selections passes', fn() => self::expectOk(['one','two'], array_merge($cfg, ['max_selections'=>2]), $h));
@@ -881,8 +883,6 @@ final class FieldBehaviourTest extends TestCase
             return $r === $expected ? true : 'expected the retry message naming doc.pdf';
         });
         $this->check('validate empty temp path refused', fn() => self::expectError(['name'=>'doc.pdf','tmp_name'=>'','error'=>0,'size'=>100,'type'=>'application/pdf'], $cfg, $h));
-        $this->check('map string value', fn() => self::expectMap('file.pdf', $cfg, $h, 'file.pdf'));
-        $this->check('map empty → Kein Eintrag', fn() => self::expectMapContains('', $cfg, $h, __('[No entry]', 'formfabricator')));
     }
 
     public function testSignature(): void
@@ -918,8 +918,6 @@ final class FieldBehaviourTest extends TestCase
         $this->check('validate png rejected for jpeg config', function () use ($h, $cfg, $validPng) {
             return self::expectError($validPng, array_merge($cfg, ['required'=>true,'export_format'=>'jpeg']), $h);
         });
-        $this->check('map non-empty → empty string', fn() => self::expectMap($validPng, $cfg, $h, ''));
-        $this->check('map empty → Kein Eintrag', fn() => self::expectMapContains('', $cfg, $h, __('[No entry]', 'formfabricator')));
         $this->check('includeValueInSeal=false', fn() => !$h->includeValueInSeal() ? true : 'expected false');
     }
 
@@ -1109,12 +1107,6 @@ final class FieldBehaviourTest extends TestCase
         $this->check('skipValidation=true', fn() => $h->skipValidation() ? true : 'expected true');
         $this->check('includeInEmailSummary=true', fn() => $h->includeInEmailSummary() ? true : 'expected true');
         $this->check('rawEmailHtml=true', fn() => $h->rawEmailHtml() ? true : 'expected true');
-        $this->check('map strips all tags', function () use ($h, $cfg) {
-            $m = $h->map('', $cfg);
-            self::$lastIn  = '(html_content from config)';
-            self::$lastOut = $m;
-            return !str_contains($m, '<') ? true : 'tags remain: '.$m;
-        });
         $this->check('sanitize strips <script>', function () use ($h) {
             return !str_contains($h->sanitizeConfigValue('html_content', '<p>OK</p><script>evil()</script>'), '<script') ? true : 'script not stripped';
         });
@@ -1195,7 +1187,6 @@ final class FieldBehaviourTest extends TestCase
         $this->check('includeInEmailSummary=false', fn() => !$h->includeInEmailSummary() ? true : 'expected false');
         $this->check('render returns string', fn() => is_string($h->render($cfg, 'f1')) ? true : 'render failed');
         $this->check('render opens fabricator-field-group', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-field-group'));
-        $this->check('map always empty string', fn() => self::expectMap(null, $cfg, $h, ''));
         $this->check('mapNormalized empty → []', function () use ($h, $cfg) {
             $r = $h->mapNormalized('f1', 'Group', [], $cfg, []);
             return $r === [] ? true : 'expected [], got: '.var_export($r, true);
@@ -1232,7 +1223,6 @@ final class FieldBehaviourTest extends TestCase
         $this->check('skipValidation=true', fn() => $h->skipValidation() ? true : 'expected true');
         $this->check('includeInEmailSummary=false', fn() => !$h->includeInEmailSummary() ? true : 'expected false');
         $this->check('render returns empty string', fn() => $h->render($cfg, 'f1') === '' ? true : 'expected empty string');
-        $this->check('map returns empty string', fn() => self::expectMap(null, $cfg, $h, ''));
         $this->check('mapNormalized returns []', function () use ($h, $cfg) {
             $r = $h->mapNormalized('f1', '', null, $cfg, []);
             return $r === [] ? true : 'expected []';
@@ -1266,7 +1256,6 @@ final class FieldBehaviourTest extends TestCase
         $this->check('hasRequired=false', fn() => !$h->hasRequired() ? true : 'expected false');
         $this->check('skipValidation=true', fn() => $h->skipValidation() ? true : 'expected true');
         $this->check('includeInEmailSummary=false', fn() => !$h->includeInEmailSummary() ? true : 'expected false');
-        $this->check('map returns empty string', fn() => self::expectMap(null, $cfg, $h, ''));
         $this->check('mapNormalized returns []', function () use ($h, $cfg) {
             $r = $h->mapNormalized('f1', '', null, $cfg, []);
             return $r === [] ? true : 'expected []';
@@ -1469,10 +1458,6 @@ final class FieldBehaviourTest extends TestCase
         // Text that is no data URI is a name typed instead of a drawing (BaseField::isTypedSignature()); a broken drawing is refused.
         $this->check('validate req typed-name signature → true', fn() => self::expectOk(['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'Max','sig'=>'Max Mustermann'], array_merge($cfg, ['required'=>true]), $h));
         $this->check('validate req broken image signature → error', fn() => self::expectError(['iban'=>'DE89370400440532013000','bic'=>'COBADEFFXXX','holder'=>'Max','sig'=>'data:image/png;base64,bm90IGFuIGltYWdl'], array_merge($cfg, ['required'=>true]), $h));
-        $this->check('map non-array → No entry', fn() => str_contains($h->map(null, $cfg), __('[No entry]', 'formfabricator')) ? true : 'wrong map');
-        $this->check('map valid data contains IBAN', fn() => self::expectMapContains($validData, $cfg, $h, 'IBAN'));
-        $this->check('map valid data contains BIC', fn() => self::expectMapContains($validData, $cfg, $h, 'BIC'));
-        $this->check('map valid data contains holder', fn() => self::expectMapContains($validData, $cfg, $h, 'Mustermann'));
     }
 
     // ── conditional logic ────────────────────────────────────────────────────

@@ -262,7 +262,7 @@ class MailSender
 
         \FabricatorForms\fabricator_log(
             "FabricatorForms MailSender: onSubmission fired for form {$form_id}, "
-            . count($form->notifications ?? []) . ' notification(s) configured'
+            . count($form->notifications) . ' notification(s) configured'
         );
 
         if (empty($form->notifications)) {
@@ -762,7 +762,7 @@ class MailSender
     ): string {
         // Children too: a group's choice fields are mapped by their own id, so a rule on one found nothing here and
         // then compared the stored option value against the displayed label.
-        foreach ((array) ($form->fields ?? []) as $field_cfg) {
+        foreach ($form->fields as $field_cfg) {
             $candidates = array_merge([$field_cfg], (array) ($field_cfg['children'] ?? []));
             foreach ($candidates as $candidate) {
                 if (!is_array($candidate) || ($candidate['id'] ?? '') !== $field_id) {

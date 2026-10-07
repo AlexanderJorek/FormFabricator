@@ -90,4 +90,35 @@ final class Measure
             'trusted'  => $base >= $min_seconds,
         ];
     }
+
+    /**
+     * growthExponent(), measured once more when the first result reaches $limit, and the lower of the two kept.
+     *
+     * Best of three can't filter a slowdown that lasts through all three runs (other work on the machine, a virus
+     * scanner reading the build). Over the 4n runs alone, a third slower is enough to read a linear scan near n^1.3 as
+     * n^1.55. A scan that really grows faster than linear does so in both measurements.
+     *
+     * @param float    $limit       Exponent at which to measure again.
+     * @param callable $build       As for growthExponent().
+     * @param callable $scan        As for growthExponent().
+     * @param int      $n           Starting size.
+     * @param float    $min_seconds Shortest base run the exponent is trusted at.
+     * @param int      $max_n       Largest base size to try.
+     * @return array{exponent: float, n: int, base: float, grown: float, trusted: bool}
+     */
+    public static function settledGrowthExponent(
+        float $limit,
+        callable $build,
+        callable $scan,
+        int $n,
+        float $min_seconds = 0.03,
+        int $max_n = PHP_INT_MAX
+    ): array {
+        $r = self::growthExponent($build, $scan, $n, $min_seconds, $max_n);
+        if ($r['trusted'] && $r['exponent'] >= $limit) {
+            $again = self::growthExponent($build, $scan, $n, $min_seconds, $max_n);
+            $r     = $again['exponent'] < $r['exponent'] ? $again : $r;
+        }
+        return $r;
+    }
 }

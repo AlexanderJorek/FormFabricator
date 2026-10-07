@@ -115,7 +115,7 @@ class SecureDir
             }
             require_once ABSPATH . 'wp-admin/includes/file.php';
         }
-        if (!function_exists('get_filesystem_method') || get_filesystem_method() !== 'direct') {
+        if (get_filesystem_method() !== 'direct') {
             return null;
         }
         if (!$wp_filesystem instanceof \WP_Filesystem_Base) {

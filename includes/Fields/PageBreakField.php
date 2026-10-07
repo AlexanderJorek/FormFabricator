@@ -84,18 +84,6 @@ class PageBreakField extends BaseField
     }
 
     /**
-     * Returns true — the builder opens a panel so the Back and Next button labels can be edited.
-     *
-     * Nesting a page break inside a group is refused through isPageBreak(), not through this method.
-     *
-     * @return bool
-     */
-    public function hasSettingsPanel(): bool
-    {
-        return true;
-    }
-
-    /**
      * Returns false because page-break fields have no required-toggle in the editor.
      *
      * @return bool
@@ -180,18 +168,6 @@ class PageBreakField extends BaseField
         array $context
     ): array {
         return [];
-    }
-
-    /**
-     * Maps the field value to a human-readable string for email and PDF output.
-     *
-     * @param mixed $value  Submitted value.
-     * @param array $config Field configuration.
-     * @return string Human-readable representation.
-     */
-    public function map(mixed $value, array $config): string
-    {
-        return '';
     }
 
     /**

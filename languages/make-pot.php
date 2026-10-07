@@ -1,7 +1,7 @@
 <?php
 /**
  * Regenerates languages/formfabricator.pot from the plugin source. Build-time CLI tool, stands in for
- * `wp i18n make-pot` (not installed in this dev environment); stripped from the release package by build.ps1.
+ * `wp i18n make-pot` (not installed in this dev environment); stripped from the release package by the release build.
  *
  * Usage:
  *   php languages/make-pot.php            rewrite languages/formfabricator.pot
@@ -286,17 +286,16 @@ $root      = str_replace(chr(92), '/', dirname(__DIR__));
 $checkOnly = in_array('--check', array_slice($argv, 1), true);
 $potPath   = $root . '/languages/formfabricator.pot';
 
-// Mirrors build.ps1's $nestedExclude: these files are stripped from the release package, so
-// their strings can never reach translate.wordpress.org and must not appear here either.
-$notShipped = [
-    'includes/Fields/_ExampleField.php',
-    'languages/compile-mo.php',
-    'languages/make-pot.php',
-];
+// The PHP files the release build strips from inside shipped folders (tools/build-config.php): their strings can
+// never reach translate.wordpress.org, so they must not appear here either.
+$notShipped = array_values(array_filter(
+    (require $root . '/tools/build-config.php')['nestedExclude'],
+    static fn(string $rel): bool => str_ends_with($rel, '.php')
+));
 // '.git' is pruned by name; note this repository itself lives under a directory called .git, so
 // the match is against the relative path only, never the absolute one.
-// 'tests': the test suites call __() too, but never ship (build.ps1 excludes tests/).
-$skipDirs = ['vendor', 'build', 'node_modules', '.git', '.claude', '.vscode', 'tests'];
+// 'tests', 'tools', 'docs': dev-only, never shipped (tools/build-config.php); the tests call __() too.
+$skipDirs = ['vendor', 'build', 'node_modules', '.git', '.claude', '.vscode', 'tests', 'tools', 'docs'];
 
 $entries  = [];
 $warnings = ['nonliteral' => [], 'domain' => [], 'comment' => [], 'catalogue' => []];
@@ -559,17 +558,17 @@ if ($checkOnly) {
         fwrite(STDERR, count($warnings['catalogue']) . " stale .po entr(ies) - remove them, then recompile the .mo\n");
         exit(1);
     }
-    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI-only build tool (stripped from the shipped package by build.ps1); writes to stdout, never to a web response.
+    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI-only build tool (stripped from the shipped package by the release build); writes to stdout, never to a web response.
     echo 'languages/ is up to date (' . $summary . ")\n";
     exit(0);
 }
 
 if ($upToDate) {
-    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI-only build tool (stripped from the shipped package by build.ps1); writes to stdout, never to a web response.
+    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI-only build tool (stripped from the shipped package by the release build); writes to stdout, never to a web response.
     echo 'Unchanged: ' . $summary . "\n";
     exit(0);
 }
 
 file_put_contents($potPath, $final);
-// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI-only build tool (stripped from the shipped package by build.ps1); writes to stdout, never to a web response.
+// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI-only build tool (stripped from the shipped package by the release build); writes to stdout, never to a web response.
 echo 'Wrote ' . $summary . ' -> ' . $potPath . "\n";

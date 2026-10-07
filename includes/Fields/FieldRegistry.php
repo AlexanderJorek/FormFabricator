@@ -130,16 +130,6 @@ class FieldRegistry
     }
 
     /**
-     * Returns true if the given field type slug is registered.
-     *
-     * @param string $type Field type slug.
-     */
-    public static function hasType(string $type): bool
-    {
-        return isset(self::$types[$type]);
-    }
-
-    /**
      * Registers all built-in field types.
      *
      * @return void

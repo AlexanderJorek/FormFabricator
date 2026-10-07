@@ -3,7 +3,7 @@
  * Compiles a .po file to a binary .mo file. Build-time CLI tool only, not run by the plugin.
  */
 
-// Build-time only. build.ps1 strips this file from the package, but a repository checked out
+// Build-time only. The release build strips this file from the package, but a repository checked out
 // directly into wp-content/plugins would otherwise leave it reachable over HTTP.
 if (PHP_SAPI !== 'cli') {
     exit(1);
@@ -196,5 +196,5 @@ $header = pack(
 );
 
 file_put_contents($moFile, $header . $origTable . $transTable . $origData . $transData);
-// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI-only build tool (stripped from the shipped package by build.ps1); writes to stdout, never to a web response.
+// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI-only build tool (stripped from the shipped package by the release build); writes to stdout, never to a web response.
 echo "Compiled $count strings → $moFile\n";

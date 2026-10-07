@@ -6,9 +6,9 @@ Build a custom WordPress form plugin (`FormFabricator`). The admin UI is similar
 the implementation approach is open as long as it is performant and secure.
 
 The project's rules (layout, fields, data storage, PDF system, coding rules, linters, tests, translations) are in
-CONTRIBUTING.md, which applies in full:
+docs/CONTRIBUTING.md, which applies in full:
 
-@CONTRIBUTING.md
+@docs/CONTRIBUTING.md
 
 The design decisions listed there under "Front-end assets" (form selections rendering every listed form, inlined field
 assets) are known, accepted trade-offs. Don't re-report them.

@@ -2,13 +2,13 @@
 <!--
     Test suites, cheapest first:
       unit         : pure PHP plus Brain Monkey stubs; no WordPress, no database.
-      perf         : the pathological-PDF shapes from CONTRIBUTING.md ("Scanning untrusted PDF bytes"): scaling and peak memory.
+      perf         : the pathological-PDF shapes from docs/CONTRIBUTING.md ("Scanning untrusted PDF bytes"): scaling and peak memory.
       integration  : real WordPress + MySQL (wp-phpunit); runs in CI, see .github/workflows/tests.yml.
     Run: composer test  (the unit and perf suites)
 -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
-         bootstrap="tests/bootstrap.php"
+         xsi:noNamespaceSchemaLocation="../vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="bootstrap.php"
          colors="true"
          cacheDirectory=".phpunit.cache"
          failOnWarning="true"
@@ -16,10 +16,10 @@
          beStrictAboutOutputDuringTests="true">
     <testsuites>
         <testsuite name="unit">
-            <directory>tests/Unit</directory>
+            <directory>Unit</directory>
         </testsuite>
         <testsuite name="perf">
-            <directory>tests/Perf</directory>
+            <directory>Perf</directory>
         </testsuite>
     </testsuites>
     <php>
@@ -29,7 +29,7 @@
     </php>
     <source>
         <include>
-            <directory>includes</directory>
+            <directory>../includes</directory>
         </include>
     </source>
 </phpunit>

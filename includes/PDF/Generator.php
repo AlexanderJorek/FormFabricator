@@ -39,6 +39,30 @@ class Generator
     private const MAX_SEALED_FONTS = 256;
 
     /**
+     * Characters per line of the seal text. At the seal's 0.1 px a line this long is about 13 mm wide, so mPDF never
+     * has to break one, and a line costs mPDF time in proportion to its length.
+     *
+     * @var int
+     */
+    private const SEAL_LINE_CHARS = 1000;
+
+    /**
+     * mPDF font families that draw what the chosen font lacks, tried in this order, each by the one file shipped
+     * (fontConfig()): GNU FreeSerif for rarer letters and symbols, then Quivira for further symbols (technical, box
+     * drawing, enclosed characters).
+     *
+     * @var array<string, string> Family => font file.
+     */
+    private const FALLBACK_FONTS = ['freeserif' => 'FreeSerif.ttf', 'quivira' => 'Quivira.otf'];
+
+    /**
+     * Drawn where the PDF can draw neither a character nor anything for it (drawableText()).
+     *
+     * @var string
+     */
+    private const MISSING_GLYPH = "\u{FFFD}";
+
+    /**
      * Generates a PDF from normalized submission data and returns its path.
      *
      * @param array  $mapped     Normalized field data from FieldRegistry::mapSubmission().
@@ -61,6 +85,22 @@ class Generator
         $sealed_uploads = [];
 
         $title = $form_title !== '' ? $form_title : __('Form submission', 'formfabricator');
+
+        // The values the PDF and the seal are both made from, as the PDF can draw them (drawableText()); the mail keeps
+        // what was sent. Labels and the title only decide whether the fallback font is needed.
+        $needs_fallback = false;
+        $glyphs         = self::glyphTest(is_string($layout['font_family'] ?? null) ? $layout['font_family'] : 'dejavusans');
+        if ($glyphs !== null) {
+            foreach ($mapped as $key => $field) {
+                if (is_string($field['value'] ?? null)) {
+                    $mapped[$key]['value'] = self::drawableText($field['value'], $glyphs, $needs_fallback);
+                }
+                if (is_string($field['label'] ?? null)) {
+                    self::drawableText($field['label'], $glyphs, $needs_fallback);
+                }
+            }
+            self::drawableText($title, $glyphs, $needs_fallback);
+        }
 
         $metadata = [
             // Site-local time plus UTC offset: readable, and unambiguous at the daylight-saving changeover.
@@ -187,18 +227,7 @@ class Generator
                 $raised_backtrack = ini_set('pcre.backtrack_limit', (string)(16 * 1024 * 1024)) !== false;
             }
 
-            $upload_dir = wp_upload_dir();
-            $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
-
-            // is_dir() too, so a removed directory is re-hardened at once rather than when the transient expires.
-            if (!get_transient('fabricator_pdf_dirs_ready') || !is_dir($safe_dir . '/pdf')) {
-                \FabricatorForms\Utils\SecureDir::harden(
-                    $safe_dir,
-                    array_map(static fn($sub) => $safe_dir . $sub, ['', '/pdf', '/embed', '/mpdf'])
-                );
-                set_transient('fabricator_pdf_dirs_ready', true, DAY_IN_SECONDS);
-            }
-
+            $safe_dir  = self::secureDir();
             $pdf_dir   = $safe_dir . '/pdf';
             $mpdf_temp = $safe_dir . '/mpdf';
             $grid_svg  = FABRICATOR_FORMS_PATH . 'includes/PDF/templates/construction-grid.svg';
@@ -239,7 +268,15 @@ class Generator
                 'percentSubset' => 0,
                 'aliasNbPg'     => $nb_alias,
                 'aliasNbPgGp'   => $nbpg_alias,
-            ];
+                // /Producer then reads exactly "mPDF", which the seal records (pdf_meta), and no PDF names the library's
+                // version for anyone looking for one with a known flaw.
+                'exposeVersion' => false,
+                // Only when the text needs it: checking every character against the fallback costs layout time, and a
+                // document that never draws from it keeps the fonts it always had.
+                'useSubstitutions' => $needs_fallback,
+                'backupSubsFont'   => array_keys(self::FALLBACK_FONTS),
+                'backupSIPFont'    => (string) array_key_first(self::FALLBACK_FONTS),
+            ] + self::fontConfig();
 
             /* ---- PASS 1: font discovery ---- */
             $mpdf = new PageAliasMpdf($mpdf_config);
@@ -276,11 +313,15 @@ class Generator
                 $font_prog_hashes = PdfUtils::hashFontProgramStreams($pdf_raw);
                 $all_stream_hashes = PdfUtils::hashAllCompressedStreams($pdf_raw);
                 $seal_page_text    = PdfUtils::sealPageTextFingerprint($pdf_raw);
+                // Links come only from the form author's HTML (an e-mail address becomes a mailto link); the verifier
+                // accepts no other annotation.
+                $links             = PdfUtils::linkTargets($pdf_raw);
             }
             $fonts             = array_keys($fonts);
             $font_prog_hashes  = $font_prog_hashes  ?? [];
             $all_stream_hashes = $all_stream_hashes ?? [];
             $seal_page_text    = $seal_page_text    ?? '';
+            $links             = $links             ?? [];
             wp_delete_file($sl_path);
             if (file_exists($sl_path)) {
                 \FabricatorForms\fabricator_log('FabricatorForms Generator: failed to delete temp PDF: ' . $sl_path);
@@ -291,6 +332,8 @@ class Generator
                 'title'   => self::normalizeFieldValue($title),
                 'author'  => self::normalizeFieldValue((string) get_bloginfo('name')),
                 'creator' => 'FormFabricator',
+                // What mPDF writes as /Producer with exposeVersion off (mpdf_config above).
+                'producer' => 'mPDF',
             ];
 
             if ($seal) {
@@ -315,6 +358,7 @@ class Generator
                     'font_prog_hashes'  => $font_prog_hashes,
                     'all_stream_hashes' => $all_stream_hashes,
                     'pdf_meta'          => $pdf_meta,
+                    'links'             => $links,
                     // Key order is part of the HMAC input; Verificationpage::rebuildPayload() builds the same order.
                     'seal_page_text'    => $seal_page_text,
                 ];
@@ -336,8 +380,10 @@ class Generator
                     throw new \RuntimeException('FabricatorForms Generator: seal too large.');
                 }
 
-                $seal_div = '<div style="font-size:0.1px;line-height:0.1px;color:#000;">'
-                    . '---BEGIN-SEAL---' . $seal_base64 . '---END-SEAL---'
+                // Lines of SEAL_LINE_CHARS, since mPDF breaks an over-long word in quadratic time; the verifier joins them
+                // without whitespace. No ligatures, which would read back "fi" as U+FB01.
+                $seal_div = '<div style="font-size:0.1px;line-height:0.1px;color:#000;font-variant-ligatures:none;">'
+                    . '---BEGIN-SEAL---' . implode('<br>', str_split($seal_base64, self::SEAL_LINE_CHARS)) . '---END-SEAL---'
                     . '</div>';
 
                 $html .= $seal_div;
@@ -671,6 +717,199 @@ class Generator
         if ($buf !== '') {
             $mpdf->WriteHTML($buf, $first ? HTMLParserMode::DEFAULT_MODE : HTMLParserMode::HTML_BODY);
         }
+    }
+
+    /**
+     * The protected folder for PDFs and mPDF's temporary files, hardened when it is new or was removed.
+     *
+     * @return string Its path.
+     */
+    private static function secureDir(): string
+    {
+        $upload_dir = wp_upload_dir();
+        $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
+        // is_dir() too, so a removed directory is re-hardened at once rather than when the transient expires.
+        if (!get_transient('fabricator_pdf_dirs_ready') || !is_dir($safe_dir . '/pdf')) {
+            \FabricatorForms\Utils\SecureDir::harden(
+                $safe_dir,
+                array_map(static fn($sub) => $safe_dir . $sub, ['', '/pdf', '/embed', '/mpdf'])
+            );
+            set_transient('fabricator_pdf_dirs_ready', true, DAY_IN_SECONDS);
+        }
+        return $safe_dir;
+    }
+
+    /**
+     * mPDF's font settings, trimmed to the files the release build ships:
+     *
+     * - Each of FALLBACK_FONTS uses its regular file for every style (the others cover fewer characters, or don't exist).
+     * - No Condensed DejaVu: generic names ("serif", "Arial") resolve to DejaVu Sans or Serif. Removed, not pointed at
+     *   the regular files, since mPDF caches measurements by family name.
+     *
+     * @return array{fontdata: array, sans_fonts: string[], serif_fonts: string[]}
+     */
+    private static function fontConfig(): array
+    {
+        $defaults = (new \Mpdf\Config\FontVariables())->getDefaults();
+        $fontdata = $defaults['fontdata'];
+        foreach (self::FALLBACK_FONTS as $family => $file) {
+            $fontdata[$family] = ['R' => $file, 'B' => $file, 'I' => $file, 'BI' => $file] + ($fontdata[$family] ?? []);
+        }
+        unset($fontdata['dejavusanscondensed'], $fontdata['dejavuserifcondensed']);
+        $first = static fn(array $list, string $family): array => array_values(array_unique(array_merge(
+            [$family],
+            array_diff($list, ['dejavusanscondensed', 'dejavuserifcondensed'])
+        )));
+        return [
+            'fontdata'    => $fontdata,
+            'sans_fonts'  => $first($defaults['sans_fonts'], 'dejavusans'),
+            'serif_fonts' => $first($defaults['serif_fonts'], 'dejavuserif'),
+        ];
+    }
+
+    /**
+     * Where the PDF can draw a code point: 1 in every style of $family (a value may be bold or italic), 2 only in
+     * FALLBACK_FONTS, 0 nowhere.
+     *
+     * @param string $family The body's mPDF font family.
+     * @return \Closure(int): int|null Null when the fonts can't be read; the text is then left as it is.
+     */
+    private static function glyphTest(string $family): ?\Closure
+    {
+        try {
+            $mpdf  = new \Mpdf\Mpdf(['tempDir' => self::secureDir() . '/mpdf'] + self::fontConfig());
+            $maps  = [];
+            foreach (['', 'B', 'I', 'BI'] as $style) {
+                $mpdf->SetFont($family, $style);
+                $maps[] = (string) $mpdf->CurrentFont['cw'];
+            }
+            $fallbacks = [];
+            foreach (array_keys(self::FALLBACK_FONTS) as $fallback_family) {
+                $mpdf->SetFont($fallback_family, '');
+                $fallbacks[] = (string) $mpdf->CurrentFont['cw'];
+            }
+        } catch (\Throwable $e) {
+            \FabricatorForms\fabricator_log('FabricatorForms Generator: could not read the PDF fonts\' characters: ' . $e->getMessage());
+            return null;
+        }
+        // mPDF's width table: two bytes per code point, zero for one the font lacks.
+        $has = static fn(string $cw, int $c): bool => isset($cw[2 * $c + 1]) && ($cw[2 * $c] !== "\0" || $cw[2 * $c + 1] !== "\0");
+        return static function (int $c) use ($maps, $fallbacks, $has): int {
+            // Beyond the BMP, mPDF's text doesn't read back as its characters: treated as undrawable.
+            if ($c > 0xFFFF) {
+                return 0;
+            }
+            foreach ($maps as $cw) {
+                if (!$has($cw, $c)) {
+                    foreach ($fallbacks as $fallback) {
+                        if ($has($fallback, $c)) {
+                            return 2;
+                        }
+                    }
+                    return 0;
+                }
+            }
+            return 1;
+        };
+    }
+
+    /**
+     * $text as the PDF can draw it, so the PDF and the seal hold the same characters. An undrawable character becomes
+     * its compatibility form when that can be drawn ("𝔏" as "L"), else MISSING_GLYPH, or nothing when it shows nothing
+     * itself (a format character or combining mark). A numeric character reference counts as its character.
+     *
+     * @param string               $text           Text or HTML.
+     * @param \Closure(int): int   $glyphs         glyphTest().
+     * @param bool                 $needs_fallback Set when a character is drawn from FALLBACK_FONTS.
+     * @return string
+     */
+    private static function drawableText(string $text, \Closure $glyphs, bool &$needs_fallback): string
+    {
+        if (!preg_match('/[^\x00-\x7F]|&#/', $text)) {
+            return $text;
+        }
+        $replace = static function (int $cp, string $as) use ($glyphs, &$needs_fallback): string {
+            $where = $glyphs($cp);
+            if ($where === 2) {
+                $needs_fallback = true;
+            }
+            if ($where !== 0) {
+                return $as;
+            }
+            $char = mb_chr($cp, 'UTF-8');
+            if (!is_string($char)) {
+                return self::MISSING_GLYPH;
+            }
+            $plain = self::plainMathLetter($cp)
+                ?? (class_exists('Normalizer') ? \Normalizer::normalize($char, \Normalizer::NFKC) : false);
+            if (is_string($plain) && $plain !== $char && $plain !== '') {
+                $codes = array_map(static fn(string $c): int => (int) mb_ord($c, 'UTF-8'), mb_str_split($plain, 1, 'UTF-8'));
+                $where = array_map($glyphs, $codes);
+                if (!in_array(0, $where, true)) {
+                    $needs_fallback = $needs_fallback || in_array(2, $where, true);
+                    return $plain;
+                }
+            }
+            return preg_match('/^[\p{Cf}\p{M}]$/u', $char) === 1 ? '' : self::MISSING_GLYPH;
+        };
+        $out = preg_replace_callback(
+            '/&#(?:[xX]([0-9a-fA-F]{1,6})|([0-9]{1,7}));/',
+            static fn(array $m): string => $replace($m[1] !== '' ? (int) hexdec($m[1]) : (int) $m[2], $m[0]),
+            $text
+        );
+        $out = $out === null ? null : preg_replace_callback(
+            '/[^\x00-\x7F]/u',
+            static fn(array $m): string => $replace((int) mb_ord($m[0], 'UTF-8'), $m[0]),
+            $out
+        );
+        // Invalid UTF-8 fails under /u; such text is left as it was.
+        return $out === null ? $text : self::separateEscapePairs($out);
+    }
+
+    /**
+     * $text with an invisible COMBINING GRAPHEME JOINER (U+034F) between a character whose code ends in 0x5C and one
+     * from U+2000–U+20FF or U+2800–U+29FF: "Ŝ€" as "Ŝ\u{034F}€", in the PDF and the seal alike.
+     *
+     * mPDF writes two bytes per character, so such a pair puts a backslash byte before a space, "(" or ")" byte, which
+     * pdfparser unescapes twice, misreading the rest of the line. Other such byte values start CJK characters, which
+     * drawableText() has already replaced.
+     *
+     * @param string $text Text or HTML.
+     * @return string
+     */
+    private static function separateEscapePairs(string $text): string
+    {
+        static $pattern = null;
+        if ($pattern === null) {
+            $ends = '';
+            for ($high = 0; $high <= 0xFF; $high++) {
+                // U+D800–U+DFFF are surrogates, no characters: PCRE refuses them in a UTF-8 pattern.
+                if ($high < 0xD8 || $high > 0xDF) {
+                    $ends .= sprintf('\x{%04X}', ($high << 8) | 0x5C);
+                }
+            }
+            $pattern = '/([' . $ends . '])(?=[\x{2000}-\x{20FF}\x{2800}-\x{29FF}])/u';
+        }
+        return preg_replace($pattern, "\$1\u{034F}", $text) ?? $text;
+    }
+
+    /**
+     * The plain letter or digit for a Latin letter or digit of the Mathematical Alphanumeric Symbols block ("𝔏" is "L"),
+     * without the intl extension Normalizer needs. The block holds 13 styles of A–Z a–z, Greek, then 5 styles of 0–9.
+     *
+     * @param int $cp Code point.
+     * @return string|null Null outside those ranges.
+     */
+    private static function plainMathLetter(int $cp): ?string
+    {
+        if ($cp >= 0x1D400 && $cp < 0x1D400 + 13 * 52) {
+            $index = ($cp - 0x1D400) % 52;
+            return chr($index < 26 ? ord('A') + $index : ord('a') + $index - 26);
+        }
+        if ($cp >= 0x1D7CE && $cp <= 0x1D7FF) {
+            return chr(ord('0') + ($cp - 0x1D7CE) % 10);
+        }
+        return null;
     }
 
     /**

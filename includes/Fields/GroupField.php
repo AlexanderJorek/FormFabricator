@@ -131,17 +131,6 @@ class GroupField extends BaseField
     }
 
     /**
-     * Returns true — group fields DO have a settings panel in the builder
-     * (used to configure the child field list).
-     *
-     * @return bool
-     */
-    public function hasSettingsPanel(): bool
-    {
-        return true;
-    }
-
-    /**
      * Returns false because group fields have no required-toggle in the editor.
      *
      * @return bool
@@ -202,18 +191,6 @@ class GroupField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         return $this->openTag($config, $field_id) . $this->closeTag();
-    }
-
-    /**
-     * Maps the field value to a human-readable string for email and PDF output.
-     *
-     * @param mixed $value  Submitted value.
-     * @param array $config Field configuration.
-     * @return string Human-readable representation.
-     */
-    public function map(mixed $value, array $config): string
-    {
-        return '';
     }
 
     /**

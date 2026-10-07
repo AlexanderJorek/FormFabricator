@@ -3652,8 +3652,8 @@ function spSubfields(parent, items, field, change) {
         var card = document.createElement('div');
         card.className = 'fabricator-sp-subfield-card';
 
-        var isEnabled = item.optional ? field[k + '_enabled'] !== false : true;
-        if (item.optional && !isEnabled) {
+        var isEnabled = field[k + '_enabled'] !== false;
+        if (!isEnabled) {
             card.classList.add('fabricator-sp-subfield--off');
         }
 
@@ -3669,20 +3669,13 @@ function spSubfields(parent, items, field, change) {
         var togInp = document.createElement('input');
         togInp.type    = 'checkbox';
         togInp.checked = isEnabled;
-        (function (cardEl, sfKey, optional) {
+        (function (cardEl, sfKey) {
             togInp.addEventListener('change', function () {
                 var v = this.checked;
-                if (optional) {
-                    change(sfKey + '_enabled', v);
-                    cardEl.classList.toggle('fabricator-sp-subfield--off', !v);
-                }
+                change(sfKey + '_enabled', v);
+                cardEl.classList.toggle('fabricator-sp-subfield--off', !v);
             });
-        }(card, k, item.optional));
-        /* Non-optional sub-fields: toggle is always checked and disabled */
-        if (!item.optional) {
-            togInp.checked  = true;
-            togInp.disabled = true;
-        }
+        }(card, k));
         togWrap.appendChild(togInp);
         var togSlider = document.createElement('span');
         togSlider.className = 'fabricator-toggle-slider';
@@ -4697,9 +4690,16 @@ function setSaveStatus(status, state, msg) {
         status._fadeTimer = setTimeout(function () { status.classList.add('fabricator-ss--fade'); }, 2200);
         status._clearTimer = setTimeout(function () { status.className = ''; status.innerHTML = ''; }, 2600);
     } else if (state === 'warn') {
-        /* Saved, but with something the user has to act on — stays until the next save instead of fading. */
+        /* Saved, but with something the user has to act on: stays until dismissed or the next save, instead of fading. */
         status.className = 'fabricator-ss--warn';
-        status.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + escHtml((_i18n.saved || 'Saved') + ' – ' + msg);
+        status.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>'
+            + '<span class="fabricator-ss-text">' + escHtml((_i18n.saved || 'Saved') + ' – ' + msg) + '</span>'
+            + '<button type="button" class="fabricator-ss-close" aria-label="' + escHtml(_i18n.dismiss || 'Dismiss') + '">'
+            + '<i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
+        status.querySelector('.fabricator-ss-close').addEventListener('click', function () {
+            status.className = '';
+            status.innerHTML = '';
+        });
     } else if (state === 'err') {
         status.className = 'fabricator-ss--err';
         status.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + escHtml(msg || (_i18n.errorGeneric || 'Error'));

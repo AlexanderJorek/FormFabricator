@@ -21,10 +21,10 @@ defined('ABSPATH') || exit;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\PDF\PdfUtils;
 
-/* The three AJAX endpoints below are hooked in Verificationpage::register(), not when this file is included. */
+/* The two AJAX endpoints below are hooked in Verificationpage::register(), not when this file is included. */
 
 /**
- * AJAX: verifies one stored PDF against the text lines pdf.js extracted in the browser, and returns the rendered result.
+ * AJAX: verifies one stored PDF against its seal and returns the rendered result.
  *
  * A named function rather than a closure, so other code can unhook or replace it.
  *
@@ -67,37 +67,10 @@ function fabricator_ajax_verify_push_lines(): void
     /* ---- Input ---- */
     // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
     $pdf_token   = sanitize_key($_POST['pdf_token'] ?? '');
-    // Decoded raw: sanitize_textarea_field() would change genuine PDF text (%xx, tag-like text). Each line is
-    // UTF-8-checked below and only compared with the seal or printed through esc_html().
-    // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-    $visualLines = isset($_POST['visualLines'])
-    // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require(), which the sniff can't see through; see comment above.
-    ? json_decode(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['visualLines']), '[]'), true)
-    : [];
 
     if (!$pdf_token) {
         \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — missing pdf_token (user ' . get_current_user_id() . ').');
         wp_send_json_error(['message' => __('Invalid input: missing token', 'formfabricator')], 400);
-    }
-    // Bounds worst-case comparison cost against a crafted payload while still allowing
-    // large-but-legitimate multi-page PDFs sized up to MAX_PDF_BYTES.
-    $visualLines = array_slice(
-        array_values(
-            array_filter(
-                is_array($visualLines) ? $visualLines : [],
-                'is_string'
-            )
-        ),
-        0,
-        50000
-    );
-    foreach ($visualLines as $i => $line) {
-        if (strlen($line) > 20000) {
-            // mb_strcut(): a byte cut through a multibyte character would fail the UTF-8 check below and drop the line.
-            $line = mb_strcut($line, 0, 20000, 'UTF-8');
-        }
-        // pdf.js text extraction never yields invalid UTF-8; such a line is emptied rather than compared as raw bytes.
-        $visualLines[$i] = wp_check_invalid_utf8($line);
     }
 
     /* ---- Resolve path from transient (avoids URL-to-path mapping) ---- */
@@ -238,19 +211,18 @@ function fabricator_ajax_verify_push_lines(): void
     /* ---- Capture output ---- */
     ob_start();
     try {
-        Verificationpage::handleUpload($file, $visualLines, $pdf_token, $fabricator_allowance);
+        Verificationpage::handleUpload($file, $pdf_token, $fabricator_allowance);
     } catch (\Throwable $ajax_err) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: handleUpload threw: ' . $ajax_err->getMessage());
-        echo '<p style="color:red">' . esc_html__('Internal error while processing this PDF. See server log for details.', 'formfabricator') . '</p>';
+        $fabricator_failure = Verificationpage::reportInternalFailure(
+            'handleUpload threw ' . get_class($ajax_err) . ': ' . $ajax_err->getMessage() . ' at ' . basename($ajax_err->getFile()) . ':' . $ajax_err->getLine()
+        );
+        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- problemCardHtml() escapes.
+        echo Verificationpage::problemCardHtml(sanitize_file_name((string) $file['name']), $fabricator_failure, true);
     }
     $raw_html = ob_get_clean();
 
     if ($raw_html === false || $raw_html === '') {
-        \FabricatorForms\fabricator_log(
-            'FabricatorForms fabricator_verify_push_lines: raw_html is empty after handleUpload — ob level was '
-            . ob_get_level()
-        );
-        wp_send_json_error(['message' => __('PDF processing produced no output. Check the PHP error log.', 'formfabricator')], 500);
+        wp_send_json_error(['message' => Verificationpage::reportInternalFailure('handleUpload produced no output; ob level ' . ob_get_level())], 500);
         return;
     }
 
@@ -258,25 +230,23 @@ function fabricator_ajax_verify_push_lines(): void
     try {
         $safe_html = fabricator_sanitize_verifier_html($raw_html);
     } catch (\Throwable $san_err) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: fabricator_sanitize_verifier_html threw: ' . $san_err->getMessage());
-        wp_send_json_error(['message' => __('Output sanitization failed. See server log for details.', 'formfabricator')], 500);
+        wp_send_json_error(['message' => Verificationpage::reportInternalFailure('fabricator_sanitize_verifier_html threw ' . get_class($san_err) . ': ' . $san_err->getMessage())], 500);
         return;
     }
 
     if ($safe_html === '') {
-        \FabricatorForms\fabricator_log(
-            'FabricatorForms fabricator_verify_push_lines: safe_html is empty after wp_kses (raw len='
-            . strlen($raw_html) . ')'
+        // wp_kses() left nothing of a report this plugin wrote: an internal failure, shown as such.
+        $safe_html = Verificationpage::problemCardHtml(
+            sanitize_file_name((string) $file['name']),
+            Verificationpage::reportInternalFailure('the report was sanitized to nothing (raw length ' . strlen($raw_html) . ')'),
+            true
         );
-        // Fall back to escaping raw html if kses strips everything (e.g. encoding issue)
-        $safe_html = '<p style="color:orange">' . esc_html__('Result was sanitized to empty. Check PHP error log.', 'formfabricator') . '</p>';
     }
 
     delete_transient('fabricator_vp_' . $pdf_token);
 
     wp_send_json_success(
         [
-        'lines_received' => count($visualLines),
         // No 'pdf' key: it disclosed the random storage filename, and verification.js never read it.
         'html'           => $safe_html,
         ]
@@ -314,78 +284,6 @@ function fabricator_ajax_verify_progress(): void
     wp_send_json_success($data ?: ['step' => '', 'pct' => 0]);
 }
 
-/* ---- Authenticated PDF file-serving endpoint ---- */
-
-/**
- * AJAX: streams a stored verification PDF back to the user who uploaded it.
- *
- * A named function rather than a closure, so other code can unhook or replace it.
- *
- * @return void
- */
-function fabricator_ajax_serve_pdf(): void
-{
-    if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
-        wp_die(esc_html__('Forbidden', 'formfabricator'), '', ['response' => 403]);
-    }
-
-    // Nonce/token are posted in the request body by verification.js (not query-string
-    // params) so they don't end up in server logs, browser history, or a Referer header.
-    if (!wp_verify_nonce(sanitize_key($_POST['nonce'] ?? ''), 'fabricator_verifier_nonce')) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
-        wp_die(esc_html__('Nonce verification failed', 'formfabricator'), '', ['response' => 403]);
-    }
-
-    $token = sanitize_key($_POST['token'] ?? '');
-    if (!$token) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — missing token (user ' . get_current_user_id() . ').');
-        wp_die(esc_html__('Missing token', 'formfabricator'), '', ['response' => 400]);
-    }
-
-    $pdf_transient = get_transient('fabricator_pdf_' . $token);
-    $path = is_array($pdf_transient) ? ($pdf_transient['path'] ?? null) : null;
-    if (!$path || !is_string($path) || !file_exists($path)) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — token not found, expired, or target file missing.');
-        wp_die(esc_html__('PDF not found or token expired', 'formfabricator'), '', ['response' => 404]);
-    }
-    if ((int)($pdf_transient['uid'] ?? -1) !== get_current_user_id()) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — token owned by a different user than ' . get_current_user_id() . '.');
-        wp_die(esc_html__('Forbidden', 'formfabricator'), '', ['response' => 403]);
-    }
-
-    // A download means the page is still working through its batch: keep this user's waiting copies.
-    \FabricatorForms\Utils\VerifierCleanup::refreshPending();
-
-    // Extra path-safety check
-    $upload_dir   = wp_upload_dir();
-    $safe_dir     = realpath($upload_dir['basedir'] . '/fabricator-secure-pdf');
-    $real_path    = realpath($path);
-    if (!$safe_dir || !$real_path || strpos($real_path, $safe_dir . DIRECTORY_SEPARATOR) !== 0) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — path-traversal guard failed for token-resolved path.');
-        wp_die(esc_html__('Invalid path', 'formfabricator'), '', ['response' => 403]);
-    }
-
-    $finfo = new \finfo(FILEINFO_MIME_TYPE);
-    $detected_mime = $finfo->file($real_path);
-    if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_serve_pdf: rejected — stored file MIME re-check failed, detected "' . $detected_mime . '".');
-        wp_die(esc_html__('Not a PDF', 'formfabricator'), '', ['response' => 400]);
-    }
-
-    header('Content-Type: application/pdf');
-    header('X-Content-Type-Options: nosniff');
-    // An untrusted upload on the admin's origin, so sandboxed: no scripts, forms or same-origin access.
-    // allow-downloads keeps the viewer's save button working.
-    header('Content-Security-Policy: sandbox allow-downloads; default-src \'none\'; object-src \'none\'');
-    header('Content-Disposition: inline; filename="verified.pdf"');
-    header('Content-Length: ' . filesize($real_path));
-    header('Cache-Control: no-store');
-    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile -- streams instead of buffering; verified PDFs can be up to 500MB (MAX_PDF_BYTES).
-    readfile($real_path);
-    exit;
-}
-
 /**
  * Sanitizes HTML output from the PDF verifier using wp_kses, with data-URI preservation.
  *
@@ -421,6 +319,9 @@ function fabricator_sanitize_verifier_html(string $html): string
         // Formatting
         'strong' => ['class' => true, 'style' => true], 'em' => ['class' => true, 'style' => true], 'b' => ['style' => true],
         'i' => ['class' => true, 'style' => true, 'aria-hidden' => true], 'br' => [], 'hr' => [],
+        // Differences and fold-outs: what changed in a field, a seal's full content.
+        'mark' => ['class' => true], 'del' => ['class' => true], 'ins' => ['class' => true],
+        'details' => ['class' => true, 'open' => true], 'summary' => ['class' => true],
 
         // Images / SVG / media
         'img' => [
@@ -482,7 +383,6 @@ final class Verificationpage
         // so register() runs for these.
         add_action('wp_ajax_fabricator_verify_push_lines', __NAMESPACE__ . '\\fabricator_ajax_verify_push_lines');
         add_action('wp_ajax_fabricator_verify_progress', __NAMESPACE__ . '\\fabricator_ajax_verify_progress');
-        add_action('wp_ajax_fabricator_serve_pdf', __NAMESPACE__ . '\\fabricator_ajax_serve_pdf');
         /* Verifier cron callbacks are hooked in Plugin::init(), not here — register() only runs under is_admin(), which wp-cron.php never is. */
     }
 
@@ -583,6 +483,8 @@ final class Verificationpage
 
         // Collected here, shown by render() after the redirect.
         $notices            = [];
+        // Files refused before any check: [name, reason, whether it is an error]; shown as problem cards with the results.
+        $rejected           = [];
         $verification_queue = [];
         $stored_tokens      = [];
         if (!empty($_FILES['pdfs']['name'][0])) {
@@ -633,11 +535,7 @@ final class Verificationpage
                         'FabricatorForms Verificationpage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name)
                         . ' — failed is_uploaded_file()/is_readable() check (possible spoofed or malformed multipart entry).'
                     );
-                    $notices[] = [
-                        // translators: %s: uploaded file name.
-                        sprintf(esc_html__('Upload skipped: "%s" could not be read from the upload.', 'formfabricator'), esc_html($original_name)),
-                        'warning',
-                    ];
+                    $rejected[] = [$original_name, __('The upload could not be read.', 'formfabricator'), true];
                     continue;
                 }
 
@@ -647,10 +545,11 @@ final class Verificationpage
                         'FabricatorForms Verificationpage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name) . ' — '
                         . round(filesize($tmpName) / 1048576, 1) . 'MB exceeds ' . round($max_upload_bytes / 1048576) . 'MB limit.'
                     );
-                    $notices[] = [
+                    $rejected[] = [
+                        $original_name,
                         // translators: %d: maximum accepted file size in MB.
-                        sprintf(esc_html__('Upload skipped: file exceeds %d MB limit.', 'formfabricator'), (int) round($max_upload_bytes / 1048576)),
-                        'warning',
+                        sprintf(__('The file is larger than the %d MB limit.', 'formfabricator'), (int) round($max_upload_bytes / 1048576)),
+                        false,
                     ];
                     continue;
                 }
@@ -667,7 +566,7 @@ final class Verificationpage
                         . ' — wp_check_filetype_and_ext() did not resolve to pdf (ext: '
                         . ($type_check['ext'] ?? '(none)') . ', type: ' . ($type_check['type'] ?? '(none)') . ').'
                     );
-                    $notices[] = [__('Upload skipped: only PDF files are allowed.', 'formfabricator'), 'warning'];
+                    $rejected[] = [$original_name, __('This file is not a PDF.', 'formfabricator'), false];
                     continue;
                 }
 
@@ -678,7 +577,7 @@ final class Verificationpage
                         'FabricatorForms Verificationpage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name)
                         . ' — finfo MIME re-check detected "' . $detected_mime . '" instead of application/pdf.'
                     );
-                    $notices[] = [__('Upload skipped: MIME validation failed.', 'formfabricator'), 'warning'];
+                    $rejected[] = [$original_name, __('This file is not a PDF.', 'formfabricator'), false];
                     continue;
                 }
 
@@ -689,7 +588,7 @@ final class Verificationpage
                         'FabricatorForms Verificationpage::handleUploadPost: upload skipped — '
                         . \FabricatorForms\fabricator_log_file((string) $original_name) . ' is not a valid .pdf name.'
                     );
-                    $notices[] = [__('Upload skipped: invalid PDF filename.', 'formfabricator'), 'warning'];
+                    $rejected[] = [$original_name, __('The file name does not end in .pdf.', 'formfabricator'), false];
                     continue;
                 }
 
@@ -712,11 +611,9 @@ final class Verificationpage
                     );
                     $stored_tokens[] = $token;
 
-                    // nonce/token travel in the POST body (see verification.js) so they never land in server logs, history, or a Referer header.
+                    // The token travels in the check request's POST body (verification.js), so it never lands in a server log,
+                    // the history or a Referer header.
                     $verification_queue[] = [
-                        'url'   => esc_url_raw(admin_url('admin-ajax.php')),
-                        'action' => 'fabricator_serve_pdf',
-                        'nonce' => wp_create_nonce('fabricator_verifier_nonce'),
                         'token' => $token,
                         'name'  => $safe_name,
                     ];
@@ -728,7 +625,7 @@ final class Verificationpage
 
         set_transient(
             self::BATCH_TRANSIENT_PREFIX . get_current_user_id(),
-            ['queue' => $verification_queue, 'notices' => $notices],
+            ['queue' => $verification_queue, 'notices' => $notices, 'rejected' => $rejected],
             10 * MINUTE_IN_SECONDS
         );
         wp_safe_redirect(add_query_arg('verified', '1', admin_url('admin.php?page=fabricator-pdf-verification')));
@@ -765,7 +662,13 @@ final class Verificationpage
         }
 
         // Localized once for the whole batch; verification.js reads this on load to seed its queue.
-        wp_localize_script('fabricator-verifier-data', 'FabricatorVerifierQueueData', $verification_queue);
+        wp_localize_script('fabricator-forms-verification', 'FabricatorVerifierQueueData', $verification_queue);
+
+        // Files refused at upload, each as the same card a refused check shows, first among the results.
+        $rejected_cards = '';
+        foreach ($has_batch && is_array($batch['rejected'] ?? null) ? $batch['rejected'] : [] as $rejected) {
+            $rejected_cards .= self::problemCardHtml((string) ($rejected[0] ?? ''), (string) ($rejected[1] ?? ''), (bool) ($rejected[2] ?? false));
+        }
 
         // --- Render drag-and-drop form with nonce ---
         // Verification page styles: assets/css/admin-verification.css (enqueued in Utils/Assets.php).
@@ -819,7 +722,7 @@ final class Verificationpage
             </div>
         </div>
 
-        <div id="fabricator-pdf-verification-results"></div>
+        <div id="fabricator-pdf-verification-results">' . $rejected_cards . '</div>
         ';
         // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
 
@@ -827,8 +730,10 @@ final class Verificationpage
     }
 
     private static array $image_slots = [];
-    // Images extracted during this request's check, deleted with the checked copy by discardCheckedCopy().
+    // Images extracted during the running check: handleUpload() deletes them once its page holds them as data URIs.
     private static array $files_to_delete = [];
+    // Whether this process has registered discardExtractedImages() for its end, the backstop for a check that dies.
+    private static bool $image_cleanup_registered = false;
     private static string $progressKey = '';
 
     /**
@@ -894,6 +799,22 @@ final class Verificationpage
      * @var int
      */
     private const MAX_XOBJECT_DEPTH = 32;
+
+    /**
+     * Longest a PDF's generation may take, from its sealed generation time to the dates mPDF writes when saving it.
+     * Generation runs within one submission request, far shorter than this on any host.
+     *
+     * @var int
+     */
+    private const MAX_PDF_GENERATION_SECONDS = 3600;
+
+    /**
+     * How far the saved dates may lie before the sealed generation time: both come from the same server clock, which a
+     * time sync can set back by a little between the two readings.
+     *
+     * @var int
+     */
+    private const META_DATE_SLACK_SECONDS = 60;
 
     /**
      * Most different /Type names distinctTypeNames() records; a document from this plugin uses about a dozen.
@@ -977,55 +898,103 @@ final class Verificationpage
     }
 
     /**
-     * Processes a single uploaded PDF file and outputs verification results HTML.
+     * Checks one uploaded PDF against its seal and prints the result: a card per document, headed by the verdict.
+     *
+     * The stages run in order, each a method of its own: preflightUpload() refuses what can't be a sealed PDF before
+     * anything parses it, readSeal() reads and authenticates the seal, checkDocument() holds the file to it section by
+     * section, and renderDocumentCard() frames the report.
      *
      * @param array  $file             Uploaded file data from $_FILES.
-     * @param array  $visualLines      Lines of text extracted for visual display.
      * @param string $progressKey      Transient key for progress reporting.
      * @param int    $decode_allowance Most bytes the PDF reader may unpack, as the caller reserved memory for.
      */
-    public static function handleUpload(array $file, array $visualLines = [], string $progressKey = '', int $decode_allowance = PHP_INT_MAX): void
+    public static function handleUpload(array $file, string $progressKey = '', int $decode_allowance = PHP_INT_MAX): void
     {
-        /* The EscapeOutput suppressions below are per block: their variables are escaped or regex-constrained at assignment, which WPCS can't follow. */
+        /* The EscapeOutput suppressions in the stage methods are per block: their variables are escaped or regex-constrained at assignment, which WPCS can't follow. */
         self::$progressKey = $progressKey;
-        // Soft time budget, scaled to file size, aborts well before the 900 s hard ceiling.
-        $fabricator_parse_start       = microtime(true);
-        $fabricator_parse_file_mb     = max(1, (int) ceil(($file['size'] ?? 0) / 1048576));
-        $fabricator_parse_max_seconds = min(600, 30 + ($fabricator_parse_file_mb * 2));
+        // Soft time budget, scaled to file size, aborts well before the 900 s hard ceiling. readSeal() raises it for a
+        // file whose text unpacks to far more than its size.
+        $budget = [
+            'start' => microtime(true),
+            'max'   => min(600, 30 + (max(1, (int) ceil(($file['size'] ?? 0) / 1048576)) * 2)),
+        ];
         $file_name = sanitize_file_name((string) ($file['name'] ?? 'document.pdf'));
         static $upload_id_counter = 0;
         $uid_prefix = 'fabricator-pdf-' . (++$upload_id_counter) . '-' . substr(md5($file_name), 0, 8);
 
+        $refusal   = null;
+        $structure = self::preflightUpload($file, $file_name, $refusal);
+        if ($structure === null) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- problemCardHtml() escapes.
+            echo self::problemCardHtml($file_name, (string) ($refusal[0] ?? ''), (bool) ($refusal[1] ?? true));
+            return;
+        }
+
+        self::setProgress(__('Parsing PDF…', 'formfabricator'), 10);
+
+        // The seal once read (its key status heads the card even when a later check fails), and the verdict once every
+        // check ran; a check that throws ends in a problem card instead.
+        $seal    = null;
+        $verdict = null;
+        $failure = null;
+        ob_start();
+        $outer_ob_level = ob_get_level();
+        try {
+            $seal    = self::readSeal($file, $decode_allowance, $structure['raw_plain_seal_count'], $budget);
+            $verdict = self::checkDocument($file, $file_name, $uid_prefix, $structure, $seal, $budget);
+        } catch (\Throwable $e) {
+            while (ob_get_level() > $outer_ob_level) {
+                ob_end_clean();
+            }
+            $failure = self::failureMessage($e, $file_name);
+        } finally {
+            $pdf_content = (string) ob_get_clean();
+        }
+
+        if ($failure === null && $verdict === null) {
+            $failure = [self::reportInternalFailure('the checks ended without a verdict (' . \FabricatorForms\fabricator_log_file($file_name) . ')'), true];
+        }
+        if ($failure !== null) {
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- problemCardHtml() escapes.
+            echo self::problemCardHtml($file_name, $failure[0], $failure[1]);
+        } else {
+            self::renderDocumentCard($file_name, $uid_prefix, $pdf_content, $seal, $verdict);
+        }
+        // The result holds every extracted image as a data URI now.
+        self::discardExtractedImages();
+    }
+
+    /**
+     * Refuses what can't be a sealed PDF from this plugin, before anything parses it: an upload error, a file that is no
+     * PDF, a file of more objects than any such document has, or one without a seal marker.
+     *
+     * @param array      $file      Uploaded file data from $_FILES.
+     * @param string     $file_name The file's sanitized name, for log lines.
+     * @param array|null $refusal   Set on refusal: [the reason in words, whether it is an error rather than "not checked"].
+     * @return array{incremental_update_detected: bool, incremental_update_eof_count: int, raw_plain_seal_count: int}|null
+     *         What the raw bytes show about the file's structure, or null when it was refused.
+     */
+    private static function preflightUpload(array $file, string $file_name, ?array &$refusal): ?array
+    {
         if ($file['error'] !== UPLOAD_ERR_OK) {
             \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected ' . \FabricatorForms\fabricator_log_file((string) $file_name) . ' — PHP upload error code ' . $file['error'] . '.');
-            // translators: %s: uploaded file name.
-            $msg = sprintf(__('Upload failed for %s.', 'formfabricator'), esc_html($file_name));
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() runs $message through wp_kses_post() internally.
-            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see note atop handleUpload().
-            echo self::noticeHtml($msg, 'error');
-            return;
+            $refusal = [__('The upload did not complete.', 'formfabricator'), true];
+            return null;
         }
 
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $detected_mime = $finfo->file($file['tmp_name']);
         if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
             \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected ' . \FabricatorForms\fabricator_log_file((string) $file_name) . ' — finfo detected MIME "' . $detected_mime . '" instead of application/pdf.');
-            // translators: %s: uploaded file name.
-            $msg = sprintf(__('Invalid file type for %s.', 'formfabricator'), esc_html($file_name));
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
-            // its $message argument internally.
-            echo self::noticeHtml($msg, 'error');
-            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-            return;
+            $refusal = [__('This file is not a PDF.', 'formfabricator'), false];
+            return null;
         }
 
-        // --- Store visual lines if provided ---
+        // The protected folder the checks write their images to.
         $upload_dir   = wp_upload_dir();
         $safe_dir     = $upload_dir['basedir'] . '/fabricator-secure-pdf';
 
         \FabricatorForms\Utils\SecureDir::harden($safe_dir, [$safe_dir]);
-
-        // $visualLines is already available as a parameter — no disk round-trip needed.
 
         self::setProgress(__('Byte scan: searching for seal…', 'formfabricator'), 5);
 
@@ -1034,12 +1003,8 @@ final class Verificationpage
         $raw_for_guard = is_readable($file['tmp_name']) ? file_get_contents($file['tmp_name']) : false;
         if ($raw_for_guard === false) {
             \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected ' . \FabricatorForms\fabricator_log_file((string) $file_name) . ' — file_get_contents() failed reading the uploaded temp file.');
-            // translators: %s: uploaded file name.
-            $msg = sprintf(__('Could not read PDF file: %s.', 'formfabricator'), esc_html($file_name));
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() runs $message through wp_kses_post() internally.
-            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see note atop handleUpload().
-            echo self::noticeHtml($msg, 'error');
-            return;
+            $refusal = [__('The file could not be read.', 'formfabricator'), true];
+            return null;
         }
         // Outside image data, which holds whatever the uploaded file did: a JPEG comment reading "%%EOF" is no revision,
         // nor one reading "---BEGIN-SEAL---" an injected seal (PdfUtils::imageStreamSpans()).
@@ -1056,11 +1021,8 @@ final class Verificationpage
                 'FabricatorForms handleUpload: rejected ' . \FabricatorForms\fabricator_log_file((string) $file_name) . ' — ' . $declared_objects
                 . ' object headers, more than the ' . PdfUtils::MAX_OBJECTS . ' a document from this plugin can have.'
             );
-            // translators: %s: uploaded file name.
-            $msg = sprintf(__('%s has far more parts than any document this plugin creates and was not read.', 'formfabricator'), esc_html($file_name));
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() runs $message through wp_kses_post() internally.
-            echo self::noticeHtml($msg, 'error');
-            return;
+            $refusal = [__('This file has far more parts than any document this plugin creates and was not read.', 'formfabricator'), false];
+            return null;
         }
 
         // Raw-byte preflight avoids calling pdfparser (and its memory overhead) entirely for PDFs with no fabricator seal.
@@ -1068,2538 +1030,3207 @@ final class Verificationpage
             // rawPdfHasSeal() itself logs details (skipped/oversized streams) when
             // relevant — this just records that this file was rejected at this gate.
             \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected ' . \FabricatorForms\fabricator_log_file((string) $file_name) . ' — raw-byte preflight found no seal marker.');
-            // translators: %s: uploaded file name.
-            $msg = sprintf(__('%s does not contain a fabricator-pdf seal and cannot be verified.', 'formfabricator'), esc_html($file_name)); // phpcs:ignore Generic.Files.LineLength
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() wp_kses_post()'s
-            // its $message argument internally.
-            echo self::noticeHtml($msg, 'error');
-            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-            return;
+            $refusal = [__('This PDF has no FormFabricator seal, so there is nothing to check it against.', 'formfabricator'), false];
+            return null;
         }
 
-        self::setProgress(__('Parsing PDF…', 'formfabricator'), 10);
+        return [
+            'incremental_update_detected'  => $incremental_update_detected,
+            'incremental_update_eof_count' => $incremental_update_eof_count,
+            'raw_plain_seal_count'         => $raw_plain_seal_count,
+        ];
+    }
 
-        $document_modified = null;
-        /* Initialised here (not only where computed) so an early throw can't leave it undefined; false is the correct default. */
-        $structural_tamper = false;
-        $refused_streams   = [];
-        $refused_unlisted  = 0;
-        ob_start();
-        $outer_ob_level = ob_get_level();
+    /**
+     * Parses the PDF, reads its seal block and checks the seal's HMAC.
+     *
+     * @param array $file                 Uploaded file data from $_FILES.
+     * @param int   $decode_allowance     Most bytes the PDF reader may unpack.
+     * @param int   $raw_plain_seal_count Seal markers found in the raw bytes, outside streams pdfparser unpacks.
+     * @param array $budget               The parse-time budget; its limit grows with the unpacked text.
+     * @return array The seal and what the parse found; see the keys at the end.
+     * @throws \RuntimeException When the document has no readable seal (constant messages, mapped by failureMessage()).
+     */
+    private static function readSeal(array $file, int $decode_allowance, int $raw_plain_seal_count, array &$budget): array
+    {
+        // Only what mPDF writes is unpacked, within the reserved allowance; anything else stays packed and is listed
+        // under PDF Objects. Image data is dropped after parsing.
+        // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded plugin path, not request-influenced.
+        require_once FABRICATOR_FORMS_PATH . 'includes/PDF/GuardedRawDataParser.php';
+        // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded plugin path, not request-influenced.
+        require_once FABRICATOR_FORMS_PATH . 'includes/PDF/GuardedPdfParser.php';
+        $parser_config = new \Smalot\PdfParser\Config();
+        $parser_config->setRetainImageContent(false);
+        $parser = new \FabricatorForms\PDF\GuardedPdfParser($parser_config, $decode_allowance);
         try {
-            // $incremental_update_detected is set before the try block — make it available inside.
-            $incremental_update_detected = $incremental_update_detected ?? false;
-            // Only what mPDF writes is unpacked, within the reserved allowance; anything else stays packed and is listed
-            // under PDF Objects. Image data is dropped after parsing.
-            // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded plugin path, not request-influenced.
-            require_once FABRICATOR_FORMS_PATH . 'includes/PDF/GuardedRawDataParser.php';
-            // phpcs:ignore PHPCS_SecurityAudit.Misc.IncludeMismatch.ErrMiscIncludeMismatchNoExt -- hardcoded plugin path, not request-influenced.
-            require_once FABRICATOR_FORMS_PATH . 'includes/PDF/GuardedPdfParser.php';
-            $parser_config = new \Smalot\PdfParser\Config();
-            $parser_config->setRetainImageContent(false);
-            $parser           = new \FabricatorForms\PDF\GuardedPdfParser($parser_config, $decode_allowance);
-            $pdf              = $parser->parseFile($file['tmp_name']);
-            $refused_streams  = $parser->refusedStreams();
-            $refused_unlisted = $parser->unlistedRefusedCount();
+            $pdf  = $parser->parseFile($file['tmp_name']);
             $text = $pdf->getText();
+        } catch (\LengthException | \RuntimeException $e) {
+            // The guards' own refusals ("Too many objects…", a parser that changed): mapped or reported as they are.
+            throw $e;
+        } catch (\Exception $e) {
+            // pdfparser throws for a file whose structure it can't follow (no startxref, a broken cross-reference
+            // table, undecodable data): the file is damaged, which the reader is told, not an error of this plugin.
+            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: pdfparser refused the file: ' . get_class($e) . ': ' . $e->getMessage());
+            if (str_contains($e->getMessage(), 'Object list not found') || str_contains($e->getMessage(), 'Secured pdf')) {
+                throw new \RuntimeException('Object list not found.');
+            }
+            throw new \RuntimeException('PDF structure unreadable.');
+        }
+        $refused_streams  = $parser->refusedStreams();
+        $refused_unlisted = $parser->unlistedRefusedCount();
 
-            // Budget on decompressed text volume, not on-disk size — a small compressed PDF can still unpack to a huge string.
-            $fabricator_parse_text_mb    = strlen($text) / 1048576;
-            $fabricator_parse_max_seconds = max(
-                $fabricator_parse_max_seconds,
-                min(600, 30 + ($fabricator_parse_text_mb * 4))
+        // Budget on decompressed text volume, not on-disk size — a small compressed PDF can still unpack to a huge string.
+        $budget['max'] = max($budget['max'], min(600, 30 + ((strlen($text) / 1048576) * 4)));
+
+        // --- Extract Seal (exactly one allowed) ---
+        // What the lazy seal regex found, from a linear scan (see PdfUtils::sealBlocks()).
+        $seal_bodies = array_column(PdfUtils::sealBlocks($text), 2);
+        $seal_count  = count($seal_bodies);
+        if ($seal_count === 0) {
+            throw new \RuntimeException('Seal not found.');
+        }
+        // Several seal blocks: the last one is used so other checks still run, and the violation is recorded.
+        $multiple_seals_detected = $seal_count > 1
+            || $raw_plain_seal_count > 0;
+
+        $text_seal_b64_list = array_values(
+            array_filter(
+                array_map('trim', $seal_bodies),
+                fn($s) => $s !== ''
+            )
+        );
+
+        $seal_base64 = trim($multiple_seals_detected ? end($seal_bodies) : $seal_bodies[0]);
+
+        self::checkParseTimeBudget($budget['start'], $budget['max'], 'seal extraction');
+
+        if (strlen($seal_base64) > \FabricatorForms\PDF\HashSeal::MAX_SEAL_BLOCK_BYTES) {
+            throw new \RuntimeException('Seal is implausibly large.');
+        }
+
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the seal block read back out of the PDF (strict mode rejects malformed input). Not obfuscation.
+        $seal_json = base64_decode($seal_base64, true);
+        if ($seal_json === false || strlen($seal_json) < 2) {
+            throw new \RuntimeException('Base64 decode of seal failed.');
+        }
+
+        $seal_data = json_decode($seal_json, true, 512, JSON_THROW_ON_ERROR);
+        /* Well-formed JSON may still be a scalar, which rebuildPayload(array) can't take. */
+        if (!is_array($seal_data)) {
+            throw new \RuntimeException('Seal is not a JSON object.');
+        }
+
+        self::setProgress(__('Seal found — reconstructing payload…', 'formfabricator'), 25);
+
+        // --- Rebuild payload ---
+        $rebuilt_payload = self::rebuildPayload($seal_data);
+
+        self::setProgress(__('HMAC check…', 'formfabricator'), 35);
+
+        // --- HMAC check (early, before any output, so it's available for the summary) ---
+        // Cast/default: a seal with no 'seal' member would otherwise TypeError into a generic outer-catch failure.
+        $seal_result      = HashSeal::verify($rebuilt_payload, (string) ($seal_data['seal'] ?? ''));
+        $seal_matches     = $seal_result['valid'];
+        $seal_key_status  = $seal_result['key_status'];
+        $seal_compromised = $seal_result['compromised'];
+
+        // --- Seal vs rebuilt diff ---
+        $original_payload = $seal_data;
+        unset($original_payload['seal']);
+        $diffs = self::diffArrays($original_payload, $rebuilt_payload);
+        $seal_rebuilt_match = empty($diffs);
+
+        return [
+            'text'             => $text,
+            'refused_streams'  => $refused_streams,
+            'refused_unlisted' => $refused_unlisted,
+            'b64_list'         => $text_seal_b64_list,
+            'multiple'         => $multiple_seals_detected,
+            'base64'           => $seal_base64,
+            'data'             => $seal_data,
+            'rebuilt'          => $rebuilt_payload,
+            'matches'          => $seal_matches,
+            'key_status'       => $seal_key_status,
+            'compromised'      => $seal_compromised,
+            'diffs'            => $diffs,
+        ];
+    }
+
+    /**
+     * Holds the document to its seal, section by section, prints the summary panel and the sections, and returns the
+     * verdict.
+     *
+     * @param array  $file        Uploaded file data from $_FILES.
+     * @param string $file_name   The file's sanitized name.
+     * @param string $uid_prefix  Prefix of every element id in this document's card.
+     * @param array  $structure   What preflightUpload() found.
+     * @param array  $seal        What readSeal() found.
+     * @param array  $budget      The parse-time budget.
+     * @return array{document_modified: bool, structural_tamper: bool}
+     * @throws \RuntimeException When the file can no longer be read.
+     */
+    private static function checkDocument(
+        array $file,
+        string $file_name,
+        string $uid_prefix,
+        array $structure,
+        array $seal,
+        array $budget
+    ): array {
+        [
+            'text'             => $text,
+            'refused_streams'  => $refused_streams,
+            'refused_unlisted' => $refused_unlisted,
+            'multiple'         => $multiple_seals_detected,
+            'data'             => $seal_data,
+            'rebuilt'          => $rebuilt_payload,
+        ] = $seal;
+        $incremental_update_detected = $structure['incremental_update_detected'];
+
+        // Read again rather than kept from the preflight, so the parser above ran without the file's bytes held as well.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of $_FILES tmp_name; wp_remote_get() (the sniff's suggestion) is for remote URLs, not this.
+        $pdf_raw = is_readable($file['tmp_name']) ? file_get_contents($file['tmp_name']) : false;
+        if ($pdf_raw === false) {
+            throw new \RuntimeException('Could not re-read the uploaded PDF.');
+        }
+        // Every reference the checks below resolve reads from this, built in one pass over the file. Resolving each by
+        // searching the whole file cost the number of references times the file, and that number is the uploader's.
+        $object_index = PdfUtils::objectDefinitionIndex($pdf_raw);
+        // Objects a viewer would read from another definition than every check below does.
+        $xref_conflicts = PdfUtils::xrefConflicts($pdf_raw, $object_index);
+        // A name spelled with "#xx" escapes: a viewer decodes it, while every check below reads names as spelled.
+        $escaped_name = PdfUtils::escapedName($pdf_raw);
+
+        // All detail HTML goes here, so the summary panel can be printed ahead of it.
+        ob_start();
+
+        if ($incremental_update_detected || $xref_conflicts !== [] || $escaped_name !== null) {
+            self::renderStructureSection(
+                $uid_prefix,
+                $incremental_update_detected,
+                $structure['incremental_update_eof_count'],
+                $xref_conflicts,
+                $escaped_name
             );
+        }
+        self::renderRawSealSection($seal_data, $rebuilt_payload, $seal['diffs'], $uid_prefix, $seal['matches'] ? 'pass' : (in_array($seal['key_status'], ['unknown-key', 'undecryptable-key'], true) ? 'nokey' : 'fail'));
+        $field_mismatch_count = self::renderFieldContentSection($text, $rebuilt_payload, $uid_prefix, $budget);
+        if ($multiple_seals_detected) {
+            self::renderSealBlocksSection($seal['b64_list'], $pdf_raw, $uid_prefix);
+        }
 
-            // --- Extract Seal (exactly one allowed) ---
-            // What the lazy seal regex found, from a linear scan (see PdfUtils::sealBlocks()).
-            $seal_bodies = array_column(PdfUtils::sealBlocks($text), 2);
-            $seal_count  = count($seal_bodies);
-            if ($seal_count === 0) {
-                throw new \RuntimeException('Seal not found.');
+        self::$image_slots = [];
+
+        $annotation_fail_count   = self::renderAnnotationsSection($pdf_raw, $object_index, $rebuilt_payload, $uid_prefix, $budget);
+        $annotation_mismatch     = $annotation_fail_count > 0;
+        $pagecount_mismatch      = self::renderPageCountSection($pdf_raw, $rebuilt_payload, $uid_prefix);
+        $image_missmatch         = self::renderImagesSection($pdf_raw, $object_index, $rebuilt_payload, $uid_prefix, $budget);
+        $content_stream_mismatch = self::renderContentStreamsSection($pdf_raw, $rebuilt_payload, $seal['base64'], $uid_prefix);
+        // The fonts and objects sections only ask which /Type names occur — see distinctTypeNames().
+        $type_names              = self::distinctTypeNames($pdf_raw);
+        $font_prog_diff          = self::fontProgramDifference($pdf_raw, $seal_data);
+        $font_missmatch          = self::renderFontsSection(
+            $pdf_raw,
+            $object_index,
+            $rebuilt_payload,
+            $type_names,
+            $font_prog_diff,
+            $uid_prefix
+        );
+        $unexpected_detected     = self::renderObjectsSection(
+            $pdf_raw,
+            $type_names,
+            $pagecount_mismatch,
+            $annotation_mismatch,
+            $font_missmatch,
+            $image_missmatch,
+            $content_stream_mismatch,
+            $refused_streams,
+            $refused_unlisted,
+            $uid_prefix
+        );
+        $unsealed_streams    = self::unsealedStreams($pdf_raw, $seal_data);
+        $all_stream_mismatch = $unsealed_streams !== [];
+        if ($all_stream_mismatch) {
+            self::renderStreamFingerprintSection($unsealed_streams, $uid_prefix);
+        }
+
+        $inner_html = (string) ob_get_clean();
+
+        $meta          = self::metadataSection($pdf_raw, $object_index, $seal_data, $rebuilt_payload, $uid_prefix);
+        $meta_mismatch = $meta['mismatch'];
+        $inner_html    = $meta['html'] . $inner_html;
+
+        // Final verdict: the seal's HMAC uses hash_equals() against a server-resolved key (never the upload's own
+        // payload); structural-tamper flags are OR'd in on top.
+        $visual_modified   = $field_mismatch_count > 0;
+        $any_pdf_issue     = $incremental_update_detected || $xref_conflicts !== [] || $escaped_name !== null || $multiple_seals_detected
+            || $unexpected_detected || $annotation_mismatch || $pagecount_mismatch
+            || $image_missmatch || $font_missmatch || $content_stream_mismatch
+            || $meta_mismatch || $all_stream_mismatch;
+        // Apart from $document_modified: an uploader rewriting key_id to an unknown UUID must not mask these signals.
+        $structural_tamper = $visual_modified || $any_pdf_issue;
+        $document_modified = !$seal['matches'] || $structural_tamper;
+
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see note atop handleUpload().
+        echo self::renderSummaryPanel(
+            [
+            'seal_matches'               => $seal['matches'],
+            'seal_key_status'            => $seal['key_status'],
+            'seal_compromised'           => $seal['compromised'],
+            'visual_modified'            => $visual_modified,
+            'structural_tamper'          => $structural_tamper,
+            'field_mismatch_count'       => $field_mismatch_count,
+            'annotation_fail_count'      => $annotation_fail_count,
+            'pagecount_mismatch'         => $pagecount_mismatch,
+            'image_missmatch'            => $image_missmatch,
+            'font_missmatch'             => $font_missmatch,
+            'font_programs_changed'      => $font_prog_diff['added'] !== [] || $font_prog_diff['removed'] !== [],
+            'unexpected_detected'        => $unexpected_detected,
+            'content_stream_mismatch'    => $content_stream_mismatch,
+            'meta_mismatch'                  => $meta_mismatch,
+            'incremental_update_detected'    => $incremental_update_detected,
+            'incremental_update_eof_count'   => $structure['incremental_update_eof_count'],
+            'xref_conflicts'                 => $xref_conflicts,
+            'escaped_name'                   => $escaped_name,
+            'multiple_seals_detected'        => $multiple_seals_detected,
+            'all_stream_mismatch'            => $all_stream_mismatch,
+            'document_modified'          => $document_modified,
+            'file_name'                  => $file_name,
+            'uid_prefix'                 => $uid_prefix,
+            'doc_nonce'                  => (string) ($seal_data['nonce'] ?? ''),
+            ]
+        );
+
+        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- ob_get_clean() capture whose contents were already escaped at each echo() above.
+        echo $inner_html;
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+
+        return ['document_modified' => $document_modified, 'structural_tamper' => $structural_tamper];
+    }
+
+    /**
+     * How the document's embedded font programs differ from those the seal lists, compared as multisets. A stripped or
+     * edited font program leaves the font names as they were, so the fonts section reports this beside its name
+     * comparison.
+     *
+     * @param string $pdf_raw   The document's bytes.
+     * @param array  $seal_data The seal as read.
+     * @return array{added: string[], removed: string[]} SHA-256 of programs the PDF has beyond the seal, and of sealed
+     *                                                   programs it lacks.
+     */
+    private static function fontProgramDifference(string $pdf_raw, array $seal_data): array
+    {
+        $sealed = array_count_values(array_map('strval', (array) ($seal_data['font_prog_hashes'] ?? [])));
+        $live   = array_count_values(PdfUtils::hashFontProgramStreams($pdf_raw));
+        $beyond = static function (array $from, array $other): array {
+            $out = [];
+            foreach ($from as $hash => $count) {
+                for ($k = $other[$hash] ?? 0; $k < $count; $k++) {
+                    $out[] = (string) $hash;
+                }
             }
-            // Several seal blocks: the last one is used so other checks still run, and the violation is recorded.
-            $multiple_seals_detected = $seal_count > 1
-                || ($raw_plain_seal_count ?? 0) > 0;
+            return $out;
+        };
+        return ['added' => $beyond($live, $sealed), 'removed' => $beyond($sealed, $live)];
+    }
 
-            $text_seal_b64_list = array_values(
-                array_filter(
-                    array_map('trim', $seal_bodies),
-                    fn($s) => $s !== ''
-                )
+    /**
+     * Prints the structure section, present only when the file's structure can't be the one this plugin wrote: more
+     * than one revision (an incremental update), or objects the cross-reference table finds elsewhere than the checks.
+     *
+     * @param string   $uid_prefix                   Element id prefix of this document's card.
+     * @param bool     $incremental_update_detected  Whether the file holds more than one revision.
+     * @param int      $incremental_update_eof_count End-of-file markers found outside image data.
+     * @param string[] $xref_conflicts               PdfUtils::xrefConflicts() of the file.
+     * @param ?string  $escaped_name                 PdfUtils::escapedName() of the file.
+     * @return void
+     */
+    private static function renderStructureSection(
+        string $uid_prefix,
+        bool $incremental_update_detected,
+        int $incremental_update_eof_count,
+        array $xref_conflicts,
+        ?string $escaped_name
+    ): void {
+        $struct_section_id = 'fabricator-pdf-content-structure-' . $uid_prefix;
+        $struct_sec_attr = esc_attr($uid_prefix);
+        $explain_style   = 'margin:10px 14px 8px;font-size:12px;color:#444;line-height:1.6';
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
+        echo "<div class='fabricator-pdf-detail-section'"
+           . " id='fabricator-pdf-section-structure-{$struct_sec_attr}'>";
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($struct_section_id) . "'>" . esc_html__('PDF Structure', 'formfabricator') . "</button>";
+        echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+        echo "</div>";
+        echo "<div id='" . esc_attr($struct_section_id) . "'"
+           . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        echo "<div class='fabricator-pdf-hash-list'>";
+        if ($incremental_update_detected) {
+            $eof_n_disp = (int) $incremental_update_eof_count;
+            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
+            // translators: %s: the literal PDF end-of-file marker "%%EOF".
+            echo "<span class='fabricator-pdf-hash-label'>" . esc_html(sprintf(__('%s count', 'formfabricator'), '%%EOF')) . "</span>";
+            // translators: %1$d: number of end-of-file markers found, %2$d: number expected.
+            echo "<span class='fabricator-pdf-hash-value'>" . esc_html(sprintf(__('%1$d (expected: %2$d)', 'formfabricator'), $eof_n_disp, 1)) . "</span>";
+            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+            echo "</div>";
+            echo "<p style='{$explain_style}'>";
+            echo wp_kses_post(sprintf(
+                /* translators: %s: the literal PDF "%%EOF" end-of-file marker, wrapped in <code> */
+                __(
+                    // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
+                    'A valid PDF has exactly <strong>one</strong> %s marker. Each extra marker signals that content was <strong>appended after the original cross-reference table</strong> was written. This is the standard technique for a <strong>PDF shadow attack / incremental update</strong>: an attacker appends new objects that override visible content while leaving the original seal intact.',
+                    'formfabricator'
+                ),
+                '<code>%%EOF</code>'
+            ));
+            echo "</p>";
+        }
+        if ($xref_conflicts !== []) {
+            $unreadable = in_array('unreadable', $xref_conflicts, true);
+            $objects    = array_slice(array_values(array_diff($xref_conflicts, ['unreadable'])), 0, 20);
+            $value      = $objects !== []
+                // translators: %s: comma-separated PDF object numbers.
+                ? sprintf(__('points elsewhere for object %s', 'formfabricator'), implode(', ', $objects))
+                : __('not readable', 'formfabricator');
+            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
+            echo "<span class='fabricator-pdf-hash-label'>" . esc_html__('Cross-reference table', 'formfabricator') . "</span>";
+            echo "<span class='fabricator-pdf-hash-value'>" . esc_html($value) . "</span>";
+            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+            echo "</div>";
+            echo "<p style='{$explain_style}'>";
+            echo esc_html(
+                $unreadable && $objects === []
+                    // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
+                    ? __('A PDF reader finds every part of the document through its cross-reference table. This file has none that can be read, so nothing shows that a reader displays the parts that were checked.', 'formfabricator')
+                    // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
+                    : __('A PDF reader finds every part of the document through its cross-reference table. Here the table points to another copy of these parts than the one that was checked: a second copy, placed for a reader to display instead of the sealed content.', 'formfabricator')
             );
-
-            $seal_base64 = trim($multiple_seals_detected ? end($seal_bodies) : $seal_bodies[0]);
-
-            self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'seal extraction');
-
-            if (strlen($seal_base64) > \FabricatorForms\PDF\HashSeal::MAX_SEAL_BLOCK_BYTES) {
-                throw new \RuntimeException('Seal is implausibly large.');
-            }
-
-            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the seal block read back out of the PDF (strict mode rejects malformed input). Not obfuscation.
-            $seal_json = base64_decode($seal_base64, true);
-            if ($seal_json === false || strlen($seal_json) < 2) {
-                throw new \RuntimeException('Base64 decode of seal failed.');
-            }
-
-            $seal_data = json_decode($seal_json, true, 512, JSON_THROW_ON_ERROR);
-            /* Well-formed JSON may still be a scalar, which rebuildPayload(array) can't take. */
-            if (!is_array($seal_data)) {
-                throw new \RuntimeException('Seal is not a JSON object.');
-            }
-
-            self::setProgress(__('Seal found — reconstructing payload…', 'formfabricator'), 25);
-
-            // --- Rebuild payload ---
-            $rebuilt_payload = self::rebuildPayload($seal_data);
-
-            self::setProgress(__('HMAC check…', 'formfabricator'), 35);
-
-            // --- HMAC check (early, before any output, so it's available for the summary) ---
-            // Cast/default: a seal with no 'seal' member would otherwise TypeError into a generic outer-catch failure.
-            $seal_result      = HashSeal::verify($rebuilt_payload, (string) ($seal_data['seal'] ?? ''));
-            $seal_matches     = $seal_result['valid'];
-            $seal_key_status  = $seal_result['key_status'];
-            $seal_compromised = $seal_result['compromised'];
-
-            // --- Seal vs rebuilt diff ---
-            $original_payload = $seal_data;
-            unset($original_payload['seal']);
-            $diffs = self::diffArrays($original_payload, $rebuilt_payload);
-            $seal_rebuilt_match = empty($diffs);
-
-            /* ---- PDF RAW PREPARATION ---- */
-            // Read here, before the font-program check below, which needs $pdf_raw.
-            $pdf_raw = null;
-
-            if (!empty($file['tmp_name']) && is_readable($file['tmp_name'])) {
-                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of $_FILES tmp_name; wp_remote_get() (the sniff's suggestion) is for remote URLs, not this.
-                $pdf_raw = file_get_contents($file['tmp_name']);
-            } else {
-                $pdf_raw = false;
-            }
-            // Every reference the checks below resolve reads from this, built in one pass over the file. Resolving each by
-            // searching the whole file cost the number of references times the file, and that number is the uploader's.
-            $object_index = PdfUtils::objectDefinitionIndex((string) $pdf_raw);
-
-            // --- Font program integrity check (computed before the inner buffer so the fonts section can
-            // display it) ---
-            $font_prog_mismatch = false;
-            $sealed_fp          = [];
-            $live_fp            = [];
-            if ($pdf_raw !== false) {
-                $sealed_fp = array_values(array_map('strval', (array) ($seal_data['font_prog_hashes'] ?? [])));
-                $live_fp   = PdfUtils::hashFontProgramStreams((string) $pdf_raw);
-                sort($sealed_fp);
-                sort($live_fp);
-
-                $font_prog_mismatch = ($live_fp !== $sealed_fp);
-                if ($font_prog_mismatch) {
-                    $font_missmatch = true;
-                }
-            }
-
-            // ---- Start inner buffer: all detail HTML goes here so the summary panel can be prepended ----
-            ob_start();
-
-            // --- Structure integrity section (only present when incremental update detected) ---
-            if ($incremental_update_detected) {
-                $struct_section_id = 'fabricator-pdf-content-structure-' . $uid_prefix;
-                $struct_sec_attr = esc_attr($uid_prefix);
-                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                echo "<div class='fabricator-pdf-detail-section'"
-                   . " id='fabricator-pdf-section-structure-{$struct_sec_attr}'>";
-                echo "<div class='fabricator-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-                   . " data-target='" . esc_attr($struct_section_id) . "'>" . esc_html__('PDF Structure', 'formfabricator') . "</button>";
-                echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
-                echo "</div>";
-                $eof_n_disp = (int) $incremental_update_eof_count;
-                echo "<div id='" . esc_attr($struct_section_id) . "'"
-                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-                echo "<div class='fabricator-pdf-hash-list'>";
-                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
-                // translators: %s: the literal PDF end-of-file marker "%%EOF".
-                echo "<span class='fabricator-pdf-hash-label'>" . esc_html(sprintf(__('%s count', 'formfabricator'), '%%EOF')) . "</span>";
-                // translators: %1$d: number of end-of-file markers found, %2$d: number expected.
-                echo "<span class='fabricator-pdf-hash-value'>" . esc_html(sprintf(__('%1$d (expected: %2$d)', 'formfabricator'), $eof_n_disp, 1)) . "</span>";
-                echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
-                echo "</div>";
-                echo "<p style='margin:10px 14px 8px;font-size:12px;color:#444;line-height:1.6'>";
-                echo wp_kses_post(sprintf(
-                    /* translators: %s: the literal PDF "%%EOF" end-of-file marker, wrapped in <code> */
-                    __(
-                        // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
-                        'A valid PDF has exactly <strong>one</strong> %s marker. Each extra marker signals that content was <strong>appended after the original cross-reference table</strong> was written. This is the standard technique for a <strong>PDF shadow attack / incremental update</strong>: an attacker appends new objects that override visible content while leaving the original seal intact.',
-                        'formfabricator'
-                    ),
-                    '<code>%%EOF</code>'
-                ));
-                echo "</p>";
-                echo "</div>";
-                echo "</div>";
-                echo "</div>";
-            }
-
-            // --- Raw debug: Seal Data + Rebuilt Payload (info-only, always collapsed) ---
-            echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-raw-" . esc_attr($uid_prefix) . "'>";
-            echo "<div class='fabricator-pdf-detail-hdr'>";
-            echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-               . " data-target='" . esc_attr($uid_prefix) . "-raw-content'>" . esc_html__('Raw Seal & Rebuilt Data', 'formfabricator') . "</button>";
-            echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-info'>" . esc_html__('INFO', 'formfabricator') . "</span>";
+            echo "</p>";
+        }
+        if ($escaped_name !== null) {
+            // The name as spelled and as a viewer reads it, printable ASCII only: it is the uploader's bytes, cut short.
+            $printable = static fn(string $s): string => (string) preg_replace('/[^\x21-\x7E]/', '?', substr($s, 0, 64));
+            $decoded   = (string) preg_replace_callback('/#([0-9A-Fa-f]{2})/', static fn(array $m): string => chr((int) hexdec($m[1])), $escaped_name);
+            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
+            echo "<span class='fabricator-pdf-hash-label'>" . esc_html__('Disguised name', 'formfabricator') . "</span>";
+            echo "<span class='fabricator-pdf-hash-value'>" . esc_html(sprintf(
+                // translators: %1$s: the name as written in the file, e.g. "/Ann#6Fts"; %2$s: as a viewer reads it, e.g. "/Annots"; %3$s: what that part does.
+                __('%1$s, which a viewer reads as %2$s: %3$s', 'formfabricator'),
+                '/' . $printable($escaped_name),
+                '/' . $printable($decoded),
+                self::pdfNameMeaning($decoded)
+            )) . "</span>";
+            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
             echo "</div>";
-            $flags      = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE;
-            $json_seal  = esc_html((string) wp_json_encode($seal_data, $flags));
-            $json_built = esc_html((string) wp_json_encode($rebuilt_payload, $flags));
-
-            /* Names the differing keys, which the HMAC can't. 'seal' itself is not in the rebuild. */
-            $seal_diff_keys = [];
-            foreach (array_keys($seal_data) as $seal_key) {
-                if ($seal_key === 'seal') {
-                    continue;
-                }
-                if (!array_key_exists($seal_key, $rebuilt_payload)) {
-                    $seal_diff_keys[] = $seal_key . ' (' . __('missing from rebuild', 'formfabricator') . ')';
-                    continue;
-                }
-                if (wp_json_encode($seal_data[$seal_key]) !== wp_json_encode($rebuilt_payload[$seal_key])) {
-                    $seal_diff_keys[] = $seal_key;
-                }
-            }
-            foreach (array_keys($rebuilt_payload) as $built_key) {
-                if (!array_key_exists($built_key, $seal_data)) {
-                    $seal_diff_keys[] = $built_key . ' (' . __('added by rebuild', 'formfabricator') . ')';
-                }
-            }
-
-            /* Classed for padding: the surrounding container gives this region none. */
-            if ($seal_diff_keys !== []) {
-                echo "<p class='fabricator-pdf-seal-diff fabricator-pdf-seal-diff--differs'><strong>"
-                   . esc_html__('Keys differing between seal and rebuild:', 'formfabricator')
-                   . "</strong> <code>" . esc_html(implode(', ', $seal_diff_keys)) . "</code></p>";
-            } else {
-                echo "<p class='fabricator-pdf-seal-diff fabricator-pdf-seal-diff--identical'>"
-                   . esc_html__('Seal and rebuilt payload are byte-identical (excluding the seal hash itself).', 'formfabricator')
-                   . "</p>";
-            }
-
-            $raw_id = esc_attr($uid_prefix) . '-raw-content';
-            echo "<div id='{$raw_id}' class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
-
-            // Column headers — outside the scroll container so they stay fixed
-            echo "<div class='fabricator-pdf-sbs-headers'>";
-            echo "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Seal', 'formfabricator') . "</div>";
-            echo "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Rebuilt', 'formfabricator') . "</div>";
-            echo "</div>";
-
-            // Single scrollable container — one scroll event, both columns move together
-            echo "<div class='fabricator-pdf-sbs-scroll'>";
-            echo "<pre class='fabricator-pdf-sbs-pre'>{$json_seal}</pre>";
-            echo "<div class='fabricator-pdf-sbs-divider'></div>";
-            echo "<pre class='fabricator-pdf-sbs-pre'>{$json_built}</pre>";
-            echo "</div>";
-
-            if (!$seal_rebuilt_match) {
-                $json_diff = esc_html((string) wp_json_encode($diffs, $flags));
-                echo "<div style='padding:12px 14px;border-top:1px solid #f5c6cb;'>";
-                echo "<div class='fabricator-pdf-seal-pane__label'"
-                    . " style='color:#721c24;margin-bottom:4px;'>" . esc_html__('Differences', 'formfabricator') . "</div>";
-                echo "<pre class='fabricator-pdf-json-pre'"
-                    . " style='border-color:#f5c6cb;color:#721c24;margin:0;'>{$json_diff}</pre>";
-                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                echo "</div>";
-            }
-            echo "</div></div>";
-
-            // --- Visual content check using invisible field markers ---
-            $visual_mismatch_found = false;
-            $field_mismatch_count  = 0;
-
-            // One definition, shared with the submission check that keeps visitors from typing markers (PdfUtils).
-            $normalize = static fn(string $s): string => PdfUtils::normalizeText($s);
-
-            // Normalize full PDF text
-            $normalized_pdf = $normalize($text);
-            $normalized_pdf = preg_replace(
-                '/\[FABRICATOR_PDF_PAGENO_START\].*?\[FABRICATOR_PDF_PAGENO_END\]/s',
-                '',
-                $normalized_pdf
+            echo "<p style='{$explain_style}'>";
+            echo esc_html(
+                // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
+                __('Something was added to this file after it was sealed and written so that the checks above do not recognize it, while a PDF viewer does and shows it: for instance a box or text drawn over a page. Whatever you see in this file beyond the sealed answers is not part of the original. This plugin never writes names this way.', 'formfabricator')
             );
-            $fields = $rebuilt_payload['fields'] ?? [];
+            echo "</p>";
+        }
+        echo "</div>";
+        echo "</div>";
+        echo "</div>";
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+    }
 
-            self::setProgress(__('Checking fields…', 'formfabricator'), 45);
+    /**
+     * What a PDF name stands for, in words a reader of the report follows; for a disguised name in the structure section.
+     *
+     * @param string $name The name as a viewer reads it, without its slash.
+     * @return string
+     */
+    private static function pdfNameMeaning(string $name): string
+    {
+        return match ($name) {
+            'Annots', 'Annot', 'FreeText', 'Popup', 'Stamp', 'Ink', 'Square', 'Circle'
+                => __('annotations, boxes, notes or links drawn on top of the pages', 'formfabricator'),
+            'Contents' => __('what a page draws', 'formfabricator'),
+            'XObject', 'Image', 'Form' => __('an image or a drawing placed on a page', 'formfabricator'),
+            'Font', 'BaseFont', 'FontFile', 'FontFile2', 'FontFile3', 'FontDescriptor'
+                => __('a font', 'formfabricator'),
+            'OpenAction', 'AA', 'JS', 'JavaScript', 'Launch', 'URI', 'A', 'S'
+                => __('an action the viewer carries out, such as opening a link or running a script', 'formfabricator'),
+            'AcroForm', 'Fields', 'Widget' => __('fillable form fields', 'formfabricator'),
+            'Page', 'Pages', 'Kids', 'MediaBox', 'CropBox' => __('the pages and their size', 'formfabricator'),
+            'Info', 'Metadata', 'Title', 'Author', 'Producer', 'CreationDate', 'ModDate'
+                => __('the document information', 'formfabricator'),
+            default => __('a part of the document\'s structure', 'formfabricator'),
+        };
+    }
 
-            // Section wrapper — badge + open-state injected after check runs via post-processing
-            $all_visual_id = 'fabricator-pdf-content-fields-' . $uid_prefix;
-            echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-fields-" . esc_attr($uid_prefix) . "'>";
-            echo "<div class='fabricator-pdf-detail-hdr' id='fabricator-pdf-hdr-fields-" . esc_attr($uid_prefix) . "'>";
-            echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-               . " data-target='" . esc_attr($all_visual_id) . "'>" . esc_html__('Field Content', 'formfabricator') . "</button>";
-            echo "<span id='fabricator-pdf-badge-fields-" . esc_attr($uid_prefix)
-               . "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
+    /**
+     * Prints the seal as read beside the payload rebuilt from it (information only, always collapsed), naming the keys
+     * that differ, which the HMAC can't.
+     *
+     * @param array  $seal_data       The seal as read.
+     * @param array  $rebuilt_payload The payload rebuilt from it (rebuildPayload()).
+     * @param array  $diffs           Their differences (diffArrays()).
+     * @param string $uid_prefix      Element id prefix of this document's card.
+     * @param string $hmac            The HMAC's outcome: 'pass', 'fail', or 'nokey' when no key of this site could check it.
+     * @return void
+     */
+    private static function renderRawSealSection(array $seal_data, array $rebuilt_payload, array $diffs, string $uid_prefix, string $hmac): void
+    {
+        $seal_rebuilt_match = empty($diffs);
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
+        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-raw-" . esc_attr($uid_prefix) . "'>";
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($uid_prefix) . "-raw-content'>" . esc_html__('Seal', 'formfabricator') . "</button>";
+        echo self::detailBadge('fabricator-pdf-badge-raw-' . $uid_prefix, $hmac !== 'pass');
+        echo "</div>";
+
+        // What the HMAC says comes first: the comparison below only shows the seal is complete, not that it is genuine.
+        $hmac_text = match ($hmac) {
+            'pass'  => __('HMAC valid: the seal holds exactly what was signed when the PDF was made.', 'formfabricator'),
+            'nokey' => __('HMAC not checked: no key on this site matches the seal, so nothing shows it was signed here.', 'formfabricator'),
+            default => __('HMAC mismatch: the seal was changed after it was signed, or signed with another key. Nothing it records can be trusted.', 'formfabricator'),
+        };
+        echo "<p class='fabricator-pdf-seal-diff fabricator-pdf-seal-diff--" . ($hmac === 'pass' ? 'identical' : 'differs') . "'><strong>"
+           . esc_html($hmac_text) . '</strong></p>';
+        $flags      = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE;
+        $json_seal  = esc_html((string) wp_json_encode($seal_data, $flags));
+        $json_built = esc_html((string) wp_json_encode($rebuilt_payload, $flags));
+
+        /* Names the differing keys, which the HMAC can't. 'seal' itself is not in the rebuild. */
+        $seal_diff_keys = [];
+        foreach (array_keys($seal_data) as $seal_key) {
+            if ($seal_key === 'seal') {
+                continue;
+            }
+            if (!array_key_exists($seal_key, $rebuilt_payload)) {
+                $seal_diff_keys[] = $seal_key . ' (' . __('missing from rebuild', 'formfabricator') . ')';
+                continue;
+            }
+            if (wp_json_encode($seal_data[$seal_key]) !== wp_json_encode($rebuilt_payload[$seal_key])) {
+                $seal_diff_keys[] = $seal_key;
+            }
+        }
+        foreach (array_keys($rebuilt_payload) as $built_key) {
+            if (!array_key_exists($built_key, $seal_data)) {
+                $seal_diff_keys[] = $built_key . ' (' . __('added by rebuild', 'formfabricator') . ')';
+            }
+        }
+
+        /* Classed for padding: the surrounding container gives this region none. */
+        if ($seal_diff_keys !== []) {
+            echo "<p class='fabricator-pdf-seal-diff fabricator-pdf-seal-diff--differs'><strong>"
+               . esc_html__('Keys differing between seal and rebuild:', 'formfabricator')
+               . "</strong> <code>" . esc_html(implode(', ', $seal_diff_keys)) . "</code></p>";
+        } else {
+            echo "<p class='fabricator-pdf-seal-diff'>"
+               . esc_html__('The seal is complete: every entry the check reads is present and well-formed. Whether it is genuine is the HMAC\'s verdict above.', 'formfabricator')
+               . "</p>";
+        }
+
+        $raw_id = esc_attr($uid_prefix) . '-raw-content';
+        echo "<div id='{$raw_id}' class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
+
+        // Column headers — outside the scroll container so they stay fixed
+        echo "<div class='fabricator-pdf-sbs-headers'>";
+        echo "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Seal', 'formfabricator') . "</div>";
+        echo "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Rebuilt', 'formfabricator') . "</div>";
+        echo "</div>";
+
+        // Single scrollable container — one scroll event, both columns move together
+        echo "<div class='fabricator-pdf-sbs-scroll'>";
+        echo "<pre class='fabricator-pdf-sbs-pre'>{$json_seal}</pre>";
+        echo "<div class='fabricator-pdf-sbs-divider'></div>";
+        echo "<pre class='fabricator-pdf-sbs-pre'>{$json_built}</pre>";
+        echo "</div>";
+
+        if (!$seal_rebuilt_match) {
+            $json_diff = esc_html((string) wp_json_encode($diffs, $flags));
+            echo "<div style='padding:12px 14px;border-top:1px solid #f5c6cb;'>";
+            echo "<div class='fabricator-pdf-seal-pane__label'"
+                . " style='color:#721c24;margin-bottom:4px;'>" . esc_html__('Differences', 'formfabricator') . "</div>";
+            echo "<pre class='fabricator-pdf-json-pre'"
+                . " style='border-color:#f5c6cb;color:#721c24;margin:0;'>{$json_diff}</pre>";
+            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
             echo "</div>";
-            echo "<div id='" . esc_attr($all_visual_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-            echo "<div class='fabricator-pdf-cmp-list'>";
+        }
+        echo "</div></div>";
+    }
 
-            // A cursor over the payload fields and a set of seen markers keep this linear. Only shown fields have markers.
-            $field_keys        = is_array($fields)
-                ? array_keys(array_filter($fields, static fn($f): bool => is_array($f) && !empty($f['shown'])))
-                : [];
-            $field_cursor      = 0;
-            $processed_markers = [];
+    /**
+     * Prints the field content section: each sealed field shown in the PDF against the text between its invisible
+     * markers.
+     *
+     * @param string $text            The document's text as pdfparser extracted it.
+     * @param array  $rebuilt_payload The payload rebuilt from the seal.
+     * @param string $uid_prefix      Element id prefix of this document's card.
+     * @param array  $budget          The parse-time budget.
+     * @return int How many fields don't match.
+     */
+    private static function renderFieldContentSection(string $text, array $rebuilt_payload, string $uid_prefix, array $budget): int
+    {
+        $field_mismatch_count  = 0;
 
-            do {
-                $new_start_found = false;
+        // One definition, shared with the submission check that keeps visitors from typing markers (PdfUtils).
+        $normalize = static fn(string $s): string => PdfUtils::normalizeText($s);
 
-                // Each field marker up to its end marker, found by a linear scan (PdfUtils::fieldMarkerMatches()).
-                $matches = PdfUtils::fieldMarkerMatches($normalized_pdf);
-                if ($matches !== []) {
-                    foreach ($matches as $match) {
-                        $start_marker = $match[1];
-                        $pdf_field_text = $normalize($match[2]);
+        // Normalize full PDF text
+        $normalized_pdf = $normalize($text);
+        $normalized_pdf = preg_replace(
+            '/\[FABRICATOR_PDF_PAGENO_START\].*?\[FABRICATOR_PDF_PAGENO_END\]/s',
+            '',
+            $normalized_pdf
+        );
+        $fields = $rebuilt_payload['fields'] ?? [];
 
-                        // Skip already processed markers
-                        if (isset($processed_markers[$start_marker])) {
-                            continue;
-                        }
+        self::setProgress(__('Checking fields…', 'formfabricator'), 45);
 
-                        // Next unprocessed field in the payload
-                        $payload_index = $field_keys[$field_cursor] ?? null;
+        // The rows first, so the header can carry the outcome.
+        ob_start();
 
-                        if ($payload_index === null) {
-                            echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
-                               . "<div class='fabricator-pdf-cmp-header'>"
-                               . "<span class='fabricator-pdf-cmp-label'>" . esc_html__('Unknown field', 'formfabricator') . "</span>"
-                               . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($start_marker) . "</span>"
-                               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . "</span>"
-                               . "</div></div>\n";
-                            $processed_markers[$start_marker] = true;
-                            $new_start_found = true;
-                            continue;
-                        }
+        // A cursor over the payload fields and a set of seen markers keep this linear. Only shown fields have markers.
+        $field_keys        = is_array($fields)
+            ? array_keys(array_filter($fields, static fn($f): bool => is_array($f) && !empty($f['shown'])))
+            : [];
+        $field_cursor      = 0;
+        $processed_markers = [];
 
-                        $payload_field = $fields[$payload_index];
-                        $expected_text = $normalize($payload_field['value'] ?? '');
+        do {
+            $new_start_found = false;
 
-                        // Remove all zero-width spaces, trim, and normalize whitespace again
-                        $pdf_field_text = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $pdf_field_text);
-                        $expected_text = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $expected_text);
+            // Each field marker up to its end marker, found by a linear scan (PdfUtils::fieldMarkerMatches()).
+            $matches = PdfUtils::fieldMarkerMatches($normalized_pdf);
+            if ($matches !== []) {
+                foreach ($matches as $match) {
+                    $start_marker = $match[1];
+                    $pdf_field_text = $normalize($match[2]);
 
-                        $repair_missing_spaces_strict = function (string $pdf, string $canonical): ?string {
-                            // Split into characters once: mb_substr($s, $i, 1) walks the string from its start on every call,
-                            // which made this comparison quadratic in the field length for a crafted PDF.
-                            $pdf_chars = mb_str_split($pdf);
-                            $can_chars = mb_str_split($canonical);
-                            $p = 0;
-                            $c = 0;
-                            $out = '';
+                    // Skip already processed markers
+                    if (isset($processed_markers[$start_marker])) {
+                        continue;
+                    }
 
-                            $pdf_len = count($pdf_chars);
-                            $can_len = count($can_chars);
+                    // Next unprocessed field in the payload
+                    $payload_index = $field_keys[$field_cursor] ?? null;
 
-                            while ($p < $pdf_len && $c < $can_len) {
-                                $pdf_ch = $pdf_chars[$p];
-                                $can_ch = $can_chars[$c];
-
-                                // Exact match
-                                if ($pdf_ch === $can_ch) {
-                                    $out .= $pdf_ch;
-                                    $p++;
-                                    $c++;
-                                    continue;
-                                }
-
-                                // Canonical has space, PDF lost it → allow ONE thing
-                                if ($can_ch === ' ' && $pdf_ch !== ' ') {
-                                    $out .= ' ';
-                                    $c++;
-                                    continue;
-                                }
-
-                                // Anything else is a real mismatch
-                                return null;
-                            }
-
-                            // Both sides fully consumed, or a sealed "100" shown as "1000" would match. A genuine field
-                            // has no text between its value and its end marker.
-                            if (trim(implode('', array_slice($can_chars, $c))) !== '' || trim(implode('', array_slice($pdf_chars, $p))) !== '') {
-                                return null;
-                            }
-
-                            return $out;
-                        };
-
-                        $repaired_pdf = $repair_missing_spaces_strict(
-                            $pdf_field_text,
-                            $expected_text
-                        );
-
-                        if ($repaired_pdf === null) {
-                            $matches_visual = false;
-                        } else {
-                            $matches_visual = ($repaired_pdf === $expected_text);
-                            $pdf_field_text = $repaired_pdf; // IMPORTANT: for printing
-                        }
-
-                        if (!$matches_visual) {
-                            $visual_mismatch_found = true;
-                            $field_mismatch_count++;
-                        }
-
-                        // Display results as comparison card
-                        $label      = $payload_field['label'] ?? '';
-                        $row_state  = $matches_visual ? 'pass' : 'fail';
-                        $pill_state = $matches_visual ? 'pass' : 'fail';
-                        $pill_text  = $matches_visual ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
-                        // translators: %d: the field's position in the seal.
-                        $display_label = $label !== '' ? esc_html($label) : esc_html(sprintf(__('Field #%d', 'formfabricator'), (int) $payload_index));
-
-                        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                        echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
-                        echo "<div class='fabricator-pdf-cmp-header'>"
-                           . "<span class='fabricator-pdf-cmp-label'>{$display_label}</span>"
+                    if ($payload_index === null) {
+                        echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
+                           . "<div class='fabricator-pdf-cmp-header'>"
+                           . "<span class='fabricator-pdf-cmp-label'>" . esc_html__('Unknown field', 'formfabricator') . "</span>"
                            . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($start_marker) . "</span>"
-                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>{$pill_text}</span>"
-                           . "</div>";
-                        echo "<div class='fabricator-pdf-cmp-body'>";
-                        $seal_val = esc_html((string) ($payload_field['value'] ?? ''));
-                        echo "<div class='fabricator-pdf-cmp-col'>"
-                           . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
-                           . "<div class='fabricator-pdf-cmp-col__value'>{$seal_val}</div>"
-                           . "</div>";
-                        echo "<div class='fabricator-pdf-cmp-col'>"
-                           . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
-                           . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html((string) $pdf_field_text) . "</div>"
-                           . "</div>";
-                        echo "</div>"; // fabricator-pdf-cmp-body
-
-                        if (!$matches_visual) {
-                            $diff_parts = [];
-                            $len = min(100, max(mb_strlen($expected_text), mb_strlen($pdf_field_text)));
-                            for ($j = 0; $j < $len; $j++) {
-                                $exp_char = mb_substr($expected_text, $j, 1);
-                                $pdf_char = mb_substr($pdf_field_text, $j, 1);
-                                if ($exp_char !== $pdf_char) {
-                                    $diff_parts[] = 'pos ' . $j . ': &laquo;' . esc_html((string) $exp_char)
-                                                  . '&raquo; vs &laquo;' . esc_html((string) $pdf_char) . '&raquo;';
-                                }
-                            }
-                            if (!empty($diff_parts)) {
-                                echo "<div class='fabricator-pdf-diff-row'>"
-                                . implode(' &nbsp;|&nbsp; ', $diff_parts) . "</div>";
-                        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                            }
-                        }
-
-                        echo "</div>\n"; // fabricator-pdf-cmp-row
-
-                        // Mark both as processed
-                        $field_cursor++;
+                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . "</span>"
+                           . "</div></div>\n";
                         $processed_markers[$start_marker] = true;
                         $new_start_found = true;
-                    }
-                }
-            } while ($new_start_found);
-
-            // Sealed fields the PDF shows but whose markers are gone: the comparison above checked fewer fields than were
-            // sealed and said nothing. The content-stream check still catches the edit that removed them; this names them.
-            for ($missing_at = $field_cursor, $missing_to = count($field_keys); $missing_at < $missing_to; $missing_at++) {
-                $missing_field = $fields[$field_keys[$missing_at]];
-                $missing_label = (string) ($missing_field['label'] ?? '');
-                $visual_mismatch_found = true;
-                $field_mismatch_count++;
-                echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
-                   . "<div class='fabricator-pdf-cmp-header'>"
-                   . "<span class='fabricator-pdf-cmp-label'>"
-                   // translators: %d: the field's position in the seal.
-                   . esc_html($missing_label !== '' ? $missing_label : sprintf(__('Field #%d', 'formfabricator'), (int) $field_keys[$missing_at]))
-                   . "</span>"
-                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISSING FROM PDF', 'formfabricator') . "</span>"
-                   . "</div></div>\n";
-            }
-
-            self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'field extraction');
-
-            echo "</div>"; // fabricator-pdf-cmp-list
-            echo "</div>"; // fabricator-pdf-detail-content
-            echo "</div>"; // fabricator-pdf-detail-section
-
-            // --- Multiple seals detail section ---
-            // Each seal is checked like the primary; the verdict fails regardless.
-            if ($multiple_seals_detected && $pdf_raw !== false) {
-                // The seals in pdfparser's text, plus any injected after the last %%EOF (raw bytes before it give false hits).
-                $all_seals_b64 = [];
-                foreach ($text_seal_b64_list as $m) {
-                    if ($m !== '' && !in_array($m, $all_seals_b64, true)) {
-                        $all_seals_b64[] = $m;
-                    }
-                }
-                $last_eof_pos = strrpos((string) $pdf_raw, '%%EOF');
-                $appended_raw = $last_eof_pos !== false
-                    ? substr((string) $pdf_raw, $last_eof_pos + 5)
-                    : '';
-                foreach (array_column(PdfUtils::sealBlocks($appended_raw), 2) as $rb64) {
-                    $rb64 = trim($rb64);
-                    if ($rb64 !== '' && !in_array($rb64, $all_seals_b64, true)) {
-                        $all_seals_b64[] = $rb64;
-                    }
-                }
-
-                $seals_section_id = 'fabricator-pdf-content-seals-' . $uid_prefix;
-                echo "<div class='fabricator-pdf-detail-section'"
-                   . " id='fabricator-pdf-section-seals-" . esc_attr($uid_prefix) . "'>";
-                echo "<div class='fabricator-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-                   . " data-target='" . esc_attr($seals_section_id) . "'>" . esc_html__('Seal Blocks', 'formfabricator') . "</button>";
-                echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
-                echo "</div>";
-                echo "<div id='" . esc_attr($seals_section_id) . "'"
-                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-                echo "<div class='fabricator-pdf-hash-list'>";
-
-                $total_seals = count($all_seals_b64);
-                echo "<p style='margin:8px 14px 4px;font-size:12px;color:#d63638;font-weight:600'>";
-                echo esc_html(
-                    sprintf(
-                        /* translators: %d: number of seal blocks found in the PDF (should be exactly 1). */
-                        _n('%d seal block found — exactly 1 is expected.', '%d seal blocks found — exactly 1 is expected.', $total_seals, 'formfabricator'),
-                        $total_seals
-                    )
-                ) . ' ';
-                echo esc_html__('Any extra seal block is proof of tampering regardless of its HMAC status.', 'formfabricator');
-                echo "</p>";
-
-                foreach ($all_seals_b64 as $idx => $sb64) {
-                    $sb64      = trim((string) $sb64);
-                    $seal_num  = $idx + 1;
-                    $is_ok     = false;
-                    $sd        = null;
-                    $parse_err = '';
-
-                    if (strlen($sb64) > \FabricatorForms\PDF\HashSeal::MAX_SEAL_BLOCK_BYTES) {
-                        $parse_err = __('The seal is implausibly large and was rejected.', 'formfabricator');
-                    } else {
-                        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the seal block read back out of the PDF (strict mode rejects malformed input). Not obfuscation.
-                        $sj = base64_decode($sb64, true);
-                        if ($sj === false) {
-                            $parse_err = __('The seal could not be base64-decoded.', 'formfabricator');
-                        } else {
-                            $sd = json_decode($sj, true);
-                            if (!is_array($sd)) {
-                                $parse_err = __('The seal data is not valid JSON.', 'formfabricator');
-                            } else {
-                                try {
-                                    $rp    = self::rebuildPayload($sd);
-                                    $vr    = HashSeal::verify($rp, (string)($sd['seal'] ?? ''));
-                                    $is_ok = $vr['valid'];
-                                } catch (\Throwable $sve) {
-                                    \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: seal HMAC check threw: ' . $sve->getMessage());
-                                    $is_ok     = false;
-                                    $parse_err = __('The seal check could not be completed.', 'formfabricator');
-                                }
-                            }
-                        }
+                        continue;
                     }
 
-                    $row_cls  = $is_ok ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail';
-                    $pill_cls = $is_ok ? 'fabricator-pdf-pill--pass'     : 'fabricator-pdf-pill--fail';
-                    $pill_txt = $is_ok ? esc_html__('AUTHENTIC', 'formfabricator') : esc_html__('FORGED / INVALID', 'formfabricator');
+                    $payload_field = $fields[$payload_index];
+                    $expected_text = $normalize($payload_field['value'] ?? '');
 
-                    $seal_row_style = 'flex-direction:column;align-items:flex-start;gap:6px;padding:10px 14px';
+                    // Remove all zero-width spaces, trim, and normalize whitespace again
+                    $pdf_field_text = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $pdf_field_text);
+                    $expected_text = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $expected_text);
+
+                    $matches_visual = self::comparableText((string) $pdf_field_text) === self::comparableText((string) $expected_text);
+                    // Shown spaced as the seal has it, where only spaces differ.
+                    $repaired_pdf = self::repairSpacing((string) $pdf_field_text, (string) $expected_text);
+                    if ($repaired_pdf !== null) {
+                        $pdf_field_text = $repaired_pdf;
+                    }
+
+                    if (!$matches_visual) {
+                        $field_mismatch_count++;
+                    }
+
+                    // Display results as comparison card
+                    $label      = $payload_field['label'] ?? '';
+                    $row_state  = $matches_visual ? 'pass' : 'fail';
+                    $pill_state = $matches_visual ? 'pass' : 'fail';
+                    $pill_text  = $matches_visual ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
+                    // translators: %d: the field's position in the seal.
+                    $display_label = $label !== '' ? esc_html($label) : esc_html(sprintf(__('Field #%d', 'formfabricator'), (int) $payload_index));
+
                     // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                    echo "<div class='fabricator-pdf-hash-row {$row_cls}' style='{$seal_row_style}'>";
-                    echo "<div style='display:flex;align-items:center;gap:8px;width:100%'>";
-                    // translators: %d: position of this seal among the seals found in the document.
-                    echo "<strong style='flex:1'>" . esc_html(sprintf(__('Seal #%d', 'formfabricator'), (int) $seal_num)) . "</strong>";
-                    echo "<span class='fabricator-pdf-pill {$pill_cls}'>{$pill_txt}</span>";
-                    echo "</div>";
-
-                    // Always show a truncated preview of the raw base64 between the markers.
-                    $b64_preview = strlen($sb64) > 120
-                        ? esc_html(substr($sb64, 0, 60)) . '…' . esc_html(substr($sb64, -30))
-                        : esc_html($sb64);
-                    echo "<div style='font-size:10px;color:#787c82;font-family:monospace;word-break:break-all'>";
-                    echo esc_html__('Base64:', 'formfabricator') . ' ' . $b64_preview;
-                    echo "</div>";
-
-                    if ($parse_err !== '') {
-                        echo "<div style='font-size:11px;color:#d63638'>" . esc_html($parse_err) . "</div>";
-                    } elseif (is_array($sd)) {
-                        // Show key fields from the seal so the admin can identify which is real
-                        $s_form    = esc_html((string) ($sd['form_name'] ?? '—'));
-                        $s_id      = esc_html((string) ($sd['form_id']   ?? '—'));
-                        $s_gen     = esc_html((string) ($sd['generated'] ?? '—'));
-                        $s_fields  = is_array($sd['fields'] ?? null) ? count($sd['fields']) : '—';
-                        $s_pages   = esc_html((string) ($sd['expected_pages'] ?? '—'));
-                        echo "<table style='font-size:11px;border-collapse:collapse;width:100%'>";
-                        echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0;white-space:nowrap'>" . esc_html__('Form', 'formfabricator') . "</td>"
-                           // translators: %1$s: form name, %2$s: form ID, both as recorded in the seal.
-                           . "<td>" . sprintf(esc_html__('%1$s (ID: %2$s)', 'formfabricator'), $s_form, $s_id) . "</td></tr>";
-                        echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Generated', 'formfabricator') . "</td>"
-                           . "<td>" . $s_gen . "</td></tr>";
-                        echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Fields', 'formfabricator') . "</td>"
-                           . "<td>" . $s_fields . "</td></tr>";
-                        echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Pages', 'formfabricator') . "</td>"
-                           . "<td>" . $s_pages . "</td></tr>";
-                        echo "</table>";
-                    }
-
-                    echo "</div>";
-                }
-
-                echo "</div></div></div>";
-            }
-
-            $unexpected_detected     = false;
-            $annotation_mismatch     = false;
-            $pagecount_mismatch      = false;
-            $image_missmatch         = false;
-            $font_missmatch          = false;
-            $content_stream_mismatch = false;
-
-            self::$image_slots = [];
-
-            /* ─────────────────────── ANNOTATION PROCESSING ─────────────────────── */
-
-            // $visualLines comes directly from the AJAX parameter — no log file read needed.
-            if (!is_array($visualLines)) {
-                $visualLines = [];
-            }
-
-            $annotation_fail_count = 0;
-
-            self::setProgress(__('Checking annotations…', 'formfabricator'), 58);
-
-            // Section wrapper — badge injected after annotation check via post-processing
-            echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-annots-" . esc_attr($uid_prefix) . "'>";
-
-            $fold_id = 'fabricator-pdf-content-annots-' . $uid_prefix;
-            echo "<div class='fabricator-pdf-detail-hdr'>";
-            echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-               . " data-target='" . esc_attr($fold_id) . "'>"
-               . esc_html__('Annotations', 'formfabricator') . "</button>";
-            $annot_badge_id = 'fabricator-pdf-badge-annots-' . esc_attr($uid_prefix);
-            echo "<span id='{$annot_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
-                    // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-            echo "</div>";
-            echo "<div id='" . esc_attr($fold_id) . "'"
-               . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-
-            $fold_dupes_id = 'fold_dupecheck_' . uniqid();
-            echo "<div class='fabricator-pdf-subsection'>";
-            echo "<button type='button' class='fabricator-pdf-subtoggle fabricator-pdf-toggle'"
-               . " data-target='" . esc_attr($fold_dupes_id) . "'>"
-               . "<span class='fabricator-pdf-subtoggle__icon'>&#9656;</span> " . esc_html__('Chunk Check', 'formfabricator')
-               . "</button>";
-            echo "<div id='" . esc_attr($fold_dupes_id) . "'"
-               . " class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
-            echo "<div class='fabricator-pdf-cmp-list'>";
-
-            $fields = $rebuilt_payload['fields'] ?? [];
-            // Cursor and marker set, as in the comparison loop above.
-            // Only the fields the PDF shows have markers; hidden ones are sealed too, with "shown" false (Generator).
-            $field_keys        = is_array($fields)
-                ? array_keys(array_filter($fields, static fn($f): bool => is_array($f) && !empty($f['shown'])))
-                : [];
-            $field_cursor      = 0;
-            $processed_markers = [];
-            $potential_dupes = []; // <-- store actual dupes here
-
-            $inside_field = false;
-            $current_marker = '';
-            $current_chunks = [];
-
-            $fabricator_total_lines = count($visualLines);
-
-            foreach ($visualLines as $line_number => $chunk) {
-                // Interim progress, so a large comparison doesn't look frozen.
-                if ($fabricator_total_lines > 0 && $line_number % 1000 === 0) {
-                    self::setProgress(
-                        sprintf(
-                            /* translators: 1: lines processed so far, 2: total lines to process. */
-                            __('Compiling results… (%1$d/%2$d)', 'formfabricator'),
-                            $line_number,
-                            $fabricator_total_lines
-                        ),
-                        58
-                    );
-                }
-
-                // Strip numeric line prefixes like "58: "
-                $chunk_clean = preg_replace('/^\d+:\s*/', '', $chunk);
-
-                // --- Detect end of field first ---
-                if ($inside_field && preg_match('/^\[FABRICATOR_PDF_FIELD_END\]/', $chunk_clean)) {
-                    $inside_field = false;
-
-                    // Concatenate chunks
-                    $full_field_text = implode('', $current_chunks);
-
-                    // Remove page markers inside field
-                    $full_field_text = preg_replace(
-                        '/\[FABRICATOR_PDF_PAGENO_START\].*?\[FABRICATOR_PDF_PAGENO_END\]/s',
-                        '',
-                        $full_field_text
-                    );
-
-                    if (!isset($processed_markers[$current_marker])) {
-                        // Next unprocessed payload field
-                        $payload_index = $field_keys[$field_cursor] ?? null;
-
-                        if ($payload_index !== null) {
-                            $payload_field = $fields[$payload_index];
-                            $expected_text = $payload_field['value'] ?? '';
-
-                            $found_pos = mb_strpos($full_field_text, $expected_text);
-                            $potential_dupe = ($found_pos === false || count($current_chunks) > 1);
-                            $snippet = $current_chunks[0] ?? '';
-
-                            // Only store actual dupes
-                            if ($potential_dupe) {
-                                $potential_dupes[] = [
-                                    'Sealdata'   => $expected_text,
-                                    'chunkcount' => count($current_chunks),
-                                ];
-                            }
-
-                            $label      = $payload_field['label'] ?? '';
-                            $row_state  = $potential_dupe ? 'warn' : 'pass';
-                            $pill_state = $potential_dupe ? 'warn' : 'pass';
-                            $pill_text  = $potential_dupe ? __('MULTI-CHUNK', 'formfabricator') : __('OK', 'formfabricator');
-                            $disp_label = $label !== '' ? esc_html($label) : esc_html($current_marker);
-                            // translators: %d: number of text chunks the field's content was split into.
-                            $chunk_count_label = sprintf(_n('%d chunk', '%d chunks', count($current_chunks), 'formfabricator'), count($current_chunks));
-
-                            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                            echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
-                            echo "<div class='fabricator-pdf-cmp-header'>"
-                               . "<span class='fabricator-pdf-cmp-label'>{$disp_label}</span>"
-                               . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($current_marker) . "</span>"
-                               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>" . esc_html($pill_text) . "</span>"
-                               . "<span style='font-size:10px;color:#787c82;margin-left:4px;'>"
-                               . esc_html($chunk_count_label) . "</span>"
-                               . "</div>";
-                            echo "<div class='fabricator-pdf-cmp-body'>";
-                            $seal_v = esc_html((string) $expected_text);
-                            $pdf_v  = esc_html((string) $snippet);
-                            echo "<div class='fabricator-pdf-cmp-col'><div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
-                               . "<div class='fabricator-pdf-cmp-col__value'>{$seal_v}</div></div>";
-                            echo "<div class='fabricator-pdf-cmp-col'><div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF chunk', 'formfabricator') . "</div>"
-                               . "<div class='fabricator-pdf-cmp-col__value'>{$pdf_v}</div></div>";
-                            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                            echo "</div></div>\n"; // fabricator-pdf-cmp-body + fabricator-pdf-cmp-row
-
-                            $field_cursor++;
-                        } else {
-                            echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
-                               . "<div class='fabricator-pdf-cmp-header'>"
-                               . "<span class='fabricator-pdf-cmp-label'>" . esc_html__('Unknown marker', 'formfabricator') . "</span>"
-                               . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($current_marker) . "</span>"
-                               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . "</span>"
-                               . "</div></div>\n";
-                        }
-
-                        $processed_markers[$current_marker] = true;
-                    }
-
-                    $current_marker = '';
-                    $current_chunks = [];
-                    continue;
-                }
-
-                // --- Detect start of field ---
-                if (preg_match('/^\[FABRICATOR_PDF_FIELD_([^\]]+)\]/', $chunk_clean, $start_match)) {
-                    $inside_field = true;
-                    $current_marker = $start_match[1];
-                    $current_chunks = [];
-                    continue;
-                }
-
-                // Accumulate chunks if inside a field
-                if ($inside_field) {
-                    $current_chunks[] = $chunk_clean;
-                }
-            }
-
-            echo "</div>"; // fabricator-pdf-cmp-list
-            echo "</div>"; // fold_dupes_id content
-            echo "</div>"; // fabricator-pdf-subsection
-
-            // --- RAW PDF ANNOTATION EXTRACTION & SEAL CHECK ---
-            if ($pdf_raw === false) {
-                \FabricatorForms\fabricator_log('FabricatorForms handleUpload: could not re-read ' . \FabricatorForms\fabricator_log_file((string) $file_name) . ' for annotation/seal extraction — file_get_contents() failed.');
-                // translators: %s: uploaded file name.
-                $msg = sprintf(__('Could not read PDF content for %s.', 'formfabricator'), esc_html($file_name));
-                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- noticeHtml() runs $message through wp_kses_post() internally.
-                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see note atop handleUpload().
-                echo self::noticeHtml($msg, 'error');
-                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-            } else {
-                $annotations = [];
-
-                // List of standard PDF annotation subtypes (from the PDF spec)
-                $validTypes = [
-                    'Text','FreeText','Highlight','Underline','Squiggly','StrikeOut',
-                    'Line','Square','Circle','Polygon','PolyLine',
-                    'Ink','Stamp','Popup','FileAttachment','Sound','Movie',
-                    'Screen','Widget','PrinterMark','TrapNet','Watermark',
-                    '3D','Redact','Projection','RichMedia'
-                ];
-
-                // --- 1) Scan all objects for /Type /Annot ---
-                // Every object's (header, body) outside image data, built linearly (scanObjectBodies()).
-                if ($pdf_raw !== false) {
-                    foreach (self::scanObjectBodies((string) $pdf_raw) as [$objId, $rawDict]) {
-                        if (preg_match('/\/Type\s*\/Annot\b/i', $rawDict)) {
-                            // Extract /Subtype if present
-                            $subtype = null;
-                            if (preg_match('/\/Subtype\s*\/([A-Za-z0-9]+)/i', $rawDict, $subMatch)) {
-                                $subtype = $subMatch[1];
-                            }
-
-                            // Only accept known types
-                            if ($subtype !== null && !in_array($subtype, $validTypes, true)) {
-                                $subtype = 'UNKNOWN';
-                            }
-
-                            // Extract /Rect if present
-                            $rect = [0,0,0,0];
-                            if (preg_match('/\/Rect\s*\[(.*?)\]/s', $rawDict, $r)) {
-                                $coords = preg_split('/\s+/', trim($r[1]));
-                                $rect = array_map('floatval', $coords);
-                            }
-
-                            // Extract /Contents if present
-                            $content = '';
-                            if (preg_match('/\/Contents\s*\((.*?)\)/s', $rawDict, $c)) {
-                                $content = $c[1];
-                            }
-
-                            // --- If /Contents is empty, try to extract /URI from /A dictionary ---
-                            $uri_pat = '/\/A\s*<<[^>]*\/URI\s*\((.*?)\)/';
-                            if ($content === '' && preg_match($uri_pat, $rawDict, $uriMatch)) {
-                                $content = $uriMatch[1];
-                            }
-
-                            $content = preg_replace('/^mailto:/i', '', $content);
-
-                            // Save rawDict for debugging if needed
-                            $annotations[] = [
-                                'type'    => $subtype ?? 'UNKNOWN',
-                                'content' => $content,
-                                'rect'    => $rect,
-                                'objId'   => $objId,
-                                'raw'     => $rawDict,
-                            ];
-                        }
-                    }
-                }
-
-                // --- 2) Optional: check /Annots references for completeness ---
-                if (str_contains($pdf_raw, '/Annots')) {
-                    // Object ids already listed, as a set: comparing every reference with the whole list would be quadratic.
-                    $known_annot_ids = [];
-                    foreach ($annotations as $a) {
-                        if (is_string($a['objId'] ?? null)) {
-                            $known_annot_ids[$a['objId']] = true;
-                        }
-                    }
-                    // One /Annots array at a time, outside image data; the ids share the object ceiling.
-                    $annots_at   = 0;
-                    $find_annots = PdfUtils::finderOutsideImageData((string) $pdf_raw, '/\/Annots\s*\[((?:\d+\s+\d+\s+R\s*)+)\]/');
-                    while ($find_annots($annots_at, $annotRef)) {
-                        $annots_at = $annotRef[0][1] + strlen($annotRef[0][0]);
-                        $refs      = $annotRef[1][0];
-                        if (preg_match_all('/(\d+\s+\d+)\s+R/', $refs, $objMatches)) {
-                            foreach ($objMatches[1] as $objId) {
-                                if (!isset($known_annot_ids[$objId])) {
-                                    if (count($known_annot_ids) >= PdfUtils::MAX_OBJECTS) {
-                                        throw new \LengthException('Too many objects: annotation references.');
-                                    }
-                                    $known_annot_ids[$objId] = true;
-                                    $annotations[] = [
-                                        'type'    => 'UNKNOWN (from /Annots)',
-                                        'content' => '',
-                                        'rect'    => null,
-                                        'objId'   => $objId,
-                                    ];
-                                }
-                            }
-                        }
-                    }
-                }
-
-                self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'object/annotation extraction');
-
-                // --- 3) Foldable unified annotation report ---
-                $all_annots_id = sanitize_html_class($uid_prefix . '-all-annots');
-                echo "<div class='fabricator-pdf-subsection'>";
-                $annot_btn_target = esc_attr($all_annots_id);
-                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                echo "<button type='button' class='fabricator-pdf-subtoggle fabricator-pdf-toggle'"
-                   . " data-target='{$annot_btn_target}'>"
-                   . "<span class='fabricator-pdf-subtoggle__icon'>&#9656;</span> " . esc_html__('Annotation List', 'formfabricator')
-                   . "</button>";
-                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                echo "<div id='" . esc_attr($all_annots_id) . "'"
-                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
-                echo "<div class='fabricator-pdf-cmp-list'>";
-
-                if (!empty($annotations)) {
-                    $matched_fields = []; // track fields already matched
-                    $potential_dupes_remaining = [];
-
-                    // Initialize remaining counts for potential dupes
-                    foreach ($potential_dupes ?? [] as $pd_idx => $pd) {
-                        $potential_dupes_remaining[$pd_idx] = $pd['chunkcount'] - 1; // initial subtraction
-                    }
-
-                    foreach ($annotations as $i => $ann) {
-                        // Determine the "content" to match
-                        $content_to_match = '';
-
-                        if (isset($ann['content']) && $ann['content'] !== '') {
-                            $content_to_match = $ann['content'];
-                        } elseif (!empty($ann['raw'])) {
-                            if (preg_match('/\/A\s*<<[^>]*\/URI\s*\((.*?)\)/', $ann['raw'], $uriMatch)) {
-                                $content_to_match = $uriMatch[1];
-                            }
-                        }
-                        // Gap D: also check /V — widget annotations may hold value there instead of /Contents.
-                        if ($content_to_match === '' && !empty($ann['raw'])) {
-                            if (preg_match('/\/V\s*\(([^)]*)\)/', $ann['raw'], $vMatch)) {
-                                $content_to_match = $vMatch[1];
-                            }
-                        }
-
-                        $content_to_match = trim($content_to_match);
-
-                        // Track match type
-                        $match_type = 'No'; // default
-                        $matched_field = null;
-
-                        if ($content_to_match !== '') {
-                            // --- Sealdata match first ---
-                            foreach ($seal_data['fields'] ?? [] as $idx => $field) {
-                                if (!is_array($field)) {
-                                    continue;
-                                }
-                                if (in_array($idx, $matched_fields, true)) {
-                                    continue;
-                                }
-                                $field_value = trim((string) ($field['value'] ?? ''));
-                                if ($field_value === '') {
-                                    continue;
-                                }
-
-                                // Exact: this plugin's PDFs have no links, so every annotation is foreign, and a substring
-                                // match would let one explain itself against any longer sealed value.
-                                if ($field_value === $content_to_match) {
-                                    $matched_field = $field_value;
-                                    $matched_fields[] = $idx;
-                                    $match_type = 'Yes';
-                                    break;
-                                }
-                            }
-
-                            // --- Fallback to potential dupes ---
-                            if ($match_type === 'No') {
-                                foreach ($potential_dupes ?? [] as $pd_idx => $pd) {
-                                    $seal_text = $pd['Sealdata'];
-                                    if ($potential_dupes_remaining[$pd_idx] <= 0) {
-                                        continue;
-                                    }
-
-                                    // Same exact comparison as above for values that spanned chunks.
-                                    if (trim((string) $seal_text) === $content_to_match) {
-                                        $matched_field = $seal_text;
-                                        $potential_dupes_remaining[$pd_idx]--;
-                                        $match_type = 'Dupe Match';
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if ($match_type === 'No') {
-                            $annotation_mismatch = true;
-                            $annotation_fail_count++;
-                        }
-
-                        $matched_to_display = $matched_field ?? '';
-
-                        $row_state = match ($match_type) {
-                            'Yes'        => 'pass',
-                            'Dupe Match' => 'warn',
-                            default      => 'fail',
-                        };
-                        $pill_state = $row_state;
-                        $pill_text  = esc_html(match ($match_type) {
-                            'Yes'        => __('MATCH', 'formfabricator'),
-                            'Dupe Match' => __('DUPE', 'formfabricator'),
-                            default      => __('UNMATCHED', 'formfabricator'),
-                        });
-
-                        // translators: %1$d: the annotation's position, %2$s: its type, e.g. "Link".
-                        $ann_label = esc_html(sprintf(__('Annotation #%1$d — %2$s', 'formfabricator'), $i + 1, (string) $ann['type']));
-                        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                        echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
-                        echo "<div class='fabricator-pdf-cmp-header'>"
-                           . "<span class='fabricator-pdf-cmp-label'>{$ann_label}</span>"
-                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>{$pill_text}</span>"
-                           . "</div>";
-                        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                        echo "<div class='fabricator-pdf-cmp-body'>";
-                        echo "<div class='fabricator-pdf-cmp-col'>"
-                           . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF content', 'formfabricator') . "</div>"
-                           . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html($content_to_match) . "</div>"
-                           . "</div>";
-                        echo "<div class='fabricator-pdf-cmp-col'>"
-                           . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Matched to seal', 'formfabricator') . "</div>"
-                           . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html($matched_to_display) . "</div>"
-                           . "</div>";
-                        echo "</div></div>\n";
-                    }
-                } else {
-                    echo "<p class='fabricator-pdf-empty-state'>" . esc_html__('No annotations found in PDF.', 'formfabricator') . "</p>";
-                }
-
-                echo "</div>"; // fabricator-pdf-cmp-list
-                echo "</div>"; // all_annots_id content
-                echo "</div>"; // all_annots fabricator-pdf-detail-section
-            }
-
-            echo "</div>"; // close annotation section foldable content
-            echo "</div>"; // close annotation section wrapper
-
-            /* ─────────────────────────── OBJECT PROCESSING ────────────────────────── */
-
-            if ($pdf_raw !== false) {
-                // PAGE COUNT CHECK: counted as the generator counted it (PdfUtils::countPageObjects()).
-                $object_page_count = PdfUtils::countPageObjects((string) $pdf_raw);
-                $expected_pages = $rebuilt_payload['expected_pages'] ?? $object_page_count; // fallback
-
-                if ($object_page_count !== $expected_pages) {
-                    $pagecount_mismatch = true;
-                    $unexpected_detected = true;
-                }
-
-                self::setProgress(__('Checking page count…', 'formfabricator'), 68);
-
-                $page_box_id    = 'fabricator-pdf-content-pgcount-' . $uid_prefix;
-                $pgcount_sec_id = 'fabricator-pdf-section-pgcount-' . esc_attr($uid_prefix);
-                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                echo "<div class='fabricator-pdf-detail-section' id='{$pgcount_sec_id}'>";
-                echo "<div class='fabricator-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-                   . " data-target='" . esc_attr($page_box_id) . "'>" . esc_html__('Page Count', 'formfabricator') . "</button>";
-                $pgcount_badge = $pagecount_mismatch ? 'fabricator-pdf-badge-fail' : 'fabricator-pdf-badge-pass';
-                $pgcount_label = $pagecount_mismatch ? __('FAIL', 'formfabricator') : __('PASS', 'formfabricator');
-                echo "<span class='fabricator-pdf-detail-badge {$pgcount_badge}'>" . esc_html($pgcount_label) . "</span>";
-                echo "</div>";
-                $pgcount_hidden = $pagecount_mismatch ? '' : ' fabricator-pdf-hidden';
-                echo "<div id='" . esc_attr($page_box_id) . "' class='fabricator-pdf-detail-content{$pgcount_hidden}'>";
-                echo "<div class='fabricator-pdf-stat-row'>";
-                echo "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
-                   . "<div class='fabricator-pdf-stat__value'>{$expected_pages}</div></div>";
-                echo "<div class='fabricator-pdf-stat-sep'>→</div>";
-                echo "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
-                   . "<div class='fabricator-pdf-stat__value'>{$object_page_count}</div></div>";
-                echo "</div>";
-                if ($pagecount_mismatch) {
-                    echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISMATCH', 'formfabricator') . "</span>";
-                } else {
-                    echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('OK', 'formfabricator') . "</span>";
-                }
-                echo "</div>";
-                echo "</div>";
-
-                // Every image XObject must match a sealed exact stream hash.
-                $exact_image_hashes = $rebuilt_payload['image_hashes'] ?? [];
-
-                // IMAGE CHECK
-                self::setProgress(__('Checking images…', 'formfabricator'), 75);
-
-                $image_section_id  = 'fabricator-pdf-content-images-' . $uid_prefix;
-                $image_section_sec = 'fabricator-pdf-section-images-' . esc_attr($uid_prefix);
-                echo "<div class='fabricator-pdf-detail-section' id='{$image_section_sec}'>";
-                echo "<div class='fabricator-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-                   . " data-target='" . esc_attr($image_section_id) . "'>" . esc_html__('Image Hashes', 'formfabricator') . "</button>";
-                $img_badge_id = 'fabricator-pdf-badge-images-' . esc_attr($uid_prefix);
-                echo "<span id='{$img_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
-                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                echo "</div>";
-                echo "<div id='" . esc_attr($image_section_id) . "'"
-                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'"
-                   . " style='background:#f4f4f4; padding:10px; border:1px solid #ddd;'>";
-
-                if (str_contains($pdf_raw, '/XObject')) {
-                    // SMask object numbers (alpha channels, skipped as images), collected as Generator::hashImageXObjects()
-                    // does and held to PdfUtils::MAX_OBJECTS.
-                    $smask_obj_nums = [];
-                    $smask_at       = 0;
-                    $find_smask     = PdfUtils::finderOutsideImageData((string) $pdf_raw, '/\/SMask\s+(\d+)\s+\d+\s+R/');
-                    while ($find_smask($smask_at, $_sm)) {
-                        $smask_at = $_sm[0][1] + strlen($_sm[0][0]);
-                        $smask_obj_nums[$_sm[1][0]] = true;
-                        if (count($smask_obj_nums) > PdfUtils::MAX_OBJECTS) {
-                            throw new \LengthException('Too many objects: soft-mask references.');
-                        }
-                    }
-                    unset($_sm);
-
-                    // Ensure image output directory exists (HTTP-blocked); hoisted out of the recursive
-                    // $scanXObjects closure to avoid repeating the same stat/write calls per image.
-                    $upload_dir = wp_upload_dir();
-                    $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
-                    $ver_dir    = $safe_dir . '/verimages';
-                    // Random per request, so whoever made the PDF can't predict the image file names.
-                    $verimage_prefix = bin2hex(random_bytes(12));
-
-                            \FabricatorForms\Utils\SecureDir::harden($safe_dir, [$safe_dir, $ver_dir]);
-
-                    // Bytes the nested scans have read, across the whole walk: $visited only stops cycles along one path,
-                    // so naming one nested object many times per layer would multiply the work.
-                    $xobject_nested_bytes = 0;
-                    $xobject_nested_limit = max(64 * 1024 * 1024, 4 * strlen((string) $pdf_raw));
-                    $scanXObjects = function ($pdf_raw, $parentName = null, array $visited = [], ?array $index = null)
- use (&$scanXObjects, &$xobject_nested_bytes, $xobject_nested_limit, $rebuilt_payload, $smask_obj_nums, $exact_image_hashes, $safe_dir, $ver_dir, $verimage_prefix, $fabricator_parse_start, $fabricator_parse_max_seconds) {
-                        $offset = 0;
-                        $found  = false;
-                        // One forward cursor per needle for this walk (PdfUtils::nextAt()): a plain strpos() per XObject
-                        // would search to the end of the file whenever the needle is missing, which is quadratic.
-                        $walk_cache = [];
-                        // "/XObject" outside image data only, as the generator walks it; each search starts past the last
-                        // one found, so the walk always moves forward.
-                        $find_xobject = PdfUtils::finderOutsideImageData((string) $pdf_raw, '/\/XObject/');
-                        $xobject_from = 0;
-
-                        while ($find_xobject($xobject_from = max($offset, $xobject_from), $xobject_match)) {
-                            $pos          = $xobject_match[0][1];
-                            $xobject_from = $pos + 1;
-                            $found = true;
-                            /* Per-XObject checkpoint: the most expensive region (GD decode, per-pixel loops). */
-                            self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'image XObject scan');
-
-                            // A negative offset searches backwards from $pos in place; strrpos(substr()) copied the whole prefix
-                            // for every XObject, quadratic in file size. Same result, including 0 when there is no newline.
-                            $obj_start_line = $pos > 0 ? (strrpos($pdf_raw, "\n", $pos - strlen($pdf_raw) - 1) ?: 0) : 0;
-                            $obj_start      = $obj_start_line + 1;
-
-                            // Resolve the PDF object number — look back up to 4 KB from
-                            // /XObject so large image dictionaries are handled correctly.
-                            $look_back = substr($pdf_raw, max(0, $pos - 4096), min($pos, 4096));
-                            $obj_num   = null;
-                            if (preg_match_all('/(\d+)\s+\d+\s+obj\b/', $look_back, $_all_nm)) {
-                                $obj_num = end($_all_nm[1]); // last = closest to /XObject
-                            }
-                            unset($_all_nm);
-
-                            if ($obj_num !== null && isset($smask_obj_nums[$obj_num])) {
-                                $offset = $pos + 10;
-                                continue;
-                            }
-
-                                    $obj_end = PdfUtils::nextAt($pdf_raw, 'endobj', $obj_start, $walk_cache);
-                            if ($obj_end === false) {
-                                $offset = $pos + 10;
-                                continue;
-                            }
-
-                                    // Keys are read from the dictionary only, up to "stream", never from image data.
-                                    $stream_pos = PdfUtils::nextAt($pdf_raw, 'stream', $obj_start, $walk_cache);
-                                    $dict_end   = ($stream_pos !== false && $stream_pos < $obj_end) ? $stream_pos : $obj_end + 6;
-                                    $objDict    = substr($pdf_raw, $obj_start, $dict_end - $obj_start);
-                                    $isImage    = str_contains($objDict, '/Subtype /Image');
-
-                                    // Extract filters
-                                    preg_match_all('/\/Filter\s*\/([A-Za-z0-9]+)/i', $objDict, $fMatches);
-                                    $filters = $fMatches[1] ?: [];
-
-                                    // Extract width & height
-                                    $width = $height = null;
-
-                                    // Direct integer or float
-                            if (preg_match('/\/Width\s+([0-9.]+)/', $objDict, $m)) {
-                                $width = (int)round($m[1]);
-                            }
-                            if (preg_match('/\/Height\s+([0-9.]+)/', $objDict, $m)) {
-                                $height = (int)round($m[1]);
-                            }
-
-                                    // Indirect reference (e.g. /Width 12 0 R)
-                            $wh_pat = '/\/(Width|Height)\s+(\d+)\s+0\s+R/';
-                            if ((!$width || !$height)
-                                && preg_match_all($wh_pat, $objDict, $refs, PREG_SET_ORDER)
-                            ) {
-                                foreach ($refs as $r) {
-                                    // Last definition, digit-bounded: object 12 must not resolve to an earlier "112 0 obj".
-                                    $refObj = self::definitionLookup($index, $pdf_raw, $r[2], '0');
-                                    if ($refObj !== null) {
-                                        if ($r[1] === 'Width') {
-                                            $width  = (int)trim($refObj['body']);
-                                        }
-                                        if ($r[1] === 'Height') {
-                                            $height = (int)trim($refObj['body']);
-                                        }
-                                    }
-                                }
-                            }
-
-                                    // Reject implausible /Width, /Height before they size any allocation/loop bound —
-                                    // JPEG gets the full pixel cap (hashed raw, no per-pixel loop); other filters get half.
-                            $dims_over_cap = false;
-                            $safe_pixels = PdfUtils::maxSafePixels();
-                            // Require DCTDecode as the SOLE filter for the higher cap — otherwise a crafted PDF
-                            // could claim it while still routing through the unvectorized per-pixel loops below.
-                            $pixel_cap = (count($filters) === 1 && $filters[0] === 'DCTDecode')
-                                ? $safe_pixels
-                                : (int) ($safe_pixels / 2);
-                            if ($width !== null && $height !== null) {
-                                if ($width < 0 || $height < 0 || $width > 20000 || $height > 20000
-                                    || ($width * $height) > $pixel_cap
-                                ) {
-                                    $dims_over_cap = true;
-                                    $width = $height = null;
-                                }
-                            }
-
-                                    // Extract stream ($stream_pos from above; offset 0 when there is none, as strpos() reads false).
-                                    $endstream_pos = PdfUtils::nextAt($pdf_raw, 'endstream', (int) $stream_pos, $walk_cache);
-                                    $stream_data = '';
-                                    $decoded = null;
-
-                            if ($stream_pos !== false && $endstream_pos !== false) {
-                                $stream_data = substr($pdf_raw, $stream_pos + 6, $endstream_pos - ($stream_pos + 6));
-                                $stream_data = ltrim($stream_data, "\r\n");
-
-                                $decoded = $stream_data;
-                                if (in_array('FlateDecode', $filters, true)) {
-                                    // Bounded while inflating, against a decompression-bomb stream.
-                                    $try = PdfUtils::inflateWithin($stream_data);
-                                    if (is_string($try)) {
-                                        $decoded = $try;
-                                    }
-                                }
-                            }
-
-                                    $bytes    = strlen($decoded ?? '');
-                                    $channels = 0;
-
-                            if ($isImage) {
-                                // Determine metadata
-                                preg_match('/\/BitsPerComponent\s+(\d+)/', $objDict, $bpcMatch);
-                                $bpc = (int)($bpcMatch[1] ?? 8);
-
-                                preg_match('/\/ColorSpace\s*(\/[A-Za-z0-9]+|\[.+?\])/s', $objDict, $csMatch);
-                                $csRaw = $csMatch[1] ?? '';
-                                $colorspace = 'unknown';
-                                $channels = 0;
-                                $palette = null;
-
-                                $isImageMask = str_contains($objDict, '/ImageMask true');
-
-                                // Standard color spaces
-                                if (is_string($csRaw)) {
-                                    switch ($csRaw) {
-                                        case '/DeviceRGB':
-                                                $colorspace = 'DeviceRGB';
-                                            $channels = 3;
-                                            break;
-                                        case '/DeviceGray':
-                                                $colorspace = 'DeviceGray';
-                                            $channels = 1;
-                                            break;
-                                        case '/DeviceCMYK':
-                                                $colorspace = 'DeviceCMYK';
-                                            $channels = 4;
-                                            break;
-                                    }
-                                }
-
-                                // Indexed color spaces have TWO streams (image index + palette lookup); both must decode.
-
-                                // Indexed color spaces
-                                if (str_starts_with($csRaw, '[')
-                                    && preg_match('/\/Indexed\s+\/DeviceRGB\s+(\d+)\s+(\d+)\s+0\s+R/', $csRaw, $m)
-                                ) {
-                                    $colorspace = 'IndexedRGB';
-                                    $channels = 1; // IMPORTANT: index stream is 1 channel
-                                    $hival = (int)$m[1];
-                                    $paletteObjNum = (int)$m[2];
-
-                                    // hival is at most 255 for an 8-bit index; it bounds the allocation below.
-                                    if ($hival < 0 || $hival > 255) {
-                                        $hival = null;
-                                    }
-
-                                    if ($hival !== null) {
-                                        $palObj = self::definitionLookup($index, $pdf_raw, (string) $paletteObjNum, '0');
-                                        if ($palObj !== null) {
-                                            // Extract palette filters
-                                            preg_match_all('/\/Filter\s*\/([A-Za-z0-9]+)/', $palObj['body'], $pf);
-                                            $palFilters = $pf[1] ?? [];
-
-                                            if (preg_match('/stream\s*(.*?)\s*endstream/s', $palObj['body'], $palStream)) {
-                                                $lookup = ltrim($palStream[1], "\r\n");
-
-                                                // Decode palette stream — bounded against a decompression bomb.
-                                                if (in_array('FlateDecode', $palFilters, true)) {
-                                                    $try = PdfUtils::inflateWithin($lookup);
-                                                    if (is_string($try)) {
-                                                        $lookup = $try;
-                                                    }
-                                                }
-
-                                                // Validate palette length
-                                                $expectedLen = ($hival + 1) * 3;
-                                                if (strlen($lookup) < $expectedLen) {
-                                                    throw new \RuntimeException("Indexed palette too short");
-                                                }
-
-                                                // Build palette
-                                                $palette = [];
-                                                for ($i = 0; $i <= $hival; $i++) {
-                                                    $off = $i * 3;
-                                                    $palette[$i] = [
-                                                        ord($lookup[$off]),
-                                                        ord($lookup[$off + 1]),
-                                                        ord($lookup[$off + 2]),
-                                                    ];
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // JPEG hash is on raw encoded bytes, so colorspace is irrelevant; treat as DeviceRGB.
-                                if ($channels <= 0 && in_array('DCTDecode', $filters, true)) {
-                                    $colorspace = 'DeviceRGB';
-                                    $channels   = 3;
-                                }
-
-                                // --- Collect failure reasons ---
-                                $failureReasons = [];
-                                if ($decoded === null) {
-                                    $failureReasons[] = __('The image stream could not be decoded.', 'formfabricator');
-                                }
-                                if ($dims_over_cap) {
-                                    $failureReasons[] = sprintf(
-                                        // translators: %d: verification size limit in megapixels.
-                                        __('The image exceeds the %d-megapixel verification size limit for this image type and was skipped. This is a size cap, not evidence of tampering.', 'formfabricator'),
-                                        (int) ($pixel_cap / 1_000_000)
-                                    );
-                                } elseif (!$width || !$height) {
-                                    // translators: %1$s: image width, %2$s: image height, as read from the PDF.
-                                    $failureReasons[] = sprintf(__('Invalid dimensions (%1$s×%2$s)', 'formfabricator'), (string) $width, (string) $height);
-                                }
-                                if ($isImageMask) {
-                                    $failureReasons[] = __('The image is a mask.', 'formfabricator');
-                                }
-                                if ($channels <= 0) {
-                                    // translators: %s: PDF colour space name, e.g. DeviceN.
-                                    $failureReasons[] = sprintf(__('Unsupported colour space: %s', 'formfabricator'), (string) $colorspace);
-                                }
-
-                                // Always display metadata if anything is wrong
-                                if ($failureReasons) {
-                                    // An unreadable image XObject is suspicious — record it as a mismatch
-                                    // so a tampered/corrupted image can't slip through by being undecodable.
-                                    self::$image_slots[] = [
-                                        'label'        => __('Unreadable XObject', 'formfabricator'),
-                                        'allowed'      => 0,
-                                        'isBackground' => false,
-                                        'hash'         => '',
-                                        'check_hash'   => '',
-                                        'colorspace'   => $colorspace,
-                                        'width'        => $width,
-                                        'height'       => $height,
-                                    ];
-
-                                    echo "<div style='margin:10px; padding:8px;"
-                                       . " border:2px dashed #c00; background:#fff6f6;'>";
-                                    echo '<b>' . esc_html__('The image could not be recreated from its stream and counts as a mismatch.', 'formfabricator') . '</b><br>';
-                                    echo "<ul style='margin:5px 0; padding-left:18px;'>";
-                                    foreach ($failureReasons as $r) {
-                                        echo "<li>" . esc_html($r) . "</li>";
-                                    }
-                                    echo "</ul>";
-
-                                    echo "<div style='font-size:11px; color:#333;'>";
-                                    echo '<b>' . esc_html__('Image metadata:', 'formfabricator') . '</b><br>';
-                                    echo '• ' . esc_html__('Filters:', 'formfabricator') . ' ' . esc_html(implode(', ', $filters)) . "<br>";
-                                    echo '• ' . esc_html__('Width x Height:', 'formfabricator') . ' ' . (int)$width . " × " . (int)$height . "<br>";
-                                    echo '• ' . esc_html__('BitsPerComponent:', 'formfabricator') . ' ' . (int)$bpc . "<br>";
-                                    echo '• ' . esc_html__('ColorSpace:', 'formfabricator') . ' ' . esc_html($colorspace) . "<br>";
-                                    echo '• ' . esc_html__('Channels:', 'formfabricator') . ' ' . (int)$channels . "<br>";
-                                    echo '• ' . esc_html__('ImageMask:', 'formfabricator') . ' ' . ($isImageMask ? 'true' : 'false') . "<br>";
-                                    $dec_size = $decoded !== null
-                                        // translators: %d: decoded image size in bytes.
-                                        ? sprintf(_n('%d byte', '%d bytes', strlen($decoded), 'formfabricator'), strlen($decoded))
-                                        : __('n/a', 'formfabricator');
-                                    // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see handleUpload() note.
-                                    echo '• ' . esc_html__('Decoded size:', 'formfabricator') . ' ' . esc_html($dec_size) . '<br>';
-                                    // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                                    echo "</div></div>";
-
-                                    $offset = $obj_end + 6;
-                                    continue;
-                                }
-                            }
-
-                            if ($isImage && $decoded !== null && $width && $height) {
-                                // --- Image metadata ---
-                                preg_match('/\/BitsPerComponent\s+(\d+)/', $objDict, $bpcMatch);
-                                $bpc = (int)($bpcMatch[1] ?? 8);
-
-                                // $palette is kept from the colour-space pass above; reset, no indexed image would expand.
-                                $colorspace = 'DeviceRGB'; // default
-                                if (preg_match('/\/ColorSpace\s*\[\s*\/Indexed\s*\/([A-Za-z0-9]+)/', $objDict, $m)) {
-                                    $colorspace = 'IndexedRGB';
-                                    $baseSpace  = $m[1]; // usually DeviceRGB
-                                    if ($baseSpace !== 'DeviceRGB') {
-                                        // The palette decoder below always reads 3-byte RGB triples, so this image can't be
-                                        // recreated. Reported here: the block that renders $failureReasons has already run.
-                                        self::reportUnreadableImage(
-                                            // translators: %s: PDF colour space name the palette is based on, e.g. DeviceCMYK.
-                                            [sprintf(__('Unsupported base colour space for an indexed image: %s', 'formfabricator'), (string) $baseSpace)],
-                                            $colorspace,
-                                            $width,
-                                            $height
-                                        );
-                                        $offset = $obj_end + 6;
-                                        continue;
-                                    }
-                                } elseif (preg_match('/\/ColorSpace\s*\/([A-Za-z0-9]+)/', $objDict, $m)) {
-                                    $colorspace = $m[1];
-                                }
-
-                                $isImageMask = str_contains($objDict, '/ImageMask true');
-
-                                preg_match('/\/Decode\s*\[(.*?)\]/', $objDict, $decodeMatch);
-                                $invert = isset($decodeMatch[1]) && trim($decodeMatch[1]) === '1 0';
-
-                                preg_match('/\/DecodeParms\s*<<(.+?)>>/s', $objDict, $dpMatch);
-                                $predictor = 1;
-                                $colors = null;
-                                if ($dpMatch) {
-                                    if (preg_match('/\/Predictor\s+(\d+)/', $dpMatch[1], $m)) {
-                                        $predictor = (int)$m[1];
-                                    }
-                                    if (preg_match('/\/Colors\s+(\d+)/', $dpMatch[1], $m)) {
-                                        $colors = (int)$m[1];
-                                    }
-                                }
-
-                                // --- Skip unsupported ---
-                                if ($isImageMask || $bpc > 8 || $bpc < 1) {
-                                    $offset = $obj_end + 6;
-                                    continue;
-                                }
-
-                                // --- Determine channels ---
-                                $channels = match ($colorspace) {
-                                    'DeviceRGB' => 3,
-                                    'DeviceGray' => 1,
-                                    'DeviceCMYK' => 4,
-                                    'IndexedRGB' => 1,
-                                    default => 0
-                                };
-
-                                // JPEG hash is on raw DCT bytes, so colorspace is irrelevant; treat as DeviceRGB.
-                                if ($channels === 0 && in_array('DCTDecode', $filters, true)) {
-                                    $colorspace = 'DeviceRGB';
-                                    $channels   = 3;
-                                }
-
-                                if ($channels === 0) {
-                                    // translators: %s: PDF colour space name, e.g. DeviceN.
-                                    $unsupported_space = sprintf(__('Unsupported colour space: %s', 'formfabricator'), (string) $colorspace);
-                                    self::reportUnreadableImage(
-                                        [$unsupported_space],
-                                        $colorspace,
-                                        $width,
-                                        $height
-                                    );
-                                    $offset = $obj_end + 6;
-                                    continue;
-                                }
-
-                                if ($width === null || $height === null) {
-                                    self::reportUnreadableImage(
-                                        [__('Implausible or missing image dimensions', 'formfabricator')],
-                                        $colorspace,
-                                        $width,
-                                        $height
-                                    );
-                                    $offset = $obj_end + 6;
-                                    continue;
-                                }
-
-                                        // --- PNG Predictor (skip for IndexedRGB) ---
-                                if ($predictor >= 10 && $decoded !== null && $colorspace !== 'IndexedRGB') {
-                                    $rowSize = $width * $channels;
-                                    $out = '';
-                                    $prev = str_repeat("\0", $rowSize);
-                                    $i = 0;
-                                    for ($y = 0; $y < $height; $y++) {
-                                        // Per-row checkpoint: one oversized image otherwise ran unbounded between the per-XObject checks.
-                                        if (($y & 255) === 0) {
-                                            self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'PNG predictor');
-                                        }
-                                        if ($i >= strlen($decoded)) {
-                                            break;
-                                        }
-                                        $filter = ord($decoded[$i++]);
-                                        $row = substr($decoded, $i, $rowSize);
-                                        $i += strlen($row);
-                                        $row = str_pad($row, $rowSize, "\0");
-                                        for ($j = 0; $j < $rowSize; $j++) {
-                                            $cur = ord($row[$j]);
-                                            $up  = ord($prev[$j]);
-                                            $left = $j >= $channels ? ord($row[$j - $channels]) : 0;
-                                            switch ($filter) {
-                                                case 0:
-                                                    $row[$j] = chr($cur);
-                                                    break;
-                                                case 1:
-                                                    $row[$j] = chr(($cur + $left) & 0xFF);
-                                                    break;
-                                                case 2:
-                                                    $row[$j] = chr(($cur + $up) & 0xFF);
-                                                    break;
-                                                case 3:
-                                                    $row[$j] = chr(($cur + intdiv($left + $up, 2)) & 0xFF);
-                                                    break;
-                                                case 4:
-                                                    $prev_c = $j >= $channels ? ord($prev[$j - $channels]) : 0;
-                                                    $p  = $left + $up - $prev_c;
-                                                    $pa = abs($p - $left);
-                                                    $pb = abs($p - $up);
-                                                    $pc = abs($p - $prev_c);
-                                                    $paeth = ($pa <= $pb && $pa <= $pc)
-                                                    ? $left
-                                                    : (($pb <= $pc) ? $up : $prev_c);
-                                                    $row[$j] = chr(($cur + $paeth) & 0xFF);
-                                                    break;
-                                                default:
-                                                    $row[$j] = chr($cur);
-                                            }
-                                        }
-                                        $out .= $row;
-                                        $prev = $row;
-                                    }
-                                    $decoded = $out;
-                                }
-
-                                        // --- Handle IndexedRGB safely ---
-                                $is_indexed = $colorspace === 'IndexedRGB'
-                                    && $decoded !== null
-                                    && is_array($palette)
-                                    && count($palette) > 0;
-                                if ($is_indexed) {
-                                    if ($predictor >= 10) {
-                                        $decoded = self::undoPngPredictorIndexed($decoded, $width, $bpc);
-                                    }
-
-                                    // --- Map indices to RGB and invert colors ---
-                                    $expanded = '';
-                                    $paletteSize = count($palette);
-                                    for ($y = 0; $y < $height; $y++) {
-                                        if (($y & 255) === 0) {
-                                            self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'palette expansion');
-                                        }
-                                        $rowStart = $y * $width;
-                                        for ($x = 0; $x < $width; $x++) {
-                                            $byte_pos = $rowStart + $x;
-                                            $idx = ($byte_pos < strlen($decoded)) ? ord($decoded[$byte_pos]) : 0;
-                                            if ($idx >= $paletteSize) {
-                                                $idx = $paletteSize - 1;
-                                            }
-
-                                            $rgbEntry = $palette[$idx];
-                                            if (is_string($rgbEntry)) {
-                                                $rgbEntry = str_pad(substr($rgbEntry, 0, 3), 3, "\0");
-                                                $rgb = array_map('ord', str_split($rgbEntry));
-                                            } elseif (is_array($rgbEntry) && count($rgbEntry) >= 3) {
-                                                $rgb = array_map(
-                                                    fn($v) => is_string($v) ? ord($v) : (int) $v,
-                                                    array_slice($rgbEntry, 0, 3)
-                                                );
-                                            } else {
-                                                $rgb = [0,0,0];
-                                            }
-
-                                            $expanded .= chr($rgb[0]) . chr($rgb[1]) . chr($rgb[2]);
-                                        }
-                                    }
-
-                                    $decoded = $expanded;
-                                    $channels = 3;
-                                }
-
-                                        // --- Ensure full buffer ---
-                                        $expected_len = $width * $height * $channels;
-                                if (strlen($decoded) < $expected_len) {
-                                    $decoded = str_pad($decoded, $expected_len, "\0");
-                                }
-
-                                // Exact XObject hash: raw compressed bytes, identical across both generation passes.
-                                $check_hash        = hash('sha256', $stream_data);
-                                $hash_method_label = 'Exact XObject stream (sha256)';
-                                $img_id            = $check_hash;
-
-                                        $uid = 'img_' . uniqid();
-
-                                        // Determine file extension
-                                        $ext = in_array('DCTDecode', $filters, true) ? 'jpg' : 'png';
-                                        $imgFile = $ver_dir . "/xobject_{$verimage_prefix}_{$check_hash}.{$ext}";
-
-                                        // --- Emit empty slot FIRST (no logic) ---
-                                // --- Prepare slot metadata ---
-                                $is_allowed = in_array($check_hash, $exact_image_hashes, true);
-
-                                        self::emitImageSlot(
-                                            $uid,
-                                            [
-                                            'colorspace'  => $colorspace,
-                                            'width'       => $width,
-                                            'height'      => $height,
-                                            'img_id'      => $img_id,
-                                            'decoded_len' => strlen($decoded),
-                                            'allowed'     => $is_allowed ? 1 : 0,
-                                            'file_path'   => $imgFile,
-                                            ]
-                                        );
-                                self::$image_slots[$uid] = [
-                                    'allowed' => $is_allowed ? 1 : 0,
-                                    // Kept so the sealed list can be compared as a MULTISET below,
-                                    // not merely as "is this one known?".
-                                    'hash' => $check_hash,
-                                    'colorspace' => $colorspace,
-                                    'width' => $width,
-                                    'height' => $height,
-                                    'isBackground' => false,
-                                ];
-
-                                // --- Decode SMask (alpha channel) for this image, if any ---
-                                // Read from the image's own dictionary, not a whole-file scan.
-                                $smask_decoded = null;
-                                $sm_width      = $width;
-                                $sm_height     = $height;
-                                $_sm_ref_num   = null;
-                                if (preg_match('/\/SMask\s+(\d+)\s+\d+\s+R/', $objDict, $_sm_ref)) {
-                                    $_sm_ref_num = $_sm_ref[1];
-                                    unset($_sm_ref);
-                                }
-                                if ($_sm_ref_num !== null) {
-                                    $sm_num = $_sm_ref_num;
-                                    // Last definition, like every other object lookup here.
-                                    $_sm_obj = self::definitionLookup($index, $pdf_raw, (string) $sm_num);
-                                    if ($_sm_obj !== null) {
-                                        $sm_body = $_sm_obj['body'];
-                                        // Keys from the mask's dictionary only, never from its stream bytes, which can hold any
-                                        // of them.
-                                        $sm_dict_end = strpos($sm_body, 'stream');
-                                        $sm_dict     = $sm_dict_end === false ? $sm_body : substr($sm_body, 0, $sm_dict_end);
-                                        preg_match_all('/\/Filter\s*\/([A-Za-z0-9]+)/', $sm_dict, $_sm_f);
-                                        $sm_filters = $_sm_f[1] ?? [];
-                                        /* The mask carries its own size, which is often smaller than the image it belongs to.
-                                           Undoing the predictor with the image's width read every row at the wrong offset. */
-                                        $sm_width  = preg_match('/\/Width\s+(\d+)/', $sm_dict, $_sm_w) ? (int) $_sm_w[1] : $width;
-                                        $sm_height = preg_match('/\/Height\s+(\d+)/', $sm_dict, $_sm_h) ? (int) $_sm_h[1] : $height;
-                                        $sm_width  = max(1, $sm_width);
-                                        $sm_height = max(1, $sm_height);
-                                        // The image's own size bounds, as the size drives str_repeat() below. Too large, the
-                                        // mask is skipped: it only shapes the preview.
-                                        $sm_over_cap = $sm_width > 20000 || $sm_height > 20000
-                                            || $sm_width * $sm_height > (int) (PdfUtils::maxSafePixels() / 2);
-                                        if ($sm_over_cap) {
-                                            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: soft mask ' . $sm_num . ' declares ' . $sm_width . 'x' . $sm_height . ' pixels; not decoded.');
-                                        } elseif (preg_match('/stream\r?\n(.*?)\r?\nendstream/s', $sm_body, $_sm_s)) {
-                                            $sm_raw  = $_sm_s[1];
-                                            $sm_data = $sm_raw;
-                                            if (in_array('FlateDecode', $sm_filters, true)) {
-                                                $sm_try = PdfUtils::inflateWithin($sm_raw);
-                                                if (is_string($sm_try)) {
-                                                    $sm_data = $sm_try;
-                                                }
-                                            }
-                                            // Undo PNG predictor for 1-channel (DeviceGray) SMask.
-                                            $sm_predictor = 1;
-                                            if (preg_match('/\/DecodeParms\s*<<(.*?)>>/s', $sm_dict, $_sm_dp)
-                                                && preg_match('/\/Predictor\s+(\d+)/', $_sm_dp[1], $_sm_pp)
-                                            ) {
-                                                $sm_predictor = (int)$_sm_pp[1];
-                                            }
-                                            if ($sm_predictor >= 10) {
-                                                $sm_out  = '';
-                                                $sm_prev = str_repeat("\0", $sm_width);
-                                                $sm_i    = 0;
-                                                for ($sy = 0; $sy < $sm_height; $sy++) {
-                                                    // Per-row checkpoint, like the image's own predictor loop above.
-                                                    if (($sy & 255) === 0) {
-                                                        self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'SMask predictor');
-                                                    }
-                                                    if ($sm_i >= strlen($sm_data)) {
-                                                        break;
-                                                    }
-                                                    $sm_ftype = ord($sm_data[$sm_i++]);
-                                                    $sm_row   = str_pad(
-                                                        substr($sm_data, $sm_i, $sm_width),
-                                                        $sm_width,
-                                                        "\0"
-                                                    );
-                                                    $sm_i += $sm_width;
-                                                    for ($sx = 0; $sx < $sm_width; $sx++) {
-                                                        $sc   = ord($sm_row[$sx]);
-                                                        $sup  = ord($sm_prev[$sx]);
-                                                        $slft = $sx > 0 ? ord($sm_row[$sx - 1]) : 0;
-                                                        switch ($sm_ftype) {
-                                                            case 1:
-                                                                $sm_row[$sx] = chr(($sc + $slft) & 0xFF);
-                                                                break;
-                                                            case 2:
-                                                                $sm_row[$sx] = chr(($sc + $sup) & 0xFF);
-                                                                break;
-                                                            case 3:
-                                                                $sm_row[$sx] = chr(
-                                                                    ($sc + intdiv($slft + $sup, 2)) & 0xFF
-                                                                );
-                                                                break;
-                                                            case 4:
-                                                                $spc   = $sx > 0 ? ord($sm_prev[$sx - 1]) : 0;
-                                                                $sp    = $slft + $sup - $spc;
-                                                                $spa   = abs($sp - $slft);
-                                                                $spb   = abs($sp - $sup);
-                                                                $spc_a = abs($sp - $spc);
-                                                                $spaeth = ($spa <= $spb && $spa <= $spc_a)
-                                                                    ? $slft : (($spb <= $spc_a) ? $sup : $spc);
-                                                                $sm_row[$sx] = chr(($sc + $spaeth) & 0xFF);
-                                                                break;
-                                                            default:
-                                                                $sm_row[$sx] = chr($sc);
-                                                        }
-                                                    }
-                                                    $sm_out  .= $sm_row;
-                                                    $sm_prev  = $sm_row;
-                                                }
-                                                $sm_data = $sm_out;
-                                            }
-                                            $smask_decoded = $sm_data;
-                                        }
-                                        unset($_sm_obj, $_sm_f, $_sm_s, $_sm_dp, $_sm_pp);
-                                    }
-                                }
-
-                                // Build a data URI so the .htaccess-protected verimages/ dir stays non-HTTP-accessible.
-                                $data_uri = '';
-                                if (!file_exists($imgFile)) {
-                                    if ($ext === 'jpg') {
-                                        \FabricatorForms\Utils\SecureDir::putFile($imgFile, $decoded);
-                                    } else {
-                                        $im = imagecreatetruecolor($width, $height);
-                                        // Enable alpha so the SMask can be written as transparency.
-                                        imagealphablending($im, false);
-                                        imagesavealpha($im, true);
-                                        $idx = 0;
-
-                                        for ($y = 0; $y < $height; $y++) {
-                                            if (($y & 255) === 0) {
-                                                self::checkParseTimeBudget($fabricator_parse_start, $fabricator_parse_max_seconds, 'image render');
-                                            }
-                                            for ($x = 0; $x < $width; $x++) {
-                                                // An indexed image is RGB only once its palette expanded it to three channels; if the palette
-                                                // was unusable, its one index byte per pixel is drawn as grey instead of read out of range.
-                                                if ($colorspace === 'DeviceRGB' || ($colorspace === 'IndexedRGB' && $channels === 3)) {
-                                                    $r = ord($decoded[$idx++]);
-                                                    $g = ord($decoded[$idx++]);
-                                                    $b = ord($decoded[$idx++]);
-                                                } elseif ($colorspace === 'DeviceGray' || $colorspace === 'IndexedRGB') {
-                                                    $g = ord($decoded[$idx++]);
-                                                    $r = $b = $g;
-                                                } else { // CMYK
-                                                    $c = ord($decoded[$idx++]) / 255;
-                                                    $m = ord($decoded[$idx++]) / 255;
-                                                    $yC = ord($decoded[$idx++]) / 255;
-                                                    $k = ord($decoded[$idx++]) / 255;
-                                                    $r = (int)(255 * (1 - min(1, $c + $k)));
-                                                    $g = (int)(255 * (1 - min(1, $m + $k)));
-                                                    $b = (int)(255 * (1 - min(1, $yC + $k)));
-                                                }
-                                                if ($invert) {
-                                                    $r = 255 - $r;
-                                                    $g = 255 - $g;
-                                                    $b = 255 - $b;
-                                                }
-                                                // SMask: 0=transparent, 255=opaque.
-                                                // GD alpha: 0=opaque, 127=transparent.
-                                                if ($smask_decoded !== null) {
-                                                    // Sampled with the mask's own size: a mask smaller than its image is
-                                                    // normal, and reading it at the image's stride shifted every row.
-                                                    $sm_sx    = $sm_width === $width ? $x : intdiv($x * $sm_width, max(1, $width));
-                                                    $sm_sy    = $sm_height === $height ? $y : intdiv($y * $sm_height, max(1, $height));
-                                                    $sm_byte  = ord($smask_decoded[$sm_sy * $sm_width + $sm_sx] ?? "\xff");
-                                                    $gd_alpha = (int)((255 - $sm_byte) / 2); // truncate: max 127 when sm_byte=0
-                                                } else {
-                                                    $gd_alpha = 0; // fully opaque
-                                                }
-                                                imagesetpixel(
-                                                    $im,
-                                                    $x,
-                                                    $y,
-                                                    imagecolorallocatealpha($im, $r, $g, $b, $gd_alpha)
-                                                );
-                                            }
-                                        }
-                                        imagepng($im, $imgFile, 9);
-                                        // unset(), not imagedestroy(): a no-op since PHP 8.0 and deprecated in 8.5.
-                                        unset($im);
-                                    }
-                                }
-
-                                // Display only, size-bounded; the verdict hashes the full-resolution data separately.
-                                $data_uri = self::displayDataUri(
-                                    $imgFile,
-                                    $ext === 'jpg' ? 'image/jpeg' : 'image/png'
-                                );
-
-                                // --- Build HTML content ---
-                                // A data URI: verimages/ is HTTP-blocked.
-                                $html  = "<div style='margin:10px 0; padding:8px; border:1px solid #ccc'>";
-
-                                $html .= "<div style='font-size:10px;color:#666;margin-bottom:4px'>";
-                                $html .= "{$colorspace} | {$width}×{$height} | {$channels}ch";
-                                $html .= "</div>";
-
-                                // --- SUSPECT FOUND LABEL (RESTORED) ---
-                                $html .= "<div style='margin-bottom:4px'>";
-                                $html .= '<b>' . esc_html__('Suspect found:', 'formfabricator') . '</b> ' . esc_html((string)$check_hash);
-                                $html .= "</div>";
-
-                                // --- STATUS AREA ---
-                                $html .= "<div class='img-status' style='margin-bottom:6px'>";
-                                if ($is_allowed) {
-                                    $html .= "<span style='color:green;font-weight:bold'>"
-                                           . esc_html__('Suspect is determined as usual.', 'formfabricator') . '</span>';
-                                } else {
-                                    $html .= '<span style=' . "'" . 'color:red;font-weight:bold' . "'" . '>' . esc_html__('Visual mismatch detected', 'formfabricator') . '</span>';
-                                    $html .= "<div style='margin-top:6px;padding:6px;"
-                                           . "background:#fff0f0;border:1px solid #f99;"
-                                           . "font-size:11px;font-family:monospace'>";
-                                    $html .= '<b>' . esc_html__('Why flagged:', 'formfabricator') . '</b><br>';
-                                    $html .= esc_html__('Hash method:', 'formfabricator') . ' ' . esc_html($hash_method_label ?? '') . "<br>";
-                                    $html .= esc_html__('Computed hash:', 'formfabricator') . ' <b>' . $check_hash . '</b><br>';
-                                    $pool  = $exact_image_hashes;
-                                    $html .= esc_html__('Allowed hashes in seal', 'formfabricator') . ' (' . count($pool) . "):<br>";
-                                    foreach ($pool as $ah) {
-                                        $html .= "&nbsp;&nbsp;" . esc_html($ah) . "<br>";
-                                    }
-                                    $html .= "</div>";
-                                }
-                                $html .= "</div>";
-
-                                // --- IMAGE ---
-                                if ($data_uri !== '') {
-                                    $html .= "<img src='" . esc_attr($data_uri) . "'"
-                                           . " style='max-width:100%; height:auto;"
-                                           . " border:1px solid #999; display:block; margin-bottom:6px'>";
-                                } else {
-                                    $html .= '<p style=' . "'" . 'color:orange' . "'" . '>' . esc_html__('[Image could not be rendered]', 'formfabricator') . '</p>';
-                                }
-
-                                // --- IMAGE INFO (below the image) ---
-                                $html .= "<div style='margin:5px 0; padding:5px;"
-                                       . " border:1px solid #666; background:#f9f9f9; font-size:10px'>";
-                                $html .= esc_html__('Image ID:', 'formfabricator') . ' <b>' . $img_id . '</b><br>';
-                                $html .= esc_html__('Colorspace:', 'formfabricator') . ' ' . $colorspace . '<br>';
-                                $html .= esc_html__('Width × Height:', 'formfabricator') . " {$width}×{$height}<br>";
-                                $html .= esc_html__('Decoded length:', 'formfabricator') . ' ' . strlen($decoded) . " bytes";
-                                $html .= "</div>";
-
-                                $html .= "</div>";
-
-                                // --- Fill slot ---
-                                self::fillImageSlot($uid, $html);
-                            }
-
-                                    // --- Recurse if Form XObject ---
-                            $xObjDict     = [];
-                            $is_form_xobj = str_contains($objDict, '/Subtype /Form')
-                                && preg_match('/\/XObject\s*<<(.+?)>>/is', $objDict, $xObjDict);
-                            if ($is_form_xobj) {
-                                preg_match_all('/\/[A-Za-z0-9]+\s+(\d+\s+0\s+R)/', $xObjDict[1], $refs);
-                                if (!empty($refs[1])) {
-                                    foreach ($refs[1] as $ref) {
-                                        $objRefNum = preg_replace('/\D.*/s', '', $ref); // leading digits of "N 0 R"
-                                        // Guard against circular /XObject references (A -> B -> A) exhausting the stack.
-                                        if (isset($visited[$objRefNum])) {
-                                            continue;
-                                        }
-                                        $refObj = self::definitionLookup($index, $pdf_raw, $objRefNum, '0');
-                                        if ($refObj !== null) {
-                                            // Refuse rather than stop quietly: a skipped scan could hide the very image
-                                            // this check looks for.
-                                            if (count($visited) >= self::MAX_XOBJECT_DEPTH) {
-                                                throw new \LengthException('Too many objects: Form XObjects nest too deep.');
-                                            }
-                                            $nested_bytes = $refObj['header'] . $refObj['body'] . 'endobj';
-                                            $xobject_nested_bytes += strlen($nested_bytes);
-                                            if ($xobject_nested_bytes > $xobject_nested_limit) {
-                                                throw new \LengthException('Too many objects: nested Form XObjects repeat too often.');
-                                            }
-                                            // With its own index: resolving each reference by searching the nested bytes cost
-                                            // the number of references times their size, with no time check in between.
-                                            $scanXObjects(
-                                                $nested_bytes,
-                                                $objRefNum,
-                                                $visited + [$objRefNum => true],
-                                                PdfUtils::objectDefinitionIndex($nested_bytes)
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-
-                                    $offset = $obj_end + 6;
-                        }
-
-                        if (!$found && !$parentName) {
-                            echo esc_html__('[XObject Scan] No XObjects found.', 'formfabricator') . "\n";
-                        }
-                    };
-
-                    $scanXObjects($pdf_raw, null, [], $object_index);
-
-                    // --- Final visual classification ---
-                    $contains_background_images = false; // retained for downstream verdict compat
-                    $image_missmatch            = false;
-
-                    foreach (self::$image_slots as $slot) {
-                        if ((int)$slot['allowed'] !== 1) {
-                            $image_missmatch = true;
-                        }
-                    }
-
-                    // Compares counts, not just presence, so swapping one sealed image for another still-known image is caught.
-                    $observed_counts = [];
-                    foreach (self::$image_slots as $slot) {
-                        $slot_hash = (string) ($slot['hash'] ?? '');
-                        if ($slot_hash === '') {
-                            continue;
-                        }
-                        $observed_counts[$slot_hash] = ($observed_counts[$slot_hash] ?? 0) + 1;
-                    }
-                    $sealed_counts = array_count_values(array_map('strval', $exact_image_hashes));
-
-                    $missing_images   = 0;
-                    $duplicate_images = 0;
-                    foreach ($sealed_counts as $sealed_hash => $sealed_n) {
-                        $seen = $observed_counts[$sealed_hash] ?? 0;
-                        if ($seen < $sealed_n) {
-                            $missing_images += $sealed_n - $seen;
-                        } elseif ($seen > $sealed_n) {
-                            $duplicate_images += $seen - $sealed_n;
-                        }
-                    }
-
-                    if ($missing_images > 0 || $duplicate_images > 0) {
-                        $image_missmatch = true;
-                        echo "<p style='margin-top:8px;'>"
-                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
-                           . esc_html(
-                               sprintf(
-                                   /* translators: 1: number of sealed images no longer present, 2: number of images appearing more often than sealed. */
-                                   __('Image inventory does not match the seal — %1$d missing, %2$d duplicated', 'formfabricator'),
-                                   $missing_images,
-                                   $duplicate_images
-                               )
-                           )
-                           . "</span></p>";
-                    }
-                }
-
-                echo "</div>"; // close image section foldable content
-                echo "</div>"; // close image section wrapper
-
-
-                /* ─────────────────────── CONTENT STREAM INTEGRITY ─────────────────────── */
-
-                $allowed_content_hashes = $rebuilt_payload['content_streams'] ?? [];
-                $content_stream_mismatch = false;
-                $seal_page_text_live     = null;
-
-                self::setProgress(__('Checking content streams…', 'formfabricator'), 87);
-
-                $cs_section_id  = 'fabricator-pdf-content-streams-' . $uid_prefix;
-                $cs_section_sec = 'fabricator-pdf-section-streams-' . esc_attr($uid_prefix);
-                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                echo "<div class='fabricator-pdf-detail-section' id='{$cs_section_sec}'>";
-                echo "<div class='fabricator-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-                   . " data-target='" . esc_attr($cs_section_id) . "'>" . esc_html__('Content Streams', 'formfabricator') . "</button>";
-                $cs_badge_id = 'fabricator-pdf-badge-streams-' . esc_attr($uid_prefix);
-                echo "<span id='{$cs_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
-                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                echo "</div>";
-                echo "<div id='" . esc_attr($cs_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-
-                if (empty($allowed_content_hashes)) {
-                    // Generator refuses to seal without content streams, so a seal listing none was not made here.
-                    echo "<p><span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
-                       . esc_html__('The seal lists no content streams, so the page content cannot be checked.', 'formfabricator')
-                       . "</span></p>";
-                    $content_stream_mismatch = true;
-                } else {
-                    // Any stream added, swapped or removed fails (PdfUtils::verifyContentStreams()).
-                    $cs_result = \FabricatorForms\PDF\PdfUtils::verifyContentStreams(
-                        (string) $pdf_raw,
-                        array_map('strval', (array) $allowed_content_hashes),
-                        '---BEGIN-SEAL---' . preg_replace('/\s+/', '', (string) $seal_base64) . '---END-SEAL---'
-                    );
-                    if ($cs_result['mismatch']) {
-                        $content_stream_mismatch = true;
-                    }
-                    if ($cs_result['seal_obj'] !== null) {
-                        $seal_page_text_live = \FabricatorForms\PDF\PdfUtils::sealPageTextFingerprint((string) $pdf_raw);
-                    }
-
-                    $n_seal = count($allowed_content_hashes);
-                    $n_pdf  = count($cs_result['rows']);
-                    // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see handleUpload() note.
-                    echo "<p class='fabricator-pdf-hash-summary'>"
-                       . esc_html(
-                           sprintf(
-                               /* translators: %1$d: content streams recorded in the seal, %2$d: content streams found in the PDF */
-                               __('Streams in seal: %1$d · verifiable in PDF: %2$d', 'formfabricator'),
-                               $n_seal,
-                               $n_pdf
-                           )
-                       ) . "</p>";
-                    echo "<div class='fabricator-pdf-hash-list'>";
-                    foreach ($cs_result['rows'] as $cs_row) {
-                        $short = esc_html(substr((string) $cs_row['hash'], 0, 20));
-                        if ($cs_row['status'] === 'unrecognised') {
-                            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
-                               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('UNRECOGNISED', 'formfabricator') . "</span>"
-                               . "<code>{$short}…</code>"
-                               . "<span style='font-size:11px;color:#721c24;'>" . esc_html__('not in seal', 'formfabricator') . "</span></div>";
-                            continue;
-                        }
-                        $cs_pill = $cs_row['status'] === 'seal-page' ? esc_html__('SEAL PAGE', 'formfabricator') : esc_html__('MATCH', 'formfabricator');
-                        echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--pass'>"
-                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>{$cs_pill}</span>"
-                           . "<code>{$short}…</code></div>";
-                    }
-                    foreach ($cs_result['problems'] as $cs_problem) {
-                        $cs_obj   = (int) ($cs_problem['obj'] ?? 0);
-                        $cs_count = (int) ($cs_problem['count'] ?? 0);
-                        $cs_msg   = match ((string) $cs_problem['code']) {
-                            // translators: %d: PDF object number of the stream.
-                            'oversized' => sprintf(__('Content stream %d is too large to verify.', 'formfabricator'), $cs_obj),
-                            // translators: %d: PDF object number of the stream.
-                            'marker_outside_seal_page' => sprintf(__('Stream %d carries a seal marker outside the seal page: injected content.', 'formfabricator'), $cs_obj),
-                            'no_seal_stream' => __('No content stream on the last page carries the seal.', 'formfabricator'),
-                            'seal_page_mismatch' => __('The seal page contains content that is not in the seal.', 'formfabricator'),
-                            // translators: %d: number of sealed content streams missing from the PDF.
-                            'sealed_missing' => sprintf(_n('%d sealed content stream is missing from the PDF.', '%d sealed content streams are missing from the PDF.', $cs_count, 'formfabricator'), $cs_count),
-                            default => __('Content streams do not match the seal.', 'formfabricator'),
-                        };
-                        echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
-                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html($cs_msg) . "</span></div>";
-                    }
-                    echo "</div>";
-
-                    /* Seal-page text check. */
-                    $seal_page_text_sealed = (string) ($rebuilt_payload['seal_page_text'] ?? '');
-                    if ($seal_page_text_live === null) {
-                        echo "<p style='margin-top:8px;'>"
-                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
-                           . esc_html__('Seal-page content stream not found', 'formfabricator')
-                           . "</span></p>";
-                        $content_stream_mismatch = true;
-                    } elseif (!hash_equals($seal_page_text_sealed, $seal_page_text_live)) {
-                        echo "<p style='margin-top:8px;'>"
-                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
-                           . esc_html__('Text on the seal page does not match the seal', 'formfabricator')
-                           . "</span></p>";
-                        $content_stream_mismatch = true;
-                    } else {
-                        echo "<p style='margin-top:8px;'>"
-                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>"
-                           . esc_html__('Seal-page text matches the seal', 'formfabricator')
-                           . "</span></p>";
-                    }
-
-                    if (!$content_stream_mismatch) {
-                        echo "<p style='margin-top:8px;'>"
-                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('All streams accounted for', 'formfabricator') . "</span></p>";
-                    }
-                }
-
-                echo "</div>"; // close content streams foldable content
-                echo "</div>"; // close content streams section wrapper
-
-                /* ─────────────────────── GENERIC TYPE PROCESSING ──────────────────────── */
-
-                self::setProgress(__('Checking fonts…', 'formfabricator'), 94);
-
-                // ── Fonts section
-                // ─────────────────────────────────────────────────────
-                $fonts_section_id  = 'fabricator-pdf-content-fonts-' . $uid_prefix;
-                $fonts_section_sec = 'fabricator-pdf-section-fonts-' . esc_attr($uid_prefix);
-                echo "<div class='fabricator-pdf-detail-section' id='{$fonts_section_sec}'>";
-                echo "<div class='fabricator-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-                   . " data-target='" . esc_attr($fonts_section_id) . "'>" . esc_html__('Fonts', 'formfabricator') . "</button>";
-                $fonts_badge_id = 'fabricator-pdf-badge-fonts-' . esc_attr($uid_prefix);
-                echo "<span id='{$fonts_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
-                    // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                echo "</div>";
-                echo "<div id='" . esc_attr($fonts_section_id) . "'"
-                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-
-                // Both sections below only ask which /Type names occur — see distinctTypeNames().
-                $matches = self::distinctTypeNames((string) $pdf_raw);
-
-                if ($matches !== []) {
-                    $verified_fonts = null;
-
-                    foreach ($matches as $m) {
-                        $type = $m[1];
-
-                        if ($type !== 'Font') {
-                            continue;
-                        }
-
-                        if ($verified_fonts === null) {
-                            $verified_fonts = [
-                                'used'       => [],
-                                'missing'    => [],
-                                'unexpected' => [],
-                            ];
-
-                            $allowed_fonts = $rebuilt_payload['fonts'] ?? [];
-
-                            // --- 1a. Collect font references from /Resources ---
-                            // Each "/Font <<" block up to its ">>", found linearly, outside image data.
-                            $font_refs    = [];
-                            $font_scan_at = 0;
-                            $find_fonts   = PdfUtils::finderOutsideImageData((string) $pdf_raw, '/\/Font\s*<</i');
-                            while ($find_fonts($font_scan_at, $font_match)) {
-                                $font_block_start = $font_match[0][1] + strlen($font_match[0][0]);
-                                $font_block_end   = strpos($pdf_raw, '>>', $font_block_start);
-                                if ($font_block_end === false) {
-                                    break;
-                                }
-                                $block        = substr($pdf_raw, $font_block_start, $font_block_end - $font_block_start);
-                                $font_scan_at = $font_block_end + 2;
-                                if (preg_match_all('/\/\w+\s+(\d+\s+\d+)\s+R/', $block, $m)) {
-                                    foreach ($m[1] as $ref) {
-                                        $font_refs[$ref] = true;
-                                    }
-                                }
-                            }
-
-                            // --- 1b. Resolve font objects & extract BaseFont ---
-                            foreach (array_keys($font_refs) as $ref) {
-                                // Last definition of exactly this object and generation.
-                                [$font_ref_num, $font_ref_gen] = preg_split('/\s+/', (string) $ref);
-                                $font_ref_obj = self::definitionLookup($object_index, (string) $pdf_raw, $font_ref_num, $font_ref_gen);
-                                if ($font_ref_obj === null || !preg_match('/\A\s*<<(.*?)>>/s', $font_ref_obj['body'], $obj)) {
-                                    continue;
-                                }
-                                if (!preg_match('/\/BaseFont\s*\/([^\s\/]+)/', $obj[1], $bf)) {
-                                    continue;
-                                }
-
-                                // Normalize subset prefix
-                                $font_name = preg_replace('/^[A-Z]{6}\+/', '', $bf[1]);
-                                $verified_fonts['used'][$font_name] = true;
-                            }
-
-                            $used_fonts = array_keys($verified_fonts['used']);
-
-                            // --- 1c. Compare ---
-                            foreach ($used_fonts as $font) {
-                                if (!in_array($font, $allowed_fonts, true)) {
-                                    $verified_fonts['unexpected'][] = $font;
-                                }
-                            }
-
-                            foreach ($allowed_fonts as $font) {
-                                if (!in_array($font, $used_fonts, true)) {
-                                    $verified_fonts['missing'][] = $font;
-                                }
-                            }
-
-                            $all_font_names = array_unique(array_merge($allowed_fonts, $used_fonts));
-                            sort($all_font_names);
-                            echo "<div class='fabricator-pdf-hash-list'>";
-                            foreach ($all_font_names as $font) {
-                                $in_seal = in_array($font, $allowed_fonts, true);
-                                $in_pdf  = in_array($font, $used_fonts, true);
-                                if ($in_seal && $in_pdf) {
-                                    $row_cls = 'fabricator-pdf-hash-row--pass';
-                                    $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('OK', 'formfabricator') . "</span>";
-                                } elseif (!$in_seal && $in_pdf) {
-                                    $row_cls = 'fabricator-pdf-hash-row--fail';
-                                    $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('UNDECLARED', 'formfabricator') . "</span>";
-                                } else {
-                                    $row_cls = 'fabricator-pdf-hash-row--warn';
-                                    $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--warn'>" . esc_html__('UNUSED', 'formfabricator') . "</span>";
-                                }
-                                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                                echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
-                                   . $pill
-                                   . "<code>" . esc_html($font) . "</code>"
-                                   . "</div>";
-                            }
-                            echo "</div>";
-
-                            if ($verified_fonts['unexpected'] || $verified_fonts['missing']) {
-                                $font_missmatch = true;
-                            }
-                        }
-                    }
-                }
-
-                if ($font_prog_mismatch) {
-                    // Set again after the re-init before annotation processing; $all_stream_mismatch misses a stripped font.
-                    $font_missmatch = true;
-                    echo "<p style='margin-top:8px;'>"
-                       . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
-                       . esc_html__('Font binary programs do not match the seal', 'formfabricator')
-                       . "</span></p>";
-                }
-
-                if (!$font_missmatch) {
-                    echo "<p style='margin-top:8px;'>"
-                       . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>"
-                       . esc_html__('All fonts match the seal', 'formfabricator')
-                       . "</span></p>";
-                }
-
-                echo "</div>"; // close fonts foldable content
-                echo "</div>"; // close fonts section wrapper
-
-                // ── PDF Objects section
-                // ────────────────────────────────────────────────
-                $objects_section_id  = 'fabricator-pdf-content-objects-' . $uid_prefix;
-                $objects_section_sec = 'fabricator-pdf-section-objects-' . esc_attr($uid_prefix);
-                echo "<div class='fabricator-pdf-detail-section' id='{$objects_section_sec}'>";
-                echo "<div class='fabricator-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-                   . " data-target='" . esc_attr($objects_section_id) . "'>" . esc_html__('PDF Objects', 'formfabricator') . "</button>";
-                $objects_badge_id = 'fabricator-pdf-badge-objects-' . esc_attr($uid_prefix);
-                echo "<span id='{$objects_badge_id}' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
-                                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                echo "</div>";
-                echo "<div id='" . esc_attr($objects_section_id) . "'"
-                   . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-
-                $unexpected_types = [];
-                if (!empty($matches)) {
-                    // Whitelist
-                    $safe_types = [
-                        'Pages', 'Catalog', 'ExtGState', 'Pattern',
-                        'FontDescriptor', 'Group', 'XRef', 'ObjStm', 'Trailer',
-                    ];
-                    // Whether the file declares any image at all: asked once, not once per XObject match over the whole file.
-                    $raw_has_image_subtype = null;
-                    foreach ($matches as $m) {
-                        $type = $m[1];
-                        if (in_array($type, $safe_types, true)) {
-                            continue;
-                        }
-                        if ($type === 'Page' && $pagecount_mismatch === false) {
-                            continue;
-                        }
-                        if ($type === 'Annot' && $annotation_mismatch === false) {
-                            continue;
-                        }
-                        if ($type === 'Font' && $font_missmatch === false) {
-                            continue;
-                        }
-                        if ($type === 'XObject' && $image_missmatch === false) {
-                            $raw_has_image_subtype ??= PdfUtils::finderOutsideImageData((string) $pdf_raw, '/\/Subtype\s*\/Image/i')(0, $image_subtype);
-                            // The background grid is a Form XObject, which the content-stream check above already
-                            // holds to the seal.
-                            $form_xobjects_sealed = $content_stream_mismatch === false;
-                            if ($raw_has_image_subtype || $form_xobjects_sealed) {
-                                continue;
-                            }
-                        }
-                        $unexpected_types[] = $type;
-                        $unexpected_detected = true;
-                    }
-                }
-
-                // Streams the reader left packed: never packed like this by FormFabricator, or beyond the memory reserved for
-                // this check. Either way the file can't be confirmed.
-                if ($refused_streams !== []) {
-                    $unexpected_detected = true;
-                }
-
-                if ($unexpected_detected) {
-                    echo "<div class='fabricator-pdf-tag-list'>";
-                    foreach (array_unique($unexpected_types) as $utype) {
-                        echo "<span class='fabricator-pdf-tag'>" . esc_html($utype) . "</span>";
-                    }
-                    echo "</div>";
-                    self::renderRefusedStreams($refused_streams, $refused_unlisted);
-                } else {
-                    echo "<p class='fabricator-pdf-empty-state'>" . esc_html__('No unexpected PDF objects detected.', 'formfabricator') . "</p>";
-                }
-
-                echo "</div>"; // close objects foldable content
-                echo "</div>"; // close objects section wrapper
-            }
-
-            // --- Collect inner detail HTML ---
-            $inner_html = ob_get_clean();
-
-            // --- Post-process: update badge classes based on computed booleans ---
-            // The labels as printed, i.e. translated.
-            $bdg_pass = "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator');
-            $bdg_fail = "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator');
-            $bdg_flip = static function (
-                string &$html,
-                string $id,
-                string $pass,
-                string $fail
-            ): void {
-                $html = str_replace("id='" . $id . $pass, "id='" . $id . $fail, $html);
-            };
-
-            if ($field_mismatch_count > 0) {
-                $bdg_flip(
-                    $inner_html,
-                    'fabricator-pdf-badge-fields-' . $uid_prefix,
-                    $bdg_pass,
-                    $bdg_fail
-                );
-            }
-            if ($annotation_fail_count > 0) {
-                $bdg_flip(
-                    $inner_html,
-                    'fabricator-pdf-badge-annots-' . $uid_prefix,
-                    $bdg_pass,
-                    $bdg_fail
-                );
-            }
-            if ($image_missmatch) {
-                $bdg_flip(
-                    $inner_html,
-                    'fabricator-pdf-badge-images-' . $uid_prefix,
-                    $bdg_pass,
-                    $bdg_fail
-                );
-            }
-            if ($font_missmatch) {
-                $bdg_flip(
-                    $inner_html,
-                    'fabricator-pdf-badge-fonts-' . $uid_prefix,
-                    $bdg_pass,
-                    $bdg_fail
-                );
-            }
-            if ($unexpected_detected) {
-                $bdg_flip(
-                    $inner_html,
-                    'fabricator-pdf-badge-objects-' . $uid_prefix,
-                    $bdg_pass,
-                    $bdg_fail
-                );
-            }
-            if ($content_stream_mismatch) {
-                $bdg_flip(
-                    $inner_html,
-                    'fabricator-pdf-badge-streams-' . $uid_prefix,
-                    $bdg_pass,
-                    $bdg_fail
-                );
-            }
-
-            // --- PDF Metadata integrity check ---
-            $meta_mismatch  = false;
-            $sealed_meta    = $rebuilt_payload['pdf_meta'] ?? [];
-            $meta_section_id = 'fabricator-pdf-content-meta-' . $uid_prefix;
-
-            if (!empty($sealed_meta)) {
-                // The LAST /Info reference and the LAST definition of that object, as a viewer reads an incrementally updated
-                // file: each update appends a new trailer (pageContents() takes the last /Root the same way).
-                $pdf_meta_found = ['title' => '', 'author' => '', 'creator' => ''];
-                // Only the last /Info reference counts, so only the last is kept: preg_match_all() held a match for every
-                // one in the file, and a file can repeat "/Info 1 0 R" as often as it likes.
-                $info_ref = null;
-                $info_at  = 0;
-                $info_raw = (string) $pdf_raw;
-                while (preg_match('/\/Info\s+(\d+)\s+(\d+)\s+R/', $info_raw, $info_match, PREG_OFFSET_CAPTURE, $info_at) === 1) {
-                    $info_ref = [$info_match[0][0], $info_match[1][0], $info_match[2][0]];
-                    $info_at  = $info_match[0][1] + strlen($info_match[0][0]);
-                }
-                unset($info_raw);
-                if ($info_ref !== null) {
-                    $info_obj = self::definitionLookup($object_index, (string) $pdf_raw, $info_ref[1], $info_ref[2]);
-                    if ($info_obj !== null) {
-                        foreach (['Title' => 'title', 'Author' => 'author', 'Creator' => 'creator'] as $key => $slot) {
-                            // A real string parser: mPDF escapes "(", ")" and "\" inside these UTF-16BE strings, and reading
-                            // up to the first ")" garbled such a value, so a genuine PDF came out as "Modified".
-                            $pdf_meta_found[$slot] = PdfUtils::dictTextEntry($info_obj['body'], $key) ?? '';
-                        }
-                    }
-                }
-
-                ob_start();
-                echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-meta-" . esc_attr($uid_prefix) . "'>";
-                echo "<div class='fabricator-pdf-detail-hdr'>";
-                echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
-                   . " data-target='" . esc_attr($meta_section_id) . "'>" . esc_html__('PDF Metadata', 'formfabricator') . "</button>";
-                echo "<span id='fabricator-pdf-badge-meta-" . esc_attr($uid_prefix) . "'"
-                   . " class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator') . "</span>";
-                echo "</div>";
-                echo "<div id='" . esc_attr($meta_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-                echo "<div class='fabricator-pdf-hash-list'>";
-
-                $meta_labels = [
-                    'title'   => __('Title', 'formfabricator'),
-                    'author'  => __('Author', 'formfabricator'),
-                    'creator' => __('Creator', 'formfabricator'),
-                ];
-                foreach ($meta_labels as $slot => $label) {
-                    $expected = trim((string)($sealed_meta[$slot] ?? ''));
-                    $actual   = trim((string)($pdf_meta_found[$slot] ?? ''));
-                    $match    = ($expected === $actual);
-                    if (!$match) {
-                        $meta_mismatch = true;
-                    }
-                    $row_cls    = $match ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail';
-                    $pill_cls   = $match ? 'fabricator-pdf-pill--pass' : 'fabricator-pdf-pill--fail';
-                    $pill_text  = $match ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
-                    // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                    echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
-                       . "<span class='fabricator-pdf-pill {$pill_cls}'>{$pill_text}</span>"
-                       . "<code>" . esc_html($label) . "</code>"
-                       . "<span style='color:#50575e;font-size:11px;margin-left:4px;'>"
-                       . esc_html($actual !== '' ? $actual : __('(empty)', 'formfabricator'))
-                       . ($match ? '' : ' <em style="color:#d63638;">' . esc_html__('expected:', 'formfabricator') . ' ' . esc_html($expected) . '</em>')
-                       . "</span>"
+                    echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
+                    echo "<div class='fabricator-pdf-cmp-header'>"
+                       . "<span class='fabricator-pdf-cmp-label'>{$display_label}</span>"
+                       . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($start_marker) . "</span>"
+                       . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>{$pill_text}</span>"
                        . "</div>";
+                    echo "<div class='fabricator-pdf-cmp-body'>";
+                    $seal_val = esc_html((string) ($payload_field['value'] ?? ''));
+                    echo "<div class='fabricator-pdf-cmp-col'>"
+                       . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
+                       . "<div class='fabricator-pdf-cmp-col__value'>{$seal_val}</div>"
+                       . "</div>";
+                    echo "<div class='fabricator-pdf-cmp-col'>"
+                       . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
+                       . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html((string) $pdf_field_text) . "</div>"
+                       . "</div>";
+                    echo "</div>"; // fabricator-pdf-cmp-body
+
+                    if (!$matches_visual) {
+                        echo self::differenceHtml((string) $expected_text, (string) $pdf_field_text);
                     // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+                    }
+
+                    echo "</div>\n"; // fabricator-pdf-cmp-row
+
+                    // Mark both as processed
+                    $field_cursor++;
+                    $processed_markers[$start_marker] = true;
+                    $new_start_found = true;
                 }
-
-                echo "</div>"; // fabricator-pdf-hash-list
-                echo "</div>"; // meta section content
-                echo "</div>"; // meta section wrapper
-                $meta_html = ob_get_clean();
-                $inner_html = ($meta_html ?: '') . ($inner_html ?? '');
             }
+        } while ($new_start_found);
 
-            if ($meta_mismatch) {
-                $meta_badge_pass = "id='fabricator-pdf-badge-meta-{$uid_prefix}'"
-                    . " class='fabricator-pdf-detail-badge fabricator-pdf-badge-pass'>" . esc_html__('PASS', 'formfabricator');
-                $meta_badge_fail = "id='fabricator-pdf-badge-meta-{$uid_prefix}'"
-                    . " class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator');
-                $inner_html = str_replace($meta_badge_pass, $meta_badge_fail, $inner_html ?? '');
+        // Sealed fields the PDF shows but whose markers are gone: the comparison above checked fewer fields than were
+        // sealed and said nothing. The content-stream check still catches the edit that removed them; this names them.
+        for ($missing_at = $field_cursor, $missing_to = count($field_keys); $missing_at < $missing_to; $missing_at++) {
+            $missing_field = $fields[$field_keys[$missing_at]];
+            $missing_label = (string) ($missing_field['label'] ?? '');
+            $field_mismatch_count++;
+            echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
+               . "<div class='fabricator-pdf-cmp-header'>"
+               . "<span class='fabricator-pdf-cmp-label'>"
+               // translators: %d: the field's position in the seal.
+               . esc_html($missing_label !== '' ? $missing_label : sprintf(__('Field #%d', 'formfabricator'), (int) $field_keys[$missing_at]))
+               . "</span>"
+               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISSING FROM PDF', 'formfabricator') . "</span>"
+               . "</div></div>\n";
+        }
+
+        self::checkParseTimeBudget($budget['start'], $budget['max'], 'field extraction');
+
+        $rows          = (string) ob_get_clean();
+        $all_visual_id = 'fabricator-pdf-content-fields-' . $uid_prefix;
+        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-fields-" . esc_attr($uid_prefix) . "'>";
+        echo "<div class='fabricator-pdf-detail-hdr' id='fabricator-pdf-hdr-fields-" . esc_attr($uid_prefix) . "'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($all_visual_id) . "'>" . esc_html__('Field Content', 'formfabricator') . "</button>";
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes; $rows was escaped at each echo() above.
+        echo self::detailBadge('fabricator-pdf-badge-fields-' . $uid_prefix, $field_mismatch_count > 0);
+        echo "</div>";
+        echo "<div id='" . esc_attr($all_visual_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        echo "<div class='fabricator-pdf-cmp-list'>";
+        echo $rows;
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
+        echo "</div>"; // fabricator-pdf-cmp-list
+        echo "</div>"; // fabricator-pdf-detail-content
+        echo "</div>"; // fabricator-pdf-detail-section
+
+        return $field_mismatch_count;
+    }
+
+    /**
+     * Most changed stretches differenceHtml() looks for and shows in one field; past them it notes that more follow.
+     *
+     * @var int
+     */
+    private const MAX_DIFF_HUNKS = 5;
+
+    /**
+     * Where a field's PDF text differs from its sealed value, as short excerpts a reader can follow in a long text: each
+     * changed stretch of words with a few words of context, the sealed words marked as removed, the PDF's as added.
+     *
+     * Words are matched greedily: at a difference, the nearest point where both texts agree again (two words in a row,
+     * within 40 words on either side) ends the stretch. Each stretch costs at most 40 × 80 comparisons, and the scan
+     * stops after MAX_DIFF_HUNKS of them, so even a crafted text stays cheap.
+     *
+     * @param string $sealed The sealed value, normalized as the check reads it.
+     * @param string $pdf    The PDF's text of the field, normalized alike.
+     * @return string
+     */
+    private static function differenceHtml(string $sealed, string $pdf): string
+    {
+        $a = preg_split('/\s+/u', trim($sealed), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $b = preg_split('/\s+/u', trim($pdf), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $n = count($a);
+        $m = count($b);
+        $window = 40;
+        $hunks  = [];
+        $more   = false;
+        $i = 0;
+        $j = 0;
+        while ($i < $n || $j < $m) {
+            if ($i < $n && $j < $m && $a[$i] === $b[$j]) {
+                $i++;
+                $j++;
+                continue;
             }
-
-            // All-stream fingerprint check (Gap B catch-all): flag a live stream with no matching sealed
-            // hash (injected content); a sealed hash missing from the live PDF is not flagged (mere removal).
-            $all_stream_mismatch = false;
-            if ($pdf_raw !== false) {
-                $sealed_as_index = array_flip(
-                    array_map('strval', (array) ($seal_data['all_stream_hashes'] ?? []))
-                );
-                foreach (PdfUtils::hashAllCompressedStreams((string) $pdf_raw) as $h) {
-                    if (!isset($sealed_as_index[$h])) {
-                        $all_stream_mismatch = true;
+            if (count($hunks) >= self::MAX_DIFF_HUNKS) {
+                $more = true;
+                break;
+            }
+            [$di, $dj] = [$n - $i, $m - $j];
+            for ($cost = 1; $cost <= 2 * $window && [$di, $dj] === [$n - $i, $m - $j]; $cost++) {
+                for ($x = max(0, $cost - $window); $x <= min($cost, $window); $x++) {
+                    $y = $cost - $x;
+                    if ($i + $x < $n && $j + $y < $m && $a[$i + $x] === $b[$j + $y]
+                        && ($a[$i + $x + 1] ?? null) === ($b[$j + $y + 1] ?? null)
+                    ) {
+                        [$di, $dj] = [$x, $y];
                         break;
                     }
                 }
             }
-
-            // Final verdict: $seal_matches uses hash_equals() against a server-resolved key (never the
-            // upload's own payload); structural-tamper flags are OR'd in on top.
-            $visual_modified   = $visual_mismatch_found === true;
-            $contains_background_images = (bool)($contains_background_images ?? false);
-            $any_pdf_issue     = $incremental_update_detected || $multiple_seals_detected
-                || $unexpected_detected || $annotation_mismatch || $pagecount_mismatch
-                || $image_missmatch || $font_missmatch || $content_stream_mismatch
-                || $meta_mismatch || $all_stream_mismatch;
-            // Apart from $document_modified: an uploader rewriting key_id to an unknown UUID must not mask these signals.
-            $structural_tamper = $visual_modified || $any_pdf_issue;
-            $document_modified = !$seal_matches || $structural_tamper;
-
-            // --- Summary panel ---
-            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see note atop handleUpload().
-            echo self::renderSummaryPanel(
-                [
-                'seal_matches'               => $seal_matches,
-                'seal_key_status'            => $seal_key_status  ?? 'active',
-                'seal_compromised'           => $seal_compromised ?? false,
-                'visual_modified'            => $visual_modified,
-                'structural_tamper'          => $structural_tamper,
-                'field_mismatch_count'       => $field_mismatch_count,
-                'annotation_fail_count'      => $annotation_fail_count,
-                'pagecount_mismatch'         => $pagecount_mismatch,
-                'image_missmatch'            => $image_missmatch,
-                'font_missmatch'             => $font_missmatch,
-                'unexpected_detected'        => $unexpected_detected,
-                'content_stream_mismatch'    => $content_stream_mismatch,
-                'meta_mismatch'                  => $meta_mismatch,
-                'incremental_update_detected'    => $incremental_update_detected,
-                'incremental_update_eof_count'   => $incremental_update_eof_count ?? $eof_count ?? 1,
-                'multiple_seals_detected'        => $multiple_seals_detected ?? false,
-                'all_stream_mismatch'            => $all_stream_mismatch ?? false,
-                'contains_background_images'     => $contains_background_images,
-                'document_modified'          => $document_modified,
-                'file_name'                  => $file_name,
-                'uid_prefix'                 => $uid_prefix,
-                'doc_nonce'                  => (string) ($seal_data['nonce'] ?? ''),
-                ]
-            );
-
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- ob_get_clean() capture whose contents were already escaped at each echo() above.
-            echo $inner_html;
-        } catch (\Throwable $e) {
-            while (ob_get_level() > $outer_ob_level) {
-                ob_end_clean();
-            }
-            $raw_msg = $e->getMessage();
-            // The file name is logged here rather than carried in the exception: messages stay constant strings.
-            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: ' . $raw_msg . ' (' . \FabricatorForms\fabricator_log_file((string) $file_name) . ')');
-            // Map technical exception messages to user-friendly, translatable ones.
-            $fn           = esc_html($file_name);
-            $friendly_msg = match (true) {
-                str_contains($raw_msg, 'Parsing timed out')
-                    => $fn . ': ' . __('PDF parsing took too long and was stopped for safety. Please try a smaller or simpler PDF.', 'formfabricator'),
-                str_contains($raw_msg, 'Seal not found')
-                    => $fn . ': ' . __('No FormFabricator seal found. Please only upload original documents.', 'formfabricator'),
-                str_contains($raw_msg, 'Base64 decode')
-                    => $fn . ': ' . __('The seal in the document is corrupted and cannot be read.', 'formfabricator'),
-                str_contains($raw_msg, 'Seal is implausibly large')
-                    => $fn . ': ' . __('The seal in the document is unusually large — file rejected.', 'formfabricator'),
-                str_contains($raw_msg, 'Object list not found')
-                    => $fn . ': ' . __('The PDF structure is invalid or the document is encrypted.', 'formfabricator'),
-                str_contains($raw_msg, 'not a valid PDF')
-                    => $fn . ': ' . __('The file is not a valid PDF document.', 'formfabricator'),
-                str_contains($raw_msg, 'Indexed palette too short')
-                    => $fn . ': ' . __('An embedded image in the document has invalid color data and could not be processed.', 'formfabricator'),
-                // The same sentence as the early refusal before parsing, reached here only through indexObjects()'s backstop.
-                str_contains($raw_msg, 'Too many objects')
-                    // translators: %s: uploaded file name.
-                    => sprintf(__('%s has far more parts than any document this plugin creates and was not read.', 'formfabricator'), $fn),
-                default
-                    => $fn . ': ' . __('The document could not be processed. See server log for details.', 'formfabricator'),
-            };
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built from esc_html() + hardcoded strings; noticeHtml() also wp_kses_post()'s it.
-            echo self::noticeHtml($friendly_msg, 'error');
-            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-        } finally {
-            $pdf_content = ob_get_clean();
+            $hunks[] = [$i, $i + $di, $j, $j + $dj];
+            $i += $di;
+            $j += $dj;
         }
+
+        if ($hunks === []) {
+            // Only spacing or the order of combining marks differs, which the check does not read either.
+            return "<div class='fabricator-pdf-diff'><p class='fabricator-pdf-diff__note'>"
+                . esc_html__('The words are the same; the difference lies in characters that do not show as words.', 'formfabricator') . '</p></div>';
+        }
+
+        $context = 6;
+        $excerpt = static function (array $words, int $from, int $to, string $tag) use ($context): string {
+            $cut    = static fn(array $w): string => esc_html(implode(' ', $w));
+            $before = array_slice($words, max(0, $from - $context), $from - max(0, $from - $context));
+            $change = array_slice($words, $from, $to - $from);
+            $after  = array_slice($words, $to, $context);
+            if (count($change) > 60) {
+                $change = array_merge(array_slice($change, 0, 30), ['…'], array_slice($change, -30));
+            }
+            return ($from > $context ? '… ' : '') . $cut($before)
+                . ($change === [] ? " <{$tag} class='fabricator-pdf-diff__none'>" . esc_html__('(nothing)', 'formfabricator') . "</{$tag}> "
+                    : " <{$tag}>" . $cut($change) . "</{$tag}> ")
+                . $cut($after) . ($to + $context < count($words) ? ' …' : '');
+        };
+
+        $html = "<div class='fabricator-pdf-diff'>";
+        foreach ($hunks as [$a_from, $a_to, $b_from, $b_to]) {
+            $html .= "<div class='fabricator-pdf-diff__hunk'>"
+                . "<div class='fabricator-pdf-diff__line'><span class='fabricator-pdf-diff__label'>" . esc_html__('Seal', 'formfabricator') . '</span> '
+                . $excerpt($a, $a_from, $a_to, 'del') . '</div>'
+                . "<div class='fabricator-pdf-diff__line'><span class='fabricator-pdf-diff__label'>" . esc_html__('PDF', 'formfabricator') . '</span> '
+                . $excerpt($b, $b_from, $b_to, 'ins') . '</div>'
+                . '</div>';
+        }
+        if ($more) {
+            $html .= "<p class='fabricator-pdf-diff__note'>" . esc_html__('…and further changes after these.', 'formfabricator') . '</p>';
+        }
+        return $html . '</div>';
+    }
+
+    /**
+     * A field's text as the comparison reads it: normalized (PdfUtils::normalizeText()), whitespace removed, then
+     * normalized again. pdfparser loses a space at a line wrap and adds one at a font switch, and the second pass sorts
+     * combining marks alike once those spaces are gone. Any change beyond spacing also changes a sealed content stream.
+     *
+     * @param string $text Normalized text of the PDF's field, or the sealed value.
+     * @return string
+     */
+    private static function comparableText(string $text): string
+    {
+        $no_space = static fn(string $s): string => (string) preg_replace('/[\s\x{200B}-\x{200D}\x{FEFF}]+/u', '', $s);
+        return $no_space(PdfUtils::normalizeText($no_space(PdfUtils::normalizeText($text))));
+    }
+
+    /**
+     * The field's text from the PDF, spaced as the sealed value has it, for display; nothing else is changed.
+     *
+     * @param string $pdf       The field's text as read from the PDF.
+     * @param string $canonical Its sealed value.
+     * @return string|null The respaced text, or null when the two differ in anything but spaces.
+     */
+    private static function repairSpacing(string $pdf, string $canonical): ?string
+    {
+        // Split once: mb_substr($s, $i, 1) walks the string from its start on every call, which is quadratic.
+        $pdf_chars = mb_str_split($pdf);
+        $can_chars = mb_str_split($canonical);
+        $p = 0;
+        $c = 0;
+        $out = '';
+
+        $pdf_len = count($pdf_chars);
+        $can_len = count($can_chars);
+
+        while ($p < $pdf_len && $c < $can_len) {
+            $pdf_ch = $pdf_chars[$p];
+            $can_ch = $can_chars[$c];
+
+            // Exact match
+            if ($pdf_ch === $can_ch) {
+                $out .= $pdf_ch;
+                $p++;
+                $c++;
+                continue;
+            }
+
+            // A space the PDF lost.
+            if ($can_ch === ' ' && $pdf_ch !== ' ') {
+                $out .= ' ';
+                $c++;
+                continue;
+            }
+
+            // A space the PDF gained.
+            if ($pdf_ch === ' ' && $can_ch !== ' ') {
+                $p++;
+                continue;
+            }
+
+            // Anything else is a real mismatch
+            return null;
+        }
+
+        // Both sides fully consumed, or a sealed "100" shown as "1000" would match. A genuine field
+        // has no text between its value and its end marker.
+        if (trim(implode('', array_slice($can_chars, $c))) !== '' || trim(implode('', array_slice($pdf_chars, $p))) !== '') {
+            return null;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Prints every seal block the document holds, each checked like the primary one; the verdict fails regardless.
+     *
+     * @param string[] $text_seal_b64_list The seal blocks in pdfparser's text.
+     * @param string   $pdf_raw            The document's bytes.
+     * @param string   $uid_prefix         Element id prefix of this document's card.
+     * @return void
+     */
+    private static function renderSealBlocksSection(array $text_seal_b64_list, string $pdf_raw, string $uid_prefix): void
+    {
+        // The seals in pdfparser's text, plus any injected after the last %%EOF (raw bytes before it give false hits).
+        $all_seals_b64 = [];
+        foreach ($text_seal_b64_list as $m) {
+            if ($m !== '' && !in_array($m, $all_seals_b64, true)) {
+                $all_seals_b64[] = $m;
+            }
+        }
+        $last_eof_pos = strrpos((string) $pdf_raw, '%%EOF');
+        $appended_raw = $last_eof_pos !== false
+            ? substr((string) $pdf_raw, $last_eof_pos + 5)
+            : '';
+        foreach (array_column(PdfUtils::sealBlocks($appended_raw), 2) as $rb64) {
+            $rb64 = trim($rb64);
+            if ($rb64 !== '' && !in_array($rb64, $all_seals_b64, true)) {
+                $all_seals_b64[] = $rb64;
+            }
+        }
+
+        $seals_section_id = 'fabricator-pdf-content-seals-' . $uid_prefix;
+        echo "<div class='fabricator-pdf-detail-section'"
+           . " id='fabricator-pdf-section-seals-" . esc_attr($uid_prefix) . "'>";
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($seals_section_id) . "'>" . esc_html__('Seal Blocks', 'formfabricator') . "</button>";
+        echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+        echo "</div>";
+        echo "<div id='" . esc_attr($seals_section_id) . "'"
+           . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        echo "<div class='fabricator-pdf-hash-list'>";
+
+        $total_seals = count($all_seals_b64);
+        echo "<p style='margin:8px 14px 4px;font-size:12px;color:#d63638;font-weight:600'>";
+        echo esc_html(
+            sprintf(
+                /* translators: %d: number of seal blocks found in the PDF (should be exactly 1). */
+                _n('%d seal block found — exactly 1 is expected.', '%d seal blocks found — exactly 1 is expected.', $total_seals, 'formfabricator'),
+                $total_seals
+            )
+        ) . ' ';
+        echo esc_html__('Any extra seal block is proof of tampering regardless of its HMAC status.', 'formfabricator') . ' ';
+        // The checks read the last seal of the document's text; blocks appended after the end of the file come later in
+        // this list but are not in that text.
+        $read_seal = $text_seal_b64_list === [] ? false : array_search(end($text_seal_b64_list), $all_seals_b64, true);
+        if ($read_seal !== false) {
+            echo esc_html(sprintf(
+                // translators: %d: number of the seal block the checks read.
+                __('The checks above read seal #%d, the last one in the document\'s text.', 'formfabricator'),
+                $read_seal + 1
+            ));
+        }
+        echo "</p>";
+
+        foreach ($all_seals_b64 as $idx => $sb64) {
+            $sb64      = trim((string) $sb64);
+            $seal_num  = $idx + 1;
+            $is_ok     = false;
+            $sd        = null;
+            $parse_err = '';
+
+            if (strlen($sb64) > \FabricatorForms\PDF\HashSeal::MAX_SEAL_BLOCK_BYTES) {
+                $parse_err = __('The seal is implausibly large and was rejected.', 'formfabricator');
+            } else {
+                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the seal block read back out of the PDF (strict mode rejects malformed input). Not obfuscation.
+                $sj = base64_decode($sb64, true);
+                if ($sj === false) {
+                    $parse_err = __('The seal could not be base64-decoded.', 'formfabricator');
+                } else {
+                    $sd = json_decode($sj, true);
+                    if (!is_array($sd)) {
+                        $parse_err = __('The seal data is not valid JSON.', 'formfabricator');
+                    } else {
+                        try {
+                            $rp    = self::rebuildPayload($sd);
+                            $vr    = HashSeal::verify($rp, (string)($sd['seal'] ?? ''));
+                            $is_ok = $vr['valid'];
+                        } catch (\Throwable $sve) {
+                            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: seal HMAC check threw: ' . $sve->getMessage());
+                            $is_ok     = false;
+                            $parse_err = __('The seal check could not be completed.', 'formfabricator');
+                        }
+                    }
+                }
+            }
+
+            $row_cls  = $is_ok ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail';
+            $pill_cls = $is_ok ? 'fabricator-pdf-pill--pass'     : 'fabricator-pdf-pill--fail';
+            $pill_txt = $is_ok ? esc_html__('AUTHENTIC', 'formfabricator') : esc_html__('FORGED / INVALID', 'formfabricator');
+
+            $seal_row_style = 'flex-direction:column;align-items:flex-start;gap:6px;padding:10px 14px';
+            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
+            echo "<div class='fabricator-pdf-hash-row {$row_cls}' style='{$seal_row_style}'>";
+            echo "<div style='display:flex;align-items:center;gap:8px;width:100%'>";
+            // translators: %d: position of this seal among the seals found in the document.
+            echo "<strong style='flex:1'>" . esc_html(sprintf(__('Seal #%d', 'formfabricator'), (int) $seal_num)) . "</strong>";
+            echo "<span class='fabricator-pdf-pill {$pill_cls}'>{$pill_txt}</span>";
+            echo "</div>";
+
+            // Always show a truncated preview of the raw base64 between the markers.
+            $b64_preview = strlen($sb64) > 120
+                ? esc_html(substr($sb64, 0, 60)) . '…' . esc_html(substr($sb64, -30))
+                : esc_html($sb64);
+            echo "<div style='font-size:10px;color:#787c82;font-family:monospace;word-break:break-all'>";
+            echo esc_html__('Base64:', 'formfabricator') . ' ' . $b64_preview;
+            echo "</div>";
+
+            if ($parse_err !== '') {
+                echo "<div style='font-size:11px;color:#d63638'>" . esc_html($parse_err) . "</div>";
+            } elseif (is_array($sd)) {
+                // Show key fields from the seal so the admin can identify which is real
+                $s_form    = esc_html((string) ($sd['form_name'] ?? '—'));
+                $s_id      = esc_html((string) ($sd['form_id']   ?? '—'));
+                $s_gen     = esc_html((string) ($sd['generated'] ?? '—'));
+                $s_fields  = is_array($sd['fields'] ?? null) ? count($sd['fields']) : '—';
+                $s_pages   = esc_html((string) ($sd['expected_pages'] ?? '—'));
+                echo "<table style='font-size:11px;border-collapse:collapse;width:100%'>";
+                echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0;white-space:nowrap'>" . esc_html__('Form', 'formfabricator') . "</td>"
+                   // translators: %1$s: form name, %2$s: form ID, both as recorded in the seal.
+                   . "<td>" . sprintf(esc_html__('%1$s (ID: %2$s)', 'formfabricator'), $s_form, $s_id) . "</td></tr>";
+                echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Generated', 'formfabricator') . "</td>"
+                   . "<td>" . $s_gen . "</td></tr>";
+                echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Fields', 'formfabricator') . "</td>"
+                   . "<td>" . $s_fields . "</td></tr>";
+                echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Pages', 'formfabricator') . "</td>"
+                   . "<td>" . $s_pages . "</td></tr>";
+                echo "</table>";
+                // Everything the seal records, folded: two seals are told apart by comparing these.
+                $sd_json = (string) wp_json_encode($sd, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                if (strlen($sd_json) > 200000) {
+                    $sd_json = mb_strcut($sd_json, 0, 200000, 'UTF-8') . "\n…";
+                }
+                echo "<details class='fabricator-pdf-seal-block'><summary>" . esc_html__('Seal content', 'formfabricator') . '</summary>'
+                   . "<pre class='fabricator-pdf-json-pre'>" . esc_html($sd_json) . '</pre></details>';
+            }
+
+            echo "</div>";
+        }
+
+        echo "</div></div></div>";
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+    }
+
+    /**
+     * Prints the annotations section: every annotation in the file, held to the links the seal lists.
+     *
+     * @param string     $pdf_raw         The document's bytes.
+     * @param array|null $object_index    PdfUtils::objectDefinitionIndex() of $pdf_raw.
+     * @param array      $rebuilt_payload The payload rebuilt from the seal.
+     * @param string     $uid_prefix      Element id prefix of this document's card.
+     * @param array      $budget          The parse-time budget.
+     * @return int How many annotations match nothing in the seal.
+     */
+    private static function renderAnnotationsSection(
+        string $pdf_raw,
+        ?array $object_index,
+        array $rebuilt_payload,
+        string $uid_prefix,
+        array $budget
+    ): int {
+        self::setProgress(__('Checking annotations…', 'formfabricator'), 58);
+
+        // The list first, so the header can carry the outcome.
+        ob_start();
+        $annotation_fail_count = self::renderAnnotationList(self::collectAnnotations($pdf_raw, $object_index, $budget), $rebuilt_payload);
+        $list                  = (string) ob_get_clean();
+
+        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-annots-" . esc_attr($uid_prefix) . "'>";
+        $fold_id = 'fabricator-pdf-content-annots-' . $uid_prefix;
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($fold_id) . "'>"
+           . esc_html__('Annotations', 'formfabricator') . "</button>";
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes; $list was escaped at each echo() that built it.
+        echo self::detailBadge('fabricator-pdf-badge-annots-' . $uid_prefix, $annotation_fail_count > 0);
+        echo "</div>";
+        echo "<div id='" . esc_attr($fold_id) . "'"
+           . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        echo $list;
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
+
+        echo "</div>"; // close annotation section foldable content
+        echo "</div>"; // close annotation section wrapper
+
+        return $annotation_fail_count;
+    }
+
+    /**
+     * Every annotation in the file: each /Type /Annot object, and each object an /Annots array names besides.
+     *
+     * @param string     $pdf_raw      The document's bytes.
+     * @param array|null $object_index PdfUtils::objectDefinitionIndex() of $pdf_raw.
+     * @param array      $budget       The parse-time budget.
+     * @return array<int, array> Type, content, rectangle, object id and (for objects) the raw dictionary of each.
+     */
+    private static function collectAnnotations(string $pdf_raw, ?array $object_index, array $budget): array
+    {
+        $annotations = [];
+
+        // --- 1) Scan all objects for /Type /Annot ---
+        // Every object's (header, body) outside image data, built linearly (scanObjectBodies()).
+        foreach (self::scanObjectBodies((string) $pdf_raw) as [$objId, $rawDict]) {
+            if (preg_match('/\/Type\s*\/Annot\b/i', $rawDict)) {
+                $subtype = self::annotationType($rawDict);
+
+                // Extract /Rect if present
+                $rect = [0,0,0,0];
+                if (preg_match('/\/Rect\s*\[(.*?)\]/s', $rawDict, $r)) {
+                    $coords = preg_split('/\s+/', trim($r[1]));
+                    $rect = array_map('floatval', $coords);
+                }
+
+                // Extract /Contents if present
+                $content = '';
+                if (preg_match('/\/Contents\s*\((.*?)\)/s', $rawDict, $c)) {
+                    $content = $c[1];
+                }
+
+                // --- If /Contents is empty, try to extract /URI from /A dictionary ---
+                $uri_pat = '/\/A\s*<<[^>]*\/URI\s*\((.*?)\)/';
+                if ($content === '' && preg_match($uri_pat, $rawDict, $uriMatch)) {
+                    $content = $uriMatch[1];
+                }
+
+                $content = preg_replace('/^mailto:/i', '', $content);
+
+                // Save rawDict for debugging if needed
+                $annotations[] = [
+                    'type'    => $subtype,
+                    'content' => $content,
+                    'rect'    => $rect,
+                    'objId'   => $objId,
+                    'raw'     => $rawDict,
+                ];
+            }
+        }
+
+        // --- 2) Every object a page's /Annots entry names ---
+        // /Type is optional, so step 1 misses an annotation without it. Only /Annots name tokens count
+        // (PdfUtils::nameTokens()); an entry that is neither an array nor a reference to one is listed as unmatched.
+        if (str_contains($pdf_raw, '/Annots')) {
+            // Object ids already listed, as a set: comparing every reference with the whole list would be quadratic.
+            $known_annot_ids = [];
+            foreach ($annotations as $a) {
+                if (is_string($a['objId'] ?? null)) {
+                    $known_annot_ids[self::refKey($a['objId'])] = true;
+                }
+            }
+            // Array objects already read: every page may name the same large one.
+            $read_arrays = [];
+            $cache       = [];
+            // One /Annots entry at a time, outside strings, comments and stream data; the ids share the object ceiling.
+            foreach (PdfUtils::nameTokens((string) $pdf_raw) as [$name, $after]) {
+                if ($name !== 'Annots') {
+                    continue;
+                }
+                $at       = PdfUtils::skipSpaceAndComments((string) $pdf_raw, $after);
+                $refs     = null;
+                $unclosed = false;
+                if (($pdf_raw[$at] ?? '') === '[') {
+                    $close    = PdfUtils::nextAt((string) $pdf_raw, ']', $at, $cache);
+                    $unclosed = $close === false;
+                    if ($close !== false) {
+                        $refs = self::annotsArrayRefs(substr((string) $pdf_raw, $at, $close + 1 - $at));
+                    }
+                } elseif (preg_match('/\G(\d+)\s+(\d+)\s+R(?![^\s()<>\[\]{}\/%])/', (string) $pdf_raw, $ref, 0, $at) === 1) {
+                    $array_id = self::refKey($ref[1] . ' ' . $ref[2]);
+                    if (isset($read_arrays[$array_id])) {
+                        continue;
+                    }
+                    $read_arrays[$array_id] = true;
+                    $array_obj = self::definitionLookup($object_index, (string) $pdf_raw, $ref[1], $ref[2]);
+                    $refs      = $array_obj === null ? null : self::annotsArrayRefs(trim($array_obj['body']));
+                }
+                if ($refs === null) {
+                    if (count($annotations) >= PdfUtils::MAX_OBJECTS) {
+                        throw new \LengthException('Too many objects: annotation references.');
+                    }
+                    $annotations[] = [
+                        'type'       => '',
+                        'unreadable' => true,
+                        'content'    => '',
+                        'rect'       => null,
+                        'objId'      => null,
+                    ];
+                    if ($unclosed) {
+                        break; // no "]" ahead closes this array, so none closes a later one either
+                    }
+                    continue;
+                }
+                foreach ($refs as [$num, $gen]) {
+                    $objId = self::refKey($num . ' ' . $gen);
+                    if (isset($known_annot_ids[$objId])) {
+                        continue;
+                    }
+                    if (count($known_annot_ids) >= PdfUtils::MAX_OBJECTS) {
+                        throw new \LengthException('Too many objects: annotation references.');
+                    }
+                    $known_annot_ids[$objId] = true;
+                    // Its body too, so a link written without /Type is judged as the generator judged it (linkTarget()).
+                    $annot_obj     = self::definitionLookup($object_index, (string) $pdf_raw, $num, $gen);
+                    $annotations[] = [
+                        'type'    => $annot_obj === null ? '' : self::annotationType($annot_obj['body']),
+                        'content' => '',
+                        'rect'    => null,
+                        'objId'   => $objId,
+                    ] + ($annot_obj === null ? [] : ['raw' => $annot_obj['body']]);
+                }
+            }
+        }
+
+        self::checkParseTimeBudget($budget['start'], $budget['max'], 'object/annotation extraction');
+
+        return $annotations;
+    }
+
+    /**
+     * Why an annotation matches none of the sealed links, in words: what about it this plugin never writes.
+     *
+     * @param array               $ann          The annotation, from collectAnnotations().
+     * @param string|null         $target       Its target, when it is a link exactly as mPDF writes one (linkTarget()).
+     * @param array<string, int>  $sealed_links Sealed targets not yet matched, with how often each is left.
+     * @return string
+     */
+    private static function annotationProblem(array $ann, ?string $target, array $sealed_links): string
+    {
+        if (!empty($ann['unreadable'])) {
+            return __('The page\'s list of annotations cannot be read. A viewer may still show what it names.', 'formfabricator');
+        }
+        if ($target !== null) {
+            return array_key_exists($target, $sealed_links)
+                ? __('The seal lists this link fewer times than the PDF has it.', 'formfabricator')
+                : __('The seal lists no link to this target: the link was changed or added.', 'formfabricator');
+        }
+        $type = (string) ($ann['type'] ?? '');
+        if ($type !== 'Link') {
+            return $type === ''
+                ? __('An annotation of no stated type. This plugin adds no annotations but invisible links.', 'formfabricator')
+                : sprintf(
+                    // translators: %s: the annotation's PDF type, e.g. "FreeText".
+                    __('A %s annotation, drawn on the page. This plugin adds no annotations but invisible links.', 'formfabricator'),
+                    $type
+                );
+        }
+        // A link, but not as mPDF writes one: say what differs.
+        $entries = PdfUtils::dictEntries((string) ($ann['raw'] ?? '')) ?? [];
+        if (isset($entries['AP'])) {
+            return __('This link draws its own appearance. The links this plugin writes draw nothing.', 'formfabricator');
+        }
+        if (isset($entries['BS']) || (isset($entries['Border']) && preg_match('/^\[\s*0*\.?0*\s+0*\.?0*\s+0*\.?0*\s*\]$/', $entries['Border']) !== 1)) {
+            return __('This link has a visible border. The links this plugin writes are invisible.', 'formfabricator');
+        }
+        return __('This link has no target this plugin writes (an address or a place in the document).', 'formfabricator');
+    }
+
+    /**
+     * An annotation's PDF type as its dictionary names it ("Link", "FreeText", "Widget"), for the list.
+     *
+     * @param string $body The annotation object's body.
+     * @return string '' when it names none; letters and digits only.
+     */
+    private static function annotationType(string $body): string
+    {
+        $subtype = PdfUtils::dictEntries($body)['Subtype'] ?? '';
+        return preg_match('/^\/([A-Za-z0-9]{1,40})$/', $subtype, $m) === 1 ? $m[1] : '';
+    }
+
+    /**
+     * An object reference as one key, "number generation", without leading zeros, however the file spaces it.
+     *
+     * @param string $ref Object number and generation number, separated by whitespace.
+     * @return string
+     */
+    private static function refKey(string $ref): string
+    {
+        $parts = preg_split('/\s+/', trim($ref)) ?: [];
+        return (ltrim((string) ($parts[0] ?? ''), '0') ?: '0') . ' ' . (ltrim((string) ($parts[1] ?? ''), '0') ?: '0');
+    }
+
+    /**
+     * The references an /Annots array holds, as [number, generation] pairs.
+     *
+     * @param string $array The array, from "[" to "]".
+     * @return array<int, array{0: string, 1: string}>|null Null when the array holds anything but references and
+     *                                                     comments (a direct dictionary, say), which the annotation check
+     *                                                     can't follow.
+     */
+    private static function annotsArrayRefs(string $array): ?array
+    {
+        if (!str_starts_with($array, '[') || !str_ends_with($array, ']')) {
+            return null;
+        }
+        // Comments read as whitespace; once the references are taken out, only whitespace may remain. Flat passes, as
+        // one repeated group overflows PCRE's JIT stack on thousands of references.
+        $inner = preg_replace('/%[^\r\n]*/', ' ', substr($array, 1, -1));
+        if ($inner === null) {
+            return null;
+        }
+        $ref   = '/(\d+)\s+(\d+)\s+R(?=\s|$)/';
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceDyn -- $ref is the literal pattern above; no /e modifier.
+        $rest  = preg_replace($ref, '', $inner);
+        if ($rest === null || trim($rest, " \t\n\r\f\v\0") !== '' || preg_match_all($ref, $inner, $refs, PREG_SET_ORDER) === false) {
+            return null;
+        }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- callback is a static closure defined inline, not attacker-controlled/dynamic dispatch.
+        return array_map(static fn(array $match): array => [$match[1], $match[2]], $refs);
+    }
+
+    /**
+     * Prints the annotation list, each annotation held to the links the seal lists.
+     *
+     * @param array $annotations     What collectAnnotations() found.
+     * @param array $rebuilt_payload The payload rebuilt from the seal.
+     * @return int How many annotations are no sealed link.
+     */
+    private static function renderAnnotationList(array $annotations, array $rebuilt_payload): int
+    {
+        $annotation_fail_count = 0;
+        echo "<div class='fabricator-pdf-cmp-list'>";
+
+        // Each sealed link target accepts as many annotations as the seal counts it.
+        $sealed_links = array_count_values(array_map('strval', (array) ($rebuilt_payload['links'] ?? [])));
+
+        // Only a link exactly as mPDF writes one, to a sealed target, is the plugin's own; any other annotation was
+        // added, whatever its text says. Those links are matched first, so a visibly drawn copy can't take their place.
+        $targets = [];
+        $matches = [];
+        foreach ($annotations as $i => $ann) {
+            $targets[$i] = isset($ann['raw']) ? PdfUtils::linkTarget((string) $ann['raw']) : null;
+            if ($targets[$i] !== null && ($sealed_links[$targets[$i]] ?? 0) > 0) {
+                $sealed_links[$targets[$i]]--;
+                $matches[$i] = true;
+            }
+        }
+        // A link to a sealed target that is drawn differently (a visible border, its own appearance) is that sealed
+        // link changed: it fails for how it is drawn, and its target is not reported missing as well.
+        $addresses = [];
+        foreach ($annotations as $i => $ann) {
+            $addresses[$i] = isset($ann['raw']) ? PdfUtils::linkAddress((string) $ann['raw']) : null;
+            if (!isset($matches[$i]) && $targets[$i] === null && $addresses[$i] !== null && ($sealed_links[$addresses[$i]] ?? 0) > 0) {
+                $sealed_links[$addresses[$i]]--;
+            }
+        }
+
+        if (!empty($annotations)) {
+            foreach ($annotations as $i => $ann) {
+                // What the annotation says, for display: where it leads, else its /Contents or widget value (/V).
+                $target           = $targets[$i];
+                $content_to_match = $addresses[$i] ?? '';
+                if ($content_to_match === '' && isset($ann['content']) && $ann['content'] !== '') {
+                    $content_to_match = $ann['content'];
+                }
+                if ($content_to_match === '' && !empty($ann['raw']) && preg_match('/\/V\s*\(([^)]*)\)/', $ann['raw'], $vMatch)) {
+                    $content_to_match = $vMatch[1];
+                }
+                $content_to_match = trim((string) $content_to_match);
+
+                $matched = isset($matches[$i]);
+                if (!$matched) {
+                    $annotation_fail_count++;
+                }
+                // The second column: the sealed link it matches, or in words why it is none of them.
+                $seal_column = $matched ? (string) $target : self::annotationProblem($ann, $target, $sealed_links);
+
+                $row_state  = $matched ? 'pass' : 'fail';
+                $pill_state = $row_state;
+                $pill_text  = $matched ? esc_html__('MATCH', 'formfabricator') : esc_html__('UNMATCHED', 'formfabricator');
+
+                $type = (string) ($ann['type'] ?? '');
+                if (!empty($ann['unreadable'])) {
+                    // translators: %d: the annotation's position in the list.
+                    $ann_label = esc_html(sprintf(__('Annotation #%d — a list of annotations that cannot be read', 'formfabricator'), $i + 1));
+                } elseif ($type === '') {
+                    // translators: %d: the annotation's position in the list.
+                    $ann_label = esc_html(sprintf(__('Annotation #%d — no type given', 'formfabricator'), $i + 1));
+                } else {
+                    // translators: %1$d: the annotation's position, %2$s: its PDF type, e.g. "Link" or "FreeText".
+                    $ann_label = esc_html(sprintf(__('Annotation #%1$d — %2$s', 'formfabricator'), $i + 1, $type));
+                }
+                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
+                echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
+                echo "<div class='fabricator-pdf-cmp-header'>"
+                   . "<span class='fabricator-pdf-cmp-label'>{$ann_label}</span>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>{$pill_text}</span>"
+                   . "</div>";
+                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+                echo "<div class='fabricator-pdf-cmp-body'>";
+                echo "<div class='fabricator-pdf-cmp-col'>"
+                   . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF content', 'formfabricator') . "</div>"
+                   . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html($content_to_match) . "</div>"
+                   . "</div>";
+                echo "<div class='fabricator-pdf-cmp-col'>"
+                   . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
+                   . "<div class='fabricator-pdf-cmp-col__value" . ($matched ? '' : ' fabricator-pdf-cmp-col__value--reason') . "'>"
+                   . esc_html($seal_column) . "</div>"
+                   . "</div>";
+                echo "</div></div>\n";
+            }
+        }
+
+        // Links the seal lists that no annotation matched: removed, or replaced by a changed one listed above.
+        $missing = 0;
+        foreach ($sealed_links as $sealed_target => $left) {
+            for ($k = 0; $k < $left; $k++) {
+                $missing++;
+                $annotation_fail_count++;
+                echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
+                   . "<div class='fabricator-pdf-cmp-header'>"
+                   . "<span class='fabricator-pdf-cmp-label'>" . esc_html__('Sealed link', 'formfabricator') . '</span>'
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISSING FROM PDF', 'formfabricator') . '</span>'
+                   . '</div>'
+                   . "<div class='fabricator-pdf-cmp-body'>"
+                   . "<div class='fabricator-pdf-cmp-col'><div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF content', 'formfabricator') . '</div>'
+                   . "<div class='fabricator-pdf-cmp-col__value fabricator-pdf-cmp-col__value--reason'>"
+                   . esc_html__('No link to this target: it was removed, or changed into one listed above.', 'formfabricator') . '</div></div>'
+                   . "<div class='fabricator-pdf-cmp-col'><div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . '</div>'
+                   . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html((string) $sealed_target) . '</div></div>'
+                   . "</div></div>\n";
+            }
+        }
+        if (empty($annotations) && $missing === 0) {
+            echo "<p class='fabricator-pdf-empty-state'>" . esc_html__('No annotations found in PDF.', 'formfabricator') . "</p>";
+        }
+
+        echo "</div>"; // fabricator-pdf-cmp-list
+
+        return $annotation_fail_count;
+    }
+
+    /**
+     * Prints the page count section: the pages the seal records against the page objects in the file.
+     *
+     * @param string $pdf_raw         The document's bytes.
+     * @param array  $rebuilt_payload The payload rebuilt from the seal.
+     * @param string $uid_prefix      Element id prefix of this document's card.
+     * @return bool Whether the counts differ.
+     */
+    private static function renderPageCountSection(string $pdf_raw, array $rebuilt_payload, string $uid_prefix): bool
+    {
+        $pagecount_mismatch = false;
+        // PAGE COUNT CHECK: counted as the generator counted it (PdfUtils::countPageObjects()).
+        $object_page_count = PdfUtils::countPageObjects((string) $pdf_raw);
+        $expected_pages = $rebuilt_payload['expected_pages'] ?? $object_page_count; // fallback
+
+        if ($object_page_count !== $expected_pages) {
+            $pagecount_mismatch = true;
+        }
+
+        self::setProgress(__('Checking page count…', 'formfabricator'), 68);
+
+        $page_box_id    = 'fabricator-pdf-content-pgcount-' . $uid_prefix;
+        $pgcount_sec_id = 'fabricator-pdf-section-pgcount-' . esc_attr($uid_prefix);
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
+        echo "<div class='fabricator-pdf-detail-section' id='{$pgcount_sec_id}'>";
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($page_box_id) . "'>" . esc_html__('Page Count', 'formfabricator') . "</button>";
+        $pgcount_badge = $pagecount_mismatch ? 'fabricator-pdf-badge-fail' : 'fabricator-pdf-badge-pass';
+        $pgcount_label = $pagecount_mismatch ? __('FAIL', 'formfabricator') : __('PASS', 'formfabricator');
+        echo "<span class='fabricator-pdf-detail-badge {$pgcount_badge}'>" . esc_html($pgcount_label) . "</span>";
+        echo "</div>";
+        $pgcount_hidden = $pagecount_mismatch ? '' : ' fabricator-pdf-hidden';
+        echo "<div id='" . esc_attr($page_box_id) . "' class='fabricator-pdf-detail-content{$pgcount_hidden}'>";
+        echo "<div class='fabricator-pdf-stat-row'>";
+        echo "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
+           . "<div class='fabricator-pdf-stat__value'>{$expected_pages}</div></div>";
+        echo "<div class='fabricator-pdf-stat-sep'>→</div>";
+        echo "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
+           . "<div class='fabricator-pdf-stat__value'>{$object_page_count}</div></div>";
+        echo "</div>";
+        if ($pagecount_mismatch) {
+            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISMATCH', 'formfabricator') . "</span>";
+        } else {
+            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('OK', 'formfabricator') . "</span>";
+        }
+        echo "</div>";
+        echo "</div>";
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+
+        return $pagecount_mismatch;
+    }
+
+    /**
+     * Prints the image section: every image XObject recreated, shown, and held to the sealed hashes as a multiset.
+     *
+     * @param string     $pdf_raw         The document's bytes.
+     * @param array|null $object_index    PdfUtils::objectDefinitionIndex() of $pdf_raw.
+     * @param array      $rebuilt_payload The payload rebuilt from the seal.
+     * @param string     $uid_prefix      Element id prefix of this document's card.
+     * @param array      $budget          The parse-time budget.
+     * @return bool Whether any image differs from the sealed ones.
+     */
+    private static function renderImagesSection(string $pdf_raw, ?array $object_index, array $rebuilt_payload, string $uid_prefix, array $budget): bool
+    {
+        $image_missmatch    = false;
+        $exact_image_hashes = $rebuilt_payload['image_hashes'] ?? [];
+
+        self::setProgress(__('Checking images…', 'formfabricator'), 75);
+
+        // The images first, so the header can carry the outcome.
+        ob_start();
+        if (str_contains($pdf_raw, '/XObject')) {
+            // SMask object numbers (alpha channels, skipped as images), collected as Generator::hashImageXObjects()
+            // does and held to PdfUtils::MAX_OBJECTS.
+            $smask_obj_nums = [];
+            $smask_at       = 0;
+            $find_smask     = PdfUtils::finderOutsideImageData((string) $pdf_raw, '/\/SMask\s+(\d+)\s+\d+\s+R/');
+            while ($find_smask($smask_at, $_sm)) {
+                $smask_at = $_sm[0][1] + strlen($_sm[0][0]);
+                $smask_obj_nums[$_sm[1][0]] = true;
+                if (count($smask_obj_nums) > PdfUtils::MAX_OBJECTS) {
+                    throw new \LengthException('Too many objects: soft-mask references.');
+                }
+            }
+            unset($_sm);
+
+
+            // The image output directory (HTTP-blocked), prepared once for the whole walk.
+            $upload_dir = wp_upload_dir();
+            $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
+            $ver_dir    = $safe_dir . '/verimages';
+            // Random per request, so whoever made the PDF can't predict the image file names.
+            $verimage_prefix = bin2hex(random_bytes(12));
+
+            \FabricatorForms\Utils\SecureDir::harden($safe_dir, [$safe_dir, $ver_dir]);
+
+            // Shared by every level of the walk. nested_bytes bounds the nested scans in total: $visited only stops
+            // cycles along one path.
+            $walk = [
+                'nested_bytes'       => 0,
+                'nested_limit'       => max(64 * 1024 * 1024, 4 * strlen($pdf_raw)),
+                'smask_obj_nums'     => $smask_obj_nums,
+                'exact_image_hashes' => $exact_image_hashes,
+                'ver_dir'            => $ver_dir,
+                'prefix'             => $verimage_prefix,
+                'budget'             => $budget,
+            ];
+            self::scanXObjects($pdf_raw, null, [], $object_index, $walk);
+
+            // --- Final visual classification ---
+            $image_missmatch            = false;
+
+            foreach (self::$image_slots as $slot) {
+                if ((int)$slot['allowed'] !== 1) {
+                    $image_missmatch = true;
+                }
+            }
+
+            // Compares counts, not just presence, so swapping one sealed image for another still-known image is caught.
+            $observed_counts = [];
+            foreach (self::$image_slots as $slot) {
+                $slot_hash = (string) ($slot['hash'] ?? '');
+                if ($slot_hash === '') {
+                    continue;
+                }
+                $observed_counts[$slot_hash] = ($observed_counts[$slot_hash] ?? 0) + 1;
+            }
+            $sealed_counts = array_count_values(array_map('strval', $exact_image_hashes));
+
+            $missing_images   = 0;
+            $duplicate_images = 0;
+            foreach ($sealed_counts as $sealed_hash => $sealed_n) {
+                $seen = $observed_counts[$sealed_hash] ?? 0;
+                if ($seen < $sealed_n) {
+                    $missing_images += $sealed_n - $seen;
+                } elseif ($seen > $sealed_n) {
+                    $duplicate_images += $seen - $sealed_n;
+                }
+            }
+
+            if ($missing_images > 0 || $duplicate_images > 0) {
+                $image_missmatch = true;
+                echo "<p style='margin-top:8px;'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
+                   . esc_html(
+                       sprintf(
+                           /* translators: 1: number of sealed images no longer present, 2: number of images appearing more often than sealed. */
+                           __('Image inventory does not match the seal — %1$d missing, %2$d duplicated', 'formfabricator'),
+                           $missing_images,
+                           $duplicate_images
+                       )
+                   )
+                   . "</span></p>";
+            }
+        }
+        $images = (string) ob_get_clean();
+
+        $image_section_id = 'fabricator-pdf-content-images-' . $uid_prefix;
+        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-images-" . esc_attr($uid_prefix) . "'>";
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($image_section_id) . "'>" . esc_html__('Image Hashes', 'formfabricator') . "</button>";
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes; $images was escaped at each echo() that built it.
+        echo self::detailBadge('fabricator-pdf-badge-images-' . $uid_prefix, $image_missmatch);
+        echo "</div>";
+        echo "<div id='" . esc_attr($image_section_id) . "'"
+           . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'"
+           . " style='background:#f4f4f4; padding:10px; border:1px solid #ddd;'>";
+        echo $images;
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
+        echo "</div>"; // close image section foldable content
+        echo "</div>"; // close image section wrapper
+
+        return $image_missmatch;
+    }
+
+    /**
+     * Walks the XObjects of $pdf_raw: recreates and prints each image, recording it in $image_slots, and descends into
+     * Form XObjects, each with its own index.
+     *
+     * @param string      $pdf_raw    The bytes to walk: the document, or a nested Form XObject's object.
+     * @param string|null $parentName Object number of the Form XObject being walked; null for the document.
+     * @param array       $visited    Form XObjects on the path here, against cycles.
+     * @param array|null  $index      PdfUtils::objectDefinitionIndex() of $pdf_raw.
+     * @param array       $walk       What every level shares (renderImagesSection()); nested_bytes grows.
+     * @return void
+     * @throws \LengthException When Form XObjects nest too deep or repeat too often.
+     */
+    private static function scanXObjects(string $pdf_raw, ?string $parentName, array $visited, ?array $index, array &$walk): void
+    {
+        $smask_obj_nums     = $walk['smask_obj_nums'];
+        $budget             = $walk['budget'];
+        $offset = 0;
+        $found  = false;
+        // One forward cursor per needle for this walk (PdfUtils::nextAt()): a plain strpos() per XObject
+        // would search to the end of the file whenever the needle is missing, which is quadratic.
+        $walk_cache = [];
+        // "/XObject" outside image data only, as the generator walks it; each search starts past the last
+        // one found, so the walk always moves forward.
+        $find_xobject = PdfUtils::finderOutsideImageData((string) $pdf_raw, '/\/XObject/');
+        $xobject_from = 0;
+
+        while ($find_xobject($xobject_from = max($offset, $xobject_from), $xobject_match)) {
+            $pos          = $xobject_match[0][1];
+            $xobject_from = $pos + 1;
+            $found = true;
+            /* Per-XObject checkpoint: the most expensive region (GD decode, per-pixel loops). */
+            self::checkParseTimeBudget($budget['start'], $budget['max'], 'image XObject scan');
+
+            // A negative offset searches backwards in place, without copying the prefix.
+            $obj_start_line = $pos > 0 ? (strrpos($pdf_raw, "\n", $pos - strlen($pdf_raw) - 1) ?: 0) : 0;
+            $obj_start      = $obj_start_line + 1;
+
+            // Resolve the PDF object number — look back up to 4 KB from
+            // /XObject so large image dictionaries are handled correctly.
+            $look_back = substr($pdf_raw, max(0, $pos - 4096), min($pos, 4096));
+            $obj_num   = null;
+            if (preg_match_all('/(\d+)\s+\d+\s+obj\b/', $look_back, $_all_nm)) {
+                $obj_num = end($_all_nm[1]); // last = closest to /XObject
+            }
+            unset($_all_nm);
+
+            if ($obj_num !== null && isset($smask_obj_nums[$obj_num])) {
+                $offset = $pos + 10;
+                continue;
+            }
+
+            $obj_end = PdfUtils::nextAt($pdf_raw, 'endobj', $obj_start, $walk_cache);
+            if ($obj_end === false) {
+                $offset = $pos + 10;
+                continue;
+            }
+
+            // Keys are read from the dictionary only, up to "stream", never from image data.
+            $stream_pos = PdfUtils::nextAt($pdf_raw, 'stream', $obj_start, $walk_cache);
+            $dict_end   = ($stream_pos !== false && $stream_pos < $obj_end) ? $stream_pos : $obj_end + 6;
+            $objDict    = substr($pdf_raw, $obj_start, $dict_end - $obj_start);
+            $isImage    = str_contains($objDict, '/Subtype /Image');
+
+            // Extract filters
+            preg_match_all('/\/Filter\s*\/([A-Za-z0-9]+)/i', $objDict, $fMatches);
+            $filters = $fMatches[1] ?: [];
+
+            // Extract width & height
+            $width = $height = null;
+
+            // Direct integer or float
+            if (preg_match('/\/Width\s+([0-9.]+)/', $objDict, $m)) {
+                $width = (int)round($m[1]);
+            }
+            if (preg_match('/\/Height\s+([0-9.]+)/', $objDict, $m)) {
+                $height = (int)round($m[1]);
+            }
+
+            // Indirect reference (e.g. /Width 12 0 R)
+            $wh_pat = '/\/(Width|Height)\s+(\d+)\s+0\s+R/';
+            if ((!$width || !$height)
+                && preg_match_all($wh_pat, $objDict, $refs, PREG_SET_ORDER)
+            ) {
+                foreach ($refs as $r) {
+                    // Last definition, digit-bounded: object 12 must not resolve to an earlier "112 0 obj".
+                    $refObj = self::definitionLookup($index, $pdf_raw, $r[2], '0');
+                    if ($refObj !== null) {
+                        if ($r[1] === 'Width') {
+                            $width  = (int)trim($refObj['body']);
+                        }
+                        if ($r[1] === 'Height') {
+                            $height = (int)trim($refObj['body']);
+                        }
+                    }
+                }
+            }
+
+            // Reject implausible /Width, /Height before they size any allocation/loop bound —
+            // JPEG gets the full pixel cap (hashed raw, no per-pixel loop); other filters get half.
+            $dims_over_cap = false;
+            $safe_pixels = PdfUtils::maxSafePixels();
+            // Require DCTDecode as the SOLE filter for the higher cap — otherwise a crafted PDF
+            // could claim it while still routing through the unvectorized per-pixel loops of renderImageXObject().
+            $pixel_cap = (count($filters) === 1 && $filters[0] === 'DCTDecode')
+                ? $safe_pixels
+                : (int) ($safe_pixels / 2);
+            if ($width !== null && $height !== null) {
+                if ($width < 0 || $height < 0 || $width > 20000 || $height > 20000
+                    || ($width * $height) > $pixel_cap
+                ) {
+                    $dims_over_cap = true;
+                    $width = $height = null;
+                }
+            }
+
+            // Extract stream ($stream_pos from above; offset 0 when there is none, as strpos() reads false).
+            $endstream_pos = PdfUtils::nextAt($pdf_raw, 'endstream', (int) $stream_pos, $walk_cache);
+            $stream_data = '';
+            $decoded = null;
+
+            if ($stream_pos !== false && $endstream_pos !== false) {
+                $stream_data = substr($pdf_raw, $stream_pos + 6, $endstream_pos - ($stream_pos + 6));
+                $stream_data = ltrim($stream_data, "\r\n");
+
+                $decoded = $stream_data;
+                if (in_array('FlateDecode', $filters, true)) {
+                    // Bounded while inflating, against a decompression-bomb stream.
+                    $try = PdfUtils::inflateWithin($stream_data);
+                    if (is_string($try)) {
+                        $decoded = $try;
+                    }
+                }
+            }
+
+
+            $palette = null;
+            if ($isImage) {
+                $inspected = self::inspectImageXObject($objDict, $pdf_raw, $index, $filters, $decoded, $width, $height, $dims_over_cap, $pixel_cap);
+                $palette   = $inspected['palette'];
+                // An unreadable image XObject is suspicious: it counts as a mismatch, so a tampered or corrupted image can't
+                // slip through by being undecodable.
+                if ($inspected['reasons'] !== []) {
+                    self::renderUnreadableImage($inspected, $filters, $width, $height, $decoded);
+                    $offset = $obj_end + 6;
+                    continue;
+                }
+            }
+
+            if ($isImage && $decoded !== null && $width && $height
+                && !self::renderImageXObject($objDict, $pdf_raw, $index, $filters, $decoded, $stream_data, $width, $height, $palette, $walk)
+            ) {
+                $offset = $obj_end + 6;
+                continue;
+            }
+
+            // --- Recurse if Form XObject ---
+            $xObjDict     = [];
+            $is_form_xobj = str_contains($objDict, '/Subtype /Form')
+                && preg_match('/\/XObject\s*<<(.+?)>>/is', $objDict, $xObjDict);
+            if ($is_form_xobj) {
+                preg_match_all('/\/[A-Za-z0-9]+\s+(\d+\s+0\s+R)/', $xObjDict[1], $refs);
+                if (!empty($refs[1])) {
+                    foreach ($refs[1] as $ref) {
+                        $objRefNum = preg_replace('/\D.*/s', '', $ref); // leading digits of "N 0 R"
+                        // Guard against circular /XObject references (A -> B -> A) exhausting the stack.
+                        if (isset($visited[$objRefNum])) {
+                            continue;
+                        }
+                        $refObj = self::definitionLookup($index, $pdf_raw, $objRefNum, '0');
+                        if ($refObj !== null) {
+                            // Refuse rather than stop quietly: a skipped scan could hide the very image
+                            // this check looks for.
+                            if (count($visited) >= self::MAX_XOBJECT_DEPTH) {
+                                throw new \LengthException('Too many objects: Form XObjects nest too deep.');
+                            }
+                            $nested_bytes = $refObj['header'] . $refObj['body'] . 'endobj';
+                            $walk['nested_bytes'] += strlen($nested_bytes);
+                            if ($walk['nested_bytes'] > $walk['nested_limit']) {
+                                throw new \LengthException('Too many objects: nested Form XObjects repeat too often.');
+                            }
+                            // With its own index, so each reference resolves without a search of the nested bytes.
+                            self::scanXObjects(
+                                $nested_bytes,
+                                $objRefNum,
+                                $visited + [$objRefNum => true],
+                                PdfUtils::objectDefinitionIndex($nested_bytes),
+                                $walk
+                            );
+                        }
+                    }
+                }
+            }
+
+            $offset = $obj_end + 6;
+        }
+
+        if (!$found && !$parentName) {
+            echo esc_html__('[XObject Scan] No XObjects found.', 'formfabricator') . "\n";
+        }
+    }
+
+    /**
+     * Reads an image XObject's colour space and palette from its dictionary, and says why it can't be recreated, if it
+     * can't.
+     *
+     * @param string      $objDict       The image's dictionary.
+     * @param string      $pdf_raw       The bytes being walked.
+     * @param array|null  $index         PdfUtils::objectDefinitionIndex() of $pdf_raw.
+     * @param string[]    $filters       The image's filters.
+     * @param string|null $decoded       Its stream data, unpacked; null when there is none.
+     * @param int|null    $width         Its width, null when unknown or over the size cap.
+     * @param int|null    $height        Its height, likewise.
+     * @param bool        $dims_over_cap Whether its size is over the cap.
+     * @param int         $pixel_cap     The cap, in pixels, for its filters.
+     * @return array{colorspace: string, channels: int, palette: array|null, mask: bool, bpc: int, reasons: string[]}
+     * @throws \RuntimeException When an indexed image's palette is too short.
+     */
+    private static function inspectImageXObject(
+        string $objDict,
+        string $pdf_raw,
+        ?array $index,
+        array $filters,
+        ?string $decoded,
+        ?int $width,
+        ?int $height,
+        bool $dims_over_cap,
+        int $pixel_cap
+    ): array {
+        // Determine metadata
+        preg_match('/\/BitsPerComponent\s+(\d+)/', $objDict, $bpcMatch);
+        $bpc = (int)($bpcMatch[1] ?? 8);
+
+        preg_match('/\/ColorSpace\s*(\/[A-Za-z0-9]+|\[.+?\])/s', $objDict, $csMatch);
+        $csRaw = $csMatch[1] ?? '';
+        $colorspace = 'unknown';
+        $channels = 0;
+        $palette = null;
+
+        $isImageMask = str_contains($objDict, '/ImageMask true');
+
+        // Standard color spaces
+        switch ($csRaw) {
+            case '/DeviceRGB':
+                    $colorspace = 'DeviceRGB';
+                $channels = 3;
+                break;
+            case '/DeviceGray':
+                    $colorspace = 'DeviceGray';
+                $channels = 1;
+                break;
+            case '/DeviceCMYK':
+                    $colorspace = 'DeviceCMYK';
+                $channels = 4;
+                break;
+        }
+
+        // Indexed color spaces have TWO streams (image index + palette lookup); both must decode.
+
+        // Indexed color spaces
+        if (str_starts_with($csRaw, '[')
+            && preg_match('/\/Indexed\s+\/DeviceRGB\s+(\d+)\s+(\d+)\s+0\s+R/', $csRaw, $m)
+        ) {
+            $colorspace = 'IndexedRGB';
+            $channels = 1; // IMPORTANT: index stream is 1 channel
+            $hival = (int)$m[1];
+            $paletteObjNum = (int)$m[2];
+
+            // hival is at most 255 for an 8-bit index; it bounds the allocation below.
+            if ($hival < 0 || $hival > 255) {
+                $hival = null;
+            }
+
+            if ($hival !== null) {
+                $palObj = self::definitionLookup($index, $pdf_raw, (string) $paletteObjNum, '0');
+                if ($palObj !== null) {
+                    // Extract palette filters
+                    preg_match_all('/\/Filter\s*\/([A-Za-z0-9]+)/', $palObj['body'], $pf);
+                    $palFilters = $pf[1] ?? [];
+
+                    if (preg_match('/stream\s*(.*?)\s*endstream/s', $palObj['body'], $palStream)) {
+                        $lookup = ltrim($palStream[1], "\r\n");
+
+                        // Decode palette stream — bounded against a decompression bomb.
+                        if (in_array('FlateDecode', $palFilters, true)) {
+                            $try = PdfUtils::inflateWithin($lookup);
+                            if (is_string($try)) {
+                                $lookup = $try;
+                            }
+                        }
+
+                        // Validate palette length
+                        $expectedLen = ($hival + 1) * 3;
+                        if (strlen($lookup) < $expectedLen) {
+                            throw new \RuntimeException("Indexed palette too short");
+                        }
+
+                        // Build palette
+                        $palette = [];
+                        for ($i = 0; $i <= $hival; $i++) {
+                            $off = $i * 3;
+                            $palette[$i] = [
+                                ord($lookup[$off]),
+                                ord($lookup[$off + 1]),
+                                ord($lookup[$off + 2]),
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        // JPEG hash is on raw encoded bytes, so colorspace is irrelevant; treat as DeviceRGB.
+        if ($channels <= 0 && in_array('DCTDecode', $filters, true)) {
+            $colorspace = 'DeviceRGB';
+            $channels   = 3;
+        }
+
+        // --- Collect failure reasons ---
+        $failureReasons = [];
+        if ($decoded === null) {
+            $failureReasons[] = __('The image stream could not be decoded.', 'formfabricator');
+        }
+        if ($dims_over_cap) {
+            $failureReasons[] = sprintf(
+                // translators: %d: verification size limit in megapixels.
+                __('The image exceeds the %d-megapixel verification size limit for this image type and was skipped. This is a size cap, not evidence of tampering.', 'formfabricator'),
+                (int) ($pixel_cap / 1_000_000)
+            );
+        } elseif (!$width || !$height) {
+            // translators: %1$s: image width, %2$s: image height, as read from the PDF.
+            $failureReasons[] = sprintf(__('Invalid dimensions (%1$s×%2$s)', 'formfabricator'), (string) $width, (string) $height);
+        }
+        if ($isImageMask) {
+            $failureReasons[] = __('The image is a mask.', 'formfabricator');
+        }
+        if ($channels <= 0) {
+            // translators: %s: PDF colour space name, e.g. DeviceN.
+            $failureReasons[] = sprintf(__('Unsupported colour space: %s', 'formfabricator'), (string) $colorspace);
+        }
+
+        return [
+            'colorspace' => $colorspace,
+            'channels'   => $channels,
+            'palette'    => $palette,
+            'mask'       => $isImageMask,
+            'bpc'        => $bpc,
+            'reasons'    => $failureReasons,
+        ];
+    }
+
+    /**
+     * Prints an image XObject that can't be recreated, with why and its metadata, and records it as a mismatch.
+     *
+     * @param array       $inspected What inspectImageXObject() found.
+     * @param string[]    $filters   The image's filters.
+     * @param int|null    $width     Its width, null when unknown or over the size cap.
+     * @param int|null    $height    Its height, likewise.
+     * @param string|null $decoded   Its stream data, unpacked; null when there is none.
+     * @return void
+     */
+    private static function renderUnreadableImage(array $inspected, array $filters, ?int $width, ?int $height, ?string $decoded): void
+    {
+        [
+            'colorspace' => $colorspace,
+            'channels'   => $channels,
+            'mask'       => $isImageMask,
+            'bpc'        => $bpc,
+            'reasons'    => $failureReasons,
+        ] = $inspected;
+        // A mismatch, so a tampered or corrupted image can't slip through by being undecodable.
+        self::$image_slots[] = [
+            'label'        => __('Unreadable XObject', 'formfabricator'),
+            'allowed'      => 0,
+            'isBackground' => false,
+            'hash'         => '',
+            'check_hash'   => '',
+            'colorspace'   => $colorspace,
+            'width'        => $width,
+            'height'       => $height,
+        ];
+
+        echo "<div style='margin:10px; padding:8px;"
+           . " border:2px dashed #c00; background:#fff6f6;'>";
+        echo '<b>' . esc_html__('The image could not be recreated from its stream and counts as a mismatch.', 'formfabricator') . '</b><br>';
+        echo "<ul style='margin:5px 0; padding-left:18px;'>";
+        foreach ($failureReasons as $r) {
+            echo "<li>" . esc_html($r) . "</li>";
+        }
+        echo "</ul>";
+
+        echo "<div style='font-size:11px; color:#333;'>";
+        echo '<b>' . esc_html__('Image metadata:', 'formfabricator') . '</b><br>';
+        echo '• ' . esc_html__('Filters:', 'formfabricator') . ' ' . esc_html(implode(', ', $filters)) . "<br>";
+        echo '• ' . esc_html__('Width x Height:', 'formfabricator') . ' ' . (int)$width . " × " . (int)$height . "<br>";
+        echo '• ' . esc_html__('BitsPerComponent:', 'formfabricator') . ' ' . (int)$bpc . "<br>";
+        echo '• ' . esc_html__('ColorSpace:', 'formfabricator') . ' ' . esc_html($colorspace) . "<br>";
+        echo '• ' . esc_html__('Channels:', 'formfabricator') . ' ' . (int)$channels . "<br>";
+        echo '• ' . esc_html__('ImageMask:', 'formfabricator') . ' ' . ($isImageMask ? 'true' : 'false') . "<br>";
+        $dec_size = $decoded !== null
+            // translators: %d: decoded image size in bytes.
+            ? sprintf(_n('%d byte', '%d bytes', strlen($decoded), 'formfabricator'), strlen($decoded))
+            : __('n/a', 'formfabricator');
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see handleUpload() note.
+        echo '• ' . esc_html__('Decoded size:', 'formfabricator') . ' ' . esc_html($dec_size) . '<br>';
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+        echo "</div></div>";
+    }
+
+    /**
+     * Recreates a readable image XObject as a PNG or JPEG file, shows it, and records it in $image_slots against the
+     * sealed hashes.
+     *
+     * @param string     $objDict     The image's dictionary.
+     * @param string     $pdf_raw     The bytes being walked.
+     * @param array|null $index       PdfUtils::objectDefinitionIndex() of $pdf_raw.
+     * @param string[]   $filters     The image's filters.
+     * @param string     $decoded     Its stream data, unpacked.
+     * @param string     $stream_data Its stream data as stored, which the seal hashes.
+     * @param int        $width       Its width.
+     * @param int        $height      Its height.
+     * @param array|null $palette     Its palette, for an indexed image (inspectImageXObject()).
+     * @param array      $walk        What every level of the walk shares (renderImagesSection()).
+     * @return bool False when the image was skipped as unsupported, before anything was shown.
+     */
+    private static function renderImageXObject(
+        string $objDict,
+        string $pdf_raw,
+        ?array $index,
+        array $filters,
+        string $decoded,
+        string $stream_data,
+        int $width,
+        int $height,
+        ?array $palette,
+        array $walk
+    ): bool {
+        $exact_image_hashes = $walk['exact_image_hashes'];
+        $ver_dir            = $walk['ver_dir'];
+        $verimage_prefix    = $walk['prefix'];
+        $budget             = $walk['budget'];
+        // --- Image metadata ---
+        preg_match('/\/BitsPerComponent\s+(\d+)/', $objDict, $bpcMatch);
+        $bpc = (int)($bpcMatch[1] ?? 8);
+
+        // $palette comes from inspectImageXObject(); without it, no indexed image would expand.
+        $colorspace = 'DeviceRGB'; // default
+        if (preg_match('/\/ColorSpace\s*\[\s*\/Indexed\s*\/([A-Za-z0-9]+)/', $objDict, $m)) {
+            $colorspace = 'IndexedRGB';
+            $baseSpace  = $m[1]; // usually DeviceRGB
+            if ($baseSpace !== 'DeviceRGB') {
+                // The palette decoder below always reads 3-byte RGB triples, so this image can't be
+                // recreated. Reported here: the block that renders $failureReasons has already run.
+                self::reportUnreadableImage(
+                    // translators: %s: PDF colour space name the palette is based on, e.g. DeviceCMYK.
+                    [sprintf(__('Unsupported base colour space for an indexed image: %s', 'formfabricator'), (string) $baseSpace)],
+                    $colorspace,
+                    $width,
+                    $height
+                );
+                return false;
+            }
+        } elseif (preg_match('/\/ColorSpace\s*\/([A-Za-z0-9]+)/', $objDict, $m)) {
+            $colorspace = $m[1];
+        }
+
+        preg_match('/\/Decode\s*\[(.*?)\]/', $objDict, $decodeMatch);
+        $invert = isset($decodeMatch[1]) && trim($decodeMatch[1]) === '1 0';
+
+        preg_match('/\/DecodeParms\s*<<(.+?)>>/s', $objDict, $dpMatch);
+        $predictor = 1;
+        if ($dpMatch && preg_match('/\/Predictor\s+(\d+)/', $dpMatch[1], $m)) {
+            $predictor = (int)$m[1];
+        }
+
+        // --- Skip unsupported ---
+        if ($bpc > 8 || $bpc < 1) {
+            return false;
+        }
+
+        // --- Determine channels ---
+        $channels = match ($colorspace) {
+            'DeviceRGB' => 3,
+            'DeviceGray' => 1,
+            'DeviceCMYK' => 4,
+            'IndexedRGB' => 1,
+            default => 0
+        };
+
+        // JPEG hash is on raw DCT bytes, so colorspace is irrelevant; treat as DeviceRGB.
+        if ($channels === 0 && in_array('DCTDecode', $filters, true)) {
+            $colorspace = 'DeviceRGB';
+            $channels   = 3;
+        }
+
+        if ($channels === 0) {
+            // translators: %s: PDF colour space name, e.g. DeviceN.
+            $unsupported_space = sprintf(__('Unsupported colour space: %s', 'formfabricator'), (string) $colorspace);
+            self::reportUnreadableImage(
+                [$unsupported_space],
+                $colorspace,
+                $width,
+                $height
+            );
+            return false;
+        }
+
+        // --- PNG Predictor (skip for IndexedRGB) ---
+        if ($predictor >= 10 && $decoded !== null && $colorspace !== 'IndexedRGB') {
+            $decoded = self::undoPngPredictor($decoded, $width, $height, $channels, $budget);
+        }
+
+        // --- Handle IndexedRGB safely ---
+        $is_indexed = $colorspace === 'IndexedRGB'
+            && $decoded !== null
+            && is_array($palette)
+            && count($palette) > 0;
+        if ($is_indexed) {
+            if ($predictor >= 10) {
+                $decoded = self::undoPngPredictorIndexed($decoded, $width, $bpc);
+            }
+
+            $decoded  = self::expandIndexedPixels($decoded, $width, $height, $palette, $budget);
+            $channels = 3;
+        }
+
+        // --- Ensure full buffer ---
+        $expected_len = $width * $height * $channels;
+        if (strlen($decoded) < $expected_len) {
+            $decoded = str_pad($decoded, $expected_len, "\0");
+        }
+
+        // Exact XObject hash: raw compressed bytes, identical across both generation passes.
+        $check_hash        = hash('sha256', $stream_data);
+        $img_id            = $check_hash;
+
+        $uid = 'img_' . uniqid();
+
+        // Determine file extension
+        $ext = in_array('DCTDecode', $filters, true) ? 'jpg' : 'png';
+        $imgFile = $ver_dir . "/xobject_{$verimage_prefix}_{$check_hash}.{$ext}";
+
+        // --- Emit the empty slot first; the card fills it below ---
+        $is_allowed = in_array($check_hash, $exact_image_hashes, true);
+
+        self::emitImageSlot(
+            $uid,
+            [
+            'colorspace'  => $colorspace,
+            'width'       => $width,
+            'height'      => $height,
+            'img_id'      => $img_id,
+            'decoded_len' => strlen($decoded),
+            'allowed'     => $is_allowed ? 1 : 0,
+            'file_path'   => $imgFile,
+            ]
+        );
+        self::$image_slots[$uid] = [
+            'allowed' => $is_allowed ? 1 : 0,
+            // Kept so the sealed list can be compared as a MULTISET below,
+            // not merely as "is this one known?".
+            'hash' => $check_hash,
+            'colorspace' => $colorspace,
+            'width' => $width,
+            'height' => $height,
+            'isBackground' => false,
+        ];
+
+        // The image's alpha channel, read from its own dictionary, not a whole-file scan.
+        [$smask_decoded, $sm_width, $sm_height] = self::decodeSoftMask($objDict, $pdf_raw, $index, $width, $height, $budget);
+
+        self::writeImageFile($imgFile, $ext, $decoded, $width, $height, $colorspace, $channels, $invert, [$smask_decoded, $sm_width, $sm_height], $budget);
+
+        // Display only, size-bounded; the verdict hashes the full-resolution data separately.
+        $data_uri = self::displayDataUri(
+            $imgFile,
+            $ext === 'jpg' ? 'image/jpeg' : 'image/png'
+        );
+
+        self::fillImageSlot(
+            $uid,
+            self::imageCardHtml($colorspace, $width, $height, $channels, $check_hash, $is_allowed, $exact_image_hashes, $data_uri, strlen($decoded))
+        );
+        return true;
+    }
+
+    /**
+     * Undoes the PNG predictor of a decoded image stream (ISO 32000-1 7.4.4.4), row by row.
+     *
+     * @param string $decoded  The unpacked stream: one filter-type byte, then a row of samples, per row.
+     * @param int    $width    The image's width.
+     * @param int    $height   The image's height.
+     * @param int    $channels Samples per pixel.
+     * @param array  $budget   The parse-time budget, checked every 256 rows.
+     * @return string The samples, without the filter-type bytes.
+     */
+    private static function undoPngPredictor(string $decoded, int $width, int $height, int $channels, array $budget): string
+    {
+        $rowSize = $width * $channels;
+        $out = '';
+        $prev = str_repeat("\0", $rowSize);
+        $i = 0;
+        for ($y = 0; $y < $height; $y++) {
+            // Per-row checkpoint: one oversized image otherwise ran unbounded between the per-XObject checks.
+            if (($y & 255) === 0) {
+                self::checkParseTimeBudget($budget['start'], $budget['max'], 'PNG predictor');
+            }
+            if ($i >= strlen($decoded)) {
+                break;
+            }
+            $filter = ord($decoded[$i++]);
+            $row = substr($decoded, $i, $rowSize);
+            $i += strlen($row);
+            $row = str_pad($row, $rowSize, "\0");
+            for ($j = 0; $j < $rowSize; $j++) {
+                $cur = ord($row[$j]);
+                $up  = ord($prev[$j]);
+                $left = $j >= $channels ? ord($row[$j - $channels]) : 0;
+                switch ($filter) {
+                    case 0:
+                        $row[$j] = chr($cur);
+                        break;
+                    case 1:
+                        $row[$j] = chr(($cur + $left) & 0xFF);
+                        break;
+                    case 2:
+                        $row[$j] = chr(($cur + $up) & 0xFF);
+                        break;
+                    case 3:
+                        $row[$j] = chr(($cur + intdiv($left + $up, 2)) & 0xFF);
+                        break;
+                    case 4:
+                        $prev_c = $j >= $channels ? ord($prev[$j - $channels]) : 0;
+                        $p  = $left + $up - $prev_c;
+                        $pa = abs($p - $left);
+                        $pb = abs($p - $up);
+                        $pc = abs($p - $prev_c);
+                        $paeth = ($pa <= $pb && $pa <= $pc)
+                        ? $left
+                        : (($pb <= $pc) ? $up : $prev_c);
+                        $row[$j] = chr(($cur + $paeth) & 0xFF);
+                        break;
+                    default:
+                        $row[$j] = chr($cur);
+                }
+            }
+            $out .= $row;
+            $prev = $row;
+        }
+        return $out;
+    }
+
+    /**
+     * Maps an indexed image's one-byte samples to RGB through its palette; an index past the palette takes its last
+     * colour.
+     *
+     * @param string $decoded The samples.
+     * @param int    $width   The image's width.
+     * @param int    $height  The image's height.
+     * @param array  $palette RGB triples by index.
+     * @param array  $budget  The parse-time budget, checked every 256 rows.
+     * @return string Three bytes per pixel.
+     */
+    private static function expandIndexedPixels(string $decoded, int $width, int $height, array $palette, array $budget): string
+    {
+        $expanded = '';
+        $paletteSize = count($palette);
+        for ($y = 0; $y < $height; $y++) {
+            if (($y & 255) === 0) {
+                self::checkParseTimeBudget($budget['start'], $budget['max'], 'palette expansion');
+            }
+            $rowStart = $y * $width;
+            for ($x = 0; $x < $width; $x++) {
+                $byte_pos = $rowStart + $x;
+                $idx = ($byte_pos < strlen($decoded)) ? ord($decoded[$byte_pos]) : 0;
+                if ($idx >= $paletteSize) {
+                    $idx = $paletteSize - 1;
+                }
+
+                $rgb = $palette[$idx];
+                $expanded .= chr($rgb[0]) . chr($rgb[1]) . chr($rgb[2]);
+            }
+        }
+        return $expanded;
+    }
+
+    /**
+     * Decodes the soft mask (alpha channel) an image's dictionary names, if any, at the mask's own size.
+     *
+     * @param string     $objDict The image's dictionary.
+     * @param string     $pdf_raw The bytes being walked.
+     * @param array|null $index   PdfUtils::objectDefinitionIndex() of $pdf_raw.
+     * @param int        $width   The image's width, the mask's when it names none.
+     * @param int        $height  The image's height, likewise.
+     * @param array      $budget  The parse-time budget, checked every 256 rows.
+     * @return array{0: string|null, 1: int, 2: int} The mask's samples (null when there is none, or it is over the size
+     *         cap), its width and its height.
+     */
+    private static function decodeSoftMask(string $objDict, string $pdf_raw, ?array $index, int $width, int $height, array $budget): array
+    {
+        $smask_decoded = null;
+        $sm_width      = $width;
+        $sm_height     = $height;
+        $_sm_ref_num   = null;
+        if (preg_match('/\/SMask\s+(\d+)\s+\d+\s+R/', $objDict, $_sm_ref)) {
+            $_sm_ref_num = $_sm_ref[1];
+            unset($_sm_ref);
+        }
+        if ($_sm_ref_num !== null) {
+            $sm_num = $_sm_ref_num;
+            // Last definition, like every other object lookup here.
+            $_sm_obj = self::definitionLookup($index, $pdf_raw, (string) $sm_num);
+            if ($_sm_obj !== null) {
+                $sm_body = $_sm_obj['body'];
+                // Keys from the mask's dictionary only, never from its stream bytes, which can hold any
+                // of them.
+                $sm_dict_end = strpos($sm_body, 'stream');
+                $sm_dict     = $sm_dict_end === false ? $sm_body : substr($sm_body, 0, $sm_dict_end);
+                preg_match_all('/\/Filter\s*\/([A-Za-z0-9]+)/', $sm_dict, $_sm_f);
+                $sm_filters = $_sm_f[1] ?? [];
+                /* The mask carries its own size, often smaller than its image's; the predictor needs it. */
+                $sm_width  = preg_match('/\/Width\s+(\d+)/', $sm_dict, $_sm_w) ? (int) $_sm_w[1] : $width;
+                $sm_height = preg_match('/\/Height\s+(\d+)/', $sm_dict, $_sm_h) ? (int) $_sm_h[1] : $height;
+                $sm_width  = max(1, $sm_width);
+                $sm_height = max(1, $sm_height);
+                // The image's own size bounds, as the size drives str_repeat() below. Too large, the
+                // mask is skipped: it only shapes the preview.
+                $sm_over_cap = $sm_width > 20000 || $sm_height > 20000
+                    || $sm_width * $sm_height > (int) (PdfUtils::maxSafePixels() / 2);
+                if ($sm_over_cap) {
+                    \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: soft mask ' . $sm_num . ' declares ' . $sm_width . 'x' . $sm_height . ' pixels; not decoded.');
+                } elseif (preg_match('/stream\r?\n(.*?)\r?\nendstream/s', $sm_body, $_sm_s)) {
+                    $sm_raw  = $_sm_s[1];
+                    $sm_data = $sm_raw;
+                    if (in_array('FlateDecode', $sm_filters, true)) {
+                        $sm_try = PdfUtils::inflateWithin($sm_raw);
+                        if (is_string($sm_try)) {
+                            $sm_data = $sm_try;
+                        }
+                    }
+                    // Undo PNG predictor for 1-channel (DeviceGray) SMask.
+                    $sm_predictor = 1;
+                    if (preg_match('/\/DecodeParms\s*<<(.*?)>>/s', $sm_dict, $_sm_dp)
+                        && preg_match('/\/Predictor\s+(\d+)/', $_sm_dp[1], $_sm_pp)
+                    ) {
+                        $sm_predictor = (int)$_sm_pp[1];
+                    }
+                    if ($sm_predictor >= 10) {
+                        $sm_out  = '';
+                        $sm_prev = str_repeat("\0", $sm_width);
+                        $sm_i    = 0;
+                        for ($sy = 0; $sy < $sm_height; $sy++) {
+                            // Per-row checkpoint, like the image's own predictor loop (undoPngPredictor()).
+                            if (($sy & 255) === 0) {
+                                self::checkParseTimeBudget($budget['start'], $budget['max'], 'SMask predictor');
+                            }
+                            if ($sm_i >= strlen($sm_data)) {
+                                break;
+                            }
+                            $sm_ftype = ord($sm_data[$sm_i++]);
+                            $sm_row   = str_pad(
+                                substr($sm_data, $sm_i, $sm_width),
+                                $sm_width,
+                                "\0"
+                            );
+                            $sm_i += $sm_width;
+                            for ($sx = 0; $sx < $sm_width; $sx++) {
+                                $sc   = ord($sm_row[$sx]);
+                                $sup  = ord($sm_prev[$sx]);
+                                $slft = $sx > 0 ? ord($sm_row[$sx - 1]) : 0;
+                                switch ($sm_ftype) {
+                                    case 1:
+                                        $sm_row[$sx] = chr(($sc + $slft) & 0xFF);
+                                        break;
+                                    case 2:
+                                        $sm_row[$sx] = chr(($sc + $sup) & 0xFF);
+                                        break;
+                                    case 3:
+                                        $sm_row[$sx] = chr(
+                                            ($sc + intdiv($slft + $sup, 2)) & 0xFF
+                                        );
+                                        break;
+                                    case 4:
+                                        $spc   = $sx > 0 ? ord($sm_prev[$sx - 1]) : 0;
+                                        $sp    = $slft + $sup - $spc;
+                                        $spa   = abs($sp - $slft);
+                                        $spb   = abs($sp - $sup);
+                                        $spc_a = abs($sp - $spc);
+                                        $spaeth = ($spa <= $spb && $spa <= $spc_a)
+                                            ? $slft : (($spb <= $spc_a) ? $sup : $spc);
+                                        $sm_row[$sx] = chr(($sc + $spaeth) & 0xFF);
+                                        break;
+                                    default:
+                                        $sm_row[$sx] = chr($sc);
+                                }
+                            }
+                            $sm_out  .= $sm_row;
+                            $sm_prev  = $sm_row;
+                        }
+                        $sm_data = $sm_out;
+                    }
+                    $smask_decoded = $sm_data;
+                }
+                unset($_sm_obj, $_sm_f, $_sm_s, $_sm_dp, $_sm_pp);
+            }
+        }
+
+        return [$smask_decoded, $sm_width, $sm_height];
+    }
+
+    /**
+     * Writes a recreated image to the protected folder, once per file name: a JPEG as stored, anything else drawn into
+     * a PNG with its soft mask as transparency. The folder is HTTP-blocked; the image reaches the browser as a data URI.
+     *
+     * @param string $imgFile    Where to write it.
+     * @param string $ext        "jpg" or "png".
+     * @param string $decoded    The samples (a JPEG's stored bytes).
+     * @param int    $width      The image's width.
+     * @param int    $height     The image's height.
+     * @param string $colorspace Its colour space.
+     * @param int    $channels   Samples per pixel.
+     * @param bool   $invert     Whether its /Decode array inverts the samples.
+     * @param array  $soft_mask  What decodeSoftMask() returned.
+     * @param array  $budget     The parse-time budget, checked every 256 rows.
+     * @return void
+     */
+    private static function writeImageFile(
+        string $imgFile,
+        string $ext,
+        string $decoded,
+        int $width,
+        int $height,
+        string $colorspace,
+        int $channels,
+        bool $invert,
+        array $soft_mask,
+        array $budget
+    ): void {
+        [$smask_decoded, $sm_width, $sm_height] = $soft_mask;
+        if (!file_exists($imgFile)) {
+            if ($ext === 'jpg') {
+                \FabricatorForms\Utils\SecureDir::putFile($imgFile, $decoded);
+            } else {
+                $im = imagecreatetruecolor($width, $height);
+                // Enable alpha so the SMask can be written as transparency.
+                imagealphablending($im, false);
+                imagesavealpha($im, true);
+                $idx = 0;
+
+                for ($y = 0; $y < $height; $y++) {
+                    if (($y & 255) === 0) {
+                        self::checkParseTimeBudget($budget['start'], $budget['max'], 'image render');
+                    }
+                    for ($x = 0; $x < $width; $x++) {
+                        // An indexed image is RGB only once its palette expanded it to three channels; if the palette
+                        // was unusable, its one index byte per pixel is drawn as grey instead of read out of range.
+                        if ($colorspace === 'DeviceRGB' || ($colorspace === 'IndexedRGB' && $channels === 3)) {
+                            $r = ord($decoded[$idx++]);
+                            $g = ord($decoded[$idx++]);
+                            $b = ord($decoded[$idx++]);
+                        } elseif ($colorspace === 'DeviceGray' || $colorspace === 'IndexedRGB') {
+                            $g = ord($decoded[$idx++]);
+                            $r = $b = $g;
+                        } else { // CMYK
+                            $c = ord($decoded[$idx++]) / 255;
+                            $m = ord($decoded[$idx++]) / 255;
+                            $yC = ord($decoded[$idx++]) / 255;
+                            $k = ord($decoded[$idx++]) / 255;
+                            $r = (int)(255 * (1 - min(1, $c + $k)));
+                            $g = (int)(255 * (1 - min(1, $m + $k)));
+                            $b = (int)(255 * (1 - min(1, $yC + $k)));
+                        }
+                        if ($invert) {
+                            $r = 255 - $r;
+                            $g = 255 - $g;
+                            $b = 255 - $b;
+                        }
+                        // SMask: 0=transparent, 255=opaque.
+                        // GD alpha: 0=opaque, 127=transparent.
+                        if ($smask_decoded !== null) {
+                            // Sampled at the mask's own size, which may be smaller than the image's.
+                            $sm_sx    = $sm_width === $width ? $x : intdiv($x * $sm_width, max(1, $width));
+                            $sm_sy    = $sm_height === $height ? $y : intdiv($y * $sm_height, max(1, $height));
+                            $sm_byte  = ord($smask_decoded[$sm_sy * $sm_width + $sm_sx] ?? "\xff");
+                            $gd_alpha = (int)((255 - $sm_byte) / 2); // truncate: max 127 when sm_byte=0
+                        } else {
+                            $gd_alpha = 0; // fully opaque
+                        }
+                        imagesetpixel(
+                            $im,
+                            $x,
+                            $y,
+                            imagecolorallocatealpha($im, $r, $g, $b, $gd_alpha)
+                        );
+                    }
+                }
+                imagepng($im, $imgFile, 9);
+                // unset(), not imagedestroy(): a no-op since PHP 8.0 and deprecated in 8.5.
+                unset($im);
+            }
+        }
+    }
+
+    /**
+     * The card an image fills its slot with, built like the field comparison's: the SHA-256 of its stored stream with
+     * MATCH or MISMATCH against the seal, the image, and its metadata.
+     *
+     * @param string   $colorspace         The image's colour space.
+     * @param int      $width              Its width.
+     * @param int      $height             Its height.
+     * @param int      $channels           Samples per pixel.
+     * @param string   $check_hash         The SHA-256 of its stored stream.
+     * @param bool     $is_allowed         Whether the seal lists that hash.
+     * @param string[] $exact_image_hashes The hashes the seal lists.
+     * @param string   $data_uri           The image as a data URI, or '' when it could not be rendered.
+     * @param int      $decoded_len        Bytes of its samples.
+     * @return string
+     */
+    private static function imageCardHtml(
+        string $colorspace,
+        int $width,
+        int $height,
+        int $channels,
+        string $check_hash,
+        bool $is_allowed,
+        array $exact_image_hashes,
+        string $data_uri,
+        int $decoded_len
+    ): string {
+        $state = $is_allowed ? 'pass' : 'fail';
+        $html  = "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$state} fabricator-pdf-img-card'>";
+        $html .= "<div class='fabricator-pdf-cmp-header'>"
+            . "<span class='fabricator-pdf-cmp-label fabricator-pdf-img-card__hash'>SHA-256 <code>" . esc_html($check_hash) . '</code></span>'
+            . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$state}'>"
+            . ($is_allowed ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator'))
+            . '</span></div>';
+
+        $html .= "<div class='fabricator-pdf-img-card__body'>";
+        // A data URI: verimages/ is HTTP-blocked.
+        $html .= $data_uri !== ''
+            ? "<img class='fabricator-pdf-img-card__image' src='" . esc_attr($data_uri) . "' alt=''>"
+            : "<p class='fabricator-pdf-img-card__note'>" . esc_html__('[Image could not be rendered]', 'formfabricator') . '</p>';
+
+        $html .= "<div class='fabricator-pdf-img-card__meta'>" . esc_html(sprintf(
+            // translators: %1$s: colour space such as "DeviceRGB", %2$d: width, %3$d: height in pixels, %4$d: colour channels, %5$s: byte count.
+            __('%1$s · %2$d × %3$d px · %4$d channels · %5$s bytes decoded', 'formfabricator'),
+            $colorspace,
+            $width,
+            $height,
+            $channels,
+            number_format_i18n($decoded_len)
+        )) . '</div>';
+
+        if (!$is_allowed) {
+            $count = count($exact_image_hashes);
+            $html .= "<div class='fabricator-pdf-img-card__note'>" . ($count === 0
+                ? esc_html__('The seal lists no images.', 'formfabricator')
+                : esc_html(sprintf(
+                    // translators: %d: how many image hashes the seal lists.
+                    _n('The seal lists %d image hash, and not this one:', 'The seal lists %d image hashes, and not this one:', $count, 'formfabricator'),
+                    $count
+                )));
+            foreach ($exact_image_hashes as $sealed_hash) {
+                $html .= '<br><code>' . esc_html((string) $sealed_hash) . '</code>';
+            }
+            $html .= '</div>';
+        }
+
+        $html .= '</div></div>';
+        return $html;
+    }
+
+    /**
+     * Prints the content stream section: every content stream held to the sealed hashes, and the seal page's text.
+     *
+     * @param string $pdf_raw         The document's bytes.
+     * @param array  $rebuilt_payload The payload rebuilt from the seal.
+     * @param string $seal_base64     The seal block as read.
+     * @param string $uid_prefix      Element id prefix of this document's card.
+     * @return bool Whether any content stream differs from the seal.
+     */
+    private static function renderContentStreamsSection(string $pdf_raw, array $rebuilt_payload, string $seal_base64, string $uid_prefix): bool
+    {
+        $allowed_content_hashes = $rebuilt_payload['content_streams'] ?? [];
+        $content_stream_mismatch = false;
+        $seal_page_text_live     = null;
+
+        self::setProgress(__('Checking content streams…', 'formfabricator'), 87);
+
+        // The rows first, so the header can carry the outcome.
+        ob_start();
+        if (empty($allowed_content_hashes)) {
+            // Generator refuses to seal without content streams, so a seal listing none was not made here.
+            echo "<p><span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
+               . esc_html__('The seal lists no content streams, so the page content cannot be checked.', 'formfabricator')
+               . "</span></p>";
+            $content_stream_mismatch = true;
+        } else {
+            // Any stream added, swapped or removed fails (PdfUtils::verifyContentStreams()).
+            $cs_result = \FabricatorForms\PDF\PdfUtils::verifyContentStreams(
+                (string) $pdf_raw,
+                array_map('strval', (array) $allowed_content_hashes),
+                '---BEGIN-SEAL---' . preg_replace('/\s+/', '', (string) $seal_base64) . '---END-SEAL---'
+            );
+            if ($cs_result['mismatch']) {
+                $content_stream_mismatch = true;
+            }
+            if ($cs_result['seal_obj'] !== null) {
+                $seal_page_text_live = \FabricatorForms\PDF\PdfUtils::sealPageTextFingerprint((string) $pdf_raw);
+            }
+
+            $n_seal = count($allowed_content_hashes);
+            $n_pdf  = count($cs_result['rows']);
+            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see handleUpload() note.
+            echo "<p class='fabricator-pdf-hash-summary'>"
+               . esc_html(
+                   sprintf(
+                       /* translators: %1$d: content streams recorded in the seal, %2$d: content streams found in the PDF */
+                       __('Streams in seal: %1$d · verifiable in PDF: %2$d', 'formfabricator'),
+                       $n_seal,
+                       $n_pdf
+                   )
+               ) . "</p>";
+            echo "<div class='fabricator-pdf-hash-list'>";
+            foreach ($cs_result['rows'] as $cs_row) {
+                $short = esc_html(substr((string) $cs_row['hash'], 0, 20));
+                if ($cs_row['status'] === 'unrecognised') {
+                    echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+                       . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('UNRECOGNISED', 'formfabricator') . "</span>"
+                       . "<code>{$short}…</code>"
+                       . "<span style='font-size:11px;color:#721c24;'>" . esc_html__('not in seal', 'formfabricator') . "</span></div>";
+                    continue;
+                }
+                $cs_pill = $cs_row['status'] === 'seal-page' ? esc_html__('SEAL PAGE', 'formfabricator') : esc_html__('MATCH', 'formfabricator');
+                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--pass'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>{$cs_pill}</span>"
+                   . "<code>{$short}…</code></div>";
+            }
+            foreach ($cs_result['problems'] as $cs_problem) {
+                $cs_obj   = (int) ($cs_problem['obj'] ?? 0);
+                $cs_count = (int) ($cs_problem['count'] ?? 0);
+                $cs_msg   = match ((string) $cs_problem['code']) {
+                    // translators: %d: PDF object number of the stream.
+                    'oversized' => sprintf(__('Content stream %d is too large to verify.', 'formfabricator'), $cs_obj),
+                    // translators: %d: PDF object number of the stream.
+                    'marker_outside_seal_page' => sprintf(__('Stream %d carries a seal marker outside the seal page: injected content.', 'formfabricator'), $cs_obj),
+                    'no_seal_stream' => __('No content stream on the last page carries the seal.', 'formfabricator'),
+                    'seal_page_mismatch' => __('The seal page contains content that is not in the seal.', 'formfabricator'),
+                    // translators: %d: number of sealed content streams missing from the PDF.
+                    'sealed_missing' => sprintf(_n('%d sealed content stream is missing from the PDF.', '%d sealed content streams are missing from the PDF.', $cs_count, 'formfabricator'), $cs_count),
+                    default => __('Content streams do not match the seal.', 'formfabricator'),
+                };
+                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html($cs_msg) . "</span></div>";
+            }
+            echo "</div>";
+
+            /* Seal-page text check. */
+            $seal_page_text_sealed = (string) ($rebuilt_payload['seal_page_text'] ?? '');
+            if ($seal_page_text_live === null) {
+                echo "<p style='margin-top:8px;'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
+                   . esc_html__('Seal-page content stream not found', 'formfabricator')
+                   . "</span></p>";
+                $content_stream_mismatch = true;
+            } elseif (!hash_equals($seal_page_text_sealed, $seal_page_text_live)) {
+                echo "<p style='margin-top:8px;'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
+                   . esc_html__('Text on the seal page does not match the seal', 'formfabricator')
+                   . "</span></p>";
+                $content_stream_mismatch = true;
+            } else {
+                echo "<p style='margin-top:8px;'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>"
+                   . esc_html__('Seal-page text matches the seal', 'formfabricator')
+                   . "</span></p>";
+            }
+
+            if (!$content_stream_mismatch) {
+                echo "<p style='margin-top:8px;'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('All streams accounted for', 'formfabricator') . "</span></p>";
+            }
+        }
+        $rows = (string) ob_get_clean();
+
+        $cs_section_id = 'fabricator-pdf-content-streams-' . $uid_prefix;
+        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-streams-" . esc_attr($uid_prefix) . "'>";
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($cs_section_id) . "'>" . esc_html__('Content Streams', 'formfabricator') . "</button>";
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- detailBadge() escapes; $rows was escaped at each echo() that built it.
+        echo self::detailBadge('fabricator-pdf-badge-streams-' . $uid_prefix, $content_stream_mismatch);
+        echo "</div>";
+        echo "<div id='" . esc_attr($cs_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        echo $rows;
+        echo "</div>"; // close content streams foldable content
+        echo "</div>"; // close content streams section wrapper
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+
+        return $content_stream_mismatch;
+    }
+
+    /**
+     * Prints the font section: the fonts the pages use against those the seal lists, and the font programs.
+     *
+     * @param string     $pdf_raw            The document's bytes.
+     * @param array|null $object_index       PdfUtils::objectDefinitionIndex() of $pdf_raw.
+     * @param array      $rebuilt_payload    The payload rebuilt from the seal.
+     * @param array      $matches            distinctTypeNames() of $pdf_raw.
+     * @param array      $font_prog_diff     fontProgramDifference(): embedded font programs beyond the seal, and missing.
+     * @param string     $uid_prefix         Element id prefix of this document's card.
+     * @return bool Whether the fonts differ from the seal.
+     */
+    private static function renderFontsSection(
+        string $pdf_raw,
+        ?array $object_index,
+        array $rebuilt_payload,
+        array $matches,
+        array $font_prog_diff,
+        string $uid_prefix
+    ): bool {
+        $font_missmatch = false;
+        self::setProgress(__('Checking fonts…', 'formfabricator'), 94);
+
+        // The rows first, so the header can carry the outcome.
+        ob_start();
+        if ($matches !== []) {
+            $verified_fonts = null;
+
+            foreach ($matches as $m) {
+                $type = $m[1];
+
+                if ($type !== 'Font') {
+                    continue;
+                }
+
+                if ($verified_fonts === null) {
+                    $verified_fonts = [
+                        'used'       => [],
+                        'missing'    => [],
+                        'unexpected' => [],
+                    ];
+
+                    $allowed_fonts = $rebuilt_payload['fonts'] ?? [];
+
+                    // --- 1a. Collect font references from /Resources ---
+                    // Each "/Font <<" block up to its ">>", found linearly, outside image data.
+                    $font_refs    = [];
+                    $font_scan_at = 0;
+                    $find_fonts   = PdfUtils::finderOutsideImageData((string) $pdf_raw, '/\/Font\s*<</i');
+                    while ($find_fonts($font_scan_at, $font_match)) {
+                        $font_block_start = $font_match[0][1] + strlen($font_match[0][0]);
+                        $font_block_end   = strpos($pdf_raw, '>>', $font_block_start);
+                        if ($font_block_end === false) {
+                            break;
+                        }
+                        $block        = substr($pdf_raw, $font_block_start, $font_block_end - $font_block_start);
+                        $font_scan_at = $font_block_end + 2;
+                        if (preg_match_all('/\/\w+\s+(\d+\s+\d+)\s+R/', $block, $m)) {
+                            foreach ($m[1] as $ref) {
+                                $font_refs[$ref] = true;
+                            }
+                        }
+                    }
+
+                    // --- 1b. Resolve font objects & extract BaseFont ---
+                    foreach (array_keys($font_refs) as $ref) {
+                        // Last definition of exactly this object and generation.
+                        [$font_ref_num, $font_ref_gen] = preg_split('/\s+/', (string) $ref);
+                        $font_ref_obj = self::definitionLookup($object_index, (string) $pdf_raw, $font_ref_num, $font_ref_gen);
+                        if ($font_ref_obj === null || !preg_match('/\A\s*<<(.*?)>>/s', $font_ref_obj['body'], $obj)) {
+                            continue;
+                        }
+                        if (!preg_match('/\/BaseFont\s*\/([^\s\/]+)/', $obj[1], $bf)) {
+                            continue;
+                        }
+
+                        // Normalize subset prefix
+                        $font_name = preg_replace('/^[A-Z]{6}\+/', '', $bf[1]);
+                        $verified_fonts['used'][$font_name] = true;
+                    }
+
+                    $used_fonts = array_keys($verified_fonts['used']);
+
+                    // --- 1c. Compare ---
+                    foreach ($used_fonts as $font) {
+                        if (!in_array($font, $allowed_fonts, true)) {
+                            $verified_fonts['unexpected'][] = $font;
+                        }
+                    }
+
+                    foreach ($allowed_fonts as $font) {
+                        if (!in_array($font, $used_fonts, true)) {
+                            $verified_fonts['missing'][] = $font;
+                        }
+                    }
+
+                    $all_font_names = array_unique(array_merge($allowed_fonts, $used_fonts));
+                    sort($all_font_names);
+                    echo "<div class='fabricator-pdf-hash-list'>";
+                    foreach ($all_font_names as $font) {
+                        $in_seal = in_array($font, $allowed_fonts, true);
+                        $in_pdf  = in_array($font, $used_fonts, true);
+                        if ($in_seal && $in_pdf) {
+                            $row_cls = 'fabricator-pdf-hash-row--pass';
+                            $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('OK', 'formfabricator') . "</span>";
+                        } elseif (!$in_seal && $in_pdf) {
+                            $row_cls = 'fabricator-pdf-hash-row--fail';
+                            $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('UNDECLARED', 'formfabricator') . "</span>";
+                        } else {
+                            $row_cls = 'fabricator-pdf-hash-row--warn';
+                            $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--warn'>" . esc_html__('UNUSED', 'formfabricator') . "</span>";
+                        }
+                        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
+                        echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
+                           . $pill
+                           . "<code>" . esc_html($font) . "</code>"
+                           . "</div>";
+                    }
+                    echo "</div>";
+
+                    if ($verified_fonts['unexpected'] || $verified_fonts['missing']) {
+                        $font_missmatch = true;
+                    }
+                }
+            }
+        }
+
+        if ($font_prog_diff['added'] !== [] || $font_prog_diff['removed'] !== []) {
+            // The all-stream check counts only added streams, so a stripped font program shows only here.
+            $font_missmatch = true;
+            echo "<p class='fabricator-pdf-section-note'>" . esc_html__(
+                'The font names match the seal, but an embedded font file does not. A changed font file can draw other shapes for the same letters, so the page may show something other than the text it holds.',
+                'formfabricator'
+            ) . '</p>';
+            echo "<div class='fabricator-pdf-hash-list'>";
+            foreach ($font_prog_diff['added'] as $hash) {
+                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . '</span>'
+                   . '<span>' . esc_html__('Embedded font file the seal does not list', 'formfabricator') . '</span>'
+                   . '<code>' . esc_html($hash) . '</code></div>';
+            }
+            foreach ($font_prog_diff['removed'] as $hash) {
+                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISSING FROM PDF', 'formfabricator') . '</span>'
+                   . '<span>' . esc_html__('Sealed font file no longer in the PDF', 'formfabricator') . '</span>'
+                   . '<code>' . esc_html($hash) . '</code></div>';
+            }
+            echo '</div>';
+        }
+
+        if (!$font_missmatch) {
+            echo "<p style='margin-top:8px;'>"
+               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>"
+               . esc_html__('All fonts match the seal', 'formfabricator')
+               . "</span></p>";
+        }
+        $rows = (string) ob_get_clean();
+
+        $fonts_section_id = 'fabricator-pdf-content-fonts-' . $uid_prefix;
+        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-fonts-" . esc_attr($uid_prefix) . "'>";
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($fonts_section_id) . "'>" . esc_html__('Fonts', 'formfabricator') . "</button>";
+        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- detailBadge() escapes; $rows was escaped at each echo() that built it.
+        echo self::detailBadge('fabricator-pdf-badge-fonts-' . $uid_prefix, $font_missmatch);
+        echo "</div>";
+        echo "<div id='" . esc_attr($fonts_section_id) . "'"
+           . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        echo $rows;
+        echo "</div>"; // close fonts foldable content
+        echo "</div>"; // close fonts section wrapper
+        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+
+        return $font_missmatch;
+    }
+
+    /**
+     * Prints the PDF object section: object types this plugin never writes, or writes only where another check failed,
+     * and the streams the reader left packed.
+     *
+     * @param string $pdf_raw                 The document's bytes.
+     * @param array  $matches                 distinctTypeNames() of $pdf_raw.
+     * @param bool   $pagecount_mismatch      Whether the page count differs.
+     * @param bool   $annotation_mismatch     Whether an annotation matches nothing in the seal.
+     * @param bool   $font_missmatch          Whether the fonts differ.
+     * @param bool   $image_missmatch         Whether an image differs.
+     * @param bool   $content_stream_mismatch Whether a content stream differs.
+     * @param array  $refused_streams         Streams the reader refused to unpack.
+     * @param int    $refused_unlisted        Refused streams beyond those listed.
+     * @param string $uid_prefix              Element id prefix of this document's card.
+     * @return bool Whether anything unexpected was found, a page count mismatch included.
+     */
+    private static function renderObjectsSection(
+        string $pdf_raw,
+        array $matches,
+        bool $pagecount_mismatch,
+        bool $annotation_mismatch,
+        bool $font_missmatch,
+        bool $image_missmatch,
+        bool $content_stream_mismatch,
+        array $refused_streams,
+        int $refused_unlisted,
+        string $uid_prefix
+    ): bool {
+        $unexpected_detected = $pagecount_mismatch;
+
+        $unexpected_types = [];
+        if (!empty($matches)) {
+            // Whitelist
+            $safe_types = [
+                'Pages', 'Catalog', 'ExtGState', 'Pattern',
+                'FontDescriptor', 'Group', 'Trailer',
+            ];
+            // Whether the file declares any image at all: asked once, not once per XObject match over the whole file.
+            $raw_has_image_subtype = null;
+            foreach ($matches as $m) {
+                $type = $m[1];
+                if (in_array($type, $safe_types, true)) {
+                    continue;
+                }
+                if ($type === 'Page' && $pagecount_mismatch === false) {
+                    continue;
+                }
+                if ($type === 'Annot' && $annotation_mismatch === false) {
+                    continue;
+                }
+                if ($type === 'Font' && $font_missmatch === false) {
+                    continue;
+                }
+                if ($type === 'XObject' && $image_missmatch === false) {
+                    $raw_has_image_subtype ??= PdfUtils::finderOutsideImageData((string) $pdf_raw, '/\/Subtype\s*\/Image/i')(0, $image_subtype);
+                    // The background grid is a Form XObject, which the content-stream check already
+                    // holds to the seal.
+                    $form_xobjects_sealed = $content_stream_mismatch === false;
+                    if ($raw_has_image_subtype || $form_xobjects_sealed) {
+                        continue;
+                    }
+                }
+                $unexpected_types[] = $type;
+                $unexpected_detected = true;
+            }
+        }
+
+        // Streams the reader left packed: never packed like this by FormFabricator, or beyond the memory reserved for
+        // this check. Either way the file can't be confirmed.
+        if ($refused_streams !== []) {
+            $unexpected_detected = true;
+        }
+
+        $objects_section_id = 'fabricator-pdf-content-objects-' . $uid_prefix;
+        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-objects-" . esc_attr($uid_prefix) . "'>";
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+           . " data-target='" . esc_attr($objects_section_id) . "'>" . esc_html__('PDF Objects', 'formfabricator') . "</button>";
+        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes.
+        echo self::detailBadge('fabricator-pdf-badge-objects-' . $uid_prefix, $unexpected_detected);
+        echo "</div>";
+        echo "<div id='" . esc_attr($objects_section_id) . "'"
+           . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+
+        if ($unexpected_detected) {
+            echo "<div class='fabricator-pdf-tag-list'>";
+            foreach (array_unique($unexpected_types) as $utype) {
+                echo "<span class='fabricator-pdf-tag'>" . esc_html($utype) . "</span>";
+            }
+            echo "</div>";
+            self::renderRefusedStreams($refused_streams, $refused_unlisted);
+        } else {
+            echo "<p class='fabricator-pdf-empty-state'>" . esc_html__('No unexpected PDF objects detected.', 'formfabricator') . "</p>";
+        }
+
+        echo "</div>"; // close objects foldable content
+        echo "</div>"; // close objects section wrapper
+
+        return $unexpected_detected;
+    }
+
+    /**
+     * Builds the metadata section: the document information the seal records, and the dates mPDF writes when saving.
+     *
+     * @param string     $pdf_raw         The document's bytes.
+     * @param array|null $object_index    PdfUtils::objectDefinitionIndex() of $pdf_raw.
+     * @param array      $seal_data       The seal as read.
+     * @param array      $rebuilt_payload The payload rebuilt from the seal.
+     * @param string     $uid_prefix      Element id prefix of this document's card.
+     * @return array{html: string, mismatch: bool} The section, empty for a seal recording no metadata.
+     */
+    private static function metadataSection(string $pdf_raw, ?array $object_index, array $seal_data, array $rebuilt_payload, string $uid_prefix): array
+    {
+        $meta_html = '';
+        $meta_mismatch  = false;
+        $sealed_meta    = $rebuilt_payload['pdf_meta'] ?? [];
+        $meta_section_id = 'fabricator-pdf-content-meta-' . $uid_prefix;
+
+        if (!empty($sealed_meta)) {
+            // The LAST /Info reference and the LAST definition of that object, as a viewer reads an incrementally updated
+            // file: each update appends a new trailer (pageContents() takes the last /Root the same way).
+            $pdf_meta_found = ['title' => '', 'author' => '', 'creator' => '', 'producer' => '', 'created' => '', 'modified' => ''];
+            // Walked forward keeping only the last, since a file can repeat "/Info 1 0 R" at will.
+            $info_ref = null;
+            $info_at  = 0;
+            $info_raw = (string) $pdf_raw;
+            while (preg_match('/\/Info\s+(\d+)\s+(\d+)\s+R/', $info_raw, $info_match, PREG_OFFSET_CAPTURE, $info_at) === 1) {
+                $info_ref = [$info_match[0][0], $info_match[1][0], $info_match[2][0]];
+                $info_at  = $info_match[0][1] + strlen($info_match[0][0]);
+            }
+            unset($info_raw);
+            if ($info_ref !== null) {
+                $info_obj = self::definitionLookup($object_index, (string) $pdf_raw, $info_ref[1], $info_ref[2]);
+                if ($info_obj !== null) {
+                    $info_keys = [
+                        'Title'        => 'title',
+                        'Author'       => 'author',
+                        'Creator'      => 'creator',
+                        'Producer'     => 'producer',
+                        'CreationDate' => 'created',
+                        'ModDate'      => 'modified',
+                    ];
+                    foreach ($info_keys as $key => $slot) {
+                        // A real string parser: mPDF escapes "(", ")" and "\" inside these UTF-16BE strings.
+                        $pdf_meta_found[$slot] = PdfUtils::dictTextEntry($info_obj['body'], $key) ?? '';
+                    }
+                }
+            }
+
+            $meta_rows = [];
+            $meta_labels = [
+                'title'    => __('Title', 'formfabricator'),
+                'author'   => __('Author', 'formfabricator'),
+                'creator'  => __('Creator', 'formfabricator'),
+                'producer' => __('Producer', 'formfabricator'),
+            ];
+            foreach ($meta_labels as $slot => $label) {
+                $expected    = trim((string)($sealed_meta[$slot] ?? ''));
+                $actual      = trim((string) $pdf_meta_found[$slot]);
+                $meta_rows[] = [$label, $actual, $expected, $expected === $actual];
+            }
+            // The dates are written after the seal is made, so they can't be sealed; one outside the window from the
+            // sealed generation time to MAX_PDF_GENERATION_SECONDS later was set afterwards.
+            $generated_at = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s P', (string) ($seal_data['generated'] ?? ''));
+            $earliest     = $generated_at === false ? null : $generated_at->getTimestamp() - self::META_DATE_SLACK_SECONDS;
+            $latest       = $generated_at === false ? null : $generated_at->getTimestamp() + self::MAX_PDF_GENERATION_SECONDS;
+            $date_window  = $earliest === null || $latest === null ? ''
+                : sprintf(
+                    /* translators: 1: earliest accepted date and time, 2: latest accepted date and time. */
+                    __('between %1$s and %2$s', 'formfabricator'),
+                    wp_date('Y-m-d H:i:s P', $earliest),
+                    wp_date('Y-m-d H:i:s P', $latest)
+                );
+            foreach (['created' => __('Creation date', 'formfabricator'), 'modified' => __('Modification date', 'formfabricator')] as $slot => $label) {
+                $raw_date    = trim((string) $pdf_meta_found[$slot]);
+                $timestamp   = PdfUtils::pdfDateTimestamp($raw_date);
+                $in_window   = $timestamp !== null && $earliest !== null && $latest !== null
+                    && $timestamp >= $earliest && $timestamp <= $latest;
+                $meta_rows[] = [$label, $timestamp !== null ? (string) wp_date('Y-m-d H:i:s P', $timestamp) : $raw_date, $date_window, $in_window];
+            }
+            $meta_mismatch = in_array(false, array_column($meta_rows, 3), true);
+
+            ob_start();
+            echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-meta-" . esc_attr($uid_prefix) . "'>";
+            echo "<div class='fabricator-pdf-detail-hdr'>";
+            echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+               . " data-target='" . esc_attr($meta_section_id) . "'>" . esc_html__('PDF Metadata', 'formfabricator') . "</button>";
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes.
+            echo self::detailBadge('fabricator-pdf-badge-meta-' . $uid_prefix, $meta_mismatch);
+            echo "</div>";
+            echo "<div id='" . esc_attr($meta_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+            echo "<div class='fabricator-pdf-hash-list'>";
+            foreach ($meta_rows as [$label, $actual, $expected, $match]) {
+                $row_cls   = $match ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail';
+                $pill_cls   = $match ? 'fabricator-pdf-pill--pass' : 'fabricator-pdf-pill--fail';
+                $pill_text  = $match ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
+                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
+                echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
+                   . "<span class='fabricator-pdf-pill {$pill_cls}'>{$pill_text}</span>"
+                   . "<code>" . esc_html($label) . "</code>"
+                   . "<span style='color:#50575e;font-size:11px;margin-left:4px;'>"
+                   . esc_html($actual !== '' ? $actual : __('(empty)', 'formfabricator'))
+                   . ($match ? '' : ' <em style="color:#d63638;">' . esc_html__('expected:', 'formfabricator') . ' ' . esc_html($expected) . '</em>')
+                   . "</span>"
+                   . "</div>";
+                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+            }
+
+            echo "</div>"; // fabricator-pdf-hash-list
+            echo "</div>"; // meta section content
+            echo "</div>"; // meta section wrapper
+            $meta_html = (string) ob_get_clean();
+        }
+
+        return ['html' => $meta_html, 'mismatch' => $meta_mismatch];
+    }
+
+    /**
+     * All-stream fingerprint check (catch-all): the live streams without a matching sealed hash (injected content). A
+     * sealed hash missing from the live PDF is not flagged here (mere removal); the other checks name what went missing.
+     *
+     * @param string $pdf_raw   The document's bytes.
+     * @param array  $seal_data The seal as read.
+     * @return string[] SHA-256 of each such stream's decoded data.
+     */
+    private static function unsealedStreams(string $pdf_raw, array $seal_data): array
+    {
+        $sealed_as_index = array_flip(
+            array_map('strval', (array) ($seal_data['all_stream_hashes'] ?? []))
+        );
+        $unsealed = [];
+        foreach (PdfUtils::hashAllCompressedStreams($pdf_raw) as $h) {
+            if (!isset($sealed_as_index[$h])) {
+                $unsealed[] = $h;
+            }
+        }
+        return $unsealed;
+    }
+
+    /**
+     * Prints the stream fingerprint section: the compressed parts of the file the seal has no fingerprint for.
+     *
+     * @param string[] $unsealed   unsealedStreams().
+     * @param string   $uid_prefix Element id prefix of this document's card.
+     * @return void
+     */
+    private static function renderStreamFingerprintSection(array $unsealed, string $uid_prefix): void
+    {
+        $section_id = 'fabricator-pdf-content-allstreams-' . $uid_prefix;
+        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-allstreams-" . esc_attr($uid_prefix) . "'>";
+        echo "<div class='fabricator-pdf-detail-hdr'>";
+        echo "<button type='button' class='button button-small fabricator-pdf-toggle' data-target='" . esc_attr($section_id) . "'>"
+           . esc_html__('Stream Fingerprint', 'formfabricator') . '</button>';
+        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes.
+        echo self::detailBadge('fabricator-pdf-badge-allstreams-' . $uid_prefix, true);
+        echo '</div>';
+        echo "<div id='" . esc_attr($section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        echo "<p class='fabricator-pdf-section-note'>" . esc_html(sprintf(
+            // translators: %d: how many compressed parts of the file the seal has no fingerprint for.
+            _n(
+                '%d compressed part of this file (a font, an image or other embedded data) has no fingerprint in the seal: it was added or changed after the PDF was made. The rows above name what kind of part it is where they can.',
+                '%d compressed parts of this file (fonts, images or other embedded data) have no fingerprint in the seal: they were added or changed after the PDF was made. The rows above name what kind of part they are where they can.',
+                count($unsealed),
+                'formfabricator'
+            ),
+            count($unsealed)
+        )) . '</p>';
+        echo "<div class='fabricator-pdf-hash-list'>";
+        foreach (array_slice($unsealed, 0, 20) as $hash) {
+            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+               . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . '</span>'
+               . '<code>' . esc_html($hash) . '</code></div>';
+        }
+        echo '</div></div></div>';
+    }
+
+    /**
+     * Logs why a check failed and words it for the reader.
+     *
+     * A file the checks can't read (damaged, encrypted, a garbled seal, too large to parse in time) is the file's
+     * problem: the reader is told what is wrong with it, under "Not checked". Anything else is a failure of this plugin
+     * or the server ("Error"): it is written to the PHP error log whatever WP_DEBUG says, since the card points there.
+     *
+     * @param \Throwable $e         What ended the check; its message is a constant string.
+     * @param string     $file_name The file's sanitized name, for the log line.
+     * @return array{0: string, 1: bool} The reason as plain text, without the file name; whether it is an internal error.
+     */
+    private static function failureMessage(\Throwable $e, string $file_name): array
+    {
+        $raw_msg = $e->getMessage();
+        // The file name is logged here rather than carried in the exception: messages stay constant strings.
+        $log_file = \FabricatorForms\fabricator_log_file($file_name);
+        \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: ' . $raw_msg . ' (' . $log_file . ')');
+        // Plain text: the problem card escapes it and names the file in its header.
+        $file_problem = match (true) {
+            str_contains($raw_msg, 'PDF structure unreadable')
+                => __('This file is damaged or incomplete, so its content could not be read. A PDF from this plugin reads in full: ask for the original file.', 'formfabricator'),
+            str_contains($raw_msg, 'Parsing timed out')
+                => __('PDF parsing took too long and was stopped for safety. Please try a smaller or simpler PDF.', 'formfabricator'),
+            str_contains($raw_msg, 'Seal not found')
+                => __('No FormFabricator seal found. Please only upload original documents.', 'formfabricator'),
+            $e instanceof \JsonException, str_contains($raw_msg, 'Base64 decode'), str_contains($raw_msg, 'Seal is not a JSON object')
+                => __('The seal in the document is corrupted and cannot be read.', 'formfabricator'),
+            str_contains($raw_msg, 'Seal is implausibly large')
+                => __('The seal in the document is unusually large — file rejected.', 'formfabricator'),
+            str_contains($raw_msg, 'Object list not found')
+                => __('The PDF structure is invalid or the document is encrypted.', 'formfabricator'),
+            str_contains($raw_msg, 'Indexed palette too short')
+                => __('An embedded image in the document has invalid color data and could not be processed.', 'formfabricator'),
+            // The same sentence as the early refusal before parsing, reached here only through indexObjects()'s backstop.
+            str_contains($raw_msg, 'Too many objects')
+                => __('This file has far more parts than any document this plugin creates and was not read.', 'formfabricator'),
+            default => null,
+        };
+        if ($file_problem !== null) {
+            return [$file_problem, false];
+        }
+        return [self::reportInternalFailure(get_class($e) . ': ' . $raw_msg . ' at ' . basename($e->getFile()) . ':' . $e->getLine() . ' (' . $log_file . ')'), true];
+    }
+
+    /**
+     * Writes an internal failure of a check to the PHP error log, with or without WP_DEBUG, and words it for the reader,
+     * whose card says the details are there. No visitor data: a file appears as fabricator_log_file()'s hash, the rest
+     * is this plugin's own.
+     *
+     * @param string $detail What failed, and where.
+     * @return string The card text.
+     */
+    public static function reportInternalFailure(string $detail): string
+    {
+        $detail = (string) preg_replace('/[\x00-\x1F\x7F]+/', ' ', mb_strcut($detail, 0, 600, 'UTF-8'));
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- deliberate production log of an internal failure the admin is told to look up; no visitor data.
+        error_log('FabricatorForms verifier: internal error: ' . $detail);
+        return __('An internal error stopped the check; the file itself may be fine. The details were written to the PHP error log.', 'formfabricator');
+    }
+
+    /**
+     * Prints a document's card: a header naming the file and the verdict, folding open to the report. A check that could
+     * not run gets problemCardHtml() instead.
+     *
+     * @param string     $file_name   The file's sanitized name.
+     * @param string     $uid_prefix  Element id prefix of this document's card.
+     * @param string     $pdf_content The report: summary panel and sections.
+     * @param array|null $seal        What readSeal() found.
+     * @param array      $verdict     What checkDocument() returned.
+     * @return void
+     */
+    private static function renderDocumentCard(string $file_name, string $uid_prefix, string $pdf_content, ?array $seal, array $verdict): void
+    {
+        $seal_key_status   = $seal['key_status'] ?? null;
+        $seal_compromised  = $seal['compromised'] ?? null;
+        $document_modified = (bool) ($verdict['document_modified'] ?? true);
+        $structural_tamper = $verdict['structural_tamper'] ?? false;
 
         $segment_id      = sanitize_html_class($uid_prefix . '-segment');
         $legacy_statuses = ['rotated-legacy', 'compromised-legacy'];
@@ -3611,14 +4242,7 @@ final class Verificationpage
         $key_unavailable = in_array($seal_key_status ?? '', ['unknown-key', 'undecryptable-key'], true)
             && !$structural_tamper;
 
-        if ($document_modified === null) {
-            $verdict_icon  = '';
-            $verdict_label = __('Error', 'formfabricator');
-            $border_color  = '#b32d2e';
-            $badge_bg      = '#b32d2e';
-            $badge_text    = '#fff';
-            $hdr_bg        = '#fff';
-        } elseif ($key_unavailable) {
+        if ($key_unavailable) {
             // A key id this site never had is exactly what a forged seal carries, so it reads as a failure, not as amber
             // "undetermined". A key the site holds but can't decrypt is a local configuration problem and stays amber.
             $unknown_key   = ($seal_key_status ?? '') !== 'undecryptable-key';
@@ -3824,6 +4448,24 @@ final class Verificationpage
             );
         }
 
+        if (!empty($d['xref_conflicts'])) {
+            $rows .= $row(
+                false,
+                __('PDF structure', 'formfabricator'),
+                __('Objects defined twice — a viewer may show other content than was checked', 'formfabricator'),
+                'fabricator-pdf-content-structure-' . $uid
+            );
+        }
+
+        if (($d['escaped_name'] ?? null) !== null) {
+            $rows .= $row(
+                false,
+                __('PDF structure', 'formfabricator'),
+                __('Disguised additions — a viewer may show content the checks cannot see', 'formfabricator'),
+                'fabricator-pdf-content-structure-' . $uid
+            );
+        }
+
         if (!empty($d['multiple_seals_detected'])) {
             $rows .= $row(
                 false,
@@ -3906,8 +4548,8 @@ final class Verificationpage
         $rows .= $row(
             $annots_ok,
             __('Annotations', 'formfabricator'),
-            // translators: %d: number of PDF annotations that don't match the seal.
-            sprintf(_n('%d annotation unmatched', '%d annotations unmatched', (int) $d['annotation_fail_count'], 'formfabricator'), $d['annotation_fail_count']),
+            // translators: %d: number of annotations, or sealed links, that don't match between PDF and seal.
+            sprintf(_n('%d link or annotation does not match the seal', '%d links or annotations do not match the seal', (int) $d['annotation_fail_count'], 'formfabricator'), $d['annotation_fail_count']),
             'fabricator-pdf-content-annots-' . $uid
         );
 
@@ -3931,7 +4573,9 @@ final class Verificationpage
         $rows .= $row(
             !$d['font_missmatch'],
             __('Fonts', 'formfabricator'),
-            __('Undeclared or missing fonts detected', 'formfabricator'),
+            !empty($d['font_programs_changed'])
+                ? __('An embedded font file differs from the seal', 'formfabricator')
+                : __('Undeclared or missing fonts detected', 'formfabricator'),
             'fabricator-pdf-content-fonts-' . $uid
         );
 
@@ -3946,7 +4590,7 @@ final class Verificationpage
             $rows .= $row(
                 !$d['meta_mismatch'],
                 __('PDF Metadata', 'formfabricator'),
-                __('Title/Author/Creator tampered', 'formfabricator'),
+                __('Document information differs from the seal, or its dates from the time it was made', 'formfabricator'),
                 'fabricator-pdf-content-meta-' . $uid
             );
         }
@@ -3956,7 +4600,7 @@ final class Verificationpage
                 false,
                 __('Stream fingerprint', 'formfabricator'),
                 __('A compressed stream was added or modified', 'formfabricator'),
-                'fabricator-pdf-content-streams-' . $uid
+                'fabricator-pdf-content-allstreams-' . $uid
             );
         }
 
@@ -4030,8 +4674,10 @@ final class Verificationpage
                     'title'   => (string)($pdf_meta['title']   ?? ''),
                     'author'  => (string)($pdf_meta['author']  ?? ''),
                     'creator' => (string)($pdf_meta['creator'] ?? ''),
+                    'producer' => (string)($pdf_meta['producer'] ?? ''),
                 ];
             })($seal_data['pdf_meta'] ?? null),
+            'links'             => array_values(array_map('strval', (array) ($seal_data['links'] ?? []))),
             'seal_page_text'    => (string) ($seal_data['seal_page_text'] ?? ''),
         ];
 
@@ -4136,6 +4782,42 @@ final class Verificationpage
         }
 
         return $diffs;
+    }
+
+    /**
+     * The PASS or FAIL badge in a detail section's header, decided before the header is printed.
+     *
+     * @param string $id     The badge's element id.
+     * @param bool   $failed Whether the section's check failed.
+     * @return string
+     */
+    private static function detailBadge(string $id, bool $failed): string
+    {
+        return "<span id='" . esc_attr($id) . "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-" . ($failed ? 'fail' : 'pass') . "'>"
+            . ($failed ? esc_html__('FAIL', 'formfabricator') : esc_html__('PASS', 'formfabricator')) . '</span>';
+    }
+
+    /**
+     * The card of a file the verifier could not check, the same for every reason: the file's name, a pill, and the
+     * reason. verification.js builds the same markup for errors it meets itself (_fabricatorProblemCard()).
+     *
+     * @param string $file_name The file's name, as uploaded.
+     * @param string $message   Why it was not checked; plain text, escaped here.
+     * @param bool   $is_error  True when checking it failed ("Error"); false when it is no sealed PDF ("Not checked").
+     * @return string
+     */
+    public static function problemCardHtml(string $file_name, string $message, bool $is_error): string
+    {
+        return "<div class='fabricator-pdf-problem fabricator-pdf-problem--" . ($is_error ? 'error' : 'unchecked') . "'>"
+            . "<div class='fabricator-pdf-problem__hdr'>"
+            . "<span class='fabricator-pdf-problem__name'>" . esc_html($file_name) . '</span>'
+            . "<span class='fabricator-pdf-problem__pill'>"
+            . ($is_error ? esc_html__('Error', 'formfabricator') : esc_html__('Not checked', 'formfabricator')) . '</span>'
+            . '</div>'
+            . "<div class='fabricator-pdf-problem__body'>"
+            . "<span class='dashicons dashicons-warning'></span>"
+            . "<span class='fabricator-pdf-problem__text'>" . esc_html($message) . '</span>'
+            . '</div></div>';
     }
 
     /**
@@ -4249,11 +4931,16 @@ final class Verificationpage
     private static function emitImageSlot(string $uid, array $meta): void
     {
 
-        // Deleted with the checked copy when this request ends: the image reaches the browser as a data URI inside the
-        // result, never as a file. Only paths inside the protected folder are taken.
+        // Listed before the file is written, so its removal is arranged the moment it exists: handleUpload() deletes it
+        // once the result is written, and the shutdown function if the check dies first. Only paths inside the protected
+        // folder are taken.
         $image_file = (string) ($meta['file_path'] ?? '');
         if (self::relativeTempPath($image_file) !== '') {
             self::$files_to_delete[] = $image_file;
+            if (!self::$image_cleanup_registered) {
+                self::$image_cleanup_registered = true;
+                register_shutdown_function([self::class, 'discardExtractedImages']);
+            }
         }
 
         echo "<div id='" . esc_attr($uid) . "' class='img-slot'
@@ -4360,7 +5047,7 @@ final class Verificationpage
     }
 
     /**
-     * Deletes a checked copy, its serving token and its extracted images when the checking request ends.
+     * Deletes a checked copy and its serving token when the checking request ends.
      *
      * @param string $path  Absolute path of the stored copy, already confined to verfiles/ by the caller.
      * @param string $token Its serving token.
@@ -4373,7 +5060,34 @@ final class Verificationpage
             fastcgi_finish_request();
         }
         delete_transient('fabricator_pdf_' . $token);
-        foreach (array_merge([$path], self::$files_to_delete) as $file) {
+        self::deleteCheckedFiles([$path]);
+        // Normally gone already: handleUpload() deletes them itself.
+        self::discardExtractedImages();
+    }
+
+    /**
+     * Deletes the images the running check took out of the PDF. They hold a submitter's signature or upload and reach
+     * the browser only as data URIs inside the result, so nothing needs the files once the result is written.
+     *
+     * Public for register_shutdown_function(), the backstop for a check that ends in a fatal error.
+     *
+     * @return void
+     */
+    public static function discardExtractedImages(): void
+    {
+        self::deleteCheckedFiles(self::$files_to_delete);
+        self::$files_to_delete = [];
+    }
+
+    /**
+     * Deletes each existing file of $files, logging any that stays.
+     *
+     * @param string[] $files Absolute paths inside the protected folder.
+     * @return void
+     */
+    private static function deleteCheckedFiles(array $files): void
+    {
+        foreach ($files as $file) {
             if (!is_file($file)) {
                 continue;
             }
@@ -4382,7 +5096,6 @@ final class Verificationpage
                 \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: could not remove ' . \FabricatorForms\fabricator_log_file(basename($file)) . ' after its check; the unused-copy cleanup retries.');
             }
         }
-        self::$files_to_delete = [];
     }
 
     /**

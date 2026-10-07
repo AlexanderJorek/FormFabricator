@@ -826,7 +826,7 @@ class HashSeal
     /**
      * Reads the pending key download without consuming it, so a reload can't burn the one-shot backup.
      *
-     * @return array{uuid: string, key: string, created_at: string}|null
+     * @return array{uuid: string, key: string, created_at: string, fingerprint: string}|null
      */
     public static function peekPendingDownload(): ?array
     {
@@ -840,7 +840,7 @@ class HashSeal
     /**
      * Deletes the pending key download transient once the admin has confirmed they saved the plaintext key elsewhere.
      *
-     * @return array{uuid: string, key: string, created_at: string}|null
+     * @return array{uuid: string, key: string, created_at: string, fingerprint: string}|null
      */
     public static function confirmDownload(): ?array
     {
@@ -858,7 +858,7 @@ class HashSeal
      * Decodes a pending-download transient's raw JSON value.
      *
      * @param mixed $raw Raw transient value (string JSON, or false when absent).
-     * @return array{uuid: string, key: string, created_at: string}|null
+     * @return array{uuid: string, key: string, created_at: string, fingerprint: string}|null
      */
     private static function decodePendingDownload(mixed $raw): ?array
     {

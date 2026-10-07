@@ -265,17 +265,64 @@
     border: 1px solid #f5c2c2;
 }
 
-/* Saved with a warning: the sentence is long, so it wraps and grows downward from where the one-line pill sits. */
+/* Saved with a warning: a popover below the Save button, over the tab bar and the canvas, with an arrow pointing at the
+   button. Dark text on white with WordPress's warning yellow as its edge, for contrast; it stays until dismissed. */
 #fabricator-save-status.fabricator-ss--warn {
     opacity: 1;
-    top: calc(100% + 5px);
+    top: calc(100% + 10px);
     bottom: auto;
+    align-items: flex-start;
+    gap: 10px;
     white-space: normal;
-    max-width: min(420px, calc(100vw - 60px));
-    border-radius: 8px;
-    background: #fcf9e8;
-    color: #7a5a00;
-    border: 1px solid #f0d98c;
+    max-width: min(440px, calc(100vw - 60px));
+    padding: 10px 10px 10px 14px;
+    border-radius: 6px;
+    background: #fff;
+    color: #1d2327;
+    font-size: 13px;
+    line-height: 1.5;
+    border: 1px solid #dcdcde;
+    border-left: 4px solid #dba617;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .15);
+    pointer-events: auto;
+    z-index: 100;
+}
+#fabricator-save-status.fabricator-ss--warn::before {
+    content: "";
+    position: absolute;
+    top: -7px;
+    right: 28px;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-left: 1px solid #dcdcde;
+    border-top: 1px solid #dcdcde;
+    transform: rotate(45deg);
+}
+#fabricator-save-status.fabricator-ss--warn > .fa-triangle-exclamation {
+    color: #b26200;
+    margin-top: 3px;
+}
+#fabricator-save-status .fabricator-ss-text {
+    flex: 1;
+}
+#fabricator-save-status .fabricator-ss-close {
+    flex-shrink: 0;
+    background: none;
+    border: 0;
+    padding: 2px 4px;
+    border-radius: 3px;
+    color: #50575e;
+    cursor: pointer;
+    line-height: 1;
+}
+#fabricator-save-status .fabricator-ss-close:hover {
+    color: #1d2327;
+    background: #f0f0f1;
+}
+#fabricator-save-status .fabricator-ss-close:focus-visible {
+    outline: 2px solid var(--fabricator-admin-accent);
+    outline-offset: 1px;
 }
 
 @keyframes fabricator-spin {
@@ -912,10 +959,6 @@
     justify-content: center;
     padding: 20px;
     animation: fabricator-fade-in .15s ease;
-}
-
-.fabricator-modal-backdrop[hidden] {
-    display: none;
 }
 
 @keyframes fabricator-fade-in {
@@ -3124,7 +3167,6 @@
 .fabricator-modal-card-icon {
     font-size: 20px;
     line-height: 1;
-    display: block;
     transition: transform .12s;
     height: 24px;
     display: flex;
@@ -3391,7 +3433,6 @@
 
 /* Page heading row stays fixed at top */
 .fabricator-list-wrap .wp-heading-inline,
-.fabricator-list-wrap .page-title-action,
 .fabricator-list-wrap .wp-header-end             { flex-shrink: 0; }
 
 /* Empty state — vertically centered in remaining space */
@@ -3892,15 +3933,6 @@
     height: 1px;
     background: var(--fabricator-bg-subtler);
     margin: 4px 0;
-}
-
-/* ================================================================
- * Verification / PDF Review Page
- * ================================================================ */
-.fabricator-verify-wrap {
-    max-width: 900px;
-    padding: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* Per-PDF inline progress card */
@@ -4487,21 +4519,6 @@
     flex-shrink: 0;
 }
 
-.fabricator-hb-tb-size {
-    width: 42px;
-    height: 26px;
-    border: 1px solid var(--fabricator-border);
-    border-radius: 3px;
-    padding: 2px 4px;
-    font-size: 12px;
-    color: var(--fabricator-text);
-    text-align: center;
-    -moz-appearance: textfield;
-}
-
-/* Re-show the spinner WebKit hides on very narrow number inputs by default */
-.fabricator-hb-tb-size::-webkit-inner-spin-button,
-.fabricator-hb-tb-size::-webkit-outer-spin-button { opacity: 1; }
 .fabricator-hb-tb-color {
     width: 26px;
     height: 26px;

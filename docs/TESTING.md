@@ -1,6 +1,6 @@
 # FormFabricator — Manual Verification Guide
 
-Dev-only. Not shipped in the release package (excluded in `build.ps1`, same as `CONTRIBUTING.md`).
+Dev-only. Not shipped in the release package (`docs/` is excluded in `tools/build-config.php`, as is `CONTRIBUTING.md`).
 
 This checklist holds only what still needs a person: real hosts and mail servers, real browsers and
 devices, a screen reader, a human eye on the PDF, and admin-screen flows. Everything else runs
@@ -13,11 +13,11 @@ unless noted otherwise.
 
 ## What is automated
 
-Release gates in `build.ps1`: `php -l`, `vendor/bin/phpcs` (PSR),
+Release gates in the build (`tools/build.php`): `php -l`, `vendor/bin/phpcs` (PSR),
 `vendor/bin/phpcs --standard=.phpcs-security.xml` (errors), `php languages/make-pot.php --check`,
 `composer audit`, `composer test` (PHPUnit `unit` + `perf`), `npm test` (JS), the WordPress
-integration suite on a single site and a network (against a throwaway MariaDB, `build-testdb.ps1`),
-and the package verification step (no dev files in the zip, pdf.js hashes in the source and in the package, font trim). CI
+integration suite on a single site and a network (against a throwaway MariaDB or a named server, `tools/testdb.php`),
+and the package verification step (no dev files in the zip, ALTCHA hashes in the source and in the package, font trim). CI
 (`.github/workflows/tests.yml`) runs the same on PHP 8.1–8.4 and Node 22/24, with MySQL 8.
 
 | Area | Covered by |
@@ -64,7 +64,7 @@ and the package verification step (no dev files in the zip, pdf.js hashes in the
 | Particle background: moving and following the mouse; a still picture redrawn on resize under reduced motion, and moving again when the system setting changes; nothing drawn when switched off, the canvas staying as the background; the setting saved, kept by a save without it, and handed to every page as a CSS variable | `tests/js/particles.test.js`, `tests/Integration/Admin/SettingsSaveTest.php` |
 | Saving a PDF Layout that hides "Signatures & Uploads" or "Form fields" names the forms whose notifications then carry no signature; the builder's warning counts both switches | `tests/Integration/Admin/PdfLayoutSaveTest.php`, `tests/Integration/Admin/FormEditorServerTest.php` |
 | Saving a PDF Layout: a header image larger than a PDF takes is refused and nothing written; one that fits is saved; an imported image is scaled down by WordPress | `tests/Integration/Admin/PdfLayoutSaveTest.php` |
-| Real sealed PDF verifies, with or without images, with a SEPA or an ACH mandate, with a 48,000-character non-ASCII answer, with a JPEG signature whose comment reads "%%EOF", a seal block and "/Type /Evil", and with "Signatures & Uploads", "Form fields" or the footer hidden; edited page, redrawn or added Form XObject, shadow-attack incremental update, unknown key and foreign PDF are caught; rotated key still verifies | `tests/Integration/PDF/SealRoundTripTest.php` |
+| Real sealed PDF verifies, with or without images, with a SEPA or an ACH mandate, with a 48,000-character non-ASCII answer, with a JPEG signature whose comment reads "%%EOF", a seal block and "/Type /Evil", with links in an HTML block (an e-mail address becomes a mailto link) or a link whose address spells "/Annots", with a long HTML block (its seal in short lines), with a seal holding "fi"/"fl" (no ligatures), with characters no font draws (CJK and emoji as U+FFFD, Fraktur letters in plain form, "ℊ" from FreeSerif, "⌭" from Quivira, combining marks, "í", "Ŝ€"), and with "Signatures & Uploads", "Form fields" or the footer hidden; edited page, redrawn or added Form XObject, shadow-attack incremental update, a second seal block, an edited font program or image, a backdated creation date, a modification date long after the generation, a changed producer, an added XMP stream, a FreeText box repeating a sealed answer, a FreeText box without /Type named through an /Annots array object, an array holding a comment or an escaped key ("/Ann#6Fts"), a link pointing elsewhere or made visible, unknown key and foreign PDF are caught; a truncated or non-PDF file ends in a notice; rotated key still verifies | `tests/Integration/PDF/SealRoundTripTest.php`, `tests/Unit/PDF/LinkTargetTest.php`, `tests/Unit/PDF/PdfDateTest.php`, `tests/Unit/PDF/NameTokensTest.php`, `tests/Unit/PDF/NormalizeTextTest.php`, `tests/Unit/PDF/RepairSpacingTest.php` |
 | No outbound request from HTML-block SSRF payloads (incl. the §4 cases) or IBAN validation; own-host and relative images kept | `tests/Integration/PDF/OutboundRequestsTest.php`, `tests/Unit/Form/LinkSafetyTest.php` |
 | Pathological PDFs: nested object headers with one `endobj`, a long `/Contents` list, stream keywords without `endstream`, many small streams, > 50,000 objects, `>>` without `<<`, decompression bombs, LZW/RunLength/double-compressed streams — time scaling and peak memory | `tests/Perf/*`, `tests/Unit/PDF/*` |
 | Verifier temp files expire ~10 min after last use, even without WP-Cron | `tests/Unit/Utils/VerifierCleanupTest.php` |
@@ -97,9 +97,9 @@ and the package verification step (no dev files in the zip, pdf.js hashes in the
 | A failed notification is logged with `WP_DEBUG` off | `tests/Integration/Form/DebugOffTest.php` |
 | Whole forms in the browser: the submit button's condition from the start and over several pages, page navigation keeping values, the same form twice and two forms sharing a field id each sending their own values with errors in the right copy, the CAPTCHA widget reset after a failed submission, the rating and the dropdown by keyboard | `tests/js/form-flow.test.js` |
 | The SEPA IBAN input's mask; sort code, routing and account numbers with `inputmode="numeric"` | `tests/js/direct-debit.test.js` |
-| The verifier page: a part compressed in a way the plugin never uses is listed while the rest is checked; the checked copy and its images are gone when the request ends; "busy" and "too large" answers; a file far past the object ceiling on a tight memory limit | `tests/Integration/PDF/VerifierPageTest.php` |
-| The verifier's batch in the browser: three downloads and three checks at most, checks a push slot apart, "busy" waited out with a countdown, a rate limit widening the gap, refusals shown on the card | `tests/js/verification.test.js` |
-| PDF Layout in the PDF: colours, margins and body size; every font the editor offers embedded, with every file build.ps1's font trim must keep; footer and page numbers on every page; hiding the footer; a Media Library logo; a header image too large to decode left out with the PDF still made; the layout's images counted in a submission's memory estimate | `tests/Integration/PDF/PdfLayoutTest.php` |
+| The verifier page: a part compressed in a way the plugin never uses is listed while the rest is checked; the images it takes out of the PDF are gone once the report holds them, the checked copy when the request ends; "busy" and "too large" answers; a file far past the object ceiling on a tight memory limit | `tests/Integration/PDF/VerifierPageTest.php` |
+| The verifier's batch in the browser: each check asked for by its token alone, three checks at most, a push slot apart, "busy" waited out with a countdown, a rate limit widening the gap, refusals shown on the card | `tests/js/verification.test.js` |
+| PDF Layout in the PDF: colours, margins and body size; every font the editor offers embedded, with every file the build's font trim must keep; footer and page numbers on every page; hiding the footer; a Media Library logo; a header image too large to decode left out with the PDF still made; the layout's images counted in a submission's memory estimate | `tests/Integration/PDF/PdfLayoutTest.php` |
 | German translation: palette groups, Name and Address sub-field labels, front-end messages; every source string translated; the committed `.mo` compiled from the `.po` | `tests/Integration/TranslationTest.php` |
 
 ## 0. Environment matrix
@@ -223,8 +223,6 @@ not.
       of the request, which the tests do not reach).
 - [ ] A PDF whose image has a transparency mask (SMask) smaller than the image: the recreated preview
       looks right and the image is not reported as a mismatch (1.0.7).
-- [ ] The inline link opens a verification PDF in the browser under its sandboxing
-      Content-Security-Policy header (1.0.7).
 
 ## 6. PDF Layout editor (FormFabricator → PDF Layout)
 
@@ -251,8 +249,8 @@ Nothing by hand: uninstall on a single site and across a network is automated
 
 ## 10. Release package sanity
 
-Run `./build.ps1` and inspect `build/formfabricator/` (the build's own verification already fails on
-dev files in the package, on a missing or changed `vendor/pdfjs` file, and on a trimmed font the PDF needs):
+Run the build (`build -y` or `./build.sh -y`) and inspect `build/formfabricator/` (the build's own verification already fails on
+dev files in the package, on a missing or changed `vendor/altcha` file, and on a trimmed font the PDF needs):
 
 - [ ] Install the built zip on a clean WordPress site via Plugins → Add New → Upload Plugin and run the
       smoke path (sections 1, 2, 4 for one field per group, 5) against the *packaged* build —

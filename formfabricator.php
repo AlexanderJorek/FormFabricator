@@ -20,7 +20,6 @@ defined('ABSPATH') || exit;
 define('FABRICATOR_FORMS_PATH', plugin_dir_path(__FILE__));
 define('FABRICATOR_FORMS_URL', plugin_dir_url(__FILE__));
 define('FABRICATOR_FORMS_VERSION', '1.0.8');
-define('FABRICATOR_FORMS_BASENAME', plugin_basename(__FILE__));
 
 $fabricator_composer_autoload = FABRICATOR_FORMS_PATH . 'vendor/autoload.php';
 if (!file_exists($fabricator_composer_autoload)) {

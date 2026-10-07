@@ -1446,10 +1446,6 @@ msgstr "oder URL eingeben …"
 msgid "Delete element"
 msgstr "Element löschen"
 
-#: includes/Admin/Verificationpage.php:121
-msgid "Internal error while processing this PDF. See server log for details."
-msgstr "Interner Fehler bei der Verarbeitung dieses PDFs. Details im Server-Log."
-
 #: includes/Admin/Verificationpage.php:441
 msgid "FormFabricator Verification"
 msgstr "FormFabricator Verifizierung"
@@ -1469,30 +1465,6 @@ msgstr "Unzureichende Berechtigungen."
 #, php-format
 msgid "Too many files selected. Only the first %d will be processed."
 msgstr "Zu viele Dateien ausgewählt. Nur die ersten %d werden verarbeitet."
-
-#. translators: %s: uploaded file name.
-#: includes/Admin/Verificationpage.php:623
-#, php-format
-msgid "Upload skipped: \"%s\" could not be read from the upload."
-msgstr "Upload übersprungen: \"%s\" konnte nicht aus dem Upload gelesen werden."
-
-#. translators: %d: maximum accepted file size in MB.
-#: includes/Admin/Verificationpage.php:639
-#, php-format
-msgid "Upload skipped: file exceeds %d MB limit."
-msgstr "Upload übersprungen: Datei überschreitet das %d-MB-Limit."
-
-#: includes/Admin/Verificationpage.php:534
-msgid "Upload skipped: only PDF files are allowed."
-msgstr "Upload übersprungen: Nur PDF-Dateien sind erlaubt."
-
-#: includes/Admin/Verificationpage.php:541
-msgid "Upload skipped: MIME validation failed."
-msgstr "Upload übersprungen: MIME-Prüfung fehlgeschlagen."
-
-#: includes/Admin/Verificationpage.php:548
-msgid "Upload skipped: invalid PDF filename."
-msgstr "Upload übersprungen: ungültiger PDF-Dateiname."
 
 #: includes/Admin/Verificationpage.php:848
 msgid "Upload one or more generated PDFs to verify their embedded seal and check for tampering."
@@ -1536,33 +1508,9 @@ msgstr "Bitte lassen Sie diese Seite geöffnet — bei großen Dateien kann dies
 msgid "Remove"
 msgstr "Entfernen"
 
-#. translators: %s: uploaded file name.
-#: includes/Admin/Verificationpage.php:1230
-#, php-format
-msgid "Upload failed for %s."
-msgstr "Upload fehlgeschlagen für %s."
-
-#. translators: %s: uploaded file name.
-#: includes/Admin/Verificationpage.php:1240
-#, php-format
-msgid "Invalid file type for %s."
-msgstr "Ungültiger Dateityp für %s."
-
 #: includes/Admin/Verificationpage.php:1272
 msgid "Byte scan: searching for seal…"
 msgstr "Byte-Scan: Siegel wird gesucht…"
-
-#. translators: %s: uploaded file name.
-#: includes/Admin/Verificationpage.php:1281
-#, php-format
-msgid "Could not read PDF file: %s."
-msgstr "Konnte PDF-Datei nicht lesen: %s."
-
-#. translators: %s: uploaded file name.
-#: includes/Admin/Verificationpage.php:1300
-#, php-format
-msgid "%s does not contain a fabricator-pdf seal and cannot be verified."
-msgstr "%s enthält kein fabricator-pdf-Siegel und kann nicht verifiziert werden."
 
 #: includes/Admin/Verificationpage.php:1306
 msgid "Parsing PDF…"
@@ -1584,10 +1532,6 @@ msgstr "PDF-Struktur"
 #: includes/Admin/Verificationpage.php:1667
 msgid "A valid PDF has exactly <strong>one</strong> %s marker. Each extra marker signals that content was <strong>appended after the original cross-reference table</strong> was written. This is the standard technique for a <strong>PDF shadow attack / incremental update</strong>: an attacker appends new objects that override visible content while leaving the original seal intact."
 msgstr "Eine gültige PDF-Datei enthält genau <strong>einen</strong> %s-Marker. Jeder zusätzliche Marker signalisiert, dass nach der ursprünglichen Querverweistabelle <strong>Inhalte angehängt</strong> wurden. Dies ist die Standardtechnik für einen <strong>PDF-Shadow-Angriff / eine inkrementelle Aktualisierung</strong>: Ein Angreifer hängt neue Objekte an, die sichtbare Inhalte überschreiben, während das ursprüngliche Siegel intakt bleibt."
-
-#: includes/Admin/Verificationpage.php:1411
-msgid "Raw Seal & Rebuilt Data"
-msgstr "Rohsiegel & rekonstruierte Daten"
 
 #: includes/Admin/Verificationpage.php:1423
 #: includes/Admin/Verificationpage.php:1613
@@ -1642,33 +1586,9 @@ msgstr "Siegelblöcke"
 msgid "Any extra seal block is proof of tampering regardless of its HMAC status."
 msgstr "Jeder zusätzliche Siegelblock ist ein Nachweis für Manipulation, unabhängig von seinem HMAC-Status."
 
-#: includes/Admin/Verificationpage.php:2104
-msgid "Chunk Check"
-msgstr "Chunk-Prüfung"
-
-#: includes/Admin/Verificationpage.php:2183
-msgid "MULTI-CHUNK"
-msgstr "MEHRTEILIG"
-
 #: includes/Admin/Verificationpage.php:2183
 msgid "OK"
 msgstr "OK"
-
-#. translators: %d: number of text chunks the field's content was split into.
-#: includes/Admin/Verificationpage.php:2185
-#, php-format
-msgid "%d chunk"
-msgid_plural "%d chunks"
-msgstr[0] "%d Chunk"
-msgstr[1] "%d Chunks"
-
-#: includes/Admin/Verificationpage.php:2199
-msgid "PDF chunk"
-msgstr "PDF-Chunk"
-
-#: includes/Admin/Verificationpage.php:2209
-msgid "Unknown marker"
-msgstr "Unbekannter Marker"
 
 #: includes/Admin/Verificationpage.php:1743
 msgid "AUTHENTIC"
@@ -1695,22 +1615,6 @@ msgstr "Seiten"
 #: includes/Admin/Verificationpage.php:1805
 msgid "Checking annotations…"
 msgstr "Annotationen werden geprüft…"
-
-#. translators: 1: lines processed so far, 2: total lines to process.
-#: includes/Admin/Verificationpage.php:2040
-#, php-format
-msgid "Compiling results… (%1$d/%2$d)"
-msgstr "Ergebnisse werden zusammengestellt… (%1$d/%2$d)"
-
-#. translators: %s: uploaded file name.
-#: includes/Admin/Verificationpage.php:1946
-#, php-format
-msgid "Could not read PDF content for %s."
-msgstr "PDF-Inhalt konnte für %s nicht gelesen werden."
-
-#: includes/Admin/Verificationpage.php:2141
-msgid "DUPE"
-msgstr "DUPLIKAT"
 
 #: includes/Admin/Verificationpage.php:2142
 msgid "UNMATCHED"
@@ -1748,17 +1652,9 @@ msgstr "Das Siegel im Dokument ist ungewöhnlich groß — Datei abgelehnt."
 msgid "The PDF structure is invalid or the document is encrypted."
 msgstr "Die PDF-Struktur ist ungültig oder das Dokument ist verschlüsselt."
 
-#: includes/Admin/Verificationpage.php:3639
-msgid "The file is not a valid PDF document."
-msgstr "Die Datei ist kein gültiges PDF-Dokument."
-
 #: includes/Admin/Verificationpage.php:3855
 msgid "An embedded image in the document has invalid color data and could not be processed."
 msgstr "Ein eingebettetes Bild im Dokument enthält ungültige Farbdaten und konnte nicht verarbeitet werden."
-
-#: includes/Admin/Verificationpage.php:3857
-msgid "The document could not be processed. See server log for details."
-msgstr "Das Dokument konnte nicht verarbeitet werden. Details siehe Server-Log."
 
 #: includes/Admin/Verificationpage.php:3656
 #: includes/Admin/FormList.php:122
@@ -1893,8 +1789,8 @@ msgid "PDF Metadata"
 msgstr "PDF-Metadaten"
 
 #: includes/Admin/Verificationpage.php:3960
-msgid "Title/Author/Creator tampered"
-msgstr "Titel/Autor/Ersteller manipuliert"
+msgid "Document information differs from the seal, or its dates from the time it was made"
+msgstr "Dokumentinformationen weichen vom Siegel ab, oder ihre Daten vom Zeitpunkt der Erstellung"
 
 #: includes/Admin/Verificationpage.php:3968
 msgid "Stream fingerprint"
@@ -3184,35 +3080,11 @@ msgstr "Bitte unterschreiben."
 msgid "This country is not allowed."
 msgstr "Dieses Land ist nicht zugelassen."
 
-#: includes/Utils/Assets.php:341
-msgid "Loading PDF…"
-msgstr "PDF wird geladen…"
-
-#. translators: %1$d: download progress percentage, 0-100 (substituted client-side).
-#: includes/Utils/Assets.php:342
-#, php-format
-msgid "Downloading… (%1$d%%)"
-msgstr "Wird heruntergeladen… (%1$d%%)"
-
-#. translators: %1$d: current page number, %2$d: total page count (both substituted client-side).
-#: includes/Utils/Assets.php:343
-#, php-format
-msgid "Reading page %1$d of %2$d…"
-msgstr "Seite %1$d von %2$d wird gelesen…"
-
-#: includes/Utils/Assets.php:345
-msgid "Text extracted — server analyzing…"
-msgstr "Text extrahiert — Server analysiert…"
-
 #. translators: %1$d: seconds remaining before this PDF's verification request is sent (substituted client-side).
 #: includes/Utils/Assets.php:347
 #, php-format
 msgid "Waiting in queue (%1$ds)…"
 msgstr "Wartet in der Warteschlange (%1$ds)…"
-
-#: includes/Utils/Assets.php:348
-msgid "Waiting to download…"
-msgstr "Wartet auf Download…"
 
 #: includes/Utils/Assets.php:349
 msgid "Waiting for a free verification slot…"
@@ -3463,10 +3335,6 @@ msgstr "(keine anderen Felder)"
 #: includes/Admin/FormEditor.php:1068
 msgid "Value"
 msgstr "Wert"
-
-#: includes/Admin/FormEditor.php:1069
-msgid "https://…"
-msgstr "https://…"
 
 #: includes/Admin/FormEditor.php:1070
 msgid "Media library"
@@ -4066,48 +3934,22 @@ msgid "Decoded size:"
 msgstr "Dekodierte Groesse:"
 
 #: includes/Admin/Verificationpage.php
-msgid "Suspect found:"
-msgstr "Fundstelle:"
-
-#: includes/Admin/Verificationpage.php
-msgid "Suspect is determined as usual."
-msgstr "Fundstelle ist unveraendert."
-
-#: includes/Admin/Verificationpage.php
-msgid "Visual mismatch detected"
-msgstr "Visuelle Abweichung erkannt"
-
-#: includes/Admin/Verificationpage.php
-msgid "Why flagged:"
-msgstr "Grund der Markierung:"
-
-#: includes/Admin/Verificationpage.php
-msgid "Hash method:"
-msgstr "Hash-Methode:"
-
-#: includes/Admin/Verificationpage.php
-msgid "Computed hash:"
-msgstr "Berechneter Hash:"
-
-#: includes/Admin/Verificationpage.php
-msgid "Allowed hashes in seal"
-msgstr "Zulaessige Hashes im Siegel"
-
-#: includes/Admin/Verificationpage.php
 msgid "[Image could not be rendered]"
 msgstr "[Bild konnte nicht gerendert werden]"
 
 #: includes/Admin/Verificationpage.php
-msgid "Image ID:"
-msgstr "Bild-ID:"
+msgid "%1$s · %2$d × %3$d px · %4$d channels · %5$s bytes decoded"
+msgstr "%1$s · %2$d × %3$d px · %4$d Kanäle · %5$s Bytes dekodiert"
 
 #: includes/Admin/Verificationpage.php
-msgid "Colorspace:"
-msgstr "Farbraum:"
+msgid "The seal lists no images."
+msgstr "Das Siegel führt keine Bilder."
 
 #: includes/Admin/Verificationpage.php
-msgid "Decoded length:"
-msgstr "Dekodierte Laenge:"
+msgid "The seal lists %d image hash, and not this one:"
+msgid_plural "The seal lists %d image hashes, and not this one:"
+msgstr[0] "Das Siegel führt %d Bild-Hash, nicht aber diesen:"
+msgstr[1] "Das Siegel führt %d Bild-Hashes, nicht aber diesen:"
 
 #: includes/Admin/Verificationpage.php
 msgid "[XObject Scan] No XObjects found."
@@ -4122,16 +3964,8 @@ msgid "%s (Copy)"
 msgstr "%s (Kopie)"
 
 #: includes/Admin/Verificationpage.php
-msgid "Annotation List"
-msgstr "Anmerkungsliste"
-
-#: includes/Admin/Verificationpage.php
 msgid "FAIL"
 msgstr "FEHLGESCHLAGEN"
-
-#: includes/Admin/Verificationpage.php
-msgid "Matched to seal"
-msgstr "Mit Siegel abgeglichen"
 
 #: includes/Admin/Verificationpage.php
 msgid "No annotations found in PDF."
@@ -4209,37 +4043,13 @@ msgstr "Ungueltige form_id"
 msgid "Invalid input: missing token"
 msgstr "Ungueltige Eingabe: Token fehlt"
 
-#: includes/Admin/Verificationpage.php
-msgid "Invalid path"
-msgstr "Ungueltiger Pfad"
-
-#: includes/Admin/Verificationpage.php
-msgid "Missing token"
-msgstr "Token fehlt"
-
-#: includes/Admin/Verificationpage.php
-msgid "Nonce verification failed"
-msgstr "Nonce-Pruefung fehlgeschlagen"
-
 #: includes/Admin/FormList.php
 msgid "Nonce verification failed."
 msgstr "Nonce-Pruefung fehlgeschlagen."
 
 #: includes/Admin/Verificationpage.php
-msgid "Not a PDF"
-msgstr "Kein PDF"
-
-#: includes/Admin/Verificationpage.php
-msgid "Output sanitization failed. See server log for details."
-msgstr "Die Bereinigung der Ausgabe ist fehlgeschlagen. Details finden Sie im Server-Log."
-
-#: includes/Admin/Verificationpage.php
 msgid "PDF not found or token expired"
 msgstr "PDF nicht gefunden oder Token abgelaufen"
-
-#: includes/Admin/Verificationpage.php
-msgid "PDF processing produced no output. Check the PHP error log."
-msgstr "Die PDF-Verarbeitung hat keine Ausgabe erzeugt. Pruefen Sie das PHP-Fehlerprotokoll."
 
 #: includes/Admin/PDFLayoutEditor.php
 msgid "Please wait before requesting another preview."
@@ -4338,10 +4148,6 @@ msgid "Sample form"
 msgstr "Beispielformular"
 
 #: includes/Admin/Verificationpage.php
-msgid "Font binary programs do not match the seal"
-msgstr "Font-Binärprogramme stimmen nicht mit dem Siegel überein"
-
-#: includes/Admin/Verificationpage.php
 msgid "All fonts match the seal"
 msgstr "Alle Schriften stimmen mit dem Siegel überein"
 
@@ -4356,10 +4162,6 @@ msgstr "vom Rekonstrukt hinzugefügt"
 #: includes/Admin/Verificationpage.php
 msgid "Keys differing between seal and rebuild:"
 msgstr "Abweichende Schlüssel zwischen Siegel und Rekonstrukt:"
-
-#: includes/Admin/Verificationpage.php
-msgid "Seal and rebuilt payload are byte-identical (excluding the seal hash itself)."
-msgstr "Siegel und rekonstruierte Nutzdaten sind byte-identisch (ohne den Siegel-Hash selbst)."
 
 #: includes/Admin/Verificationpage.php
 msgid "Key Unreadable"
@@ -4499,9 +4301,6 @@ msgstr "Bilder von externen URLs können nur Benutzer importieren, die Dateien h
 msgid "PDF too large (%1$s MB). Maximum for verification is %2$d MB."
 msgstr "PDF zu groß (%1$s MB). Die Prüfung ist auf %2$d MB begrenzt."
 
-msgid "Result was sanitized to empty. Check PHP error log."
-msgstr "Das Ergebnis war nach der Bereinigung leer. Bitte prüfen Sie das PHP-Fehlerprotokoll."
-
 msgid "Image Hashes"
 msgstr "Bild-Hashes"
 
@@ -4607,9 +4406,6 @@ msgstr "Eine Testdatei in diesem Ordner konnte von außen heruntergeladen werden
 msgid "Full control of forms:\n- Create, edit, duplicate and delete forms\n- Set notification recipients (To, CC, BCC and routing rules) - this site then sends mail to any address entered\n- Write rich text (HTML block, consent and mandate texts) with links, formatting, images and SVG; form elements such as input fields are always removed\n- Export a form, including its recipient addresses"
 msgstr "Volle Kontrolle über Formulare:\n- Formulare anlegen, bearbeiten, duplizieren und löschen\n- Benachrichtigungsempfänger festlegen (An, CC, BCC und Routing-Regeln) - diese Website versendet dann E-Mails an jede hier eingetragene Adresse\n- Rich-Text (HTML-Block, Einwilligungs- und Mandatstexte) mit Links, Formatierung, Bildern und SVG verfassen; Formularelemente wie Eingabefelder werden immer entfernt\n- Ein Formular exportieren, einschließlich seiner Empfängeradressen"
 
-msgid "Width × Height:"
-msgstr "Breite × Höhe:"
-
 msgid "The seal lists no content streams, so the page content cannot be checked."
 msgstr "Das Siegel enthält keine Inhaltsströme, daher lässt sich der Seiteninhalt nicht prüfen."
 
@@ -4630,9 +4426,6 @@ msgstr "%s-Anzahl"
 
 msgid "%1$d (expected: %2$d)"
 msgstr "%1$d (erwartet: %2$d)"
-
-msgid "INFO"
-msgstr "INFO"
 
 msgid "Seal #%d"
 msgstr "Siegel Nr. %d"
@@ -4729,6 +4522,9 @@ msgstr "Wenn Sie auf dieser Website ein Formular absenden, werden Ihre Eingaben 
 msgid "The attached files are too large in total. Please attach fewer or smaller files."
 msgstr "Die angehängten Dateien sind insgesamt zu groß. Bitte hängen Sie weniger oder kleinere Dateien an."
 
+msgid "This form is too large for the server to create its PDF. Please let the site operator know."
+msgstr "Dieses Formular ist zu groß, als dass der Server sein PDF erstellen könnte. Bitte informieren Sie den Betreiber der Website."
+
 #, php-format
 msgid "\"%1$s\" has %2$s megapixels (%3$s MB), but images can have at most %4$s megapixels. Please upload a smaller image."
 msgstr "„%1$s“ hat %2$s Megapixel (%3$s MB), Bilder dürfen aber höchstens %4$s Megapixel haben. Bitte laden Sie ein kleineres Bild hoch."
@@ -4768,10 +4564,6 @@ msgid_plural "… and %d more parts."
 msgstr[0] "… und %d weiterer Teil."
 msgstr[1] "… und %d weitere Teile."
 
-#: includes/Admin/Verificationpage.php
-msgid "Implausible or missing image dimensions"
-msgstr "Unplausible oder fehlende Bildmaße"
-
 #: includes/Fields/CurrencyField.php
 msgid "Please enter an amount with at most two decimal places."
 msgstr "Bitte geben Sie einen Betrag mit höchstens zwei Nachkommastellen ein."
@@ -4788,11 +4580,6 @@ msgstr "Mit diesen Angaben kann das Formular nicht abgeschickt werden."
 #: includes/Admin/FormSettings.php
 msgid "Another change to the seal key is in progress. Nothing was changed; please try again in a moment."
 msgstr "Gerade läuft eine andere Änderung am Siegelschlüssel. Es wurde nichts geändert; bitte versuchen Sie es gleich noch einmal."
-
-#: includes/Admin/Verificationpage.php
-#, php-format
-msgid "%s has far more parts than any document this plugin creates and was not read."
-msgstr "%s besteht aus weit mehr Teilen als jedes Dokument, das dieses Plugin erstellt, und wurde nicht gelesen."
 
 #, php-format
 msgid "Page %d"
@@ -4842,14 +4629,6 @@ msgid "Remove %s"
 msgstr "%s entfernen"
 
 #, php-format
-msgid "PDF load error: %s"
-msgstr "PDF-Ladefehler: %s"
-
-#, php-format
-msgid "Error: %s"
-msgstr "Fehler: %s"
-
-#, php-format
 msgid "%d seal block found — exactly 1 is expected."
 msgid_plural "%d seal blocks found — exactly 1 is expected."
 msgstr[0] "%d Siegelblock gefunden — erwartet wird genau 1."
@@ -4860,12 +4639,6 @@ msgid "%d field does not match the seal"
 msgid_plural "%d fields do not match the seal"
 msgstr[0] "%d Feld stimmt nicht mit dem Siegel überein"
 msgstr[1] "%d Felder stimmen nicht mit dem Siegel überein"
-
-#, php-format
-msgid "%d annotation unmatched"
-msgid_plural "%d annotations unmatched"
-msgstr[0] "%d Anmerkung nicht zugeordnet"
-msgstr[1] "%d Anmerkungen nicht zugeordnet"
 
 #, php-format
 msgid "Please select at least %d option."
@@ -5067,6 +4840,12 @@ msgstr "FEHLT IM PDF"
 msgid "Annotation #%1$d — %2$s"
 msgstr "Anmerkung #%1$d — %2$s"
 
+msgid "Annotation #%d — a list of annotations that cannot be read"
+msgstr "Anmerkung #%d — eine Liste von Anmerkungen, die sich nicht lesen lässt"
+
+msgid "Annotation #%d — no type given"
+msgstr "Anmerkung #%d — ohne angegebenen Typ"
+
 msgid "Unreadable XObject"
 msgstr "Unlesbares XObject"
 
@@ -5260,8 +5039,8 @@ msgstr "Bewegt, oder als stilles Bild, wenn das System reduzierte Bewegung wüns
 msgid "A plain background on every FormFabricator page."
 msgstr "Ein schlichter Hintergrund auf allen FormFabricator-Seiten."
 
-msgid "Each mandate gets its own reference: this prefix, the date and a random part."
-msgstr "Jedes Mandat erhält eine eigene Referenz: dieses Präfix, das Datum und einen Zufallsteil."
+msgid "Each mandate gets its own reference: this prefix, the date and a random part. Up to 15 characters of the SEPA set (letters, digits, spaces, / ? : ( ) . , ' + -); accents are dropped, other characters left out."
+msgstr "Jedes Mandat erhält eine eigene Referenz: dieses Präfix, das Datum und einen Zufallsteil. Bis zu 15 Zeichen aus dem SEPA-Zeichensatz (Buchstaben, Ziffern, Leerzeichen, / ? : ( ) . , ' + -); Akzente und Umlautpunkte entfallen (auf einer deutschen Website wird Ä zu Ae), andere Zeichen werden weggelassen."
 
 msgid "The visitor learns the reference only from an email: put {ID_ref}, with this field's ID for ID, into a notification sent to them."
 msgstr "Die Referenz erfährt der Besucher nur per E-Mail: Setzen Sie {ID_ref}, mit der ID dieses Feldes statt ID, in eine Benachrichtigung an ihn."
@@ -5340,3 +5119,258 @@ msgstr "Wird auf dieser Website geprüft: Der Browser des Besuchers löst eine k
 
 msgid "An image is larger than PDFs on this site can take: at most %s megapixels. Choose a smaller image, or scale this one down."
 msgstr "Ein Bild ist größer, als PDFs auf dieser Website es aufnehmen können: höchstens %s Megapixel. Wählen Sie ein kleineres Bild oder verkleinern Sie dieses."
+
+msgid "Producer"
+msgstr "PDF erstellt mit"
+
+msgid "Creation date"
+msgstr "Erstellungsdatum"
+
+msgid "Modification date"
+msgstr "Änderungsdatum"
+
+msgid "between %1$s and %2$s"
+msgstr "zwischen %1$s und %2$s"
+
+msgid "Checking on the server…"
+msgstr "Wird auf dem Server geprüft…"
+
+msgid "Cross-reference table"
+msgstr "Querverweistabelle"
+
+msgid "points elsewhere for object %s"
+msgstr "verweist für Objekt %s auf eine andere Stelle"
+
+msgid "not readable"
+msgstr "nicht lesbar"
+
+msgid "Objects defined twice — a viewer may show other content than was checked"
+msgstr "Objekte doppelt definiert – ein Betrachter kann anderen Inhalt anzeigen als den geprüften"
+
+msgid "A PDF reader finds every part of the document through its cross-reference table. This file has none that can be read, so nothing shows that a reader displays the parts that were checked."
+msgstr "Ein PDF-Betrachter findet jeden Teil des Dokuments über dessen Querverweistabelle. Diese Datei hat keine lesbare, daher belegt nichts, dass ein Betrachter die geprüften Teile anzeigt."
+
+msgid "A PDF reader finds every part of the document through its cross-reference table. Here the table points to another copy of these parts than the one that was checked: a second copy, placed for a reader to display instead of the sealed content."
+msgstr "Ein PDF-Betrachter findet jeden Teil des Dokuments über dessen Querverweistabelle. Hier verweist die Tabelle auf eine andere Kopie dieser Teile als die geprüfte: eine zweite Kopie, die ein Betrachter statt des versiegelten Inhalts anzeigen soll."
+
+msgid "Dismiss"
+msgstr "Schließen"
+
+#: includes/Admin/Verificationpage.php:540
+msgid "The upload could not be read."
+msgstr "Der Upload konnte nicht gelesen werden."
+
+#. translators: %d: maximum accepted file size in MB.
+#: includes/Admin/Verificationpage.php:553
+#, php-format
+msgid "The file is larger than the %d MB limit."
+msgstr "Die Datei ist größer als die Grenze von %d MB."
+
+#: includes/Admin/Verificationpage.php:571
+#: includes/Admin/Verificationpage.php:582
+#: includes/Admin/Verificationpage.php:988
+msgid "This file is not a PDF."
+msgstr "Diese Datei ist kein PDF."
+
+#: includes/Admin/Verificationpage.php:593
+msgid "The file name does not end in .pdf."
+msgstr "Der Dateiname endet nicht auf .pdf."
+
+#: includes/Admin/Verificationpage.php:980
+msgid "The upload did not complete."
+msgstr "Der Upload wurde nicht abgeschlossen."
+
+#: includes/Admin/Verificationpage.php:1005
+msgid "The file could not be read."
+msgstr "Die Datei konnte nicht gelesen werden."
+
+#: includes/Admin/Verificationpage.php:1023
+#: includes/Admin/Verificationpage.php:4193
+msgid "This file has far more parts than any document this plugin creates and was not read."
+msgstr "Diese Datei hat weit mehr Bestandteile als jedes Dokument, das dieses Plugin erstellt, und wurde nicht gelesen."
+
+#: includes/Admin/Verificationpage.php:1032
+msgid "This PDF has no FormFabricator seal, so there is nothing to check it against."
+msgstr "Dieses PDF hat kein FormFabricator-Siegel, es gibt also nichts, womit es verglichen werden könnte."
+
+#: includes/Admin/Verificationpage.php:1406
+msgid "Disguised name"
+msgstr "Getarnter Name"
+
+#. translators: %1$s: the name as written in the file, e.g. "/Ann#6Fts"; %2$s: as a viewer reads it, e.g. "/Annots"; %3$s: what that part does.
+#: includes/Admin/Verificationpage.php:1409
+#, php-format
+msgid "%1$s, which a viewer reads as %2$s: %3$s"
+msgstr "%1$s, von einem PDF-Betrachter gelesen als %2$s: %3$s"
+
+#: includes/Admin/Verificationpage.php:1419
+msgid "Something was added to this file after it was sealed and written so that the checks above do not recognize it, while a PDF viewer does and shows it: for instance a box or text drawn over a page. Whatever you see in this file beyond the sealed answers is not part of the original. This plugin never writes names this way."
+msgstr "Dieser Datei wurde nach dem Versiegeln etwas hinzugefügt, und zwar so geschrieben, dass die Prüfungen oben es nicht erkennen, ein PDF-Betrachter es aber erkennt und anzeigt: etwa ein Kasten oder Text, der über eine Seite gezeichnet ist. Was Sie in dieser Datei über die versiegelten Antworten hinaus sehen, gehört nicht zum Original. Dieses Plugin schreibt Namen nie auf diese Weise."
+
+#: includes/Admin/Verificationpage.php:1439
+msgid "annotations, boxes, notes or links drawn on top of the pages"
+msgstr "Anmerkungen, Kästen, Notizen oder Links, die über die Seiten gezeichnet werden"
+
+#: includes/Admin/Verificationpage.php:1440
+msgid "what a page draws"
+msgstr "was eine Seite zeichnet"
+
+#: includes/Admin/Verificationpage.php:1441
+msgid "an image or a drawing placed on a page"
+msgstr "ein Bild oder eine Zeichnung auf einer Seite"
+
+#: includes/Admin/Verificationpage.php:1443
+msgid "a font"
+msgstr "eine Schriftart"
+
+#: includes/Admin/Verificationpage.php:1445
+msgid "an action the viewer carries out, such as opening a link or running a script"
+msgstr "eine Aktion, die der Betrachter ausführt, etwa einen Link öffnen oder ein Skript ausführen"
+
+#: includes/Admin/Verificationpage.php:1446
+msgid "fillable form fields"
+msgstr "ausfüllbare Formularfelder"
+
+#: includes/Admin/Verificationpage.php:1447
+msgid "the pages and their size"
+msgstr "die Seiten und ihre Größe"
+
+#: includes/Admin/Verificationpage.php:1449
+msgid "the document information"
+msgstr "die Dokumentinformationen"
+
+#: includes/Admin/Verificationpage.php:1450
+msgid "a part of the document's structure"
+msgstr "ein Teil der Dokumentstruktur"
+
+#: includes/Admin/Verificationpage.php:1478
+msgid "HMAC valid: the seal holds exactly what was signed when the PDF was made."
+msgstr "HMAC gültig: Das Siegel enthält genau das, was beim Erstellen des PDFs signiert wurde."
+
+#: includes/Admin/Verificationpage.php:1479
+msgid "HMAC not checked: no key on this site matches the seal, so nothing shows it was signed here."
+msgstr "HMAC nicht geprüft: Kein Schlüssel dieser Website passt zum Siegel, nichts belegt also, dass es hier signiert wurde."
+
+#: includes/Admin/Verificationpage.php:1480
+msgid "HMAC mismatch: the seal was changed after it was signed, or signed with another key. Nothing it records can be trusted."
+msgstr "HMAC stimmt nicht überein: Das Siegel wurde nach dem Signieren geändert oder mit einem anderen Schlüssel signiert. Nichts, was es festhält, ist vertrauenswürdig."
+
+#: includes/Admin/Verificationpage.php:1515
+msgid "The seal is complete: every entry the check reads is present and well-formed. Whether it is genuine is the HMAC's verdict above."
+msgstr "Das Siegel ist vollständig: Jeder Eintrag, den die Prüfung liest, ist vorhanden und wohlgeformt. Ob es echt ist, entscheidet das HMAC-Ergebnis oben."
+
+#: includes/Admin/Verificationpage.php:1774
+msgid "The words are the same; the difference lies in characters that do not show as words."
+msgstr "Die Wörter sind gleich; der Unterschied liegt in Zeichen, die nicht als Wörter erscheinen."
+
+#: includes/Admin/Verificationpage.php:1787
+msgid "(nothing)"
+msgstr "(nichts)"
+
+#: includes/Admin/Verificationpage.php:1802
+msgid "…and further changes after these."
+msgstr "…und weitere Änderungen danach."
+
+#. translators: %d: number of the seal block the checks read.
+#: includes/Admin/Verificationpage.php:1938
+#, php-format
+msgid "The checks above read seal #%d, the last one in the document's text."
+msgstr "Die Prüfungen oben lesen Siegel #%d, das letzte im Text des Dokuments."
+
+#: includes/Admin/Verificationpage.php:2022
+msgid "Seal content"
+msgstr "Inhalt des Siegels"
+
+#: includes/Admin/Verificationpage.php:2219
+msgid "The page's list of annotations cannot be read. A viewer may still show what it names."
+msgstr "Die Anmerkungsliste der Seite kann nicht gelesen werden. Ein PDF-Betrachter zeigt womöglich dennoch an, was sie nennt."
+
+#: includes/Admin/Verificationpage.php:2223
+msgid "The seal lists this link fewer times than the PDF has it."
+msgstr "Das Siegel führt diesen Link seltener auf, als er im PDF vorkommt."
+
+#: includes/Admin/Verificationpage.php:2224
+msgid "The seal lists no link to this target: the link was changed or added."
+msgstr "Das Siegel führt keinen Link zu diesem Ziel auf: Der Link wurde geändert oder hinzugefügt."
+
+#: includes/Admin/Verificationpage.php:2229
+msgid "An annotation of no stated type. This plugin adds no annotations but invisible links."
+msgstr "Eine Anmerkung ohne angegebenen Typ. Dieses Plugin fügt außer unsichtbaren Links keine Anmerkungen hinzu."
+
+#. translators: %s: the annotation's PDF type, e.g. "FreeText".
+#: includes/Admin/Verificationpage.php:2232
+#, php-format
+msgid "A %s annotation, drawn on the page. This plugin adds no annotations but invisible links."
+msgstr "Eine Anmerkung vom Typ %s, auf die Seite gezeichnet. Dieses Plugin fügt außer unsichtbaren Links keine Anmerkungen hinzu."
+
+#: includes/Admin/Verificationpage.php:2239
+msgid "This link draws its own appearance. The links this plugin writes draw nothing."
+msgstr "Dieser Link zeichnet ein eigenes Erscheinungsbild. Die Links, die dieses Plugin schreibt, zeichnen nichts."
+
+#: includes/Admin/Verificationpage.php:2242
+msgid "This link has a visible border. The links this plugin writes are invisible."
+msgstr "Dieser Link hat einen sichtbaren Rahmen. Die Links, die dieses Plugin schreibt, sind unsichtbar."
+
+#: includes/Admin/Verificationpage.php:2244
+msgid "This link has no target this plugin writes (an address or a place in the document)."
+msgstr "Dieser Link hat kein Ziel, wie es dieses Plugin schreibt (eine Adresse oder eine Stelle im Dokument)."
+
+#: includes/Admin/Verificationpage.php:2403
+msgid "Sealed link"
+msgstr "Versiegelter Link"
+
+#: includes/Admin/Verificationpage.php:2409
+msgid "No link to this target: it was removed, or changed into one listed above."
+msgstr "Kein Link zu diesem Ziel: Er wurde entfernt oder in einen der oben aufgeführten geändert."
+
+#: includes/Admin/Verificationpage.php:3837
+msgid "The font names match the seal, but an embedded font file does not. A changed font file can draw other shapes for the same letters, so the page may show something other than the text it holds."
+msgstr "Die Schriftnamen stimmen mit dem Siegel überein, eine eingebettete Schriftdatei aber nicht. Eine geänderte Schriftdatei kann für dieselben Buchstaben andere Formen zeichnen, die Seite zeigt dann womöglich etwas anderes als den Text, den sie enthält."
+
+#: includes/Admin/Verificationpage.php:3845
+msgid "Embedded font file the seal does not list"
+msgstr "Eingebettete Schriftdatei, die das Siegel nicht aufführt"
+
+#: includes/Admin/Verificationpage.php:3851
+msgid "Sealed font file no longer in the PDF"
+msgstr "Versiegelte Schriftdatei, die nicht mehr im PDF ist"
+
+#: includes/Admin/Verificationpage.php:4138
+msgid "Stream Fingerprint"
+msgstr "Stream-Fingerabdruck"
+
+#. translators: %d: how many compressed parts of the file the seal has no fingerprint for.
+#: includes/Admin/Verificationpage.php:4145
+#, php-format
+msgid "%d compressed part of this file (a font, an image or other embedded data) has no fingerprint in the seal: it was added or changed after the PDF was made. The rows above name what kind of part it is where they can."
+msgid_plural "%d compressed parts of this file (fonts, images or other embedded data) have no fingerprint in the seal: they were added or changed after the PDF was made. The rows above name what kind of part they are where they can."
+msgstr[0] "%d komprimierter Bestandteil dieser Datei (eine Schriftart, ein Bild oder andere eingebettete Daten) hat keinen Fingerabdruck im Siegel: Er wurde nach dem Erstellen des PDFs hinzugefügt oder geändert. Die Zeilen oben nennen, wo sie können, um welche Art Bestandteil es sich handelt."
+msgstr[1] "%d komprimierte Bestandteile dieser Datei (Schriftarten, Bilder oder andere eingebettete Daten) haben keinen Fingerabdruck im Siegel: Sie wurden nach dem Erstellen des PDFs hinzugefügt oder geändert. Die Zeilen oben nennen, wo sie können, um welche Art Bestandteil es sich handelt."
+
+#: includes/Admin/Verificationpage.php:4446
+msgid "Disguised additions — a viewer may show content the checks cannot see"
+msgstr "Getarnte Ergänzungen — ein PDF-Betrachter zeigt womöglich Inhalte, die die Prüfungen nicht sehen"
+
+#. translators: %d: number of annotations, or sealed links, that don't match between PDF and seal.
+#: includes/Admin/Verificationpage.php:4534
+#, php-format
+msgid "%d link or annotation does not match the seal"
+msgid_plural "%d links or annotations do not match the seal"
+msgstr[0] "%d Link oder Anmerkung stimmt nicht mit dem Siegel überein"
+msgstr[1] "%d Links oder Anmerkungen stimmen nicht mit dem Siegel überein"
+
+#: includes/Admin/Verificationpage.php:4559
+msgid "An embedded font file differs from the seal"
+msgstr "Eine eingebettete Schriftdatei weicht vom Siegel ab"
+
+#: includes/Admin/Verificationpage.php:4797
+msgid "Not checked"
+msgstr "Nicht geprüft"
+
+#: includes/Admin/Verificationpage.php:4195
+msgid "This file is damaged or incomplete, so its content could not be read. A PDF from this plugin reads in full: ask for the original file."
+msgstr "Diese Datei ist beschädigt oder unvollständig, ihr Inhalt konnte daher nicht gelesen werden. Ein PDF dieses Plugins lässt sich vollständig lesen: Fordern Sie die Originaldatei an."
+
+#: includes/Admin/Verificationpage.php:4232
+msgid "An internal error stopped the check; the file itself may be fine. The details were written to the PHP error log."
+msgstr "Ein interner Fehler hat die Prüfung abgebrochen; die Datei selbst ist womöglich in Ordnung. Die Einzelheiten stehen im PHP-Fehlerprotokoll."

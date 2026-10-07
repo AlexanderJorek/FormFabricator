@@ -289,7 +289,7 @@ class FormRenderer
 
             if ($handler->isGroupContainer()) {
                 $children_html = self::renderChildFields($field_cfg['children'] ?? []);
-                $group_cond    = method_exists($handler, 'rowCondAttr') ? $handler->rowCondAttr($field_cfg) : '';
+                $group_cond    = $handler->rowCondAttr($field_cfg);
                 $html .= '<div class="fabricator-row"' . $group_cond . '><div class="fabricator-col fabricator-col-12">'
                     . $handler->openTag($field_cfg, $field_id)
                     . $children_html

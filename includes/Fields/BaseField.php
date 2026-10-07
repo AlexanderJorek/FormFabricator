@@ -114,7 +114,7 @@ abstract class BaseField
             }
             return true;
         }
-        $length = function_exists('mb_strlen') ? mb_strlen($other) : strlen($other);
+        $length = mb_strlen($other);
         if ($length > $max) {
             // translators: %1$d: maximum character count allowed, %2$d: current character count.
             return sprintf(__('Please enter at most %1$d characters for "Other" (currently: %2$d).', 'formfabricator'), $max, $length);
@@ -142,7 +142,7 @@ abstract class BaseField
     // limit_type/limit_max — a "words" limit doesn't bound character length.
     protected static function validateTextHardCap(string $value): bool|string
     {
-        $length = function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
+        $length = mb_strlen($value);
         if ($length > self::TEXT_FIELD_HARD_CAP) {
             // translators: %1$d: absolute maximum character count allowed, %2$d: current character count.
             return sprintf(__('Please enter at most %1$d characters (currently: %2$d).', 'formfabricator'), self::TEXT_FIELD_HARD_CAP, $length);
@@ -399,6 +399,18 @@ abstract class BaseField
     public function needsMultipartEncoding(): bool
     {
         return false;
+    }
+
+    /**
+     * Bytes of text this field puts into the PDF from its own configuration rather than from the answer, such as an
+     * HTML block's content. A submission's memory estimate counts them: mPDF's layout costs many times their size.
+     *
+     * @param array $config Field configuration.
+     * @return int
+     */
+    public function configTextBytes(array $config): int
+    {
+        return 0;
     }
 
     /**

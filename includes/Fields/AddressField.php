@@ -43,7 +43,7 @@ class AddressField extends BaseField
         }
         $keys = [];
         foreach (self::SUBFIELDS as $sf) {
-            if (!$sf['optional'] || !empty($config[$sf['key'] . '_enabled'])) {
+            if (!empty($config[$sf['key'] . '_enabled'])) {
                 $keys[] = $sf['key'];
             }
         }
@@ -86,12 +86,12 @@ class AddressField extends BaseField
     }
 
     private const SUBFIELDS = [
-        ['key' => 'street',  'optional' => true, 'label' => 'Street and house number'],
-        ['key' => 'street2', 'optional' => true, 'label' => 'Address supplement'],
-        ['key' => 'city',    'optional' => true, 'label' => 'City'],
-        ['key' => 'state',   'optional' => true, 'label' => 'State / Canton'],
-        ['key' => 'zip',     'optional' => true, 'label' => 'Postal code'],
-        ['key' => 'country', 'optional' => true, 'label' => 'Country'],
+        ['key' => 'street',  'label' => 'Street and house number'],
+        ['key' => 'street2', 'label' => 'Address supplement'],
+        ['key' => 'city',    'label' => 'City'],
+        ['key' => 'state',   'label' => 'State / Canton'],
+        ['key' => 'zip',     'label' => 'Postal code'],
+        ['key' => 'country', 'label' => 'Country'],
     ];
 
     /**
@@ -158,7 +158,7 @@ class AddressField extends BaseField
 
         foreach (self::SUBFIELDS as $sf) {
             $k = $sf['key'];
-            if ($sf['optional'] && empty($config[$k . '_enabled'])) {
+            if (empty($config[$k . '_enabled'])) {
                 continue;
             }
             $label = esc_html($config[$k . '_label'] ?? self::subfieldLabel($sf['label']));
@@ -253,7 +253,7 @@ class AddressField extends BaseField
         $errors = [];
         foreach (self::SUBFIELDS as $sf) {
             $k = $sf['key'];
-            if ($sf['optional'] && empty($config[$k . '_enabled'])) {
+            if (empty($config[$k . '_enabled'])) {
                 continue;
             }
             $sub = trim((string)($value[$k] ?? ''));
@@ -296,15 +296,11 @@ class AddressField extends BaseField
             $scalar = trim((string) ($value ?? ''));
             return $scalar !== '' ? $scalar : __('[No entry]', 'formfabricator');
         }
-        $sfMap = [];
-        foreach (self::SUBFIELDS as $sf) {
-            $sfMap[$sf['key']] = $sf;
-        }
         $lines = [];
         foreach ([['street', 'street2'], ['zip', 'city'], ['state'], ['country']] as $group) {
             $parts = [];
             foreach ($group as $k) {
-                if (isset($sfMap[$k]) && $sfMap[$k]['optional'] && empty($config[$k . '_enabled'])) {
+                if (empty($config[$k . '_enabled'])) {
                     continue;
                 }
                 $v = trim((string)($value[$k] ?? ''));

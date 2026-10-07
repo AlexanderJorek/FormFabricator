@@ -164,91 +164,6 @@ select.fabricator-input.fabricator-select-native {
     height: 0;
 }
 
-/* Custom dropdown */
-.fabricator-select-wrap {
-    position: relative;
-}
-.fabricator-select-custom {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    height: var(--fabricator-input-height);
-    padding: 0 12px;
-    border: 1px solid var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius);
-    background: var(--fabricator-bg);
-    color: var(--fabricator-text);
-    font-size: var(--fabricator-font-size);
-    font-family: var(--fabricator-font);
-    cursor: pointer;
-    user-select: none;
-    outline: none;
-    transition: border-color .15s, box-shadow .15s;
-}
-.fabricator-select-custom:focus,
-.fabricator-select-custom[aria-expanded="true"] {
-    border-color: var(--fabricator-accent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--fabricator-accent) 15%, transparent);
-}
-.fabricator-select-display {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.fabricator-select-display--placeholder {
-    color: var(--fabricator-text-muted);
-}
-.fabricator-select-arrow {
-    font-size: 24px;
-    color: var(--fabricator-text-muted);
-    transition: transform .15s;
-    flex-shrink: 0;
-}
-.fabricator-select-custom[aria-expanded="true"] .fabricator-select-arrow {
-    transform: rotate(180deg);
-}
-.fabricator-select-panel {
-    display: none;
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
-    background: var(--fabricator-bg);
-    border: 1px solid var(--fabricator-border-input);
-    border-radius: var(--fabricator-radius);
-    box-shadow: 0 4px 12px rgba(0,0,0,.1);
-    z-index: 999;
-    max-height: 260px;
-    overflow-y: auto;
-}
-.fabricator-select-custom[aria-expanded="true"] .fabricator-select-panel {
-    display: block;
-}
-.fabricator-select-option {
-    padding: 9px 12px;
-    cursor: pointer;
-    font-size: var(--fabricator-font-size);
-    color: var(--fabricator-text);
-    border-bottom: 1px solid var(--fabricator-border);
-    transition: background .1s;
-}
-.fabricator-select-option:last-child {
-    border-bottom: none;
-}
-.fabricator-select-option:hover,
-.fabricator-select-option--focused {
-    background: var(--fabricator-accent-light);
-}
-.fabricator-select-option--selected {
-    font-weight: 600;
-    color: var(--fabricator-accent);
-}
-.fabricator-select-option--placeholder {
-    color: var(--fabricator-text-muted);
-}
-
 /* ── Submit ───────────────────────────────────────────────────────────────── */
 .fabricator-form-footer {
     margin-top: 24px;
@@ -262,18 +177,27 @@ select.fabricator-input.fabricator-select-native {
 .fabricator-form-footer.fabricator-footer-off-page {
     display: none;
 }
-.fabricator-submit-btn {
+/* Scoped to the form, at a fixed height shared with the page-break buttons (PageBreakField.css): themes give buttons
+   their own capitals, letter spacing, shadow, line height and padding with selectors that would win otherwise. */
+.fabricator-form .fabricator-submit-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
-    padding: 11px 32px;
+    box-sizing: border-box;
+    height: 30px;
+    padding: 0 20px;
     background: var(--fabricator-accent);
     color: #fff;
     border: none;
     border-radius: var(--fabricator-radius);
-    font-size: 15px;
+    box-shadow: none;
+    font-size: 14px;
     font-weight: 600;
     font-family: var(--fabricator-font);
+    line-height: 1.2;
+    letter-spacing: normal;
+    text-transform: none;
     cursor: pointer;
     transition: background .15s;
 }
@@ -290,10 +214,10 @@ select.fabricator-input.fabricator-select-native {
     animation: fabricator-btn-spin .7s linear infinite;
     flex-shrink: 0;
 }
-.fabricator-submit-btn:hover {
+.fabricator-form .fabricator-submit-btn:hover {
     background: var(--fabricator-accent-dark);
 }
-.fabricator-submit-btn:disabled {
+.fabricator-form .fabricator-submit-btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
 }
@@ -321,7 +245,6 @@ select.fabricator-input.fabricator-select-native {
     width: 100%;
 }
 
-.fabricator-submit-btn[disabled] { opacity: 0.6; cursor: not-allowed; }
 .fabricator-noscript-notice {
     color: var(--fabricator-text-muted, #666);
     font-size: 0.9em;

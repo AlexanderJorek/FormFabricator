@@ -105,7 +105,7 @@ class TextField extends BaseField
         // Server-side backstop for the char limit — render() only sets a client-side
         // maxlength attribute, which a direct POST can bypass
         if ($max > 0 && $type === 'chars' && $value !== null && $value !== '') {
-            $length = function_exists('mb_strlen') ? mb_strlen((string)$value) : strlen((string)$value);
+            $length = mb_strlen((string)$value);
             if ($length > $max) {
                 // translators: %1$d: maximum character count allowed, %2$d: current character count.
                 return sprintf(__('Please enter at most %1$d characters (currently: %2$d).', 'formfabricator'), $max, $length);

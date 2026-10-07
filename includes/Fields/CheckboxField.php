@@ -253,7 +253,9 @@ class CheckboxField extends BaseField
         $cnt      = count($selected);
         $min      = (int)($config['min_selections'] ?? 0);
         $max      = (int)($config['max_selections'] ?? 0);
-        if ($min > 0 && $cnt < $min) {
+        // An optional field may stay empty; the minimum counts once anything is ticked, as in the browser, whose count
+        // rule runs only on a field that isn't empty. A required field reaches here with at least one.
+        if ($min > 0 && $cnt > 0 && $cnt < $min) {
             // translators: %d: minimum number of options that must be selected.
             return sprintf(_n('Please select at least %d option.', 'Please select at least %d options.', $min, 'formfabricator'), $min);
         }

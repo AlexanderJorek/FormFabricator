@@ -528,14 +528,11 @@ class FormList
         $payload = json_decode($json, true);
         if (!is_array($payload)
             || !isset($payload['v'], $payload['t'], $payload['f'])
-            || !in_array((int)$payload['v'], [1, 2], true)
+            || (int)$payload['v'] !== 2
         ) {
             wp_send_json_error(['message' => __('Unknown format.', 'formfabricator')], 400);
         }
-        $fields = is_array($payload['f']) ? $payload['f'] : [];
-        if ((int)$payload['v'] === 2) {
-            $fields = self::restoreFieldDefaults($fields);
-        }
+        $fields = self::restoreFieldDefaults(is_array($payload['f']) ? $payload['f'] : []);
         // Route imported content through the same sanitizers as ajaxSave() — it's untrusted input.
         $payload_title = $payload['t'];
         $title         = sanitize_text_field(is_string($payload_title) ? $payload_title : '');
@@ -665,11 +662,6 @@ class FormList
             $type     = is_array($field) && is_string($field['type'] ?? null) ? $field['type'] : '';
             $instance = $type !== '' ? \FabricatorForms\Fields\FieldRegistry::get($type) : null;
             if ($instance) {
-                // An export from before the date format setting has no key, and those fields were DD.MM.YYYY; the importing
-                // site's own default must not reinterpret their stored bounds.
-                if ($type === 'date' && is_array($field) && !array_key_exists('date_format', $field)) {
-                    $field['date_format'] = 'dmy';
-                }
                 $out[] = array_merge($instance->getDefaultConfig(), $field);
             } else {
                 $out[] = $field;

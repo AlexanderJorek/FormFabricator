@@ -149,17 +149,6 @@ class PageHeaderField extends BaseField
     }
 
     /**
-     * Maps the field value to a human-readable string for email and PDF output.
-     *
-     * @param mixed $value  Submitted value.
-     * @param array $config Field configuration.
-     */
-    public function map(mixed $value, array $config): string
-    {
-        return '';
-    }
-
-    /**
      * Adds page_names to the plain-text allowlist (sanitize_text_field() rather than the HTML sanitizer).
      *
      * @return string[]

@@ -20,26 +20,20 @@ GPL-compatible license:
 Each library's full license text is included alongside it under
 `vendor/<vendor>/<package>/LICENSE`.
 
-FormFabricator also bundles the following JavaScript library under `vendor/pdfjs/`
-(placed there manually, not installed via Composer — pdf.js is an npm
-package, not a PHP one). The PDF Verification tool uses it in the browser to
-read back a PDF that has already been uploaded, so the text layer it extracts
-can be compared with the document's seal:
+Of the fonts mPDF ships in `vendor/mpdf/mpdf/ttfonts/`, the release build keeps
+only those the PDF uses: the DejaVu families (the PDF Layout's fonts), from
+GNU FreeFont FreeMono (a PDF Layout font) and FreeSerif, and Quivira. FreeSerif
+and Quivira draw characters the chosen font lacks, such as rarer letters and
+symbols:
 
-| Library              | Version    | License     | Purpose                        |
-|----------------------|------------|-------------|---------------------------------|
-| Mozilla PDF.js        | 6.2.108   | Apache-2.0  | Client-side PDF text extraction |
-
-The exact build and provenance are recorded in `vendor/pdfjs/VERSION`
-(pdfjs-dist 6.2.108, "legacy" build). PDF.js's license notice is embedded in the
-file headers of `vendor/pdfjs/pdf.js` and `vendor/pdfjs/pdf.worker.js` (the upstream `pdf.mjs` and
-`pdf.worker.mjs`, renamed unmodified so web servers serve them with a JavaScript MIME type), with the
-full Apache-2.0 text in `vendor/pdfjs/LICENSE`. Apache-2.0 is GPL-compatible
-(one-way, per the FSF's license-compatibility list) and requires no
-relicensing to bundle here.
+| Fonts        | License                                         | Notes in the package |
+|--------------|-------------------------------------------------|----------------------|
+| DejaVu       | Bitstream Vera Fonts license (free, GPL-compatible) | `ttfonts/DejaVuinfo.txt` |
+| GNU FreeFont | GPL-3.0-or-later with font exception            | `ttfonts/GNUFreeFontinfo.txt` |
+| Quivira (Alexander Lange) | Public domain: free for any use and redistribution; the author asks that it not be altered (it is shipped unaltered) | — |
 
 FormFabricator also bundles the ALTCHA widget under `vendor/altcha/` (placed
-there manually for the same reason: it is an npm package). CAPTCHA fields set to
+there manually, not installed via Composer: it is an npm package, not a PHP one). CAPTCHA fields set to
 ALTCHA load it in the visitor's browser; the challenge it solves comes from the
 site itself, and the site checks the answer (no third-party service):
 
@@ -66,4 +60,4 @@ relicensing to bundle here.
 
 Development-only tooling (PHP_CodeSniffer, WordPress Coding Standards, PHPStubs)
 is listed in `composer.json`'s `require-dev` and is **not** included in release
-builds — see `build.ps1`.
+builds.

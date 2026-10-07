@@ -888,7 +888,7 @@ class FormEditor
      */
     private static function optionValueFromLabel(string $label, int $position): string
     {
-        $ascii = function_exists('remove_accents') ? \remove_accents($label) : $label;
+        $ascii = \remove_accents($label);
         $slug  = trim((string) preg_replace('/-{2,}/', '-', (string) preg_replace('/[^a-z0-9-]/', '', (string) preg_replace('/\s+/', '-', strtolower($ascii)))), '-');
         return $slug !== '' ? $slug : 'option-' . $position;
     }
@@ -1379,11 +1379,6 @@ class FormEditor
                 'FabricatorForms sanitizeEmailBody: input length '
                 . strlen($before) . ' → output length ' . strlen($html)
             );
-        } elseif (defined('WP_DEBUG') && WP_DEBUG) {
-            \FabricatorForms\fabricator_log(
-                'FabricatorForms sanitizeEmailBody: nothing stripped '
-                . '(input length ' . strlen($html) . ')'
-            );
         }
 
         return $html;
@@ -1404,7 +1399,7 @@ class FormEditor
         return (string) preg_replace_callback(
             '/\\\\(?:([0-9A-Fa-f]{1,6})[ \t\r\n\f]?|([^\r\n\f0-9A-Fa-f]))/',
             static function (array $m): string {
-                if (($m[1] ?? '') !== '') {
+                if ($m[1] !== '') {
                     $code = (int) hexdec($m[1]);
                     // Printable ASCII only; NUL and anything non-ASCII is dropped, not emitted.
                     return ($code >= 0x20 && $code <= 0x7E) ? chr($code) : '';
@@ -1570,7 +1565,6 @@ class FormEditor
                 'requiredField'      => __('Required field', 'formfabricator'),
                 'noOtherFields'      => __('(no other fields)', 'formfabricator'),
                 'valueWord'          => __('Value', 'formfabricator'),
-                'urlPlaceholder'     => __('https://…', 'formfabricator'),
                 'mediaLibrary'       => __('Media library', 'formfabricator'),
                 'useButtonLabel'     => __('Use', 'formfabricator'),
                 'imageUrlPrompt'     => __('Image URL:', 'formfabricator'),
@@ -1728,6 +1722,7 @@ class FormEditor
                 /* Save / preview status messages */
                 'saving'         => __('Saving…', 'formfabricator'),
                 'saved'          => __('Saved', 'formfabricator'),
+                'dismiss'        => __('Dismiss', 'formfabricator'),
                 'errorGeneric'   => __('Error', 'formfabricator'),
                 'unknownError'   => __('Unknown error', 'formfabricator'),
                 'serverError'    => __('Server error', 'formfabricator'),

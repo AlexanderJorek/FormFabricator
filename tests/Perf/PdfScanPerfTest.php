@@ -112,9 +112,8 @@ final class PdfScanPerfTest extends PerfTestCase
 
     public function testTheDefinitionIndexScalesLinearlyWhenNothingCloses(): void
     {
-        // Each object is padded so the file outgrows the object count: without nextAt()'s remembered answers every search
-        // runs to the end of the file, and that shows as n^2 (measured: n^1.97) well below the object ceiling. Unpadded,
-        // the quadratic version stayed just under the absolute fallback bound.
+        // Padded, so the file outgrows the object count and a search to the end per object shows as n^2 well below
+        // the object ceiling.
         $pad = str_repeat(' ', 200);
         // Every header's "endobj" search would run to the end of the file.
         $this->assertLinear(
@@ -243,9 +242,8 @@ final class PdfScanPerfTest extends PerfTestCase
 
     public function testNestedObjectHeadersWithOneEndobjScaleLinearlyAndCopyNoMoreThanTheFile(): void
     {
-        // Every header searched ahead to the single "endobj" and copied everything up to it: quadratic in time and in
-        // memory (a 2 MB file of this shape peaked at 3.9 GB). The verifier reaches indexObjects() for any file holding
-        // a seal marker, whether or not its HMAC checks out.
+        // Many headers sharing one "endobj": copying each up to it would be quadratic in time and memory. The verifier
+        // reaches indexObjects() for any file holding a seal marker, whether or not its HMAC checks out.
         $build = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("1 0 obj\n<< /A 1 >>\n", $n) . "endobj\n";
         $this->assertLinear($build, static fn($pdf) => PdfUtils::indexObjects($pdf), 2000, PdfUtils::MAX_OBJECTS / 4);
 
@@ -271,6 +269,45 @@ final class PdfScanPerfTest extends PerfTestCase
                 . "trailer\n<< /Root 1 0 R >>\n%%EOF\n";
         };
         $this->assertLinear($build, static fn($pdf) => PdfUtils::verifyContentStreams($pdf, [], 'x'), 1000, PdfUtils::MAX_OBJECTS / 4);
+    }
+
+    public function testTheAnnotsEntriesScaleLinearly(): void
+    {
+        // Every page naming one array object of $n references: reading the array once per page is quadratic. Then $n
+        // arrays that never close, and $n small arrays each closed right after it.
+        $shared   = static function (int $n): string {
+            $refs = '';
+            for ($i = 0; $i < $n; $i++) {
+                $refs .= (10 + $i) . ' 0 R ';
+            }
+            return "%PDF-1.4\n5 0 obj\n[" . $refs . "]\nendobj\n" . str_repeat("<< /Type /Page /Annots 5 0 R >>\n", $n);
+        };
+        $unclosed = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("<< /Annots [ 7 0 R >>\n", $n);
+        $closed   = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("<< /Annots [ 7 0 R ] >>\n", $n);
+        $collect  = static fn($pdf) => Reflect::call(
+            Verificationpage::class,
+            'collectAnnotations',
+            $pdf,
+            PdfUtils::objectDefinitionIndex($pdf),
+            ['start' => microtime(true), 'max' => 600]
+        );
+        foreach ([$shared, $unclosed, $closed] as $build) {
+            $this->assertLinear($build, $collect, 1000, PdfUtils::MAX_OBJECTS / 4);
+        }
+    }
+
+    public function testTheNameWalkScalesLinearly(): void
+    {
+        // PdfUtils::nameTokens(), behind escapedName() and the /Annots entries: streams whose /Length is wrong, so each
+        // end is searched for; nested dictionaries, each top-level one read for its /Length; strings and hex strings
+        // that never close.
+        $wrong_length = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("<< /Length 999999 >>\nstream\n/A\nendstream\n", $n);
+        $nested       = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("<< /A << /B (x) /C [<0F> /D] >> >>\n", $n);
+        $open_strings = static fn(int $n): string => "%PDF-1.4\n<< /A " . str_repeat('(x \\) /B ', $n);
+        $open_hex     = static fn(int $n): string => "%PDF-1.4\n<< /A " . str_repeat('<0F /B ', $n);
+        foreach ([$wrong_length, $nested, $open_strings, $open_hex] as $build) {
+            $this->assertLinear($build, static fn($pdf) => PdfUtils::escapedName($pdf), 5000);
+        }
     }
 
     public function testTheImageDataWalkScalesLinearly(): void
@@ -307,7 +344,7 @@ final class PdfScanPerfTest extends PerfTestCase
 
     private function assertLinear(callable $build, callable $scan, int $n, int|float $max_n = PHP_INT_MAX): void
     {
-        $r = Measure::growthExponent($build, $scan, $n, 0.05, (int) $max_n);
+        $r = Measure::settledGrowthExponent(self::MAX_EXPONENT, $build, $scan, $n, 0.05, (int) $max_n);
         if (!$r['trusted']) {
             // Still under the noise floor at the largest input: fast in absolute terms, which a quadratic scan is not.
             self::assertLessThan(0.25, $r['grown'], sprintf('n=%d took %.3f s', $r['n'] * 4, $r['grown']));

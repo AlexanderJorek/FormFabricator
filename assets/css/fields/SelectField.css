@@ -64,7 +64,6 @@
     transition: background .1s;
 }
 .fabricator-select-option:last-child { border-bottom: none; }
-.fabricator-select-option:hover,
-.fabricator-select-option--focused { background: var(--fabricator-accent-light); }
+.fabricator-select-option:hover { background: var(--fabricator-accent-light); }
 .fabricator-select-option--selected { font-weight: 600; color: var(--fabricator-accent); }
 .fabricator-select-option--placeholder { color: var(--fabricator-text-muted); }

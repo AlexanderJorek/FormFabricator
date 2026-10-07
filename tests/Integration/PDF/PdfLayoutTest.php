@@ -62,7 +62,7 @@ final class PdfLayoutTest extends TestCase
             self::assertContains($expected[$family], $m[1], "$family is the font of the PDF");
 
             foreach (array_intersect_key($fontdata[$family], array_flip(['R', 'B', 'I', 'BI'])) as $file) {
-                self::assertContains($file, $kept, "$family needs $file, which build.ps1's font trim must keep");
+                self::assertContains($file, $kept, "$family needs $file, which the build's font trim (tools/build-config.php) must keep");
             }
         }
     }
@@ -198,15 +198,13 @@ final class PdfLayoutTest extends TestCase
     }
 
     /**
-     * The font files build.ps1's mPDF font trim keeps ($keepFonts).
+     * The font files the release build's mPDF font trim keeps (tools/build-config.php, "keepFonts").
      *
      * @return string[]
      */
     private static function fontsTheBuildKeeps(): array
     {
-        $build = (string) file_get_contents(dirname(__DIR__, 3) . '/build.ps1');
-        self::assertSame(1, preg_match('/\$keepFonts = @\((.*?)\n\)/s', $build, $list));
-        preg_match_all("/'([^']+\\.ttf)'/", $list[1], $files);
-        return $files[1];
+        $config = require dirname(__DIR__, 3) . '/tools/build-config.php';
+        return array_values(array_filter($config['keepFonts'], static fn(string $file): bool => str_ends_with($file, '.ttf')));
     }
 }

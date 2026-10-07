@@ -96,7 +96,7 @@ class DateField extends BaseField
     }
 
     /**
-     * The field's format key. A field saved before the setting existed has none and keeps DD.MM.YYYY.
+     * The field's format key; DD.MM.YYYY for a configuration without one.
      *
      * @param array $config Field configuration.
      * @return string One of the FORMATS keys.
@@ -344,7 +344,7 @@ class DateField extends BaseField
                 'key'     => 'date_format',
                 'type'    => 'select',
                 'label'   => __('Date format', 'formfabricator'),
-                // Shown for a field saved before this setting existed, which has no value and keeps DD.MM.YYYY.
+                // What formatKey() reads for a configuration without a format.
                 'default' => 'dmy',
                 'options' => [
                     ['value' => 'dmy', 'label' => self::formatLabel('dmy')],

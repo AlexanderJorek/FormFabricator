@@ -54,12 +54,6 @@ class CaptchaField extends BaseField
         return 'fa-solid fa-robot';
     }
 
-    // No unconditional script load here — connecting to Google before consent is a GDPR issue; see render(). The ALTCHA
-    // widget is enqueued by the field that shows it (renderAltcha()).
-    public function enqueueFrontScripts(): void
-    {
-    }
-
     /**
      * Hands the ALTCHA widget the field's translated texts.
      *

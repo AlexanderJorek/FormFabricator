@@ -76,6 +76,16 @@ class NameField extends BaseField
     }
 
     /**
+     * Draws the salutation as the form's own dropdown, like every other dropdown of the form.
+     *
+     * @return string
+     */
+    public function getClientInit(): string
+    {
+        return self::readFieldAsset('assets/js/fields/NameField.js');
+    }
+
+    /**
      * Returns the Font Awesome icon class.
      *
      * @return string
@@ -86,10 +96,10 @@ class NameField extends BaseField
     }
 
     private const SUBFIELDS = [
-        ['key' => 'prefix', 'optional' => true, 'label' => 'Salutation',  'is_select' => true],
-        ['key' => 'fname',  'optional' => true, 'label' => 'First name'],
-        ['key' => 'mname',  'optional' => true, 'label' => 'Middle name'],
-        ['key' => 'lname',  'optional' => true, 'label' => 'Last name'],
+        ['key' => 'prefix', 'label' => 'Salutation',  'is_select' => true],
+        ['key' => 'fname',  'label' => 'First name'],
+        ['key' => 'mname',  'label' => 'Middle name'],
+        ['key' => 'lname',  'label' => 'Last name'],
     ];
 
     /**

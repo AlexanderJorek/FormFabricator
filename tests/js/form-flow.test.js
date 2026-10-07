@@ -127,6 +127,61 @@ test('page navigation back and forth keeps what was entered on every page', asyn
     );
 });
 
+/** Records window.scrollTo() calls, which jsdom doesn't implement. */
+function recordScrolls(page) {
+    const scrolls = [];
+    page.window.scrollTo = (...args) => scrolls.push(args);
+    return scrolls;
+}
+
+test('a server error for a field on an earlier page shows that page with the error', async () => {
+    const page = await open(fixture.forms['submit condition, three pages']);
+    const form = page.document.querySelector('form');
+    const active = () => form.querySelector('.fabricator-page-active');
+    type(page, form.querySelector('[name="code"]'), 'open');
+    active().querySelector('.fabricator-btn-next').click();
+    active().querySelector('.fabricator-btn-next').click();
+    assert.notEqual(active().querySelector('[name="last"]'), null, 'on the last page');
+
+    const scrolls = recordScrolls(page);
+    stubServer(page, { success: false, data: { message: 'Please correct the highlighted fields.', errors: { code: 'Not accepted.' } } });
+    submit(page, form);
+    await settle(page);
+
+    assert.notEqual(active().querySelector('[name="code"]'), null, 'back on the page holding the field');
+    assert.equal(page.document.querySelector('#code-error').textContent, 'Not accepted.');
+    assert.equal(scrolls.length, 1);
+});
+
+test('a server error without a field to show brings the message into view', async () => {
+    for (const [label, fetchStub] of [
+        ['a response that is no JSON', () => Promise.resolve({ json: () => Promise.reject(new SyntaxError('Unexpected token <')) })],
+        ['an unreachable server', () => Promise.reject(new Error('offline'))],
+    ]) {
+        const page = await open(fixture.forms['contact']);
+        const form = page.document.querySelector('form');
+        type(page, form.querySelector('[name="name"]'), 'Ada');
+        const scrolls = recordScrolls(page);
+        page.window.fetch = fetchStub;
+
+        submit(page, form);
+        await settle(page);
+
+        const box = page.document.querySelector('.fabricator-form-messages');
+        assert.equal(box.textContent, 'Server error. Please try again.', label);
+        assert.equal(scrolls.length, 1, label + ': scrolled to the message');
+    }
+
+    const page = await open(fixture.forms['contact']);
+    const form = page.document.querySelector('form');
+    type(page, form.querySelector('[name="name"]'), 'Ada');
+    const scrolls = recordScrolls(page);
+    stubServer(page, { success: false, data: { message: 'The server is busy processing other submissions. Please try again in a moment.' } });
+    submit(page, form);
+    await settle(page);
+    assert.equal(scrolls.length, 1, 'a refusal without field errors: scrolled to the message');
+});
+
 test('the same form twice: each copy sends its own values, and server errors land in the copy that was sent', async () => {
     const page = await open(fixture.forms['contact twice']);
     const [first, second] = page.document.querySelectorAll('form');

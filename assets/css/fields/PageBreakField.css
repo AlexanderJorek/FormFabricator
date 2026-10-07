@@ -16,11 +16,20 @@
     padding: 0;
     margin: 0 0 var(--fabricator-gap);
 }
-.fabricator-btn {
+/* Every button rule is scoped to .fabricator-form: themes style buttons (capitals, letter spacing, a shadow, their own
+   border) with selectors that would win otherwise, as front.css explains for inputs. */
+.fabricator-form .fabricator-btn {
     display: inline-flex;
     align-items: center;
+    /* Centred both ways at a fixed height, the Submit button's (front.css): themes give buttons their own minimum width,
+       line height and padding, which would otherwise decide it. */
+    justify-content: center;
+    text-align: center;
+    box-sizing: border-box;
+    height: 30px;
+    line-height: 1.2;
     gap: 6px;
-    padding: 9px 20px;
+    padding: 0 14px;
     border-radius: var(--fabricator-radius);
     border: 1px solid var(--fabricator-border-input);
     background: var(--fabricator-bg);
@@ -29,36 +38,39 @@
     font-family: var(--fabricator-font);
     cursor: pointer;
     transition: background .1s, border-color .1s;
+    box-shadow: none;
+    letter-spacing: normal;
+    text-transform: none;
 }
-.fabricator-btn:hover {
+.fabricator-form .fabricator-btn:hover {
     background: var(--fabricator-bg-subtle);
     border-color: var(--fabricator-text-subtle);
 }
-.fabricator-btn-next {
+.fabricator-form .fabricator-btn-next {
     margin-left: auto;
     background: var(--fabricator-accent);
     border-color: var(--fabricator-accent);
     color: #fff;
     font-weight: 600;
 }
-.fabricator-btn-next:hover,
-.fabricator-btn-next:focus,
-.fabricator-btn-next:focus-visible {
+.fabricator-form .fabricator-btn-next:hover,
+.fabricator-form .fabricator-btn-next:focus,
+.fabricator-form .fabricator-btn-next:focus-visible {
     background: var(--fabricator-accent-dark);
     border-color: var(--fabricator-accent-dark);
     color: #fff;
     outline: none;
 }
-.fabricator-page-nav--top .fabricator-btn-prev {
-    border-color: transparent;
+/* The Back button above each page: outlined in the accent colour, with smaller text. */
+.fabricator-form .fabricator-page-nav--top .fabricator-btn-prev {
+    border-color: var(--fabricator-accent);
     background: transparent;
     color: var(--fabricator-accent);
-    padding-left: 0; padding-right: 0;
+    padding: 0 12px;
     font-size: 13px;
 }
-.fabricator-page-nav--top .fabricator-btn-prev:hover {
-    background: transparent;
-    border-color: transparent;
+.fabricator-form .fabricator-page-nav--top .fabricator-btn-prev:hover {
+    background: var(--fabricator-accent-light);
+    border-color: var(--fabricator-accent-dark);
     color: var(--fabricator-accent-dark);
-    text-decoration: underline;
 }

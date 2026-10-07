@@ -366,15 +366,8 @@ function chip(label, val, col) {
 function section(t) {
     return '<div style="font-weight:700;color:#a7aaad;margin:8px 0 4px;">' + t + '</div>';
 }
-function hrow(cols) {
-    return '<tr style="color:#72aee6;font-size:11px;">' +
-        cols.map(function(c){ return '<th style="text-align:left;padding:2px 4px;">' + c + '</th>'; }).join('') + '</tr>';
-}
 function td(v, col, size) {
     return '<td style="padding:2px 4px;' + (col?'color:'+col+';':'') + (size?'font-size:'+size+';':'') + '">' + v + '</td>';
-}
-function tdR(v, col) {
-    return '<td style="padding:2px 4px;text-align:right;' + (col?'color:'+col+';':'') + '">' + v + '</td>';
 }
 
 /* ── Long-task observer ──────────────────────────────────────────────────── */

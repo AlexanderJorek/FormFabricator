@@ -111,10 +111,15 @@ return [
 
     'section_hidden' => $fabricator_section_hidden,
 
+    // The body's mPDF font family, for the generator's check of which characters the PDF can draw.
+    'font_family' => $fabricator_font,
+
     'base_css' => function () use ($fabricator_accent, $fabricator_sep, $fabricator_fs, $fabricator_title_fs, $fabricator_font): string {
+        // No ligatures and no glyph composition ("ccmp"): their glyphs read back as other characters ("fi" as U+FB01).
         return '
         <style>
-            body        { font-family:' . $fabricator_font . '; font-size:' . $fabricator_fs . 'pt; }
+            body       { font-family:' . $fabricator_font . '; font-size:' . $fabricator_fs . 'pt;'
+            . ' font-variant-ligatures:none; font-feature-settings:"ccmp" 0; }
             .field-block { margin-bottom:14px; }
             .field-label { font-weight:bold; font-size:' . $fabricator_title_fs . 'pt; margin-bottom:4px; color:#222; }
             .field-separator-thin  { border-bottom:1px solid ' . $fabricator_sep . '; margin-bottom:4px; }

@@ -244,7 +244,8 @@ class HtmlSanitizer
                 $style = preg_replace_callback(
                     '/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)]*))\s*\)?/i',
                     static function ($um) use ($is_allowed) {
-                        $url = ($um[1] ?? '') . ($um[2] ?? '') . ($um[3] ?? '');
+                        // PCRE leaves unmatched groups after the matching one out of $um: a "…" URL has no 2 or 3.
+                        $url = $um[1] . ($um[2] ?? '') . ($um[3] ?? '');
                         return $is_allowed($url) ? $um[0] : 'none';
                     },
                     $m[2]

@@ -243,8 +243,16 @@ test('the save status shows the server\'s warning, e.g. a mandate without wordin
 
     await saveAndRead(page);
 
-    assert.match(page.document.getElementById('fabricator-save-status').textContent, /no mandate text/);
+    const status = page.document.getElementById('fabricator-save-status');
+    assert.match(status.textContent, /no mandate text/);
     assert.equal(wouldWarnOnLeave(page), false, 'saved: nothing unsaved');
+
+    // It stays until the user dismisses it.
+    const dismiss = status.querySelector('.fabricator-ss-close');
+    assert.equal(dismiss.getAttribute('aria-label'), 'Dismiss');
+    dismiss.click();
+    assert.equal(status.textContent, '');
+    assert.equal(status.className, '');
 });
 
 test('a field placeholder typed as the sender address shows the warning while typing', async () => {

@@ -1,6 +1,6 @@
 name: Tests
 
-# The release gates from build.ps1, on every push and pull request, on Linux — TESTING.md §0 asks for a non-Windows
+# The release gates from tools/build.php, on every push and pull request, on Linux — TESTING.md §0 asks for a non-Windows
 # host, and the 1.0.7 upload/PDF-check regression was Windows-specific the other way round.
 on:
   push:
@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 
-# Actions are pinned to a commit, like every other dependency (composer.lock, package-lock.json, pdf.js by SHA-256):
+# Actions are pinned to a commit, like every other dependency (composer.lock, package-lock.json, the ALTCHA widget by SHA-256):
 # a tag can be moved to other code. The comment names the release; update both together.
 
 jobs:
@@ -44,10 +44,12 @@ jobs:
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ matrix.php }}
-          extensions: gd, fileinfo, mbstring, openssl, zlib
+          # intl, as most hosts have it: its Normalizer changes how the PDF check reads text. A local run without it
+          # covers the other path.
+          extensions: gd, fileinfo, mbstring, openssl, zlib, intl
           coverage: none
       - run: composer install --no-interaction --no-progress
-      - run: vendor/bin/phpunit --testsuite unit,perf
+      - run: vendor/bin/phpunit -c tests/phpunit.xml.dist --testsuite unit,perf
 
   integration:
     name: WordPress integration (PHP ${{ matrix.php }}, ${{ matrix.site }})
@@ -77,11 +79,11 @@ jobs:
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ matrix.php }}
-          extensions: gd, fileinfo, mbstring, openssl, zlib, mysqli
+          extensions: gd, fileinfo, mbstring, openssl, zlib, mysqli, intl
           coverage: none
       - run: composer install --no-interaction --no-progress
       # Real WordPress (vendor/roots/wordpress-no-content) against this MySQL; every table in it is recreated.
-      - run: vendor/bin/phpunit -c phpunit-integration.xml.dist
+      - run: vendor/bin/phpunit -c tests/phpunit-integration.xml.dist
 
   js:
     name: JS suite (Node ${{ matrix.node }})

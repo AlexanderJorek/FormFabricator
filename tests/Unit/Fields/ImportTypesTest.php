@@ -10,8 +10,7 @@ use FabricatorForms\Tests\Support\TestCase;
 
 /**
  * An imported form can hold any JSON. sanitizeFields() must give every declared config key back the kind of value its
- * default has, so that no field's render() receives a list where it expects a string. Before, one such key threw a
- * TypeError and took down every page showing the form. (TESTING.md §3, import.)
+ * default has, so no field's render() receives a list where it expects a string and throws. (TESTING.md §3, import.)
  */
 final class ImportTypesTest extends TestCase
 {
@@ -68,9 +67,8 @@ final class ImportTypesTest extends TestCase
 
     public function testEveryFieldTypeTurnsHostileValuesIntoTextWithoutAWarning(): void
     {
-        // A crafted POST reaches every field with any shape (name[first]=x on a single-input Name field arrives as a
-        // list), and an import can hold a list of lists where a list belongs (PostData's post_field reached
-        // array_flip()). Either one printed "Array" into the sealed PDF, or a warning into the AJAX answer.
+        // A crafted POST can give any field any shape, and an import a list of lists where a list belongs: neither may
+        // print "Array" into the PDF or a warning into the AJAX answer.
         $warnings = [];
         set_error_handler(static function (int $no, string $msg, string $file, int $line) use (&$warnings): bool {
             $warnings[] = basename($file) . ":$line $msg";
@@ -109,9 +107,10 @@ final class ImportTypesTest extends TestCase
                     try {
                         $value = $handler->extractValue('f-' . $type);
                         $handler->validate($value, $cfg);
-                        $mapped = $handler->map($value, $cfg);
-                        self::assertStringNotContainsString('Array', $mapped, "$label: map() printed an array");
                         foreach ($handler->mapNormalized('f-' . $type, 'Question', $value, $cfg, ['files' => [], 'raw_values' => [], 'skip_ids' => []]) as $entry) {
+                            if (is_string($entry['value'] ?? null)) {
+                                self::assertStringNotContainsString('Array', $entry['value'], "$label: the record printed an array");
+                            }
                             $handler->pdfData($entry + ['config' => $cfg]);
                         }
                         $calls++;

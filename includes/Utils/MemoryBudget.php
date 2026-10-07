@@ -267,7 +267,7 @@ class MemoryBudget
      */
     public static function canRaiseLimit(): bool
     {
-        return !function_exists('wp_is_ini_value_changeable') || wp_is_ini_value_changeable('memory_limit');
+        return wp_is_ini_value_changeable('memory_limit');
     }
 
     /**

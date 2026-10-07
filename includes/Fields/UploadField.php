@@ -422,21 +422,6 @@ class UploadField extends BaseField
     }
 
     /**
-     * Maps the field value to the normalized submission entry.
-     *
-     * @param mixed $value  Submitted value.
-     * @param array $config Field configuration.
-     * @return string Normalized field entry.
-     */
-    public function map(mixed $value, array $config): string
-    {
-        if (is_string($value) && $value !== '') {
-            return $value;
-        }
-        return __('[No entry]', 'formfabricator');
-    }
-
-    /**
      * Returns a normalized entry with materialized uploaded files.
      *
      * @param string $field_id Field identifier.

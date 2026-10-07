@@ -469,6 +469,10 @@ $formCases  = [
         ['id' => 'cap', 'type' => 'captcha', 'label' => 'CAPTCHA', 'provider' => 'altcha', 'required' => true],
     ], []],
     'rating' => [[['id' => 'stars', 'type' => 'rating', 'label' => 'Stars', 'required' => true]], []],
+    'name with salutation' => [[[
+        'id' => 'who', 'type' => 'name', 'label' => 'Name', 'expanded' => true,
+        'prefix_enabled' => true, 'prefix_required' => true, 'fname_enabled' => true, 'lname_enabled' => true,
+    ]], []],
     'dropdown' => [[[
         'id' => 'size', 'type' => 'select', 'label' => 'Size', 'required' => true,
         'options' => [['label' => 'Small', 'value' => 's'], ['label' => 'Large', 'value' => 'l']],

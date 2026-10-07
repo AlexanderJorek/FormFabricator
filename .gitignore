@@ -1,16 +1,15 @@
 ### PHP / Composer
 # Composer-managed dependencies. Not tracked: composer.json + composer.lock pin
-# exact versions, and build.ps1 excludes vendor/ from the staged copy and runs
+# exact versions, and tools/build.php excludes vendor/ from the staged copy and runs
 # `composer install --no-dev` inside it, so the release artifact is built from
 # the lock file, never from this directory.
 # Restore a working tree with: composer install
 /vendor/*
 
-# EXCEPTION: pdf.js and the ALTCHA widget are vendored by hand, not by Composer
-# (they are npm packages, not PHP ones), so nothing can regenerate them from
-# composer.lock — build.ps1 copies them straight out of the working tree, each
-# checked against the hashes pinned in its VERSION file. They must stay tracked.
-!/vendor/pdfjs/
+# EXCEPTION: the ALTCHA widget is vendored by hand, not by Composer (it is an
+# npm package, not a PHP one), so nothing can regenerate it from composer.lock —
+# tools/build.php copies it straight out of the working tree, checked against the
+# hashes pinned in its VERSION file. It must stay tracked.
 !/vendor/altcha/
 
 ### Node
@@ -59,7 +58,7 @@ out/
 .pnp.*
 
 ### Editor settings
-# Local VS Code workspace settings (build.ps1 already keeps them out of the package).
+# Local VS Code workspace settings (the release build already keeps them out of the package).
 .vscode/
 
 ### Windows

@@ -19,3 +19,80 @@
 @media (max-width: 600px) {
     .fabricator-name-group { flex-direction: column; }
 }
+/* The salutation's dropdown (NameField.js), drawn like the form's other dropdowns. */
+select.fabricator-input.fabricator-name-prefix-native {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+}
+.fabricator-name-prefix-wrap { position: relative; }
+.fabricator-name-prefix-custom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: var(--fabricator-input-height);
+    padding: 0 12px;
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
+    background: var(--fabricator-bg);
+    color: var(--fabricator-text);
+    font-size: var(--fabricator-font-size);
+    font-family: var(--fabricator-font);
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+}
+.fabricator-name-prefix-custom:focus,
+.fabricator-name-prefix-custom[aria-expanded="true"] {
+    border-color: var(--fabricator-accent);
+    box-shadow: 0 0 0 3px
+        color-mix(in srgb, var(--fabricator-accent) 15%, transparent);
+}
+.fabricator-name-prefix-display {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.fabricator-name-prefix-display--placeholder { color: var(--fabricator-text-muted); }
+.fabricator-name-prefix-arrow {
+    font-size: 24px;
+    color: var(--fabricator-text-muted);
+    transition: transform .15s;
+    flex-shrink: 0;
+}
+.fabricator-name-prefix-custom[aria-expanded="true"] .fabricator-name-prefix-arrow {
+    transform: rotate(180deg);
+}
+.fabricator-name-prefix-panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    background: var(--fabricator-bg);
+    border: 1px solid var(--fabricator-border-input);
+    border-radius: var(--fabricator-radius);
+    box-shadow: 0 4px 12px rgba(0,0,0,.1);
+    z-index: 999;
+    max-height: 260px;
+    overflow-y: auto;
+}
+.fabricator-name-prefix-custom[aria-expanded="true"] .fabricator-name-prefix-panel { display: block; }
+.fabricator-name-prefix-option {
+    padding: 9px 12px;
+    cursor: pointer;
+    font-size: var(--fabricator-font-size);
+    color: var(--fabricator-text);
+    border-bottom: 1px solid var(--fabricator-border);
+    white-space: nowrap;
+    transition: background .1s;
+}
+.fabricator-name-prefix-option:last-child { border-bottom: none; }
+.fabricator-name-prefix-option:hover { background: var(--fabricator-accent-light); }
+.fabricator-name-prefix-option--selected { font-weight: 600; color: var(--fabricator-accent); }
+.fabricator-name-prefix-option--placeholder { color: var(--fabricator-text-muted); }

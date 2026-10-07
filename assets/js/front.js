@@ -115,10 +115,24 @@
         };
     }
 
+    /* A field on another page of the form (the submit-time check and the server see every page) is shown first:
+       scrolling to an element on a hidden page goes nowhere. */
     function scrollToField(fieldEl) {
         if (!fieldEl) return;
+        var page = fieldEl.closest('.fabricator-form-page');
+        var form = page && page.closest('.fabricator-form');
+        if (form && !page.classList.contains('fabricator-page-active')) {
+            form.dispatchEvent(new CustomEvent('fabricator:show-page', { bubbles: false, cancelable: false, detail: { page: page } }));
+        }
         var top = fieldEl.getBoundingClientRect().top + window.pageYOffset - 80;
         window.scrollTo(0, Math.max(0, top));
+    }
+
+    /* The message box sits above the form, out of view from the submit button at its end. */
+    function scrollToMessages(msgBox) {
+        if (!msgBox) return;
+        var top = msgBox.getBoundingClientRect().top + window.pageYOffset - 20;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
     }
 
     /* ── Multi-page navigation ────────────────────────────────────────────── */
@@ -217,6 +231,12 @@
                 /* Reset furthest to 0 too, or the step bar's later steps stay clickable from the previous run. */
                 furthest = 0;
                 showPage(0, false);
+            });
+
+            /* scrollToField() asks for the page that holds a field with an error. */
+            form.addEventListener('fabricator:show-page', function (e) {
+                var idx = pages.indexOf(e.detail && e.detail.page);
+                if (idx !== -1 && idx !== currentIdx()) showPage(idx, false);
             });
 
             form.addEventListener('click', function (e) {
@@ -513,6 +533,7 @@
                         msgBox.textContent = i18n.error_server || 'Server error. Please try again.';
                         msgBox.style.display = '';
                     }
+                    scrollToMessages(msgBox);
                 }
 
                 var ajaxUrl = (window.FabricatorForms && window.FabricatorForms.ajaxUrl) || '';
@@ -588,10 +609,10 @@
                             msgBox.style.display = '';
                         }
 
-                        /* Show per-field server errors */
+                        /* Show per-field server errors; without one to show, the message itself is brought into view. */
                         var fieldErrors = res.data && res.data.errors;
+                        var firstErrEl  = null;
                         if (fieldErrors) {
-                            var firstErrEl = null;
                             /* A later copy of the same form on the page carries an id suffix (FormRenderer::uniqueIds()). */
                             var idSuffix = form.dataset.fabricatorIdSuffix || '';
                             Object.keys(fieldErrors).forEach(function (fid) {
@@ -601,7 +622,11 @@
                                     if (!firstErrEl) firstErrEl = errEl.closest('.fabricator-field');
                                 }
                             });
+                        }
+                        if (firstErrEl) {
                             scrollToField(firstErrEl);
+                        } else {
+                            scrollToMessages(msgBox);
                         }
                     }
                     })

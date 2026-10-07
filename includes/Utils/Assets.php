@@ -519,46 +519,24 @@ class Assets
                 'FabricatorVerifyPage',
                 ['i18n' => ['remove' => __('Remove', 'formfabricator')]]
             );
-            // pdf.js 6.x is ES-modules only; wp_localize_script has no module equivalent, so data is injected via a separate src-less classic script.
-            \wp_register_script('fabricator-verifier-data', false, [], FABRICATOR_FORMS_VERSION, true);
-            \wp_enqueue_script('fabricator-verifier-data');
-            \wp_enqueue_script_module(
+            \wp_enqueue_script(
                 'fabricator-forms-verification',
                 FABRICATOR_FORMS_URL . 'assets/js/verification.js',
                 [],
-                FABRICATOR_FORMS_VERSION
+                FABRICATOR_FORMS_VERSION,
+                true
             );
-            // Enqueued modules are printed by WP_Script_Modules' printers, which older supported WordPress releases hook only
-            // on front-end actions. Attach them to the admin footer when core hasn't, and never twice.
-            $modules = \wp_script_modules();
-            foreach (['print_import_map', 'print_enqueued_script_modules', 'print_script_module_preloads'] as $printer) {
-                if (method_exists($modules, $printer)
-                    && \has_action('admin_print_footer_scripts', [$modules, $printer]) === false
-                ) {
-                    \add_action('admin_print_footer_scripts', [$modules, $printer]);
-                }
-            }
             \wp_localize_script(
-                'fabricator-verifier-data',
+                'fabricator-forms-verification',
                 'FabricatorVerifier',
                 [
                 'ajaxUrl'     => \admin_url('admin-ajax.php'),
                 'nonce'       => \wp_create_nonce('fabricator_verifier_nonce'),
-                // .js, not .mjs, which many servers serve without a JavaScript MIME type. Both versioned, so a cached
-                // library is never paired with a newer worker.
-                'pdfJsModule' => FABRICATOR_FORMS_URL . 'vendor/pdfjs/pdf.js?ver=' . FABRICATOR_FORMS_VERSION,
-                'pdfJsWorker' => FABRICATOR_FORMS_URL . 'vendor/pdfjs/pdf.worker.js?ver=' . FABRICATOR_FORMS_VERSION,
                 'i18n'        => [
                     'loading'          => __('Loading…', 'formfabricator'),
-                    'pdf_loading'      => __('Loading PDF…', 'formfabricator'),
-                    // translators: %1$d: download progress percentage, 0-100 (substituted client-side).
-                    'downloading'      => __('Downloading… (%1$d%%)', 'formfabricator'),
-                    // translators: %1$d: current page number, %2$d: total page count (both substituted client-side).
-                    'page_reading'     => __('Reading page %1$d of %2$d…', 'formfabricator'),
-                    'text_extracted'   => __('Text extracted — server analyzing…', 'formfabricator'),
+                    'analyzing'        => __('Checking on the server…', 'formfabricator'),
                     // translators: %1$d: seconds remaining before this PDF's verification request is sent (substituted client-side).
                     'queued'           => __('Waiting in queue (%1$ds)…', 'formfabricator'),
-                    'queued_for_download' => __('Waiting to download…', 'formfabricator'),
                     'queued_for_verify' => __('Waiting for a free verification slot…', 'formfabricator'),
                     'rate_limited_retry' => __('Rate limited — retrying…', 'formfabricator'),
                     // translators: %1$d: seconds remaining before the next automatic retry (substituted client-side).
@@ -568,11 +546,9 @@ class Assets
                     // translators: %d: HTTP status code (substituted client-side).
                     'server_error'     => __('Server error (HTTP %d)', 'formfabricator'),
                     'network_error'    => __('Network error', 'formfabricator'),
-                    // translators: %s: the error message (substituted client-side).
-                    'pdf_load_error'   => __('PDF load error: %s', 'formfabricator'),
-                    // translators: %s: the error message (substituted client-side).
-                    'error_message'    => __('Error: %s', 'formfabricator'),
                     'unknown_error'    => __('Unknown server error', 'formfabricator'),
+                    // The pill of a file that could not be checked, as Verificationpage::problemCardHtml() writes it.
+                    'error_pill'       => __('Error', 'formfabricator'),
                 ],
                 ]
             );

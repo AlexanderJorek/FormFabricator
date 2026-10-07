@@ -145,7 +145,7 @@ class ConsentField extends BaseField
      */
     public function map(mixed $value, array $config): string
     {
-        if (empty($value) || $value === '0') {
+        if (empty($value)) {
             return __('Not agreed', 'formfabricator');
         }
         // The text as the visitor saw it (render() shows the same shownText()), so the record never names another one.

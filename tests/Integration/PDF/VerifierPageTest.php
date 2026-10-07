@@ -139,16 +139,17 @@ final class VerifierPageTest extends AjaxTestCase
         $r = $this->ajax('fabricator_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $token, 'visualLines' => '[]']);
 
         self::assertTrue($r['success'], $r['raw']);
-        $images = array_values(array_diff(glob($imageDir) ?: [], $before));
-        self::assertNotEmpty($images, 'the signature image was taken out of the PDF for the report');
-        return array_merge([$copy], $images);
+        self::assertStringContainsString('data:image/png;base64,', $r['data']['html'], 'the signature image was taken out of the PDF for the report');
+        // Data protection: the image is a submitter's signature, needed only until the report holds it.
+        self::assertSame([], array_values(array_diff(glob($imageDir) ?: [], $before)), 'its file was deleted once the report held it');
+        return [$copy];
     }
 
     /**
      * @param string[] $left What the check had on disk when it answered.
      */
     #[Depends('testACheckRunsOnAStoredUpload')]
-    public function testTheCheckedCopyAndItsImagesAreGoneOnceTheCheckingRequestEnded(array $left): void
+    public function testTheCheckedCopyIsGoneOnceTheCheckingRequestEnded(array $left): void
     {
         self::assertNotEmpty($left);
         foreach ($left as $file) {
@@ -199,7 +200,8 @@ final class VerifierPageTest extends AjaxTestCase
         $html    = $this->check($pdf, 'many-parts.pdf');
 
         self::assertLessThan(5.0, microtime(true) - $started);
-        self::assertStringContainsString('many-parts.pdf has far more parts than any document this plugin creates and was not read.', $html);
+        self::assertStringContainsString("<span class='fabricator-pdf-problem__name'>many-parts.pdf</span>", $html);
+        self::assertStringContainsString('This file has far more parts than any document this plugin creates and was not read.', $html);
     }
 
     /**

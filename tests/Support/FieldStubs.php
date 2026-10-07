@@ -77,6 +77,8 @@ final class FieldStubs
         Functions\when('wp_max_upload_size')->justReturn(64 * 1048576);
         Functions\when('wp_convert_hr_to_bytes')->alias(static fn($v) => (int) $v * 1048576);
         Functions\when('wp_is_ini_value_changeable')->justReturn(true);
+        Functions\when('remove_accents')->returnArg();
+        Functions\when('get_available_languages')->justReturn([]);
         Functions\when('get_transient')->justReturn(false);
         Functions\when('set_transient')->justReturn(true);
     }

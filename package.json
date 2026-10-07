@@ -1,7 +1,7 @@
 {
   "name": "formfabricator-dev",
   "private": true,
-  "description": "Dev-only tooling for FormFabricator: the JS test suite (tests/js/). Nothing here ships; build.ps1 excludes it.",
+  "description": "Dev-only tooling for FormFabricator: the JS test suite (tests/js/). Nothing here ships; the release build excludes it.",
   "license": "GPL-3.0-or-later",
   "engines": {
     "node": ">=22.13.0"

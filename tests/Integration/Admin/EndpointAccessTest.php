@@ -48,7 +48,6 @@ final class EndpointAccessTest extends AjaxTestCase
         'fabricator_forms_unlock_pdf_layout'  => 'edit_pdf_layout',
         'fabricator_verify_push_lines'        => 'use_verifier',
         'fabricator_verify_progress'          => 'use_verifier',
-        'fabricator_serve_pdf'                => 'use_verifier',
     ];
 
     /** Actions a logged-out visitor uses on purpose: the form submission, its token and an ALTCHA field's challenge. */

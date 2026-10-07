@@ -1,8 +1,1 @@
 .fabricator-address-group { display: flex; flex-direction: column; gap: 10px; }
-.fabricator-address-row { display: flex; gap: 10px; }
-.fabricator-address-zip { width: 90px; flex-shrink: 0; }
-.fabricator-address-city { flex: 1; }
-@media (max-width: 600px) {
-    .fabricator-address-row { flex-direction: column; }
-    .fabricator-address-zip { width: 100%; }
-}

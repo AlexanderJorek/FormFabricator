@@ -74,7 +74,6 @@ final class SignatureSizeTest extends TestCase
         self::assertTrue($field->validate('Ada Lovelace', ['required' => true]));
         $entry = $field->mapNormalized('sg', 'Signature', 'Ada Lovelace', [], [])['sg'];
         self::assertSame(['label' => 'Signature', 'type' => 'text', 'value' => 'Ada Lovelace (signed by typing the name)'], $entry);
-        self::assertSame('Ada Lovelace (signed by typing the name)', $field->map('Ada Lovelace', []));
 
         $mandate = (new DirectDebitField())->mapNormalized(
             'dd',

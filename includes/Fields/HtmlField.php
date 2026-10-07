@@ -84,16 +84,6 @@ class HtmlField extends BaseField
     }
 
     /**
-     * Presence in the mapped data (and thus PDF/email) is instead gated upstream by mapNormalized().
-     *
-     * @return bool
-     */
-    public function includeInEmailSummary(): bool
-    {
-        return true;
-    }
-
-    /**
      * Already passed through Utils\HtmlSanitizer::sanitize() at save/render time, so MailSender injects it as-is.
      *
      * @return bool
@@ -148,15 +138,15 @@ class HtmlField extends BaseField
     }
 
     /**
-     * Maps the field value to a human-readable string for email and PDF output.
+     * The content's bytes, when it goes into the output: mapNormalized() puts it into the PDF.
      *
-     * @param mixed $value  Submitted value.
      * @param array $config Field configuration.
-     * @return string Human-readable representation.
+     * @return int
      */
-    public function map(mixed $value, array $config): string
+    public function configTextBytes(array $config): int
     {
-        return wp_strip_all_tags($config['html_content'] ?? '');
+        $html = $config['html_content'] ?? '';
+        return ($config['show_in_output'] ?? true) && is_string($html) ? strlen($html) : 0;
     }
 
     /**

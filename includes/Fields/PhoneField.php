@@ -181,14 +181,4 @@ class PhoneField extends BaseField
             ]
         );
     }
-
-    /**
-     * Returns the general settings schema for the field editor.
-     *
-     * @return array
-     */
-    public function getGeneralSchema(): array
-    {
-        return $this->baseGeneralEntries();
-    }
 }

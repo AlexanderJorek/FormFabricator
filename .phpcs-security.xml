@@ -14,10 +14,11 @@
     <file>uninstall.php</file>
     <file>includes</file>
     <!-- Dev tooling lives outside includes/ and was covered by neither ruleset, so it
-         inherited zero linting. build.ps1 strips it from the package; it is still code
+         inherited zero linting. The release build strips it from the package; it is still code
          in this repository and should hold the same bar. -->
     <file>languages/compile-mo.php</file>
     <file>languages/make-pot.php</file>
+    <file>tools</file>
 
     <exclude-pattern>vendor/*</exclude-pattern>
     <exclude-pattern>assets/*</exclude-pattern>
@@ -80,7 +81,7 @@
     <rule ref="WordPress.PHP.IniSet"/>
 
     <!-- Further sniffs WordPress.org's Plugin Check runs, so a new date(), a deprecated core call, a discouraged PHP
-         function or an enqueue without a version fails build.ps1 here instead of in the WordPress.org review. -->
+         function or an enqueue without a version fails the release build here instead of in the WordPress.org review. -->
     <rule ref="WordPress.DateTime.RestrictedFunctions"/>
     <rule ref="WordPress.WP.EnqueuedResourceParameters"/>
     <rule ref="WordPress.PHP.DiscouragedPHPFunctions"/>
@@ -97,9 +98,10 @@
                 <element value="FabricatorForms"/>
             </property>
         </properties>
-        <!-- The languages/ scripts are standalone CLI tools: WordPress never loads them, and build.ps1 strips them
-             from the package, so their top-level variables are no globals of the plugin. -->
+        <!-- The languages/ and tools/ scripts are standalone CLI tools: WordPress never loads them, and the release build
+             strips them from the package, so their functions and top-level variables are no globals of the plugin. -->
         <exclude-pattern>languages/*</exclude-pattern>
+        <exclude-pattern>tools/*</exclude-pattern>
     </rule>
 
     <!-- Not a security sniff: WordPress.WP.I18n checks that every translatable string is

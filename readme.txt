@@ -69,9 +69,9 @@ Mention this in your privacy policy (example text under FormFabricator → Setti
 License texts are included; `THIRD-PARTY-NOTICES.txt` lists every component.
 
 * **mPDF** (GPL-2.0-only): creates PDFs
+* PDF fonts from mPDF: **DejaVu** (Bitstream Vera license), **GNU FreeFont** FreeMono and FreeSerif (GPL-3.0-or-later with font exception), **Quivira** (public domain, unaltered)
 * **PdfParser** (LGPL-3.0): reads PDFs for checking
 * **FPDI**, **DeepCopy**, **random_compat**, **Symfony mbstring polyfill**, **PSR-7 HTTP message**, **PSR-3 logging**, **mPDF PSR-7 and PSR-3 shims** (all MIT): helpers for mPDF and PdfParser
-* **pdf.js** (Apache 2.0, [Mozilla](https://github.com/mozilla/pdf.js)): reads PDFs in the browser, unchanged from the official `pdfjs-dist` package
 * **ALTCHA** widget (MIT, [altcha.org](https://altcha.org/)): the CAPTCHA that runs on your own site, unchanged from the official `altcha` package
 * **Font Awesome Free** (icons CC BY 4.0, fonts SIL OFL 1.1, code MIT, [fontawesome.com](https://fontawesome.com/)): icons; readable source of its compressed style file at [github.com/FortAwesome/Font-Awesome](https://github.com/FortAwesome/Font-Awesome)
 
@@ -95,7 +95,15 @@ Nowhere in WordPress. Submissions go out by email (and as a PDF, if chosen); tem
 
 = Why can't visitors send my form? =
 
-Usually one of these: the form has no active notification; an email failed (the reason is in the server's error log); the PDF seal key is missing (administrators see a notice); JavaScript is turned off; the sending limit was reached; the attached files are too large in total for the server (visitors are told so); an ad blocker stopped the CAPTCHA.
+Check these, roughly in order of how often they happen:
+
+* **No active notification.** A form without one cannot be sent, because the answers would go nowhere. The form editor warns you when you save it. Add or switch on a notification.
+* **The PDF seal key is not set up.** Administrators see a notice on the plugin's pages. Finish the setup under FormFabricator → Settings.
+* **An email could not be sent.** Visitors see "Your submission could not be delivered". The reason is in your server's error log; usually the site's mail setup needs fixing.
+* **The CAPTCHA does not load.** An ad blocker can stop reCAPTCHA (visitors are told so), and ALTCHA only works on HTTPS pages.
+* **Too many submissions.** One visitor can send a form at most 10 times in 5 minutes. Visitors are told how long to wait.
+* **The uploaded files are too large** for your server's memory. Visitors are told so and asked for smaller files.
+* **JavaScript is turned off** in the visitor's browser. The form needs it to send.
 
 = Why did a recipient get a submission twice? =
 
@@ -123,10 +131,13 @@ Deactivating keeps everything. Deleting removes all forms, settings, seal keys a
 * Changed: a notification's sender address can no longer be a form field (providers often discard such mail); use "Reply-to email" instead.
 * Changed: one visitor address can send at most 50 forms in 5 minutes across the site, one IPv6 network at most 200.
 * Changed: macro-enabled Office files, disk images and more risky file types are always refused; .doc, .xls, .ppt and .rtf left the default "Documents" group.
+* Changed: the PDF check runs entirely on your server; the verification page no longer loads a PDF library in the browser.
+* Improved: characters the PDF's font lacks are drawn with fallback fonts, and anything that cannot be drawn is marked, so the PDF always matches its seal.
 * Improved: show/hide rules can test any field, including multi-input fields, uploads and the CAPTCHA, and rules that depend on each other work in any order, the same in the browser and on the server.
 * Improved: the form builder warns about a Consent field still showing its placeholder text, a mandate without creditor details, and notifications that carry no signatures.
 * Improved: with a master key in wp-config.php, seal keys are always encrypted and bound to their place, so a planted, edited or copied-back key is never trusted, and a wrong master key is recognised. Key backups carry a fingerprint.
 * Improved: a PDF logo or header image too large for the PDF is refused when the layout is saved.
+* Improved: a form whose own HTML text is too large for the PDF gets a clear message instead of a generic memory error.
 * Privacy: log lines no longer contain visitors' file names, and temporary copies of uploads are removed even after an interrupted submission, on deactivation and on deletion.
 * Fixed: a visitor could make their own sealed PDF fail the check later, through hidden markers in an answer or a crafted image; genuine PDFs with long answers were refused.
 * Fixed: hiding "Signatures & Uploads" in the PDF layout removed every field; the "Footer" switch now works.

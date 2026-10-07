@@ -91,7 +91,7 @@ class FormProcessor
         /* ---- Somewhere to send it ---- */
         // Without an enabled notification the data would go nowhere while the visitor is told it was sent. A site that
         // handles fabricator_forms_submission itself can allow it.
-        if (!MailSender::hasEnabledNotification($form->notifications ?? [])
+        if (!MailSender::hasEnabledNotification($form->notifications)
             && !apply_filters('fabricator_forms_accept_without_notifications', false, $form_id)
         ) {
             \FabricatorForms\fabricator_log('FabricatorForms FormProcessor: form ' . $form_id . ' has no enabled notification; submission refused.');
@@ -297,26 +297,35 @@ class FormProcessor
         $uploads      = self::uploadEntries($form->fields, $hidden_ids);
         // Text counts too: mPDF lays out every answer (see MemoryBudget::TEXT_FACTOR); a signature's data URI is image data.
         [$text_bytes, $image_bytes] = self::answerPayloadBytes(array_diff_key($raw, array_flip($hidden_ids)));
-        $mem_estimate = \FabricatorForms\Utils\MemoryBudget::estimateBytes(self::uploadPayloadBytes($uploads) + $image_bytes, $text_bytes);
+        $attaches_pdf = MailSender::attachesPdf($form_id, $form->notifications);
+        // The form's own text in the PDF (HTML blocks), twice: laid out in its cell, and again inside the seal.
+        $form_text_bytes = $attaches_pdf ? 2 * self::configTextBytes($form->fields, $hidden_ids) : 0;
+        $mem_estimate    = \FabricatorForms\Utils\MemoryBudget::estimateBytes(
+            self::uploadPayloadBytes($uploads) + $image_bytes,
+            $text_bytes + $form_text_bytes
+        );
         if ($mem_estimate > \FabricatorForms\Utils\MemoryBudget::budgetBytes()) {
-            // Waiting can't help a submission larger than the whole budget, so say what the visitor can change instead.
+            // Waiting can't help a submission larger than the whole budget, so say what can change instead: the
+            // visitor's files, or, when the form's own text alone is too much, the form.
+            $form_alone = \FabricatorForms\Utils\MemoryBudget::estimateBytes(0, $form_text_bytes) > \FabricatorForms\Utils\MemoryBudget::budgetBytes();
             \FabricatorForms\fabricator_log(
                 sprintf(
                     'FabricatorForms FormProcessor: a submission of form %d needs %dMB, more than the whole %dMB budget; '
-                    . 'refused as too large. If this host has headroom, raise it with FABRICATOR_MEMORY_BUDGET_MB in wp-config.php.',
+                    . 'refused as too large%s. If this host has headroom, raise it with FABRICATOR_MEMORY_BUDGET_MB in wp-config.php.',
                     $form_id,
                     (int) round($mem_estimate / 1048576),
-                    (int) round(\FabricatorForms\Utils\MemoryBudget::budgetBytes() / 1048576)
+                    (int) round(\FabricatorForms\Utils\MemoryBudget::budgetBytes() / 1048576),
+                    $form_alone ? ' (the HTML blocks alone are too large; shorten them)' : ''
                 )
             );
-            wp_send_json_error(['message' => self::uploadsTooLargeMessage()], 413);
+            wp_send_json_error(['message' => $form_alone ? self::formTooLargeMessage() : self::uploadsTooLargeMessage()], 413);
         }
 
         // Images are decoded only into a PDF. With one, an image it can't decode is refused, so the visitor can send a
         // smaller one.
         $images        = [];
         $largest_image = 0;
-        if (MailSender::attachesPdf($form_id, $form->notifications ?? [])) {
+        if ($attaches_pdf) {
             $images      = self::uploadedImages($uploads);
             $size_errors = self::imageSizeErrors($images, \FabricatorForms\PDF\PdfUtils::imagePixelLimit(), $mem_estimate, self::uploadPayloadBytes($uploads));
             if ($size_errors !== []) {
@@ -616,6 +625,44 @@ class FormProcessor
     }
 
     /**
+     * The refusal when the form's own text in the PDF is beyond the memory budget: nothing the visitor sends helps.
+     *
+     * @return string
+     */
+    private static function formTooLargeMessage(): string
+    {
+        return __('This form is too large for the server to create its PDF. Please let the site operator know.', 'formfabricator');
+    }
+
+    /**
+     * Bytes of text the shown fields put into the PDF from their configuration (BaseField::configTextBytes()), group
+     * children included; a hidden group hides its children.
+     *
+     * @param array    $fields     The form's field configurations.
+     * @param string[] $hidden_ids Ids of the fields hidden by conditions.
+     * @return int
+     */
+    private static function configTextBytes(array $fields, array $hidden_ids): int
+    {
+        $hidden    = array_flip($hidden_ids);
+        $is_hidden = static fn(mixed $c): bool => !is_array($c) || (is_string($c['id'] ?? null) && isset($hidden[$c['id']]));
+        $bytes     = 0;
+        foreach ($fields as $cfg) {
+            if ($is_hidden($cfg)) {
+                continue;
+            }
+            foreach (array_merge([$cfg], (array) ($cfg['children'] ?? [])) as $one) {
+                if ($is_hidden($one)) {
+                    continue;
+                }
+                $handler = is_string($one['type'] ?? null) ? FieldRegistry::get($one['type']) : null;
+                $bytes  += $handler ? $handler->configTextBytes($one) : 0;
+            }
+        }
+        return $bytes;
+    }
+
+    /**
      * Answers a request that runs out of memory while handling uploads with uploadsTooLargeMessage() instead of
      * WordPress's critical-error page, and releases the claim so the visitor can retry with smaller files.
      *
@@ -644,7 +691,7 @@ class FormProcessor
         // The same answer where the site has switched that handler off.
         register_shutdown_function(
             static function () use ($claim_key): void {
-                if (!function_exists('wp_is_fatal_error_handler_enabled') || wp_is_fatal_error_handler_enabled()) {
+                if (wp_is_fatal_error_handler_enabled()) {
                     return;
                 }
                 $answer = self::memoryExhaustionAnswer(error_get_last(), $claim_key);

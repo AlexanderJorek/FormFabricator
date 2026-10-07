@@ -4,7 +4,7 @@
  * Bootstrap for the integration suite: real WordPress (vendor/roots/wordpress-no-content), a real database, the WP
  * core test library (vendor/wp-phpunit/wp-phpunit), and the plugin loaded the way WordPress loads it.
  *
- * Kept apart from tests/bootstrap.php, which stubs WordPress for the unit and perf suites; see phpunit-integration.xml.dist.
+ * Kept apart from tests/bootstrap.php, which stubs WordPress for the unit and perf suites; see tests/phpunit-integration.xml.dist.
  * Set WP_MULTISITE=1 to run the same suite on a multisite network.
  */
 

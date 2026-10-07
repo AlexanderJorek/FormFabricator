@@ -4,37 +4,9 @@
  * @license   GPL-3.0-or-later
  */
 
-/* pdf.js ships ES modules only (vendored as .js, which servers send with a JavaScript MIME type). Imported lazily
-   from the page's versioned URL, so a cached old library is never paired with a new worker, and without top-level
-   await, so the rest still runs before DOMContentLoaded. */
-let _fabricatorPdfjsPromise = null;
-function _fabricatorPdfjs() {
-    if (!_fabricatorPdfjsPromise) {
-        const moduleSrc = (window.FabricatorVerifier && window.FabricatorVerifier.pdfJsModule)
-            || '../../vendor/pdfjs/pdf.js';
-        _fabricatorPdfjsPromise = import(moduleSrc).then(function (lib) {
-            /* Local worker only, no CDN. */
-            const workerSrc = window.FabricatorVerifier && window.FabricatorVerifier.pdfJsWorker;
-            if (!workerSrc) {
-                console.error('[FormFabricator] pdfJsWorker is not set. PDF.js worker may be missing.');
-            } else {
-                lib.GlobalWorkerOptions.workerSrc = workerSrc;
-            }
-            return lib;
-        });
-    }
-    return _fabricatorPdfjsPromise;
-}
-
 /* The particle background is drawn by admin-editor-canvas.js, as on every other admin page. */
 
-const Y_THRESHOLD = 3;
-
 /* ── Per-PDF inline progress cards ── */
-
-function _fabricatorCardPdfName(url) {
-    try { return decodeURIComponent(url.split('/').pop().split('?')[0]); } catch (_) { return url; }
-}
 
 function _fabricatorCreateProgressCard(name) {
     var card = document.createElement('div');
@@ -61,6 +33,34 @@ function _fabricatorCreateProgressCard(name) {
     return card;
 }
 
+/* The card of a file that could not be checked: the same markup as Verificationpage::problemCardHtml(), so a failure
+   reads alike whether the server or this script met it. Text nodes only. */
+function _fabricatorProblemCard(name, message) {
+    var i18n = (window.FabricatorVerifier && window.FabricatorVerifier.i18n) || {};
+    var card = document.createElement('div');
+    card.className = 'fabricator-pdf-problem fabricator-pdf-problem--error';
+    card.innerHTML =
+        '<div class="fabricator-pdf-problem__hdr">' +
+            '<span class="fabricator-pdf-problem__name"></span>' +
+            '<span class="fabricator-pdf-problem__pill"></span>' +
+        '</div>' +
+        '<div class="fabricator-pdf-problem__body">' +
+            '<span class="dashicons dashicons-warning"></span>' +
+            '<span class="fabricator-pdf-problem__text"></span>' +
+        '</div>';
+    card.querySelector('.fabricator-pdf-problem__name').textContent = name;
+    card.querySelector('.fabricator-pdf-problem__pill').textContent = i18n.error_pill || 'Error';
+    card.querySelector('.fabricator-pdf-problem__text').textContent = message;
+    return card;
+}
+
+/* Replaces a progress card with the problem card for the same file. */
+function _fabricatorFailCard(card, name, message) {
+    if (card.parentNode) {
+        card.parentNode.replaceChild(_fabricatorProblemCard(name, message), card);
+    }
+}
+
 /* Bar/pct is clamped to a high-water mark so it never visually moves backward; step text always updates. */
 function _fabricatorUpdateCard(card, step, pct) {
     var s = card.querySelector('.fabricator-vpc__step');
@@ -78,33 +78,7 @@ window.FABRICATOR_VERIFICATION_QUEUE = window.FabricatorVerifierQueueData || [];
 
 /* Staggers server calls to match the 1-per-5s rate limit; slots reserved by start time, not chained after responses. */
 var _fabricatorNextPushSlotAt = 0; // epoch ms
-var _fabricatorPushSlotGapMs  = 5200; // grows on an actual 429 — see forceNextSlotLater() below
-
-/* Caps concurrent fabricator_serve_pdf downloads (pdf.js issues these internally, so there's no
-   response to reject-and-retry the way the verify call has — gated here instead). */
-var FABRICATOR_MAX_CONCURRENT_LOADS = 3;
-var _fabricatorActiveLoads = 0;
-var _fabricatorLoadQueue   = [];
-
-function _fabricatorAcquireLoadSlot() {
-    return new Promise(function (resolve) {
-        function tryAcquire() {
-            if (_fabricatorActiveLoads < FABRICATOR_MAX_CONCURRENT_LOADS) {
-                _fabricatorActiveLoads++;
-                resolve();
-            } else {
-                _fabricatorLoadQueue.push(tryAcquire);
-            }
-        }
-        tryAcquire();
-    });
-}
-
-function _fabricatorReleaseLoadSlot() {
-    _fabricatorActiveLoads--;
-    var next = _fabricatorLoadQueue.shift();
-    if (next) next();
-}
+var _fabricatorPushSlotGapMs  = 5200; // grows on an actual 429 — see _fabricatorWidenPushSlotGap() below
 
 /* Caps concurrent verify requests client-side too — the server's own cap can't stop the client
    from optimistically showing "analyzing" the instant a request is sent, before it's accepted. */
@@ -150,7 +124,7 @@ function _fabricatorCountdown(waitMs, onTick) {
     });
 }
 
-function _fabricatorThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestStart) {
+function _fabricatorThrottledCheck(ajaxUrl, formData, onWaitTick, onRequestStart) {
     var now  = Date.now();
     var wait = Math.max(0, _fabricatorNextPushSlotAt - now);
     _fabricatorNextPushSlotAt = Math.max(_fabricatorNextPushSlotAt, now) + _fabricatorPushSlotGapMs;
@@ -167,8 +141,8 @@ function _fabricatorWidenPushSlotGap() {
     _fabricatorNextPushSlotAt = Math.max(_fabricatorNextPushSlotAt, Date.now() + _fabricatorPushSlotGapMs);
 }
 
-/* The server deletes an uploaded copy 10 minutes after its last use, and downloading and reading a large PDF sends no
-   request for a long time. While any file is being processed, a request every minute keeps all of this user's copies. */
+/* The server deletes an uploaded copy 10 minutes after its last use, and a file waiting its turn in a large batch sends
+   no request for a long time. While any file is being processed, a request every minute keeps all of this user's copies. */
 var _fabricatorBusyFiles     = 0;
 var _fabricatorKeepAliveTimer = null;
 function _fabricatorKeepAliveStart() {
@@ -189,18 +163,16 @@ function _fabricatorKeepAliveStop() {
     _fabricatorKeepAliveTimer = null;
 }
 
+/* Checks one stored upload: the server reads the file itself, so the page only asks for the check, by its token. */
 window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) {
-    if (!pdfInfo) return;
+    if (!pdfInfo || !pdfInfo.token) return;
 
-    const pdfUrl    = typeof pdfInfo === 'string' ? pdfInfo : pdfInfo.url;
-    const pdfToken  = typeof pdfInfo === 'string' ? null    : (pdfInfo.token || null);
-    const pdfNonce  = typeof pdfInfo === 'string' ? null    : (pdfInfo.nonce || null);
-    const pdfAction = typeof pdfInfo === 'string' ? null    : (pdfInfo.action || 'fabricator_serve_pdf');
-    const pdfName   = typeof pdfInfo === 'string' ? _fabricatorCardPdfName(pdfInfo) : (pdfInfo.name || _fabricatorCardPdfName(pdfInfo.url));
-    if (!pdfUrl) return;
+    const pdfToken  = pdfInfo.token;
+    const name      = pdfInfo.name || '';
+    const ajaxUrl   = window.FabricatorVerifier && window.FabricatorVerifier.ajaxUrl;
+    if (!ajaxUrl) return;
 
     const container = document.getElementById('fabricator-pdf-verification-results') || document.body;
-    const name      = pdfName;
     const card      = _fabricatorCreateProgressCard(name);
     container.appendChild(card);
     var _pollTimer  = null;
@@ -215,249 +187,135 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
 
     function done() { clearInterval(elapsedTimer); }
 
-    // Bar is carved into non-overlapping per-phase bands so it only ever climbs; 42-95 remaps the server's raw 5..94 scale to avoid a backward jump.
+    // The server reports 5..94 while it checks; the bar starts at 2 % once the request is out and stops short of 100 %
+    // until the answer has arrived.
     function remapServerPct(rawPct) {
-        return 42 + Math.round((Math.max(0, Math.min(100, rawPct)) / 100) * 53);
+        return 2 + Math.round((Math.max(0, Math.min(100, rawPct)) / 100) * 93);
     }
 
     var i18n = (window.FabricatorVerifier && window.FabricatorVerifier.i18n) || {};
-    // Destroyed in the finally block below — pdf.js keeps decoded pages/worker state alive until .destroy().
-    let pdf;
-    let loadingTask;
+
+    const formData = new FormData();
+    formData.append('action',    'fabricator_verify_push_lines');
+    formData.append('pdf_token', pdfToken);
+    formData.append('nonce',     (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
+
+    // Poll only once the request goes out (see onRequestStart); lastServerPct resets each (re)start since a 429 retry runs fresh server-side.
+    var lastServerPct = 0;
+    function startProgressPoll() {
+        lastServerPct = 0;
+        _pollTimer = setInterval(function () {
+            var pf = new FormData();
+            pf.append('action', 'fabricator_verify_progress');
+            pf.append('token',  pdfToken);
+            pf.append('nonce',  (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
+            fetch(ajaxUrl, { method: 'POST', body: pf, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.success && d.data && d.data.step && d.data.pct > lastServerPct) {
+                        lastServerPct = d.data.pct;
+                        _fabricatorUpdateCard(card, d.data.step, remapServerPct(d.data.pct));
+                    }
+                })
+                .catch(function () {});
+        }, 400);
+    }
+
     _fabricatorKeepAliveStart();
     try {
-        var queuedForLoad = _fabricatorActiveLoads >= FABRICATOR_MAX_CONCURRENT_LOADS;
-        if (queuedForLoad) {
-            _fabricatorUpdateCard(card, i18n.queued_for_download || 'Waiting to download…', 1);
+        function onWaitTick(waitMs) {
+            var waitMsg = (i18n.queued || 'Waiting in queue (%1$ds)…')
+                .replace('%1$d', Math.ceil(waitMs / 1000));
+            _fabricatorUpdateCard(card, waitMsg, 1);
             card.classList.add('fabricator-vpc--queued');
         }
-        await _fabricatorAcquireLoadSlot();
-        if (queuedForLoad) { card.classList.remove('fabricator-vpc--queued'); }
-        _fabricatorUpdateCard(card, i18n.pdf_loading || 'Loading PDF…', 2);
-        try {
-            // Fetched via POST so the secret download token never lands in a URL, server log, or Referer header.
-            var downloadBody = new URLSearchParams();
-            downloadBody.set('action', pdfAction || 'fabricator_serve_pdf');
-            downloadBody.set('nonce', pdfNonce || '');
-            downloadBody.set('token', pdfToken || '');
-            const downloadResp = await fetch(pdfUrl, {
-                method: 'POST',
-                credentials: 'same-origin',
-                body: downloadBody
-            });
-            if (!downloadResp.ok) {
-                throw new Error('PDF download failed (' + downloadResp.status + ')');
-            }
-            const totalBytes = parseInt(downloadResp.headers.get('Content-Length') || '0', 10);
-            const reader = downloadResp.body ? downloadResp.body.getReader() : null;
-            let pdfBytes;
-            if (reader) {
-                const chunks = [];
-                let loaded = 0;
-                for (;;) {
-                    const { done: chunkDone, value } = await reader.read();
-                    if (chunkDone) { break; }
-                    chunks.push(value);
-                    loaded += value.length;
-                    if (totalBytes) {
-                        var frac = Math.min(1, loaded / totalBytes);
-                        /* A printf-style string: %% is a literal %, which only sprintf() collapses, so it is done here. */
-                        var downloadMsg = (i18n.downloading || 'Downloading… (%1$d%%)').replace('%1$d', Math.round(frac * 100)).replace(/%%/g, '%');
-                        _fabricatorUpdateCard(card, downloadMsg, 2 + Math.round(frac * 10));
-                    }
-                }
-                pdfBytes = new Uint8Array(loaded);
-                let offset = 0;
-                for (const chunk of chunks) {
-                    pdfBytes.set(chunk, offset);
-                    offset += chunk.length;
-                }
-            } else {
-                pdfBytes = new Uint8Array(await downloadResp.arrayBuffer());
-            }
-            // pdf.js 6.x uses no eval()/Function() at all, so CVE-2024-4367's isEvalSupported:false workaround has
-            // nothing to switch off (pdf.js has no such option).
-            const pdfjsLib = await _fabricatorPdfjs();
-            loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
-            pdf = await loadingTask.promise;
-        } finally {
-            // Released once the file transfer settles, not tied to the extraction loop below.
-            _fabricatorReleaseLoadSlot();
+        function onRequestStart() {
+            card.classList.remove('fabricator-vpc--queued');
+            _fabricatorUpdateCard(card, i18n.analyzing || 'Checking on the server…', 2);
+            startProgressPoll();
         }
-        const allLines = [];
 
-        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            var pagePct = 12 + Math.round((pageNum - 1) / pdf.numPages * 28);
-            var pageMsg = (i18n.page_reading || 'Reading page %1$d of %2$d…')
-                .replace('%1$d', pageNum).replace('%2$d', pdf.numPages);
-            _fabricatorUpdateCard(card, pageMsg, pagePct);
-            const page    = await pdf.getPage(pageNum);
-            const content = await page.getTextContent();
+        var queuedForVerify = _fabricatorActiveVerifies >= FABRICATOR_MAX_CONCURRENT_VERIFIES;
+        if (queuedForVerify) {
+            _fabricatorUpdateCard(card, i18n.queued_for_verify || 'Waiting for a free verification slot…', 1);
+            card.classList.add('fabricator-vpc--queued');
+        }
+        await _fabricatorAcquireVerifySlot();
+        if (queuedForVerify) { card.classList.remove('fabricator-vpc--queued'); }
 
-            const items = content.items.sort(function (a, b) {
-                const yDiff = b.transform[5] - a.transform[5];
-                if (Math.abs(yDiff) > Y_THRESHOLD) return yDiff;
-                return a.transform[4] - b.transform[4];
-            });
+        // A 429 is retried, and _fabricatorWidenPushSlotGap() widens the gap for the rest of the batch.
+        var res;
+        try {
+            var maxAttempts = 5;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+                res = await _fabricatorThrottledCheck(ajaxUrl, formData, onWaitTick, onRequestStart);
+                if (res.status !== 429 || attempt === maxAttempts) { break; }
+                stopPoll();
 
-            const lines = [];
-            let current = null;
-            for (const item of items) {
-                const y = item.transform[5];
-                if (!current || Math.abs(current.y - y) > Y_THRESHOLD) {
-                    current = { y: y, items: [item] };
-                    lines.push(current);
+                // A 429 with code:"busy" means the server-side concurrency cap, not the generic throttle.
+                // code:"too_large" means the file needs more than the whole budget: no retry can succeed.
+                var busyRetryAfter = null;
+                var neverFits = false;
+                try {
+                    var busyBody = await res.clone().json();
+                    if (busyBody && busyBody.data && busyBody.data.code === 'busy') {
+                        busyRetryAfter = Number(busyBody.data.retry_after) || 8;
+                    }
+                    neverFits = !!(busyBody && busyBody.data && busyBody.data.code === 'too_large');
+                } catch (_) { /* not JSON or already consumed — fall through to generic retry */ }
+                if (neverFits) { break; }
+
+                if (busyRetryAfter !== null) {
+                    card.classList.add('fabricator-vpc--queued');
+                    await _fabricatorCountdown(busyRetryAfter * 1000, function (remainingMs) {
+                        var busyMsg = (i18n.server_busy_retry || 'Server busy — retrying in %1$ds…')
+                            .replace('%1$d', Math.ceil(remainingMs / 1000));
+                        _fabricatorUpdateCard(card, busyMsg, 1);
+                    });
                 } else {
-                    current.items.push(item);
+                    _fabricatorWidenPushSlotGap();
+                    _fabricatorUpdateCard(card, i18n.rate_limited_retry || 'Rate limited — retrying…', 1);
+                    card.classList.add('fabricator-vpc--queued');
                 }
             }
-
-            allLines.push(...lines.map(function (line) {
-                return line.items.map(function (i) { return i.str; }).join('');
-            }));
+        } finally {
+            // Rendering the result below is pure client-side work — no need to hold the slot for it.
+            _fabricatorReleaseVerifySlot();
         }
-
-        const ajaxUrl = window.FabricatorVerifier && window.FabricatorVerifier.ajaxUrl;
-        if (!ajaxUrl) { done(); return allLines; }
-
-        const formData = new FormData();
-        formData.append('action',      'fabricator_verify_push_lines');
-        formData.append('pdf_token',   pdfToken || '');
-        formData.append('visualLines', JSON.stringify(allLines));
-        formData.append('nonce',       (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
-
-        // Poll only once the request goes out (see onRequestStart); lastServerPct resets each (re)start since a 429 retry runs fresh server-side.
-        var lastServerPct = 0;
-        function startProgressPoll() {
-            if (!pdfToken) { return; }
-            lastServerPct = 0;
-            _pollTimer = setInterval(function () {
-                var pf = new FormData();
-                pf.append('action', 'fabricator_verify_progress');
-                pf.append('token',  pdfToken);
-                pf.append('nonce',  (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
-                fetch(ajaxUrl, { method: 'POST', body: pf, credentials: 'same-origin' })
-                    .then(function (r) { return r.json(); })
-                    .then(function (d) {
-                        if (d.success && d.data && d.data.step && d.data.pct > lastServerPct) {
-                            lastServerPct = d.data.pct;
-                            _fabricatorUpdateCard(card, d.data.step, remapServerPct(d.data.pct));
-                        }
-                    })
-                    .catch(function () {});
-            }, 400);
-        }
-
-        try {
-            function onWaitTick(waitMs) {
-                var waitMsg = (i18n.queued || 'Waiting in queue (%1$ds)…')
-                    .replace('%1$d', Math.ceil(waitMs / 1000));
-                _fabricatorUpdateCard(card, waitMsg, 40);
-                card.classList.add('fabricator-vpc--queued');
-            }
-            function onRequestStart() {
-                card.classList.remove('fabricator-vpc--queued');
-                _fabricatorUpdateCard(card, i18n.text_extracted || 'Text extracted — server analyzing…', 42);
-                startProgressPoll();
-            }
-
-            var queuedForVerify = _fabricatorActiveVerifies >= FABRICATOR_MAX_CONCURRENT_VERIFIES;
-            if (queuedForVerify) {
-                _fabricatorUpdateCard(card, i18n.queued_for_verify || 'Waiting for a free verification slot…', 40);
-                card.classList.add('fabricator-vpc--queued');
-            }
-            await _fabricatorAcquireVerifySlot();
-            if (queuedForVerify) { card.classList.remove('fabricator-vpc--queued'); }
-
-            // A 429 is retried, and _fabricatorWidenPushSlotGap() widens the gap for the rest of the batch.
-            var res;
-            try {
-                var maxAttempts = 5;
-                for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-                    res = await _fabricatorThrottledPushLines(ajaxUrl, formData, onWaitTick, onRequestStart);
-                    if (res.status !== 429 || attempt === maxAttempts) { break; }
-                    stopPoll();
-
-                    // A 429 with code:"busy" means the server-side concurrency cap, not the generic throttle.
-                    var busyRetryAfter = null;
-                    try {
-                        var busyBody = await res.clone().json();
-                        if (busyBody && busyBody.data && busyBody.data.code === 'busy') {
-                            busyRetryAfter = Number(busyBody.data.retry_after) || 8;
-                        }
-                    } catch (_) { /* not JSON or already consumed — fall through to generic retry */ }
-
-                    if (busyRetryAfter !== null) {
-                        card.classList.add('fabricator-vpc--queued');
-                        await _fabricatorCountdown(busyRetryAfter * 1000, function (remainingMs) {
-                            var busyMsg = (i18n.server_busy_retry || 'Server busy — retrying in %1$ds…')
-                                .replace('%1$d', Math.ceil(remainingMs / 1000));
-                            _fabricatorUpdateCard(card, busyMsg, 40);
-                        });
-                    } else {
-                        _fabricatorWidenPushSlotGap();
-                        _fabricatorUpdateCard(card, i18n.rate_limited_retry || 'Rate limited — retrying…', 40);
-                        card.classList.add('fabricator-vpc--queued');
-                    }
-                }
-            } finally {
-                // Rendering the result below is pure client-side work — no need to hold the slot for it.
-                _fabricatorReleaseVerifySlot();
-            }
-            stopPoll();
-            _fabricatorUpdateCard(card, i18n.processing || 'Processing response…', 98);
-            const rawText = await res.text();
-
-            let json = null;
-            try {
-                json = JSON.parse(rawText);
-            } catch (_) {
-                console.error('[FormFabricator] Non-JSON response (HTTP ' + res.status + ') for', pdfUrl, '\n', rawText);
-                _fabricatorUpdateCard(card, (i18n.server_error || 'Server error (HTTP %d)').replace('%d', res.status), 100);
-                card.classList.add('fabricator-vpc--error');
-                done();
-                return allLines;
-            }
-
-            _fabricatorUpdateCard(card, i18n.done || 'Done', 100);
-            done();
-
-            if (json.success === true && json.data && typeof json.data.html === 'string') {
-                // Escaped server-side (Verificationpage.php).
-                const tmp = document.createElement('div');
-                tmp.innerHTML = json.data.html;
-                card.parentNode.replaceChild(tmp.firstElementChild || tmp, card);
-            } else {
-                console.error('[FormFabricator] Server returned error:', json);
-                card.classList.add('fabricator-vpc--error');
-                var msg = (json.data && json.data.message) || (i18n.unknown_error || 'Unknown server error');
-                var stepEl = card.querySelector('.fabricator-vpc__step');
-                if (stepEl) stepEl.textContent = (i18n.error_message || 'Error: %s').replace('%s', function () { return msg; });
-            }
-        } catch (err) {
-            stopPoll();
-            console.error('[FormFabricator] Fetch error for', pdfUrl, err);
-            _fabricatorUpdateCard(card, i18n.network_error || 'Network error', 100);
-            card.classList.add('fabricator-vpc--error');
-            done();
-        }
-
-        return allLines;
-    } catch (e) {
         stopPoll();
-        console.error('[FormFabricator] Error parsing PDF', pdfUrl, e);
-        _fabricatorUpdateCard(card, (i18n.pdf_load_error || 'PDF load error: %s').replace('%s', function () { return e.message; }), 100);
-        card.classList.add('fabricator-vpc--error');
+        _fabricatorUpdateCard(card, i18n.processing || 'Processing response…', 98);
+        const rawText = await res.text();
+
+        let json = null;
+        try {
+            json = JSON.parse(rawText);
+        } catch (_) {
+            console.error('[FormFabricator] Non-JSON response (HTTP ' + res.status + ') for', name, '\n', rawText);
+            done();
+            _fabricatorFailCard(card, name, (i18n.server_error || 'Server error (HTTP %d)').replace('%d', res.status));
+            return;
+        }
+
+        _fabricatorUpdateCard(card, i18n.done || 'Done', 100);
         done();
-        return [];
+
+        if (json.success === true && json.data && typeof json.data.html === 'string') {
+            // Escaped server-side (Verificationpage.php).
+            const tmp = document.createElement('div');
+            tmp.innerHTML = json.data.html;
+            card.parentNode.replaceChild(tmp.firstElementChild || tmp, card);
+        } else {
+            console.error('[FormFabricator] Server returned error:', json);
+            var msg = (json && json.data && json.data.message) || (i18n.unknown_error || 'Unknown server error');
+            _fabricatorFailCard(card, name, msg);
+        }
+    } catch (err) {
+        stopPoll();
+        console.error('[FormFabricator] Fetch error for', name, err);
+        done();
+        _fabricatorFailCard(card, name, i18n.network_error || 'Network error');
     } finally {
         _fabricatorKeepAliveStop();
-        // typeof-guarded: pdf.destroy() isn't reliably present on the resolved proxy across pdf.js versions.
-        if (loadingTask && typeof loadingTask.destroy === 'function') {
-            try { loadingTask.destroy(); } catch (destroyErr) { console.error('[FormFabricator] loadingTask.destroy() failed for', pdfUrl, destroyErr); }
-        } else if (pdf && typeof pdf.destroy === 'function') {
-            try { pdf.destroy(); } catch (destroyErr) { console.error('[FormFabricator] pdf.destroy() failed for', pdfUrl, destroyErr); }
-        }
     }
 };
 

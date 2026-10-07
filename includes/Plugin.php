@@ -529,7 +529,7 @@ class Plugin
     public static function availablePrivacyLanguages(): array
     {
         $langs     = ['en' => 'English'];
-        $installed = function_exists('get_available_languages') ? get_available_languages() : [];
+        $installed = get_available_languages();
         // WP_LANG_DIR/plugins is where WP.org language packs install.
         $dirs = [
             rtrim((string) WP_LANG_DIR, '/\\') . '/plugins',
