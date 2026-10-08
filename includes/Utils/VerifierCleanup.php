@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -109,7 +109,7 @@ class VerifierCleanup
     {
         $now      = time();
         $next_due = 0;
-        $base     = wp_upload_dir()['basedir'] . '/fabricator-secure-pdf';
+        $base     = PrivateDir::base();
         foreach (self::DIRS as $sub) {
             foreach ((glob($base . $sub . '/*') ?: []) as $file) {
                 if (!is_file($file) || in_array(basename($file), self::GUARD_FILES, true)) {

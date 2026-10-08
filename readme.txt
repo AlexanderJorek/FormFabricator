@@ -4,7 +4,7 @@ Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.0.8
+Stable tag: 1.0.9
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -122,6 +122,14 @@ Replaced keys stay on your site, so older PDFs remain checkable. After a server 
 Deactivating keeps everything. Deleting removes all forms, settings, seal keys and stored files for good, so keep your key backup files.
 
 == Changelog ==
+
+= 1.0.9 =
+* Changed: every file the plugin writes (PDFs, mail attachments, the PDF check's uploads) now lives in one folder, `wp-content/uploads/formfabricator/`, instead of partly in the server's shared temporary-files folder.
+* Fixed: on a multi-site network, a user removed from a site could keep the access this plugin had granted them, and the form-selection list could show the wrong name for a user no longer on the site.
+* Fixed: if a visitor's uploaded files could not be prepared for a notification email (uploads folder not writable, or the disk full), the email was still sent without them; it now fails with the usual "could not be delivered" message instead.
+* Fixed: finishing seal-key setup with a master key already in `wp-config.php` could finalise before confirming it was the right one.
+* Fixed: the PDF Layout preview's sample form name ("Beispielformular") stayed in German regardless of the site's language.
+* Fixed: an unexpected error while rotating the seal key showed a blank error page instead of a message.
 
 = 1.0.8 =
 * New: the SEPA field is now the Direct Debit Mandate, with SEPA, Bacs (UK) or ACH (US) per field. Account details are checked on your site, and every text the mandate shows can be changed; only SEPA comes with default wording. The creditor's name and address, the type of payment, the debtor's address and the place of signing can be added.

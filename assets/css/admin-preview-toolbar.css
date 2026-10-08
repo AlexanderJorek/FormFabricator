@@ -1,0 +1,93 @@
+/* The builder preview's toolbar (FormEditor's preview page, beside admin-preview-toolbar.js). */
+#fabricator-preview-toolbar {
+    position: sticky;
+    top: 16px;
+    flex-shrink: 0;
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: system-ui, sans-serif;
+    font-size: 12px;
+    width: 190px;
+    align-self: flex-start;
+}
+
+.fpt-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.fpt-toggle {
+    position: relative;
+    flex-shrink: 0;
+    width: 34px;
+    height: 20px;
+    margin-top: 1px;
+}
+
+.fpt-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.fpt-slider {
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    background: #c3c4c7;
+    cursor: pointer;
+    transition: background .2s;
+}
+
+.fpt-slider::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform .2s;
+}
+
+.fpt-toggle input:checked + .fpt-slider {
+    background: #2271b1;
+}
+
+.fpt-toggle input:checked + .fpt-slider::before {
+    transform: translateX(14px);
+}
+
+.fpt-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    cursor: pointer;
+}
+
+.fpt-label strong {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+@media (prefers-color-scheme: dark) {
+    #fabricator-preview-toolbar {
+        background: #2c2c2c;
+        border-color: #3c3c3c;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+    }
+
+    .fpt-label strong {
+        color: #e0e0e0;
+    }
+}

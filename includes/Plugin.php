@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -138,8 +138,8 @@ class Plugin
         if (!current_user_can('manage_options')) {
             return;
         }
-        // On this plugin's own screens and the Plugins list only: shown on every admin screen and back every 30 days, it
-        // read as the kind of nag WordPress.org's guideline 11 asks plugins not to put up.
+        // On this plugin's own screens and the Plugins list only: on every admin screen, and back every 30 days, it
+        // would be the kind of nag WordPress.org's guideline 11 asks plugins not to put up.
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
         if (!$screen || (!str_contains((string) $screen->id, 'fabricator') && $screen->base !== 'plugins')) {
             return;
@@ -162,7 +162,7 @@ class Plugin
         if ($url_path === '') {
             return;
         }
-        $path = rtrim($url_path, '/') . '/fabricator-secure-pdf/';
+        $path = rtrim($url_path, '/') . '/' . Utils\PrivateDir::NAME . '/';
 
         $dismiss = wp_nonce_url(
             add_query_arg(self::UPLOADS_NOTICE_DISMISS, '1'),
@@ -252,9 +252,8 @@ class Plugin
      */
     private static function probeUploadsExposure(): string
     {
-        $upload_dir = wp_upload_dir();
-        $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
-        $safe_url   = rtrim((string) ($upload_dir['baseurl'] ?? ''), '/') . '/fabricator-secure-pdf';
+        $safe_dir = Utils\PrivateDir::base();
+        $safe_url = Utils\PrivateDir::url();
         Utils\SecureDir::harden($safe_dir);
 
         $file   = 'probe-' . bin2hex(random_bytes(8)) . '.txt';
@@ -773,19 +772,21 @@ class Plugin
         if (user_can($user_id, 'manage_options')) {
             return true;
         }
-        // Not memoized in a function-static — that risked serving a stale value if a later call in the same request saved this option.
+        $user = get_userdata($user_id);
+        // On a network, grants belong to this site's members only: removing someone from the site ends them, whatever
+        // the stored list still says.
+        if (!$user || (is_multisite() && !is_user_member_of_blog($user_id))) {
+            return false;
+        }
+        // Read on every call, never memoized: a save later in the same request must count.
         $access = get_option('fabricator_forms_access', []);
         $user_overrides = $access['users'] ?? [];
-        // A per-user entry GRANTS on top of the role, it does not replace it (else "add user" silently revoked role caps).
+        // A per-user entry grants on top of the role, it doesn't replace it.
         if (isset($user_overrides[$user_id])
             && is_array($user_overrides[$user_id])
             && !empty($user_overrides[$user_id][$cap])
         ) {
             return true;
-        }
-        $user = get_userdata($user_id);
-        if (!$user) {
-            return false;
         }
         $role_perms = $access['roles'] ?? [];
         foreach ($user->roles as $role) {

@@ -68,7 +68,7 @@ The short version. Each point links to its full explanation.
 ## Directory layout
 
 ```
-assets/                 CSS, JS front-end assets
+assets/                 CSS, JS front-end assets; assets/vendor/ holds the hand-vendored Font Awesome
 includes/               PHP plugin source (Admin, Fields, Form, PDF, Utils)
 includes/PDF/templates/ mPDF layout templates
 languages/              .pot (ships), German .po/.mo and the translation tools (don't ship)
@@ -81,6 +81,10 @@ tests/                  the test suites and their phpunit*.xml.dist    (dev-only
 tools/                  the release build and its test database        (dev-only)
 build.cmd, build.sh     launchers for tools/build.php                  (dev-only)
 ```
+
+Hand-vendored packages (ALTCHA, Font Awesome) carry a VERSION file: the npm release, its tarball integrity, how the
+shipped files were derived, and a SHA-256 for each file. They are listed in `tools/build-config.php` (`handVendored`),
+and the build refuses to package an edited, missing or unlisted file.
 
 ### How classes load
 
@@ -161,11 +165,29 @@ One provider per field, picked by the admin:
 **No form submission data is ever stored locally.** All data goes to email and/or PDF only.
 
 - There are no custom database tables for entries.
-- Temporary files holding submission data are deleted as soon as they have been read. Their removal is registered the
-  moment they exist (a shutdown function, which also runs after a memory or time fatal), and an hourly sweep, run from
-  submissions as well as WP-Cron (`Plugin::sweepIfDue()`), clears any a killed request left behind. Deactivation ends
-  that sweep, so it sweeps once more, and uninstall does the same for the system temp dir. Both leave anything changed in
-  the last ten minutes: a submission may still be sending it, here or on another site sharing the temp dir.
+- Every file the plugin writes is in `uploads/formfabricator/` (`Utils\PrivateDir`), hardened by `SecureDir`. Nothing
+  goes to the system temp dir, which other accounts on the server may share.
+
+  ```
+  pdf/<submission>/      mPDF's temp dir for the submission: first pass, final PDF, mPDF's image copies
+  mail/<submission>/     the uploads as mail attachments, one subfolder per file
+  mpdf-cache/            mPDF's font metrics, shared (nothing in them comes from a submission)
+  verfiles/, verimages/  the verification page's copies (VerifierCleanup)
+  ```
+
+- A submission's folders share one random name per request (`PrivateDir::forSubmission()`). Each one's removal is
+  registered the moment it exists (a shutdown function, which also runs after a memory or time fatal). Files holding
+  submission data are also deleted as soon as they have been read.
+- Nothing is stored locally, so a notification is never sent without what it should carry: when the PDF or an upload
+  can't be written (uploads not writable, disk full), the submission stops before the first email and the visitor is
+  asked to try again (`MailSender::deliveryFailed()`).
+- An hourly sweep, run from submissions as well as WP-Cron (`Plugin::sweepIfDue()`), removes the submission folders a
+  killed request left behind. Deactivation ends that sweep, so it sweeps once more, leaving anything changed in the last
+  ten minutes: a submission may still be sending it. Uninstall removes the whole folder, on every site.
+- mPDF keeps its font cache in its temp dir and can't be told otherwise, so each submission's temp dir gets the shared
+  metrics as hard links (copies where links fail) before the PDF, and new metrics are moved back after
+  (`PrivateDir::linkFontCache()`, `shareFontCache()`). mPDF replaces a cache file by renaming a new one over it, so it
+  never writes through a link.
 - Log lines never carry a visitor's file name, alone or inside a path: `fabricator_log_file()` stands in for it (a short
   hash and the extension). The debug log is kept indefinitely, often in a web-readable folder.
 
@@ -454,7 +476,7 @@ Configured in `tests/phpunit-integration.xml.dist`, tests in `tests/Integration/
 - **Built-ins a test cannot reach otherwise**, in the same file and reset the same way:
   - `function_exists()` (in `FabricatorForms\Admin` and `\PDF`) denies the functions in `Overrides::$missingFunctions`,
     as a PHP built without openssl would.
-  - `register_shutdown_function()` (in `FabricatorForms\Form`) holds the callbacks back while
+  - `register_shutdown_function()` (in `FabricatorForms\Form` and `\PDF`) holds the callbacks back while
     `Overrides::$shutdownFunctions` is an array; `Overrides::runShutdownFunctions()` then plays the end of the request.
     Callbacks a test never ran go to PHP at reset, so nothing they remove outlives the run.
   - An override catches only unqualified calls in its namespace: `\function_exists()` in the plugin bypasses it.

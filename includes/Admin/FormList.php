@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -212,7 +212,7 @@ class FormList
                 </a>
             </div>
 
-            <?php // Always rendered, only hidden while empty: an imported or duplicated form is inserted here, and with no container it stayed invisible until the page was reloaded. ?>
+            <?php // Always rendered, only hidden while empty: an imported or duplicated form is inserted here without a reload. ?>
             <div class="fabricator-form-list" id="fabricator-form-list"<?php echo empty($forms) ? ' hidden' : ''; ?>>
                 <?php foreach ($forms as $form) : ?>
                     <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- renderRow() escapes every dynamic value itself; one template for the page and the AJAX-inserted rows. ?>

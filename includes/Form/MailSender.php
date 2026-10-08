@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -152,7 +152,7 @@ class MailSender
 
     /**
      * Whether the last onSubmission() failed to deliver: an email failed, no notification had a usable recipient, or
-     * a needed PDF failed (decided before any email goes out).
+     * a needed PDF or upload attachment failed (decided before any email goes out).
      *
      * @return bool
      */
@@ -410,21 +410,22 @@ class MailSender
                 self::$delivery_failed = true;
                 return;
             }
-            // Removal registered the moment the PDF exists; shutdown functions run even after a memory or time fatal.
-            register_shutdown_function(
-                static function () use ($pdf_path): void {
-                    if (file_exists($pdf_path)) {
-                        wp_delete_file($pdf_path);
-                        if (file_exists($pdf_path)) {
-                            \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp PDF {$pdf_path}");
-                        }
-                    }
-                }
-            );
         }
 
-        /* ---- Materialize uploads for mail attachment (split by type); their directory removes itself on shutdown ---- */
-        $uploads = self::materializeUploadAttachments($mapped);
+        /* ---- Materialize uploads for mail attachment (split by type); their folder removes itself on shutdown ---- */
+        // Only when a notification carries them: one with the PDF gets the files the PDF can't show, one with the
+        // uploads gets all of them.
+        $uploads = ['images' => [], 'others' => [], 'complete' => true];
+        if (in_array(true, array_column($jobs, 'attach_pdf'), true) || in_array(true, array_column($jobs, 'attach_uploads'), true)) {
+            $uploads = self::materializeUploadAttachments($mapped);
+            if (!$uploads['complete']) {
+                // Stop before any email, as for the PDF: nothing is stored locally, so mailing without the visitor's
+                // files would lose them while the submission reads as sent. The visitor is asked to try again.
+                self::logFailure("form {$form_id}: the uploads could not be prepared as attachments (uploads folder not writable, or disk full?); no email sent");
+                self::$delivery_failed = true;
+                return;
+            }
+        }
 
         /* ---- Pass 2: send ---- */
         $sent_count = 0;
@@ -497,119 +498,36 @@ class MailSender
     }
 
     /**
-     * Removes a MailSender temp directory: its files, its one level of per-file subdirectories, then itself.
-     * Public for Generator::cronSweepTmpDirs(), the backstop when a request dies before its shutdown cleanup.
-     *
-     * @param string $dir Directory created by materializeUploadAttachments().
-     * @return void
-     */
-    public static function removeTempTree(string $dir): void
-    {
-        $dir = rtrim($dir, '/\\');
-        if ($dir === '' || is_link($dir) || !is_dir($dir)) {
-            return;
-        }
-        foreach (glob($dir . DIRECTORY_SEPARATOR . '*') ?: [] as $entry) {
-            if (is_dir($entry) && !is_link($entry)) {
-                foreach (glob($entry . DIRECTORY_SEPARATOR . '*') ?: [] as $f) {
-                    wp_delete_file($f);
-                    if (file_exists($f)) {
-                        \FabricatorForms\fabricator_log('FabricatorForms MailSender: failed to remove temp file ' . \FabricatorForms\fabricator_log_file(basename($f)));
-                    }
-                }
-                self::removeDir($entry);
-                continue;
-            }
-            wp_delete_file($entry);
-            if (file_exists($entry)) {
-                \FabricatorForms\fabricator_log('FabricatorForms MailSender: failed to remove temp file ' . \FabricatorForms\fabricator_log_file(basename($entry)));
-            }
-        }
-        self::removeDir($dir);
-    }
-
-    /**
-     * Removes an emptied directory, logging instead of warning when it can't.
-     *
-     * @param string $dir Directory to remove.
-     * @return void
-     */
-    private static function removeDir(string $dir): void
-    {
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- shutdown/cron cleanup of a plugin-owned temp dir; no WP_Filesystem credentials available here.
-        if (!\FabricatorForms\Utils\Cast::withoutWarnings(static fn() => rmdir($dir))) {
-            \FabricatorForms\fabricator_log("FabricatorForms MailSender: failed to remove temp dir {$dir}");
-        }
-    }
-
-    /**
-     * Where per-request attachment folders are created.
-     *
-     * The system temp dir, unless get_temp_dir() fell back to a web-served folder inside the site; then the protected
-     * PDF folder.
-     *
-     * @return string Directory path with a trailing slash.
-     */
-    public static function tempBaseDir(): string
-    {
-        $temp = trailingslashit(wp_normalize_path(get_temp_dir()));
-        foreach ([ABSPATH, WP_CONTENT_DIR] as $site_dir) {
-            if (str_starts_with($temp, trailingslashit(wp_normalize_path($site_dir)))) {
-                $secure = wp_normalize_path(wp_upload_dir()['basedir']) . '/fabricator-secure-pdf';
-                \FabricatorForms\Utils\SecureDir::harden($secure, [$secure, $secure . '/mail']);
-                return $secure . '/mail/';
-            }
-        }
-        return $temp;
-    }
-
-    /**
-     * Creates a directory readable by the web server user only.
-     *
-     * @param string $dir Directory to create; its parent must exist.
-     * @return bool True when the directory now exists.
-     */
-    private static function makePrivateDir(string $dir): bool
-    {
-        // mkdir() with 0700: wp_mkdir_p() copies the parent's mode (0777 for /tmp). Only this call's own success counts:
-        // an existing directory in a shared temp dir may belong to another local user.
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- front-end AJAX submission, no WP_Filesystem credentials; $dir is built from get_temp_dir() and random_bytes(), never request input.
-        return (bool) \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => mkdir($dir, 0700));
-    }
-
-    /**
      * Writes uploaded files to temp paths under their original filenames, so wp_mail() can attach them.
      *
      * @param array $mapped Normalized submission data.
-     * @return array Absolute paths to materialized temp files.
+     * @return array{images: string[], others: string[], complete: bool} Absolute paths of the written files, by kind;
+     *                                                                 complete is false when any file could not be
+     *                                                                 written.
      */
     private static function materializeUploadAttachments(array $mapped): array
     {
-        $result  = ['images' => [], 'others' => [], 'tmp_dir' => ''];
+        $result  = ['images' => [], 'others' => [], 'complete' => true];
 
         $has_files = (bool) array_filter($mapped, static fn($f) => !empty($f['materialized_files']));
         if (!$has_files) {
             return $result;
         }
 
-        // One subdirectory per file keeps original names without collisions. random_bytes(), not wp_generate_uuid4()
-        // (mt_rand()), so the name can't be predicted and pre-created.
-        $tmp_dir = self::tempBaseDir() . 'fabricator_' . bin2hex(random_bytes(16)) . DIRECTORY_SEPARATOR;
-        if (!self::makePrivateDir($tmp_dir)) {
-            \FabricatorForms\fabricator_log("FabricatorForms: could not create temp dir {$tmp_dir}");
+        // The submission's mail folder (PrivateDir), which removes itself at the end of the request.
+        $tmp_dir = \FabricatorForms\Utils\PrivateDir::forSubmission('mail');
+        if ($tmp_dir === '') {
+            $result['complete'] = false;
             return $result;
         }
-        $result['tmp_dir'] = $tmp_dir;
-        // Removal registered before the first file is written.
-        register_shutdown_function([self::class, 'removeTempTree'], $tmp_dir);
 
-        $file_no = 0;
         foreach ($mapped as $field) {
             foreach ($field['materialized_files'] ?? [] as $file) {
                 $b64    = $file['base64'] ?? '';
                 // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes binary handed over the array boundary described at the encode site (strict mode). Not obfuscation.
                 $binary = $b64 !== '' ? base64_decode($b64, true) : false;
                 if ($binary === false) {
+                    $result['complete'] = false;
                     continue;
                 }
                 $mime = $file['mime'] ?? '';
@@ -617,9 +535,11 @@ class MailSender
                 if ($name === '') {
                     $name = 'upload';
                 }
-                $file_dir = $tmp_dir . 'f' . (++$file_no) . DIRECTORY_SEPARATOR;
-                if (!self::makePrivateDir($file_dir)) {
+                // One subfolder per file keeps the original names without collisions.
+                $file_dir = $tmp_dir . '/f' . bin2hex(random_bytes(8)) . '/';
+                if (!\FabricatorForms\Utils\PrivateDir::makeDir($file_dir)) {
                     \FabricatorForms\fabricator_log("FabricatorForms: could not create temp dir {$file_dir}");
+                    $result['complete'] = false;
                     continue;
                 }
                 $dest = $file_dir . $name;
@@ -628,6 +548,7 @@ class MailSender
                 if (!\FabricatorForms\Utils\SecureDir::putFile($dest, $binary, 0600)) {
                     // The upload's own name, which may name a person, only as fabricator_log_file() records it.
                     \FabricatorForms\fabricator_log('FabricatorForms: failed to write temp file ' . \FabricatorForms\fabricator_log_file($name));
+                    $result['complete'] = false;
                     continue;
                 }
                 // Images the PDF shows are attached only where uploads are; everything else goes next to the PDF.

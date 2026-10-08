@@ -23,7 +23,7 @@ $inside = false;
 foreach (array_filter($allowed) as $root) {
     $inside = $inside || ($file !== false && str_starts_with($file, $root . DIRECTORY_SEPARATOR));
 }
-if (str_starts_with($relative, 'uploads/fabricator-secure-pdf/')) {
+if (str_starts_with($relative, 'uploads/formfabricator/')) {
     http_response_code(403);
     return true;
 }

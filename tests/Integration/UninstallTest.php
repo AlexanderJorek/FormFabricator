@@ -39,17 +39,6 @@ final class UninstallTest extends TestCase
         foreach ($sites as $site) {
             $this->onSite($site, fn() => $this->plantData());
         }
-        // Mail-attachment copies a killed request left in the system temp dir, and a folder a submission elsewhere on
-        // this server (sharing the temp dir) may still be sending.
-        $copies = untrailingslashit(get_temp_dir()) . '/fabricator_test' . wp_generate_password(8, false, false);
-        mkdir($copies . '/0', 0700, true);
-        file_put_contents($copies . '/0/passport.jpg', 'x');
-        file_put_contents($copies . '/form.pdf', '%PDF-1.4');
-        touch($copies, time() - 20 * MINUTE_IN_SECONDS);
-        $in_use = untrailingslashit(get_temp_dir()) . '/fabricator_test' . wp_generate_password(8, false, false);
-        mkdir($in_use);
-        file_put_contents($in_use . '/form.pdf', '%PDF-1.4');
-
         if (!defined('WP_UNINSTALL_PLUGIN')) {
             define('WP_UNINSTALL_PLUGIN', 'formfabricator/formfabricator.php');
         }
@@ -60,11 +49,6 @@ final class UninstallTest extends TestCase
             $this->onSite($site, fn() => $this->assertNothingLeft('site ' . $site));
         }
         self::assertSame('', get_user_meta($admin, 'fabricator_uploads_notice_dismissed', true));
-        clearstatcache();
-        self::assertDirectoryDoesNotExist($copies, 'attachment copies in the temp dir');
-        self::assertFileExists($in_use . '/form.pdf', 'a folder possibly still being sent');
-        wp_delete_file($in_use . '/form.pdf');
-        rmdir($in_use);
     }
 
     /**
@@ -100,6 +84,10 @@ final class UninstallTest extends TestCase
         set_transient('fabricator_vpending_1', ['tokens' => []]);
         wp_schedule_event(time() + 3600, 'hourly', 'fabricator_rl_sweep_expired');
         wp_schedule_single_event(time() + 600, 'fabricator_verifier_sweep_expired');
+        // Attachment copies a killed request left in the site's folder, and its prepare() transient.
+        $left = \FabricatorForms\Utils\PrivateDir::prepare() . '/mail/' . bin2hex(random_bytes(16));
+        mkdir($left . '/f1', 0700, true);
+        file_put_contents($left . '/f1/passport.jpg', 'x');
     }
 
     private function assertNothingLeft(string $where): void
@@ -115,5 +103,7 @@ final class UninstallTest extends TestCase
         self::assertSame([], $left, "$where: no fabricator rows left in the options table");
         self::assertFalse(wp_next_scheduled('fabricator_rl_sweep_expired'), "$where: hourly sweep unscheduled");
         self::assertFalse(wp_next_scheduled('fabricator_verifier_sweep_expired'), "$where: one-off event unscheduled");
+        clearstatcache();
+        self::assertDirectoryDoesNotExist(\FabricatorForms\Utils\PrivateDir::base(), "$where: the plugin's folder in the uploads directory");
     }
 }

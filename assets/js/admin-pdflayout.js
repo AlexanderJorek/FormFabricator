@@ -46,8 +46,7 @@
             : fallback;
     }
 
-    /* Placeholder form name for the preview. Was a hardcoded German literal ("Beispielformular")
-       left over from the pre-rename original, unreachable by any translator. */
+    /* Placeholder form name for the preview, translated through pdfLayoutI18n(). */
     function sampleFormName() {
         return I18N.sampleFormName || 'Sample form';
     }

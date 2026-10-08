@@ -375,17 +375,17 @@ function fabbuildStage(string $root, string $stageDir, array $config): void
 
 /**
  * Checks each hand-vendored package against the SHA-256 list in its VERSION file (any edited, missing or extra file
- * stops the build), then copies it into the stage.
+ * stops the build), then copies those under vendor/ into the stage, whose vendor/ Composer filled.
  *
- * @param array<int, array{dir: string, npm: string, license: string}> $packages
- * @return array<string, array<string, string>> Package dir => relative path => pinned SHA-256.
+ * @param array<int, array{path: string, npm: string, licenses: string[]}> $packages
+ * @return array<string, array<string, string>> Package path => file path inside it => pinned SHA-256.
  */
 function fabbuildHandVendored(string $root, string $stageDir, array $packages): array
 {
     $all = [];
     foreach ($packages as $package) {
         fabbuildSay('Verifying manually-vendored ' . $package['npm'] . ' against its pinned hashes...', 'cyan');
-        $dir    = $root . '/vendor/' . $package['dir'];
+        $dir    = $root . '/' . $package['path'];
         $pinned = [];
         preg_match_all('/^\s*([0-9a-fA-F]{64})\s+(\S+)\s*$/m', (string) @file_get_contents($dir . '/VERSION'), $pins, PREG_SET_ORDER);
         foreach ($pins as $pin) {
@@ -408,11 +408,13 @@ function fabbuildHandVendored(string $root, string $stageDir, array $packages): 
             }
         }
         if ($pinned === [] || $problems !== []) {
-            fabbuildFail('vendor/' . $package['dir'] . ' does not match the SHA-256 list in its VERSION file: ' . ($pinned === [] ? 'no hashes pinned' : implode('; ', $problems)));
+            fabbuildFail($package['path'] . ' does not match the SHA-256 list in its VERSION file: ' . ($pinned === [] ? 'no hashes pinned' : implode('; ', $problems)));
         }
-        fabbuildSay('Copying manually-vendored ' . $package['npm'] . '...', 'cyan');
-        fabbuildCopy($dir, $stageDir . '/vendor/' . $package['dir']);
-        $all[$package['dir']] = $pinned;
+        if (str_starts_with($package['path'], 'vendor/')) {
+            fabbuildSay('Copying manually-vendored ' . $package['npm'] . '...', 'cyan');
+            fabbuildCopy($dir, $stageDir . '/' . $package['path']);
+        }
+        $all[$package['path']] = $pinned;
     }
     return $all;
 }
@@ -579,11 +581,16 @@ function fabbuildVerify(string $stageDir, string $zipPath, array $config, array 
     // The hand-vendored packages, which no dependency step would miss, against the same pinned lists.
     foreach ($pinned as $dir => $files) {
         foreach ($files as $rel => $sha) {
-            $path = $stageDir . '/vendor/' . $dir . '/' . $rel;
+            $path = $stageDir . '/' . $dir . '/' . $rel;
             if (!is_file($path)) {
-                $violations[] = 'vendor/' . $dir . '/' . $rel . ' is missing from the package';
+                $violations[] = $dir . '/' . $rel . ' is missing from the package';
             } elseif (hash_file('sha256', $path) !== $sha) {
-                $violations[] = 'vendor/' . $dir . '/' . $rel . ' in the package differs from its pinned SHA-256';
+                $violations[] = $dir . '/' . $rel . ' in the package differs from its pinned SHA-256';
+            }
+        }
+        foreach (fabbuildFiles($stageDir . '/' . $dir) as $rel) {
+            if ($rel !== 'VERSION' && !isset($files[$rel])) {
+                $violations[] = $dir . '/' . $rel . ' in the package has no pinned hash';
             }
         }
     }
@@ -620,9 +627,9 @@ function fabbuildVerify(string $stageDir, string $zipPath, array $config, array 
 
 /**
  * Software bill of materials (NIST SSDF PS.3): CycloneDX 1.5 JSON next to the zip, never inside it. Lists what the
- * package ships: every Composer package in composer.lock's production set, the hand-vendored packages, and Font Awesome.
+ * package ships: every Composer package in composer.lock's production set and the hand-vendored packages.
  *
- * @param array<int, array{dir: string, npm: string, license: string}> $packages
+ * @param array<int, array{path: string, npm: string, licenses: string[]}> $packages
  * @return string The SBOM's path.
  */
 function fabbuildSbom(string $root, string $buildDir, array $packages): string
@@ -648,34 +655,26 @@ function fabbuildSbom(string $root, string $buildDir, array $packages): string
         $components[] = $component;
     }
     foreach ($packages as $package) {
-        $text = (string) file_get_contents($root . '/vendor/' . $package['dir'] . '/VERSION');
+        $text = (string) file_get_contents($root . '/' . $package['path'] . '/VERSION');
         preg_match('/^' . preg_quote($package['npm'], '/') . '\s+([0-9.]+)/m', $text, $version);
         $version   = $version[1] ?? '';
         $component = [
             'type'     => 'library',
             'name'     => $package['npm'],
             'version'  => $version,
-            'purl'     => 'pkg:npm/' . $package['npm'] . '@' . $version,
-            'licenses' => [['license' => ['id' => $package['license']]]],
+            'purl'     => 'pkg:npm/' . str_replace('@', '%40', $package['npm']) . '@' . $version,
+            'licenses' => array_map(static fn(string $id): array => ['license' => ['id' => $id]], $package['licenses']),
         ];
         // The npm tarball's integrity hash, recorded in VERSION; the shipped files were checked against its SHA-256 list.
         if (preg_match('~Tarball integrity:\s*sha512-([A-Za-z0-9+/=]+)~', $text, $integrity)) {
             $component['externalReferences'] = [[
                 'type'   => 'distribution',
-                'url'    => 'https://registry.npmjs.org/' . $package['npm'] . '/-/' . $package['npm'] . '-' . $version . '.tgz',
+                'url'    => 'https://registry.npmjs.org/' . $package['npm'] . '/-/' . basename($package['npm']) . '-' . $version . '.tgz',
                 'hashes' => [['alg' => 'SHA-512', 'content' => bin2hex((string) base64_decode($integrity[1], true))]],
             ]];
         }
         $components[] = $component;
     }
-    preg_match('/Font Awesome Free ([0-9.]+)/', (string) file_get_contents($root . '/assets/vendor/fontawesome/css/all.min.css'), $fa);
-    $components[] = [
-        'type'     => 'library',
-        'name'     => '@fortawesome/fontawesome-free',
-        'version'  => $fa[1] ?? '',
-        'purl'     => 'pkg:npm/%40fortawesome/fontawesome-free@' . ($fa[1] ?? ''),
-        'licenses' => [['license' => ['id' => 'CC-BY-4.0']], ['license' => ['id' => 'OFL-1.1']], ['license' => ['id' => 'MIT']]],
-    ];
 
     preg_match('/Version:\s*([0-9.]+)/', (string) file_get_contents($root . '/formfabricator.php'), $pluginVersion);
     $uuid    = bin2hex(random_bytes(16));

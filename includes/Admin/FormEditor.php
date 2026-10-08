@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -376,42 +376,6 @@ class FormEditor
             $globals .= 'window.' . $global_name . '=' . $literal . ';';
         }
 
-        $toolbar_css = '
-#fabricator-preview-toolbar{
-    position:sticky;top:16px;flex-shrink:0;
-    background:#fff;border:1px solid #dcdcde;border-radius:10px;
-    box-shadow:0 4px 16px rgba(0,0,0,.12);
-    padding:12px 14px;display:flex;flex-direction:column;gap:10px;
-    font-family:system-ui,sans-serif;font-size:12px;
-    width:190px;align-self:flex-start;
-}
-.fpt-row{display:flex;align-items:flex-start;gap:10px;}
-.fpt-toggle{position:relative;flex-shrink:0;width:34px;height:20px;margin-top:1px;}
-.fpt-toggle input{opacity:0;width:0;height:0;position:absolute;}
-.fpt-slider{
-    position:absolute;inset:0;border-radius:20px;
-    background:#c3c4c7;cursor:pointer;transition:background .2s;
-}
-.fpt-slider::before{
-    content:"";position:absolute;left:3px;top:3px;
-    width:14px;height:14px;border-radius:50%;background:#fff;
-    transition:transform .2s;
-}
-.fpt-toggle input:checked+.fpt-slider{background:#2271b1;}
-.fpt-toggle input:checked+.fpt-slider::before{transform:translateX(14px);}
-.fpt-label{display:flex;flex-direction:column;gap:2px;cursor:pointer;}
-.fpt-label strong{font-size:12px;font-weight:600;color:#1d2327;}
-.fpt-label span{font-size:11px;color:#787c82;line-height:1.4;}
-.fpt-badge{
-    display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;
-    font-weight:700;text-transform:uppercase;letter-spacing:.4px;
-    background:#f0f6fc;color:#2271b1;border:1px solid #c2d9f0;
-}
-@media(prefers-color-scheme:dark){
-    #fabricator-preview-toolbar{background:#2c2c2c;border-color:#3c3c3c;box-shadow:0 4px 16px rgba(0,0,0,.4);}
-    .fpt-label strong{color:#e0e0e0;}
-}';
-
         $toolbar_html = '<div id="fabricator-preview-toolbar">'
             . '<div class="fpt-row">'
             . '<label class="fpt-toggle">'
@@ -433,8 +397,7 @@ class FormEditor
             . '@media(prefers-color-scheme:dark){'
             . 'body{background:#1a1a1a;}'
             . '.fabricator-form-wrap{box-shadow:0 2px 16px rgba(0,0,0,.5);}'
-            . '}'
-            . $toolbar_css;
+            . '}';
 
         // Own WP_Styles/WP_Scripts, so the builder page's global registries stay out of the preview.
         $preview_styles = new \WP_Styles();
@@ -442,12 +405,18 @@ class FormEditor
             'fabricator-preview-fontawesome',
             FABRICATOR_FORMS_URL . 'assets/vendor/fontawesome/css/all.min.css',
             [],
-            FABRICATOR_FORMS_VERSION
+            \FabricatorForms\Utils\Assets::FONT_AWESOME_VERSION
         );
         $preview_styles->add('fabricator-preview-front', $css_url, [], FABRICATOR_FORMS_VERSION);
         $preview_styles->add_inline_style('fabricator-preview-front', implode("\n", $field_css) . "\n" . $base_css);
+        $preview_styles->add(
+            'fabricator-preview-toolbar',
+            FABRICATOR_FORMS_URL . 'assets/css/admin-preview-toolbar.css',
+            ['fabricator-preview-front'],
+            FABRICATOR_FORMS_VERSION
+        );
         ob_start();
-        $preview_styles->do_items(['fabricator-preview-fontawesome', 'fabricator-preview-front']);
+        $preview_styles->do_items(['fabricator-preview-fontawesome', 'fabricator-preview-front', 'fabricator-preview-toolbar']);
         $styles_markup = ob_get_clean();
 
         $preview_scripts = new \WP_Scripts();

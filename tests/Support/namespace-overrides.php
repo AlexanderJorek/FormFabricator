@@ -12,7 +12,7 @@
  * - function_exists():           denies Overrides::$missingFunctions (a PHP without openssl, for the seal key settings
  *                                and HashSeal).
  * - register_shutdown_function(): held back for Overrides::runShutdownFunctions() (the end of a request, which a test
- *                                otherwise never reaches, for MailSender's and FormProcessor's clean-up).
+ *                                otherwise never reaches, for FormProcessor's and PrivateDir's clean-up).
  */
 
 namespace FabricatorForms\Form {
@@ -62,5 +62,15 @@ namespace FabricatorForms\PDF {
     function function_exists(string $function): bool
     {
         return Overrides::functionExists($function);
+    }
+}
+
+namespace FabricatorForms\Utils {
+
+    use FabricatorForms\Tests\Support\Overrides;
+
+    function register_shutdown_function(callable $callback, mixed ...$args): void
+    {
+        Overrides::registerShutdownFunction($callback, ...$args);
     }
 }

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -103,7 +103,7 @@ function fabricator_uninstall_current_site()
     $fabricator_transients = [
         'fabricator_forms_seal_key_pending_download',
         'fabricator_host_memory_bytes',
-        'fabricator_pdf_dirs_ready',
+        'fabricator_private_dir_ready',
         'fabricator_pdf_template_fingerprints',
         'fabricator_unknown_server_logged',
         'fabricator_gdpr_no_policy_logged',
@@ -181,9 +181,9 @@ function fabricator_uninstall_current_site()
     wp_cache_delete('alloptions', 'options');
     wp_cache_delete('notoptions', 'options');
 
-    /* Remove upload directory */
+    /* Remove the plugin's folder in the uploads directory (PDFs, mail attachments, verifier copies, mPDF's cache) */
     $fabricator_upload_dir = wp_upload_dir();
-    $fabricator_plugin_dir = $fabricator_upload_dir['basedir'] . '/fabricator-secure-pdf';
+    $fabricator_plugin_dir = $fabricator_upload_dir['basedir'] . '/formfabricator';
     if (is_dir($fabricator_plugin_dir)) {
         // Runs from an admin-triggered deletion (or privileged WP-CLI), so WP_Filesystem() is safe here.
         global $wp_filesystem;
@@ -244,47 +244,5 @@ if (is_multisite()) {
     fabricator_uninstall_current_site();
 }
 
-/**
- * Removes the mail-attachment folders (fabricator_*) a killed request left in the system temp dir, as
- * MailSender::removeTempTree() does (uninstall runs without the plugin's classes); links are never followed. Folders
- * changed in the last ten minutes stay: another site sharing the temp dir may still be sending one.
- *
- * @return void
- */
-function fabricator_uninstall_temp_copies()
-{
-    $fabricator_unlink = static function (string $path): void {
-        if (is_link($path) || is_file($path)) {
-            wp_delete_file($path);
-        }
-    };
-    foreach (glob(rtrim(get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'fabricator_*', GLOB_ONLYDIR) ?: [] as $fabricator_dir) {
-        $fabricator_mtime = @filemtime($fabricator_dir);
-        if (is_link($fabricator_dir) || $fabricator_mtime === false || time() - $fabricator_mtime <= 10 * MINUTE_IN_SECONDS) {
-            continue;
-        }
-        foreach (glob($fabricator_dir . DIRECTORY_SEPARATOR . '*') ?: [] as $fabricator_entry) {
-            if (is_dir($fabricator_entry) && !is_link($fabricator_entry)) {
-                foreach (glob($fabricator_entry . DIRECTORY_SEPARATOR . '*') ?: [] as $fabricator_file) {
-                    $fabricator_unlink($fabricator_file);
-                }
-                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- an emptied plugin-owned temp folder; WP_Filesystem() may need FTP credentials and the system temp dir is outside its reach.
-                @rmdir($fabricator_entry);
-                continue;
-            }
-            $fabricator_unlink($fabricator_entry);
-        }
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- as above.
-        if (!@rmdir($fabricator_dir)) {
-            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- fabricator_log() isn't loaded during uninstall.
-            error_log('FormFabricator uninstall: failed to remove temp folder ' . $fabricator_dir);
-        }
-    }
-}
-
-// Once, not per site: every site shares the system temp dir.
-fabricator_uninstall_temp_copies();
-
-// Once, outside the per-site loop: user meta lives in the network-wide usermeta table, so running this per site
-// repeated the same delete for every site. The unprotected-uploads notice's 30-day dismissal, stored per user.
+// The unprotected-uploads notice's per-user dismissal, deleted once: user meta is network-wide.
 delete_metadata('user', 0, 'fabricator_uploads_notice_dismissed', '', true);

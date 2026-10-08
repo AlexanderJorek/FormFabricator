@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -85,8 +85,7 @@ function fabricator_ajax_verify_push_lines(): void
     }
     $target_path = $pdf_transient['path'];
 
-    $upload_dir   = wp_upload_dir();
-    $safe_dir     = $upload_dir['basedir'] . '/fabricator-secure-pdf';
+    $safe_dir     = \FabricatorForms\Utils\PrivateDir::base();
     $verfiles_dir = $safe_dir . '/verfiles';
 
     /* ---- Path-traversal guard ---- */
@@ -401,7 +400,7 @@ final class Verificationpage
      */
     private static function relativeTempPath(string $absolute): string
     {
-        $base = wp_upload_dir()['basedir'] . '/fabricator-secure-pdf';
+        $base = \FabricatorForms\Utils\PrivateDir::base();
         $norm = str_replace(chr(92), '/', $absolute);
         $base = rtrim(str_replace(chr(92), '/', $base), '/') . '/';
         if (strncmp($norm, $base, strlen($base)) !== 0) {
@@ -489,8 +488,7 @@ final class Verificationpage
         $stored_tokens      = [];
         if (!empty($_FILES['pdfs']['name'][0])) {
             // Process uploaded files
-            $upload_dir = wp_upload_dir();
-            $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
+            $safe_dir = \FabricatorForms\Utils\PrivateDir::base();
 
             // Ensure directories exist with restricted permissions.
             // No '/log': nothing ever writes there, and an empty directory in the uploads folder is one more thing to guard.
@@ -991,8 +989,7 @@ final class Verificationpage
         }
 
         // The protected folder the checks write their images to.
-        $upload_dir   = wp_upload_dir();
-        $safe_dir     = $upload_dir['basedir'] . '/fabricator-secure-pdf';
+        $safe_dir = \FabricatorForms\Utils\PrivateDir::base();
 
         \FabricatorForms\Utils\SecureDir::harden($safe_dir, [$safe_dir]);
 
@@ -2514,8 +2511,7 @@ final class Verificationpage
 
 
             // The image output directory (HTTP-blocked), prepared once for the whole walk.
-            $upload_dir = wp_upload_dir();
-            $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
+            $safe_dir   = \FabricatorForms\Utils\PrivateDir::base();
             $ver_dir    = $safe_dir . '/verimages';
             // Random per request, so whoever made the PDF can't predict the image file names.
             $verimage_prefix = bin2hex(random_bytes(12));

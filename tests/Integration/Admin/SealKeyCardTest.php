@@ -181,6 +181,73 @@ final class SealKeyCardTest extends AjaxTestCase
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
+    public function testFirstSetupWithAMasterKeyAlreadyInWpConfigConfirmsThatKeyInsteadOfIssuingAnother(): void
+    {
+        // Another site of the network chose encrypted storage first: wp-config.php, which every site shares, holds the
+        // key, and that site's keys are encrypted with it.
+        define('FABRICATOR_SEAL_MASTER_KEY', str_repeat('cd', 32));
+
+        $secure = $this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        self::assertTrue($secure['success'], wp_json_encode($secure));
+        self::assertTrue($secure['data']['existing'] ?? false, 'the key already there is taken');
+        self::assertArrayNotHasKey('define_line', $secure['data'], 'no new line to put into the shared file');
+
+        $confirm = $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        self::assertTrue($confirm['success'], wp_json_encode($confirm));
+        self::assertTrue((bool) get_option('fabricator_forms_seal_setup_done'));
+        self::assertSame('', HashSeal::activeKeyProblem(), 'a key, encrypted with the existing master key, is in use');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testAKeyPlantedBeforeSetupWithAnExistingMasterKeyIsNotMadeTrusted(): void
+    {
+        // With the constant set and setup not done, an unencrypted key can only come from a direct database write, and
+        // encrypting it would make it a key whose PDFs verify as authentic.
+        define('FABRICATOR_SEAL_MASTER_KEY', str_repeat('cd', 32));
+        $planted = (string) wp_json_encode(['uuid' => 'planted', 'key' => str_repeat('f', 64), 'created_at' => '2026-01-01 00:00:00']);
+        update_option('fabricator_forms_seal_key', $planted, false);
+
+        self::assertTrue($this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')])['success']);
+        $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+
+        self::assertSame($planted, get_option('fabricator_forms_seal_key'), 'left as it was, unencrypted');
+        self::assertNotSame('', HashSeal::activeKeyProblem(), 'and not usable');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testAfterTheReloadTheKeyIssuedInThisSessionIsStillTheOneConfirmed(): void
+    {
+        $issued = $this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        self::assertArrayHasKey('define_line', $issued['data'], wp_json_encode($issued));
+        // The admin put a different key into wp-config.php than the one shown, and reloaded: the "ready" step asks again.
+        define('FABRICATOR_SEAL_MASTER_KEY', str_repeat('cd', 32));
+        self::assertTrue($this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')])['success']);
+
+        $confirm = $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+
+        self::assertFalse($confirm['success'], 'the backup the admin saved would not open the keys');
+        self::assertStringContainsString('does not match', $confirm['data']['message']);
+        self::assertFalse((bool) get_option('fabricator_forms_seal_setup_done'));
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testAMistypedMasterKeyIsNamedAtConfirmationRatherThanFailingTheRequest(): void
+    {
+        define('FABRICATOR_SEAL_MASTER_KEY', 'cdcd-not-a-key');
+        self::assertTrue($this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')])['success']);
+
+        $confirm = $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+
+        self::assertFalse($confirm['success'], wp_json_encode($confirm));
+        self::assertStringContainsString('64 hexadecimal characters', $confirm['data']['message']);
+        self::assertFalse((bool) get_option('fabricator_forms_seal_setup_done'));
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
     public function testAnEncryptedSiteMovedToAPhpWithoutOpensslStillLoadsItsSettingsAndSaysTheKeyCannotBeRead(): void
     {
         $master = str_repeat('ab', 32);

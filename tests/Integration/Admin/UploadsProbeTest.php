@@ -53,7 +53,7 @@ final class UploadsProbeTest extends TestCase
         $notice = $this->notice();
         self::assertStringContainsString('could be downloaded from outside', $notice);
         self::assertStringContainsString('location ^~ ', $notice, 'with the Nginx rule');
-        self::assertStringContainsString('/fabricator-secure-pdf/', $notice);
+        self::assertStringContainsString('/formfabricator/', $notice);
     }
 
     public function testA403MeansProtectedForADay(): void
@@ -100,7 +100,7 @@ final class UploadsProbeTest extends TestCase
         $this->answer(static fn(string $url): array => self::response(200, self::probeFileContent($url)));
         Plugin::runUploadsProbe();
 
-        self::assertSame([], glob(wp_upload_dir()['basedir'] . '/fabricator-secure-pdf/probe-*.txt') ?: []);
+        self::assertSame([], glob(wp_upload_dir()['basedir'] . '/formfabricator/probe-*.txt') ?: []);
     }
 
     public function testAnotherUsersViewAndADismissalHideTheNotice(): void
@@ -133,7 +133,7 @@ final class UploadsProbeTest extends TestCase
     private function answer(callable $answer): void
     {
         add_filter('pre_http_request', static function ($pre, array $args, string $url) use ($answer) {
-            return str_contains($url, '/fabricator-secure-pdf/probe-') ? $answer($url) : $pre;
+            return str_contains($url, '/formfabricator/probe-') ? $answer($url) : $pre;
         }, 10, 3);
     }
 

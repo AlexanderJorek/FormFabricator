@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -1298,11 +1298,15 @@ class FormSettings
             $access_user_overrides = [];
             foreach (($access_option['users'] ?? []) as $_uid => $_perms) {
                 $_ud = get_userdata((int) $_uid);
+                // No longer a member of this site: shown as unknown, as listing the network's users is not this admin's.
+                if ($_ud && is_multisite() && !is_user_member_of_blog((int) $_uid)) {
+                    $_ud = false;
+                }
                 $access_user_overrides[] = [
                     'id'    => (int) $_uid,
                     'name'  => $_ud
                         ? ($_ud->display_name ?: $_ud->user_login)
-                        // translators: %d: the ID of a user account that no longer exists.
+                        // translators: %d: the ID of a user account that no longer exists or no longer belongs to this site.
                         : sprintf(__('Unknown user (#%d)', 'formfabricator'), (int) $_uid),
                     'perms' => is_array($_perms) ? $_perms : [],
                 ];
@@ -1505,7 +1509,7 @@ class FormSettings
         }
         // reCAPTCHA keys are hidden from non-full-admins in the UI; enforce that boundary server-side too against a raw POST.
         if (current_user_can('manage_options')) {
-            // Only when the request carries the field, like the sender fields above: a save without it cleared the saved key.
+            // Only when the request carries the field, like the sender fields above: a save without it would clear the key.
             if (isset($_POST['recaptcha_site'])) {
                 // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_text_field() below; Cast::stringOrDefault() breaks the sniff's taint trace.
                 $site_key = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['recaptcha_site'])));
@@ -1599,7 +1603,7 @@ class FormSettings
                     'post_type'      => 'fabricator_form',
                     'posts_per_page' => \FabricatorForms\Form\FormModel::QUERY_BATCH,
                     // Explicit list, as in uninstall.php: get_posts() defaults to 'publish' and 'any' still omits trash and
-                    // auto-draft, so drafts and trashed forms survived a reset that promised to delete all forms.
+                    // auto-draft, and the reset promises to delete every form, drafts and trashed ones included.
                     'post_status'    => ['publish', 'pending', 'draft', 'future', 'private', 'trash', 'auto-draft', 'inherit'],
                     'fields'         => 'ids',
                     ]
@@ -1649,7 +1653,7 @@ class FormSettings
         try {
             $new_key = \FabricatorForms\PDF\HashSeal::rotateKey($compromised, true, $master_key_lost);
         } catch (\Exception $e) {
-            // Uncaught, this surfaced as a bare 500 (with a stack trace under WP_DEBUG_DISPLAY).
+            // Caught, so a failed rotation answers as JSON, not a bare 500 (with a stack trace under WP_DEBUG_DISPLAY).
             \FabricatorForms\fabricator_log('FabricatorForms FormSettings: seal key rotation failed — ' . $e->getMessage());
             // Another rotation holds the key history: nothing was changed, and waiting is all it takes.
             if (str_starts_with($e->getMessage(), 'Lock busy:')) {
@@ -1740,6 +1744,20 @@ class FormSettings
         }
         // Commit the encryption choice immediately — the user cannot go back to Standard.
         update_option('fabricator_forms_seal_encryption', 'enabled', false);
+        // A master key already in wp-config.php is confirmed, never replaced: on a network every site shares the file,
+        // and other sites' keys may be encrypted with it.
+        if (\FabricatorForms\PDF\HashSeal::masterKeyConfigured()) {
+            $transient = 'fabricator_setup_master_key_' . get_current_user_id();
+            // A key issued in this session stays the one to confirm; only without one is the configured key taken.
+            if (!get_transient($transient)) {
+                set_transient($transient, hash('sha256', strtolower((string) FABRICATOR_SEAL_MASTER_KEY)), 600);
+                // Keys stored before setup can only have been planted while the constant was set, so none is offered
+                // for encryption (decryptKey() keeps refusing them).
+                set_transient(self::OFFERED_KEYS_TRANSIENT . get_current_user_id(), [], 600);
+            }
+            wp_send_json_success(['existing' => true]);
+            return;
+        }
         wp_send_json_success(['define_line' => self::issueMasterKey()]);
     }
 
@@ -1914,6 +1932,16 @@ class FormSettings
             return;
         }
 
+        // Checked before anything uses it: a mistyped line answers with what to fix, not with a failure to encrypt.
+        if (preg_match('/^[0-9a-fA-F]{64}$/D', (string) FABRICATOR_SEAL_MASTER_KEY) !== 1) {
+            wp_send_json_error(
+                [
+                'message' => __('FABRICATOR_SEAL_MASTER_KEY in wp-config.php must be 64 hexadecimal characters. Please check the line.', 'formfabricator'), // phpcs:ignore Generic.Files.LineLength
+                ]
+            );
+            return;
+        }
+
         // Only the key issued during setup counts; a missing or expired transient is refused.
         $expected = get_transient('fabricator_setup_master_key_' . get_current_user_id());
         if (!$expected) {
@@ -2043,8 +2071,8 @@ class FormSettings
         // Guard: hard-reject only when the exact same payload already exists.
         $incoming_created = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($parsed['created_at'] ?? null));
 
-        // By uuid only, matching HashSeal::addLegacyKey(): the stored active key may be encrypted, so comparing it with the
-        // plaintext import never matched, and a second key filed under an existing uuid made verification ambiguous.
+        // By uuid only, matching HashSeal::addLegacyKey(): the stored active key may be encrypted, so it can't be compared
+        // with the plaintext import, and a second key filed under an existing uuid would make verification ambiguous.
         $active_raw = get_option('fabricator_forms_seal_key');
         if ($active_raw) {
             $active_rec = json_decode((string) $active_raw, true);
@@ -2224,7 +2252,9 @@ class FormSettings
         if (is_array($raw_users)) {
             foreach ($raw_users as $uid => $raw_perms) {
                 $uid = (int) $uid;
-                if ($uid > 0 && get_userdata($uid)) {
+                // This site's members only: on a network, an ID of anyone else would grant nothing (Plugin::userCan()),
+                // and the page would show their name to an admin who may not list the network's users.
+                if ($uid > 0 && get_userdata($uid) && (!is_multisite() || is_user_member_of_blog($uid))) {
                     $users[$uid] = self::sanitizePerms(
                         is_array($raw_perms) ? $raw_perms : []
                     );

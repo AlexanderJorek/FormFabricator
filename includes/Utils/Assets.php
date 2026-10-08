@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,7 +28,8 @@ defined('ABSPATH') || exit;
  */
 class Assets
 {
-    // Vendored locally (no CDN, no SRI needed); public so other admin pages don't keep their own copy to drift.
+    // The release vendored in assets/vendor/fontawesome/ (named in its VERSION file, with the pinned hashes), served
+    // locally, so no CDN and no SRI. Public so other admin pages don't keep their own copy to drift.
     public const FONT_AWESOME_VERSION = '6.5.2';
 
     /**
@@ -320,8 +321,7 @@ class Assets
     }
 
     /**
-     * Enqueues the Font Awesome stylesheet vendored locally under
-     * assets/vendor/fontawesome/ (see the FONT_AWESOME_VERSION docblock above).
+     * Enqueues the Font Awesome stylesheet vendored locally under assets/vendor/fontawesome/.
      *
      * @return void
      */

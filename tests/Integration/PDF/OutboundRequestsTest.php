@@ -108,7 +108,7 @@ final class OutboundRequestsTest extends TestCase
         } finally {
             $_SERVER = $server_before;
             $site->stop();
-            \FabricatorForms\Form\MailSender::removeTempTree($docroot);
+            \FabricatorForms\Utils\PrivateDir::removeTree($docroot);
             @rmdir($docroot);
         }
     }

@@ -138,6 +138,38 @@ final class PdfLayoutTest extends TestCase
         self::assertSame(6000000, \FabricatorForms\Tests\Support\Reflect::call(\FabricatorForms\Form\FormProcessor::class, 'largestLayoutImage'));
     }
 
+    public function testASubmissionsPdfFolderGoesWhenTheRequestEndsButTheSharedFontCacheStays(): void
+    {
+        // The folder is mPDF's temp dir for the submission, and holds the first pass with every answer: its removal is
+        // registered before anything is written, so it goes at the end of the request even when the request is cut
+        // short. mPDF's font metrics reach it as links to the shared cache, which removing them must leave alone.
+        \FabricatorForms\Tests\Support\Overrides::$shutdownFunctions = [];
+        // The first fills the shared cache if it is empty; the second gets it linked into its folder.
+        $this->generate();
+        $this->generate();
+        $folders = [];
+        foreach (\FabricatorForms\Tests\Support\Overrides::$shutdownFunctions as [$callback, $args]) {
+            if ($callback === [\FabricatorForms\Utils\PrivateDir::class, 'removeTree'] && str_contains((string) $args[0], '/pdf/')) {
+                $folders[] = (string) $args[0];
+            }
+        }
+        self::assertNotEmpty($folders, 'the removal of the PDF folder is registered');
+        $folder = $folders[0];
+        $shared = glob(\FabricatorForms\Utils\PrivateDir::sharedMpdfTemp() . '/mpdf/ttfontdata/*') ?: [];
+        self::assertNotEmpty($shared, 'the font metrics this PDF needed are in the shared cache');
+        self::assertFileExists($folder . '/mpdf/ttfontdata/' . basename($shared[0]), 'and reach the next PDF in its own folder');
+        // What a request stopped before the inline delete leaves behind.
+        file_put_contents($folder . '/SL_cut-short.pdf', '%PDF-1.4');
+
+        \FabricatorForms\Tests\Support\Overrides::runShutdownFunctions();
+
+        self::assertDirectoryDoesNotExist($folder);
+        clearstatcache();
+        foreach ($shared as $file) {
+            self::assertFileExists($file, 'shared, so never removed with a submission');
+        }
+    }
+
     /**
      * A sealed PDF of one submission, as a notification would attach it.
      */

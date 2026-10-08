@@ -1,0 +1,27 @@
+@fortawesome/fontawesome-free 6.5.2
+Source: https://www.npmjs.com/package/@fortawesome/fontawesome-free (npm registry, published by Fonticons, Inc.)
+License: icons CC BY 4.0, fonts SIL OFL 1.1, code MIT (LICENSE.txt, copied unchanged from the package)
+Fetched via: npm pack @fortawesome/fontawesome-free@6.5.2 (verified against the npm registry's published integrity
+hash by npm itself during download)
+Tarball integrity: sha512-hRILoInAx8GNT5IMkrtIt9blOdrqHOnPBH+k70aWUAqPZPgopb9G5EQJFpaBx/S8zp2fC+mPW349Bziuk1o28Q==
+
+Build: webfonts/fa-brands-400.woff2, fa-regular-400.woff2 and fa-solid-900.woff2 are copied unchanged from the
+package's webfonts/. css/all.min.css is the package's css/all.min.css with two kinds of rule removed, since only the
+woff2 fonts ship: the @font-face for fa-v4compatibility, and the url(../webfonts/*.ttf) format("truetype") fallback in
+each of the 9 @font-face rules left. Nothing else in it differs; reapplying those two removals to the package's
+file gives this one byte for byte. The index.php files are this plugin's own empty directory guards.
+
+SHA-256 of every file in this folder except VERSION. tools/build.php refuses to package when a file is missing from
+this list, or its hash differs:
+  cc86b995c714b7e48c8157dbf3f0c640179fc296029e297aaac65162340dbbc6  css/all.min.css
+  bd48c24ce4500e60d2524571756787283f0d3fbfa50b116331309c09773f0cd1  css/index.php
+  bd48c24ce4500e60d2524571756787283f0d3fbfa50b116331309c09773f0cd1  index.php
+  9b914eae88817d63b576eab5aafde7068c7a1abae125d7cdfb034f1da43a9afc  LICENSE.txt
+  232c6f6a7678304f9efaa26f30b1610debc2ba9f4cd636b5e6751c8d73761b92  webfonts/fa-brands-400.woff2
+  c27da6f833431da5aa295c44540bfac0fd8270ba6a3c4346427006d8a7b34b76  webfonts/fa-regular-400.woff2
+  ae17c16afbea216707b2203ea1cf9bdb45b9bfe47d0f4ae3258ddbc6294dd02f  webfonts/fa-solid-900.woff2
+  bd48c24ce4500e60d2524571756787283f0d3fbfa50b116331309c09773f0cd1  webfonts/index.php
+
+Files intentionally NOT vendored: the TTF fonts and fa-v4compatibility (woff2 is supported by every browser
+WordPress supports), the per-style CSS files, the SVGs, sprites and JS builds (the plugin uses only the CSS webfont
+build).

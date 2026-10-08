@@ -285,6 +285,10 @@ final class ServerChecksTest extends AjaxTestCase
         $attached = $this->mailed[0]['attachments'];
         self::assertSame(['Entry', 'terms.pdf'], [substr(basename($attached[0]), 0, 5), basename($attached[1])]);
         $copies = dirname($attached[1], 2);
+        // One folder per kind in the plugin's folder in uploads, both named for the submission.
+        $base = \FabricatorForms\Utils\PrivateDir::base();
+        self::assertSame([$base . '/pdf', $base . '/mail'], [dirname($attached[0], 2), dirname($copies)]);
+        self::assertSame(basename(dirname($attached[0])), basename($copies));
         foreach ($attached as $path) {
             self::assertFileExists($path, 'still there until the request ends');
         }
@@ -295,6 +299,69 @@ final class ServerChecksTest extends AjaxTestCase
             self::assertFileDoesNotExist($path);
         }
         self::assertDirectoryDoesNotExist($copies, 'the attachment copies\' own folder too');
+        self::assertDirectoryDoesNotExist(dirname($attached[0]), 'and the PDF\'s, with mPDF\'s files in it');
+    }
+
+    public function testAnAttachmentFolderRemovedOnItsOwnIsMadeAgainBeforeTheUploadsAreAttached(): void
+    {
+        // Whatever removed mail/ (a cleanup tool, a restore) did so while the day-long "folders ready" transient still
+        // stands: the upload must still reach the notification, not be left out of a submission reported as sent.
+        \FabricatorForms\Utils\PrivateDir::prepare();
+        \FabricatorForms\Utils\PrivateDir::removeTree(\FabricatorForms\Utils\PrivateDir::base() . '/mail');
+        $form = $this->createForm([self::uploadField('doc', 'Document')], [self::notification(['attach_uploads' => true])]);
+        $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
+
+        $r = $this->submit($form, []);
+
+        self::assertTrue($r['success'], wp_json_encode($r));
+        self::assertSame(['terms.pdf'], array_map('basename', $this->mailed[0]['attachments']));
+        self::assertFileExists(\FabricatorForms\Utils\PrivateDir::base() . '/mail/index.php', 'hardened again');
+    }
+
+    public function testUploadsThatCannotBePreparedAsAttachmentsStopTheSubmissionBeforeAnyEmail(): void
+    {
+        // Nothing is stored locally: mailing the notifications without the visitor's files would lose them while the
+        // submission reads as sent. A file where mail/ belongs can't be made a folder, as an unwritable uploads folder
+        // or a full disk can't.
+        $mail_dir = \FabricatorForms\Utils\PrivateDir::prepare() . '/mail';
+        \FabricatorForms\Utils\PrivateDir::removeTree($mail_dir);
+        file_put_contents($mail_dir, 'not a folder');
+        $form  = $this->createForm([self::uploadField('doc', 'Document')], [self::notification(['attach_uploads' => true])]);
+        $token = SingleUseToken::issue($form);
+        $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
+
+        try {
+            $r = $this->submit($form, [], $token);
+        } finally {
+            unlink($mail_dir);
+        }
+
+        self::assertFalse($r['success']);
+        self::assertSame('Your submission could not be delivered. Please try again later.', $r['data']['message']);
+        self::assertSame([], $this->mailed, 'no notification went out without the file');
+        $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
+        $retry  = $this->submit($form, [], $token);
+        self::assertTrue($retry['success'], 'the visitor can send it again once the folder can be made: ' . wp_json_encode($retry));
+        self::assertSame(['terms.pdf'], array_map('basename', $this->mailed[0]['attachments']));
+    }
+
+    public function testANotificationWithoutAttachmentsIsSentWhateverTheAttachmentFolder(): void
+    {
+        // The files are prepared only for a notification that carries them.
+        $mail_dir = \FabricatorForms\Utils\PrivateDir::prepare() . '/mail';
+        \FabricatorForms\Utils\PrivateDir::removeTree($mail_dir);
+        file_put_contents($mail_dir, 'not a folder');
+        $form = $this->createForm([self::uploadField('doc', 'Document')], [self::notification(['attach_uploads' => false, 'attach_pdf' => false])]);
+        $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
+
+        try {
+            $r = $this->submit($form, []);
+        } finally {
+            unlink($mail_dir);
+        }
+
+        self::assertTrue($r['success'], wp_json_encode($r));
+        self::assertSame([], $this->mailed[0]['attachments']);
     }
 
     public function testRunningOutOfMemoryOverTheFilesAsksForSmallerOnesAndLetsTheVisitorRetry(): void

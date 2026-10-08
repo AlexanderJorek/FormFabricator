@@ -1115,6 +1115,9 @@ msgstr "FABRICATOR_SEAL_MASTER_KEY nicht gefunden. Bitte prüfen Sie die wp-conf
 msgid "Setup session expired. Please start again."
 msgstr "Setup-Sitzung abgelaufen. Bitte beginnen Sie erneut."
 
+msgid "FABRICATOR_SEAL_MASTER_KEY in wp-config.php must be 64 hexadecimal characters. Please check the line."
+msgstr "FABRICATOR_SEAL_MASTER_KEY in der wp-config.php muss aus 64 Hexadezimalzeichen bestehen. Bitte prüfen Sie die Zeile."
+
 #: includes/Admin/FormSettings.php:2415
 msgid "The entered master key does not match the expected value. Please check wp-config.php."
 msgstr "Der eingetragene Master-Schlüssel stimmt nicht mit dem erwarteten überein. Bitte prüfen Sie die wp-config.php."

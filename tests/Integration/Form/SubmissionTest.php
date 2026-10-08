@@ -229,19 +229,21 @@ final class SubmissionTest extends AjaxTestCase
         $form   = $this->createForm(self::FIELDS, [self::notification()]);
         update_option(\FabricatorForms\Plugin::LAST_INLINE_SWEEP_OPTION, time() - 2 * HOUR_IN_SECONDS, false);
         add_option('fabricator_rl_expired_one', '3|' . (time() - 10), '', false);
-        $pdf_dir = wp_upload_dir()['basedir'] . '/fabricator-secure-pdf/pdf';
-        wp_mkdir_p($pdf_dir);
-        $stale = $pdf_dir . '/left-behind.pdf';
-        $fresh = $pdf_dir . '/being-sent.pdf';
-        file_put_contents($stale, '%PDF-1.4');
-        file_put_contents($fresh, '%PDF-1.4');
+        // Submission folders of other requests: one a killed request left, one still being sent.
+        $pdf_dir = \FabricatorForms\Utils\PrivateDir::prepare() . '/pdf/';
+        $stale   = $pdf_dir . bin2hex(random_bytes(16));
+        $fresh   = $pdf_dir . bin2hex(random_bytes(16));
+        mkdir($stale);
+        mkdir($fresh);
+        file_put_contents($stale . '/Entry.pdf', '%PDF-1.4');
+        file_put_contents($fresh . '/Entry.pdf', '%PDF-1.4');
         touch($stale, time() - 2 * HOUR_IN_SECONDS);
 
         self::assertTrue($this->submit($form, ['name' => 'Ada'])['success']);
         self::assertFalse($stored('fabricator_rl_expired_one'), 'swept by the submission');
-        self::assertFileDoesNotExist($stale, 'a PDF left behind over an hour ago is removed');
-        self::assertFileExists($fresh, 'one still being sent is not');
-        wp_delete_file($fresh);
+        self::assertDirectoryDoesNotExist($stale, 'a PDF left behind over an hour ago is removed');
+        self::assertFileExists($fresh . '/Entry.pdf', 'one still being sent is not');
+        \FabricatorForms\Utils\PrivateDir::removeTree($fresh);
 
         add_option('fabricator_rl_expired_two', '3|' . (time() - 10), '', false);
         self::assertTrue($this->submit($form, ['name' => 'Ada again'])['success']);

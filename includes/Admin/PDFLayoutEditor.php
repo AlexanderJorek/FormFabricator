@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -189,8 +189,8 @@ class PDFLayoutEditor
 
         $dummy = self::dummyFields();
 
-        // Unsealed: form_id 0 alone signalled nothing to Generator/HashSeal, so previews were signed with the production
-        // key and verified as authentic, letting any edit_pdf_layout holder mint "authentic" PDFs with arbitrary text.
+        // Unsealed: a preview must never carry a seal that verifies, or anyone who may edit the layout could create
+        // "authentic" PDFs with arbitrary text.
         // The same sample form name as the editor's live preview (pdfLayoutI18n()'s sampleFormName).
         $path = \FabricatorForms\PDF\Generator::generate($dummy, 0, __('Sample form', 'formfabricator'), false);
 
@@ -847,8 +847,8 @@ class PDFLayoutEditor
             );
         }
 
-        // This form has no logo_url or logo_width input — the logo is placed through the header layout editor — so
-        // reading them from $_POST wiped a configured logo on every save. Kept unless the request actually carries them.
+        // This form has no logo_url or logo_width input (the logo is placed through the header layout editor), so they
+        // are kept unless the request carries them; reading absent fields as empty would clear the logo on every save.
         $stored_layout = get_option('fabricator_forms_pdf_layout', []);
         $stored_layout = is_array($stored_layout) ? $stored_layout : [];
 

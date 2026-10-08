@@ -502,8 +502,15 @@ try {
                     }
                 });
             } else if (setupState === 'ready') {
-                // Encryption chosen AND master key already present — skip straight to finalise.
-                showReadyStep();
+                /* Encryption chosen and a master key already present: the server confirms the session's issued key, or
+                   else the one in wp-config.php, and the setup finalises. */
+                postBlocker('fabricator_setup_get_master_key', null, function (data) {
+                    if (data.success) {
+                        showReadyStep();
+                    } else {
+                        showBlockerError((data.data && data.data.message) || I18N.error);
+                    }
+                });
             }
 
             // ── Step-1 card buttons ──
@@ -534,6 +541,12 @@ try {
                             mkStep.style.display = 'none';
                             showStep1();
                             showBlockerError((data.data && data.data.message) || I18N.error);
+                            return;
+                        }
+                        /* wp-config.php already holds a master key (perhaps another site's): no line to add. */
+                        if (data.data.existing) {
+                            mkStep.style.display = 'none';
+                            showReadyStep();
                             return;
                         }
                         mkLine.textContent = data.data.define_line;

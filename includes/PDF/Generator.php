@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -77,7 +77,8 @@ class Generator
      * @param int    $form_id    The form identifier.
      * @param string $form_title Human-readable form title used in the PDF header.
      * @param bool   $seal       Embed the HMAC seal. False for layout previews, which must never verify.
-     * @return string|false Absolute path to the generated PDF, or false on failure.
+     * @return string|false Absolute path to the generated PDF, or false on failure. It lies in the request's
+     *                      submission folder (PrivateDir), which removes itself, the PDF with it, when the request ends.
      */
     // Renders twice (PASS 1/2 below): the seal is an HMAC of the content but must also be embedded in it.
     public static function generate(array $mapped, int $form_id, string $form_title = '', bool $seal = true): string|false
@@ -234,10 +235,13 @@ class Generator
                 $raised_backtrack = ini_set('pcre.backtrack_limit', (string)(16 * 1024 * 1024)) !== false;
             }
 
-            $safe_dir  = self::secureDir();
-            $pdf_dir   = $safe_dir . '/pdf';
-            $mpdf_temp = $safe_dir . '/mpdf';
-            $grid_svg  = FABRICATOR_FORMS_PATH . 'includes/PDF/templates/construction-grid.svg';
+            // The submission's folder is mPDF's temp dir too, so mPDF's copies of the visitor's images go with it.
+            $work = \FabricatorForms\Utils\PrivateDir::forSubmission('pdf');
+            if ($work === '') {
+                throw new \RuntimeException('No folder for the PDF.');
+            }
+            \FabricatorForms\Utils\PrivateDir::linkFontCache($work);
+            $grid_svg = FABRICATOR_FORMS_PATH . 'includes/PDF/templates/construction-grid.svg';
 
 
             $margin_top    = (int) ($layout['margin_top_mm']    ?? 30);
@@ -264,7 +268,7 @@ class Generator
             $footer_margin = $footer_lines > 0 ? 5 + ($footer_lines * 5) : 5;
 
             $mpdf_config = [
-                'tempDir'       => $mpdf_temp,
+                'tempDir'       => $work,
                 'margin_top'    => $margin_top,
                 'margin_left'   => $margin_left,
                 'margin_right'  => $margin_right,
@@ -291,8 +295,9 @@ class Generator
 
             self::writeHtmlChunked($mpdf, $html);
 
-            // Random, so concurrent submissions never share a PASS-1 file.
-            $sl_path = $mpdf_temp . '/SL_' . bin2hex(random_bytes(16)) . '.pdf';
+            // It holds every answer and image. Deleted below once read; when an exception from the scans or a memory or
+            // time fatal skips that, the folder's removal at the end of the request takes it.
+            $sl_path = $work . '/SL_' . bin2hex(random_bytes(16)) . '.pdf';
             $mpdf->Output($sl_path, \Mpdf\Output\Destination::FILE);
             unset($mpdf);
 
@@ -406,8 +411,9 @@ class Generator
             self::writeHtmlChunked($mpdf, $html);
 
             // Random filename: a guessable one could be fetched directly on servers that ignore .htaccess.
-            $final_path = $pdf_dir . '/Entry_' . bin2hex(random_bytes(16)) . '.pdf';
+            $final_path = $work . '/Entry_' . bin2hex(random_bytes(16)) . '.pdf';
             $mpdf->Output($final_path, \Mpdf\Output\Destination::FILE);
+            \FabricatorForms\Utils\PrivateDir::shareFontCache($work);
 
             return $final_path;
         } catch (MpdfException $e) {
@@ -433,66 +439,22 @@ class Generator
      */
     private const SWEEP_MAX_AGE = 3600;
 
-    // WP-Cron callback (hourly): sweeps stale *.pdf files, leaving mPDF's own persistent cache files alone.
+    // WP-Cron callback (hourly): sweeps the submission folders a killed request left, leaving mPDF's shared cache alone.
     public static function cronSweepTmpDirs(): void
     {
         self::sweepTmpDirs(self::SWEEP_MAX_AGE);
     }
 
     /**
-     * Removes the temp PDFs and mail-attachment folders older than $max_age seconds. Not the cron callback itself,
-     * which WordPress calls with an empty string.
+     * Removes the submission folders (PDFs, mail attachments) unchanged for more than $max_age seconds. Not the cron
+     * callback itself, which WordPress calls with an empty string.
      *
      * @param int $max_age Seconds since the last change; younger ones may belong to a request still running.
      * @return void
      */
     public static function sweepTmpDirs(int $max_age): void
     {
-        $upload_dir = wp_upload_dir();
-        $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
-        $now        = time();
-
-        foreach (['/pdf', '/mpdf'] as $sub) {
-            $dir = $safe_dir . $sub;
-            if (!is_dir($dir)) {
-                continue;
-            }
-            foreach ((glob($dir . '/*.pdf') ?: []) as $file) {
-                if (!is_file($file)) {
-                    continue;
-                }
-                // A concurrent request may delete the file between is_file() and here; false is then the right answer.
-                $mtime = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => filemtime($file));
-                if ($mtime !== false && ($now - $mtime) > $max_age) {
-                    wp_delete_file($file);
-                    if (file_exists($file)) {
-                        \FabricatorForms\fabricator_log("FabricatorForms Generator: sweep failed to remove stale temp PDF {$file}");
-                    }
-                }
-            }
-        }
-
-        self::sweepMailSenderTmpDirs($now, $max_age);
-    }
-
-    // Backstop for MailSender's shutdown-function cleanup, which never runs if PHP dies first (fatal/OOM/kill).
-    private static function sweepMailSenderTmpDirs(int $now, int $max_age): void
-    {
-        // Both places MailSender::tempBaseDir() creates them.
-        $bases = array_unique([
-            rtrim(get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR,
-            wp_upload_dir()['basedir'] . '/fabricator-secure-pdf/mail/',
-        ]);
-        foreach ($bases as $base) {
-            foreach ((glob($base . 'fabricator_*', GLOB_ONLYDIR) ?: []) as $dir) {
-                $mtime = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => filemtime($dir));
-                if ($mtime === false || ($now - $mtime) <= $max_age) {
-                    continue;
-                }
-                // Same routine as the request's own shutdown cleanup, including its per-file subdirectories.
-                \FabricatorForms\Form\MailSender::removeTempTree($dir);
-            }
-        }
+        \FabricatorForms\Utils\PrivateDir::sweep($max_age);
     }
 
     /* ------------------------------------------------------------------ */
@@ -727,26 +689,6 @@ class Generator
     }
 
     /**
-     * The protected folder for PDFs and mPDF's temporary files, hardened when it is new or was removed.
-     *
-     * @return string Its path.
-     */
-    private static function secureDir(): string
-    {
-        $upload_dir = wp_upload_dir();
-        $safe_dir   = $upload_dir['basedir'] . '/fabricator-secure-pdf';
-        // is_dir() too, so a removed directory is re-hardened at once rather than when the transient expires.
-        if (!get_transient('fabricator_pdf_dirs_ready') || !is_dir($safe_dir . '/pdf')) {
-            \FabricatorForms\Utils\SecureDir::harden(
-                $safe_dir,
-                array_map(static fn($sub) => $safe_dir . $sub, ['', '/pdf', '/embed', '/mpdf'])
-            );
-            set_transient('fabricator_pdf_dirs_ready', true, DAY_IN_SECONDS);
-        }
-        return $safe_dir;
-    }
-
-    /**
      * mPDF's font settings, trimmed to the files the release build ships:
      *
      * - Each of FALLBACK_FONTS uses its regular file for every style (the others cover fewer characters, or don't exist).
@@ -784,7 +726,7 @@ class Generator
     private static function glyphTest(string $family): ?\Closure
     {
         try {
-            $mpdf  = new \Mpdf\Mpdf(['tempDir' => self::secureDir() . '/mpdf'] + self::fontConfig());
+            $mpdf  = new \Mpdf\Mpdf(['tempDir' => \FabricatorForms\Utils\PrivateDir::sharedMpdfTemp()] + self::fontConfig());
             $maps  = [];
             foreach (['', 'B', 'I', 'BI'] as $style) {
                 $mpdf->SetFont($family, $style);

@@ -145,6 +145,38 @@ final class SettingsSaveTest extends AjaxTestCase
         self::assertTrue($again['success'], 'saving twice in one tab works');
     }
 
+    public function testOnANetworkPerUserGrantsAreForThisSitesMembersOnly(): void
+    {
+        if (!is_multisite()) {
+            self::markTestSkipped('Multisite only: run with WP_MULTISITE=1.');
+        }
+        $member   = self::factory()->user->create(['role' => 'editor', 'display_name' => 'Member Mia']);
+        $outsider = self::factory()->user->create(['role' => 'editor', 'display_name' => 'Outsider Otto']);
+        remove_user_from_blog($outsider, get_current_blog_id());
+
+        $r = $this->ajax('fabricator_save_access_settings', [
+            'nonce'    => wp_create_nonce('fabricator_access_settings'),
+            'users'    => [$member => ['edit_forms' => '1'], $outsider => ['edit_forms' => '1']],
+            'snapshot' => hash('sha256', (string) wp_json_encode(get_option('fabricator_forms_access', ['roles' => [], 'users' => []]))),
+        ]);
+        self::assertTrue($r['success'], (string) wp_json_encode($r));
+        self::assertSame([$member], array_keys(get_option('fabricator_forms_access')['users']), 'only this site\'s member is saved');
+
+        // Removing the member from the site ends the grant, though the stored list still names them.
+        self::assertTrue(\FabricatorForms\Plugin::userCan('edit_forms', $member));
+        remove_user_from_blog($member, get_current_blog_id());
+        self::assertFalse(\FabricatorForms\Plugin::userCan('edit_forms', $member));
+
+        // The list reaches the page as the settings script's localized data.
+        wp_register_script('fabricator-forms-admin-settings', false, [], '1');
+        ob_start();
+        FormSettings::renderSettingsPage();
+        ob_end_clean();
+        $data = (string) wp_scripts()->get_data('fabricator-forms-admin-settings', 'data');
+        self::assertStringContainsString('Unknown user (#' . $member . ')', $data, 'no longer named to this site\'s admin');
+        self::assertStringNotContainsString('Member Mia', $data);
+    }
+
     public function testARotationWhileAnotherRunsIsRefusedWithoutChangingTheKey(): void
     {
         HashSeal::createInitialKey();

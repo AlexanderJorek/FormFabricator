@@ -31,5 +31,9 @@ final class PreviewTest extends AjaxTestCase
         // The whole localization, not two strings of it: one the old copy left out.
         self::assertStringContainsString('"field_required"', $page);
         self::assertStringContainsString('"ajaxUrl":""', $page, 'the preview never submits');
+        // The toolbar's rules come from their asset file, linked after the front-end styles they sit beside.
+        self::assertMatchesRegularExpression('~<link[^>]+assets/css/admin-preview-toolbar\.css~', $page);
+        self::assertGreaterThan((int) strpos($page, 'assets/css/front.css'), (int) strpos($page, 'admin-preview-toolbar.css'));
+        self::assertStringNotContainsString('.fpt-slider', $page, 'no inline copy');
     }
 }

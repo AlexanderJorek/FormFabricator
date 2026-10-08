@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.8
+ * @version   1.0.9
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -35,8 +35,7 @@ class SecureDir
 
     private const SILENCE = '<?php // Silence is golden ?>';
 
-    // Apache/LiteSpeed deny rule. Kept here rather than repeated at each call site — it was
-    // duplicated verbatim in four places, where one edit could silently miss three of them.
+    // Apache/LiteSpeed deny rule, in one place for every folder harden() guards.
     private const HTACCESS = "Options -Indexes" . self::NL
         . '<IfModule mod_authz_core.c>' . self::NL
         . 'Require all denied' . self::NL
@@ -62,7 +61,12 @@ class SecureDir
         // Explicit modes, never umask(), which is process-wide under a threaded SAPI.
         foreach ($dirs as $dir) {
             if (!is_dir($dir)) {
-                wp_mkdir_p($dir);
+                // A folder that can't be made (uploads not writable, a full disk, a file in its place) is reported by
+                // its caller's next step; setting its mode or writing into it would only add PHP warnings.
+                if (!wp_mkdir_p($dir)) {
+                    \FabricatorForms\fabricator_log('FabricatorForms SecureDir: could not create ' . $dir . '.');
+                    continue;
+                }
                 self::chmodPath($fs, $dir, 0750);
             }
 
@@ -75,6 +79,9 @@ class SecureDir
             }
         }
 
+        if (!is_dir($base)) {
+            return;
+        }
         // Compared by size, not just existence: a truncated guard file still passes file_exists() while denying nothing.
         self::ensureGuardFile($fs, $base . '/.htaccess', self::HTACCESS);
         // .htaccess only covers Apache/LiteSpeed; this is the IIS-equivalent deny rule.
@@ -196,7 +203,7 @@ class SecureDir
         . "\n" .
         '                <hiddenSegments>'
         . "\n" .
-        '                    <add segment="fabricator-secure-pdf" />'
+        '                    <add segment="formfabricator" />'
         . "\n" .
         '                </hiddenSegments>'
         . "\n" .

@@ -37,27 +37,54 @@ final class ActivationTest extends TestCase
         }
     }
 
-    public function testDeactivationRemovesTheAttachmentCopiesAKilledRequestLeftButNotOneStillInUse(): void
+    public function testDeactivationRemovesTheSubmissionFoldersAKilledRequestLeftButNotOnesStillInUse(): void
     {
-        $left  = self::attachmentCopies(time() - 20 * MINUTE_IN_SECONDS);
-        $fresh = self::attachmentCopies(time());
+        $left_pdf  = self::submissionFolder('pdf', time() - 20 * MINUTE_IN_SECONDS);
+        $left_mail = self::submissionFolder('mail', time() - 20 * MINUTE_IN_SECONDS);
+        $fresh     = self::submissionFolder('mail', time());
 
         do_action('deactivate_' . self::basename(), false);
 
-        self::assertDirectoryDoesNotExist($left, 'left by a killed request');
-        self::assertFileExists($fresh . '/0/form.pdf', 'a submission may still be sending it');
-        \FabricatorForms\Form\MailSender::removeTempTree($fresh);
+        self::assertDirectoryDoesNotExist($left_pdf, 'a PDF folder left by a killed request, with mPDF files in it');
+        self::assertDirectoryDoesNotExist($left_mail, 'attachment copies left by a killed request');
+        self::assertFileExists($fresh . '/f1/passport.jpg', 'a submission may still be sending it');
+        \FabricatorForms\Utils\PrivateDir::removeTree($fresh);
+    }
+
+    public function testRemovingASubmissionFolderRemovesALinkInItButNeverWhatItPointsTo(): void
+    {
+        $outside = get_temp_dir() . 'fabricator-link-target-' . bin2hex(random_bytes(4));
+        mkdir($outside);
+        file_put_contents($outside . '/keep.txt', 'x');
+        $left = self::submissionFolder('mail', time() - 20 * MINUTE_IN_SECONDS);
+        if (!@symlink($outside, $left . '/link')) {
+            \FabricatorForms\Utils\PrivateDir::removeTree($left);
+            \FabricatorForms\Utils\PrivateDir::removeTree($outside);
+            self::markTestSkipped('This system does not let PHP create links (Windows without the privilege).');
+        }
+        touch($left, time() - 20 * MINUTE_IN_SECONDS);
+        clearstatcache();
+
+        do_action('deactivate_' . self::basename(), false);
+
+        self::assertDirectoryDoesNotExist($left);
+        self::assertFileExists($outside . '/keep.txt');
+        \FabricatorForms\Utils\PrivateDir::removeTree($outside);
     }
 
     /**
-     * A mail-attachment folder in the system temp dir as MailSender makes one (a file in a numbered subfolder), last
-     * changed at $mtime.
+     * A submission folder of the given kind in the plugin's folder, as a request makes one (a file in a subfolder),
+     * last changed at $mtime.
      */
-    private static function attachmentCopies(int $mtime): string
+    private static function submissionFolder(string $type, int $mtime): string
     {
-        $dir = untrailingslashit(get_temp_dir()) . '/fabricator_test' . wp_generate_password(8, false, false);
-        mkdir($dir . '/0', 0700, true);
-        file_put_contents($dir . '/0/form.pdf', '%PDF-1.4');
+        $dir = \FabricatorForms\Utils\PrivateDir::prepare() . '/' . $type . '/' . bin2hex(random_bytes(16));
+        $sub = $type === 'pdf' ? '/mpdf/ttfontdata' : '/f1';
+        mkdir($dir . $sub, 0700, true);
+        file_put_contents($dir . $sub . ($type === 'pdf' ? '/dejavusans.mtx.json' : '/passport.jpg'), 'x');
+        if ($type === 'pdf') {
+            file_put_contents($dir . '/Entry.pdf', '%PDF-1.4');
+        }
         touch($dir, $mtime);
         clearstatcache();
         return $dir;

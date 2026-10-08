@@ -8,7 +8,7 @@
  * @return array{
  *     exclude: string[],
  *     nestedExclude: string[],
- *     handVendored: array<int, array{dir: string, npm: string, license: string}>,
+ *     handVendored: array<int, array{path: string, npm: string, licenses: string[]}>,
  *     keepFonts: string[],
  *     vendorExclude: string[]
  * }
@@ -35,10 +35,12 @@ return [
         'assets/css/fields/ExampleField.stylesComposite.css',
     ],
 
-    // npm packages placed in vendor/ by hand (Composer doesn't manage them), each pinned by the SHA-256 list in its
-    // VERSION file.
+    // npm packages placed by hand (Composer doesn't manage them), each pinned by the SHA-256 list in its VERSION file.
+    // The build checks them before staging and again in the package. Those under vendor/ are copied in after the
+    // check, since the stage's vendor/ is Composer's; the others are staged with the folder they live in.
     'handVendored' => [
-        ['dir' => 'altcha', 'npm' => 'altcha', 'license' => 'MIT'],
+        ['path' => 'vendor/altcha', 'npm' => 'altcha', 'licenses' => ['MIT']],
+        ['path' => 'assets/vendor/fontawesome', 'npm' => '@fortawesome/fontawesome-free', 'licenses' => ['CC-BY-4.0', 'OFL-1.1', 'MIT']],
     ],
 
     // mPDF ships ~88 MB of fonts. Kept: the four selectable families (layout.php's font_family match) and the regular

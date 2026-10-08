@@ -135,7 +135,7 @@ final class VerifierPageTest extends AjaxTestCase
         $copy  = get_transient('fabricator_pdf_' . $token)['path'];
         self::assertFileExists($copy, 'the upload is kept for the check');
 
-        $imageDir = wp_upload_dir()['basedir'] . '/fabricator-secure-pdf/verimages/*';
+        $imageDir = wp_upload_dir()['basedir'] . '/formfabricator/verimages/*';
         $before   = glob($imageDir) ?: [];
 
         $r = $this->ajax('fabricator_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $token, 'visualLines' => '[]']);
@@ -282,7 +282,7 @@ final class VerifierPageTest extends AjaxTestCase
      */
     private function storedCopy(): string
     {
-        $dir = wp_upload_dir()['basedir'] . '/fabricator-secure-pdf/verfiles';
+        $dir = wp_upload_dir()['basedir'] . '/formfabricator/verfiles';
         wp_mkdir_p($dir);
         $path = $dir . '/' . bin2hex(random_bytes(8)) . '-order.pdf';
         file_put_contents($path, $this->sealedPdf());

@@ -1,7 +1,7 @@
 name: Tests
 
 # The release gates from tools/build.php, on every push and pull request, on Linux — TESTING.md §0 asks for a non-Windows
-# host, and the 1.0.7 upload/PDF-check regression was Windows-specific the other way round.
+# host, since the release build usually runs on Windows and file handling differs between the two.
 on:
   push:
   pull_request:

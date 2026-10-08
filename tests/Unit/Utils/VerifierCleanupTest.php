@@ -33,8 +33,8 @@ final class VerifierCleanupTest extends TestCase
         $this->wp             = FakeWordPress::install();
         $this->wp->userId     = 7;
         $this->wp->uploadsDir = PdfFixtures::tempDir('fabricator-uploads-');
-        $this->ver            = $this->wp->uploadsDir . '/fabricator-secure-pdf/verfiles';
-        $this->img            = $this->wp->uploadsDir . '/fabricator-secure-pdf/verimages';
+        $this->ver            = $this->wp->uploadsDir . '/formfabricator/verfiles';
+        $this->img            = $this->wp->uploadsDir . '/formfabricator/verimages';
         mkdir($this->ver, 0777, true);
         mkdir($this->img, 0777, true);
         $this->now = time();
