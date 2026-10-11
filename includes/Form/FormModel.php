@@ -45,8 +45,8 @@ class FormModel
      */
     public const QUERY_BATCH = 100;
 
-    public int $id            = 0;
-    public string $title         = '';
+    public int $id              = 0;
+    public string $title        = '';
     public array $fields        = [];
     public array $notifications = [];
     public array $settings      = [];

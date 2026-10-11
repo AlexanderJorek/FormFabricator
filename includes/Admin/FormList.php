@@ -253,7 +253,7 @@ class FormList
             </div>
         </div>
 
-<!-- Delete confirmation modal -->
+        <!-- Delete confirmation modal -->
         <div id="fabricator-delete-modal" class="fabricator-modal-backdrop" hidden>
             <div class="fabricator-modal">
                 <p class="fabricator-modal-msg" id="fabricator-modal-msg"><?php esc_html_e('Really delete form?', 'formfabricator'); ?></p>

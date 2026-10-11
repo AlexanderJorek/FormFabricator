@@ -47,7 +47,7 @@ function fabricator_uninstall_current_site()
         wp_clear_scheduled_hook($fabricator_cron_hook);
     }
 
-        /* Remove all stored forms (CPT posts + meta) */
+    /* Remove all stored forms (CPT posts + meta) */
     // A page at a time, each round deleting what it read; the counter stops a runaway loop if a delete fails.
     for ($fabricator_round = 0; $fabricator_round < 1000; $fabricator_round++) {
         $fabricator_forms = get_posts(
