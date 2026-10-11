@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -111,11 +111,14 @@ class VerifierCleanup
         $next_due = 0;
         $base     = PrivateDir::base();
         foreach (self::DIRS as $sub) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a copy in the plugin's own folder in uploads.
             foreach ((glob($base . $sub . '/*') ?: []) as $file) {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a copy in the plugin's own folder in uploads.
                 if (!is_file($file) || in_array(basename($file), self::GUARD_FILES, true)) {
                     continue;
                 }
                 // A concurrent request may delete the file between is_file() and here; false is then the right answer.
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a copy in the plugin's own folder in uploads.
                 $mtime = Cast::withoutWarnings(static fn() => filemtime($file));
                 if ($mtime === false) {
                     continue;
@@ -126,7 +129,9 @@ class VerifierCleanup
                     continue;
                 }
                 wp_delete_file($file);
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a copy in the plugin's own folder in uploads.
                 if (file_exists($file)) {
+                    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
                     \FabricatorForms\fabricator_log('FabricatorForms VerifierCleanup: could not remove ' . \FabricatorForms\fabricator_log_file(basename($file)));
                 }
             }
@@ -190,6 +195,7 @@ class VerifierCleanup
                 foreach ((array) ($pending['tokens'] ?? []) as $token) {
                     $entry = is_string($token) ? get_transient('fabricator_pdf_' . $token) : false;
                     $path  = is_array($entry) ? ($entry['path'] ?? null) : null;
+                    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path from the plugin's own transient, in its folder.
                     if (!is_string($path) || !is_file($path)) {
                         continue; // already checked, swept or expired
                     }

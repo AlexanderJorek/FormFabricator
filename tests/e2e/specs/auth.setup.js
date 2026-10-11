@@ -11,8 +11,12 @@ const { auth } = require('../support/site');
 for (const [login, file] of Object.entries(auth)) {
     setup('log in as ' + login, async ({ page }) => {
         await page.goto('/wp-login.php');
+        // wp-login.php focuses the username field and selects its text 200 ms after loading (wp_attempt_focus()). On a
+        // busy machine that lands while the password is being filled, which then replaces the username. Fill after it.
+        await expect(page.locator('#user_login')).toBeFocused();
         await page.locator('#user_login').fill(login);
         await page.locator('#user_pass').fill('e2e-password');
+        await expect(page.locator('#user_login')).toHaveValue(login);
         await page.locator('#wp-submit').click();
         await expect(page.locator('#wpadminbar')).toBeVisible();
         await page.context().storageState({ path: file });

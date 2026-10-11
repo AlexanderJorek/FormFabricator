@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -101,6 +101,7 @@ final class PrivateDir
         }
         // Every folder, so one removed on its own is made and hardened again at once rather than when the transient
         // expires: without mail/, attachments would be left out of every notification meanwhile.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a fixed closure over the plugin's own folders.
         $missing = array_filter($dirs, static fn(string $dir): bool => !is_dir($dir));
         if (!get_transient('fabricator_private_dir_ready') || $missing !== []) {
             SecureDir::harden($base, $dirs);
@@ -126,10 +127,12 @@ final class PrivateDir
             self::$submission = bin2hex(random_bytes(16));
         }
         $dir = self::prepare() . '/' . $type . '/' . self::$submission;
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
         if (!is_dir($dir) && !self::makeDir($dir)) {
             \FabricatorForms\fabricator_log('FabricatorForms PrivateDir: could not create ' . $dir);
             return '';
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions,PHPCS_SecurityAudit.BadFunctions.FunctionHandlingFunctions.WarnFunctionHandling -- the plugin's own cleanup of its own folder.
         register_shutdown_function([self::class, 'removeTree'], $dir);
         return $dir;
     }
@@ -171,8 +174,11 @@ final class PrivateDir
         if (!wp_mkdir_p($own)) {
             return;
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
         foreach (glob(self::sharedFontCache() . '/*') ?: [] as $file) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
             $target = $own . '/' . basename($file);
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
             if (is_file($file) && !is_link($file) && !file_exists($target)
                 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_copy,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- mPDF's own cache files between two folders of this plugin.
                 && !Cast::withoutWarnings(static fn() => link($file, $target)) && !Cast::withoutWarnings(static fn() => copy($file, $target))
@@ -196,13 +202,16 @@ final class PrivateDir
         if (!wp_mkdir_p($shared)) {
             return;
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
         foreach (glob($temp_dir . '/mpdf/ttfontdata/*') ?: [] as $file) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
             $name = basename($file);
             // mPDF's own half-written temp files (Cache::write()) stay behind.
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
             if (str_starts_with($name, 'cache_tmp_') || !is_file($file) || is_link($file) || file_exists($shared . '/' . $name)) {
                 continue;
             }
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- an atomic move between two folders of this plugin; WP_Filesystem's move() copies and deletes.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- an atomic move within the plugin's own folder; WP_Filesystem's move() copies and deletes.
             Cast::withoutWarnings(static fn() => rename($file, $shared . '/' . $name));
         }
     }
@@ -226,25 +235,29 @@ final class PrivateDir
     public static function removeTree(string $dir): void
     {
         $dir = rtrim($dir, '/\\');
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
         if ($dir === '' || is_link($dir) || !is_dir($dir)) {
             return;
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
         foreach (scandir($dir) ?: [] as $name) {
             if ($name === '.' || $name === '..') {
                 continue;
             }
             $path = $dir . '/' . $name;
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
             if (is_dir($path) && !is_link($path)) {
                 self::removeTree($path);
                 continue;
             }
             wp_delete_file($path);
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
             if (file_exists($path) || is_link($path)) {
                 // The file's own name may be a visitor's, so it is logged only as fabricator_log_file() records it.
                 \FabricatorForms\fabricator_log('FabricatorForms PrivateDir: failed to remove ' . $dir . '/' . \FabricatorForms\fabricator_log_file($name));
             }
         }
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- an emptied folder of this plugin, removed at shutdown or by WP-Cron, where no WP_Filesystem credentials can be asked for.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- an emptied folder of the plugin's own, removed at shutdown or by WP-Cron, where no WP_Filesystem credentials can be asked for.
         if (!Cast::withoutWarnings(static fn() => rmdir($dir))) {
             \FabricatorForms\fabricator_log('FabricatorForms PrivateDir: failed to remove folder ' . $dir);
         }
@@ -262,11 +275,14 @@ final class PrivateDir
         $base = self::base();
         $now  = time();
         foreach (self::SUBMISSION_TYPES as $type) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
             foreach (glob($base . '/' . $type . '/*', GLOB_ONLYDIR) ?: [] as $dir) {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
                 if (preg_match('/^[0-9a-f]{32}$/D', basename($dir)) !== 1) {
                     continue;
                 }
                 // A concurrent request may remove the folder meanwhile; false is then the right answer.
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
                 $mtime = Cast::withoutWarnings(static fn() => filemtime($dir));
                 if ($mtime !== false && ($now - $mtime) > $max_age) {
                     self::removeTree($dir);

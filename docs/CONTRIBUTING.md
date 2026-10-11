@@ -181,6 +181,16 @@ One provider per field, picked by the admin:
 - Nothing is stored locally, so a notification is never sent without what it should carry: when the PDF or an upload
   can't be written (uploads not writable, disk full), the submission stops before the first email and the visitor is
   asked to try again (`MailSender::deliveryFailed()`).
+- A failed delivery leaves a record for the admin notice, one per form: when, how often and what failed, never an
+  address or an answer (`MailSender::failureRecords()`, shown by `Plugin::maybeWarnMailFailures()`). Only that form's
+  next delivered submission removes it, so a form that delivers can't hide one that keeps failing. Dismissing the notice
+  clears it only for an administrator; any other form manager just stops seeing it until a newer failure (a per-site
+  user option), so no one can hide a loss from the administrators. Without the record, a mail setup that keeps failing
+  would lose every submission with only the server log saying so. A notification's Sender tab can send a test email
+  to the admin's own address (`MailSender::sendTest()`), five per user every five minutes: each is a real email, and a
+  used-up sending quota would stop the notifications too.
+- Uninstall removes the plugin's folder with PHP's own calls, not WP_Filesystem: PHP's user made every file in it, and
+  WP_Filesystem may need FTP credentials an uninstall can't ask for.
 - An hourly sweep, run from submissions as well as WP-Cron (`Plugin::sweepIfDue()`), removes the submission folders a
   killed request left behind. Deactivation ends that sweep, so it sweeps once more, leaving anything changed in the last
   ten minutes: a submission may still be sending it. Uninstall removes the whole folder, on every site.
@@ -643,6 +653,10 @@ both dev dependencies. Run `vendor/bin/phpcs --standard=.phpcs-security.xml`.
 - **Warnings are review material, not a gate.** The security-audit sniffs flag *any* filesystem or callback call with a
   non-literal argument. That is a heuristic, not proof of a real issue. For a confirmed false positive, add a targeted
   `phpcs:ignore` comment with a justification rather than restructuring sound code.
+- **The ruleset reports no warnings.** Every warning so far was reviewed and carries its `phpcs:ignore` and reason, so
+  a new warning means new code to look at. The dev-only scripts (`tools/`, `languages/*.php`) switch off the
+  warning-only sniffs their job trips (file and process access) with a `phpcs:disable` at their top; the error-level
+  checks still cover them. phpcs can't exclude the security-audit sniffs by folder, only everywhere.
 - **A `phpcs:ignore` covers only the next line.** Plugin Check doesn't know this ruleset's `customSanitizingFunctions`,
   so every line using `Cast::stringOrDefault()` still needs its own ignore.
 

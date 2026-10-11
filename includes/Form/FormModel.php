@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -244,6 +244,7 @@ class FormModel
      *                             {@see self::nonceVerifiedOrCheck()}.
      * @return bool True on success, false on failure.
      */
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a method named delete(), not the filesystem function.
     public static function delete(int $form_id, bool $nonce_verified = false): bool
     {
         if (!\FabricatorForms\Plugin::userCan('edit_forms') && !current_user_can('manage_options')) {

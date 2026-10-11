@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -39,7 +39,7 @@ abstract class BaseField
         if (!isset(self::$assetCache[$relativePath])) {
             // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site, never request input.
             $path = \FABRICATOR_FORMS_PATH . $relativePath;
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file read, not a remote URL; wp_remote_get() would be wrong here.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: the plugin's own asset file.
             $contents = is_readable($path) ? file_get_contents($path) : false;
             self::$assetCache[$relativePath] = $contents !== false ? rtrim($contents, "\r\n") : '';
         }
@@ -752,6 +752,7 @@ abstract class BaseField
         if (empty($value) || !str_starts_with((string)$value, 'data:image/')) {
             return [];
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- a fixed pattern; PHP 8 has no /e modifier.
         $b64 = preg_replace('#^data:image/[^;]+;base64,#', '', (string)$value);
         $b64 = str_replace(' ', '+', $b64);
         $b64 = preg_replace('/[^A-Za-z0-9+\/=]/', '', $b64);
@@ -791,6 +792,7 @@ abstract class BaseField
         if ($value === null || $value === '') {
             return true;
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         if (is_array($value) && empty(array_filter($value, static fn($v) => $v !== ''))) {
             return true;
         }

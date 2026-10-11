@@ -4293,6 +4293,11 @@ function buildNotifContentTab(notif) {
         spRichTextEditor(panel, 'notif-body', '', notif.body || '',
             function (v) { state.notifications[notifModalIdx].body = v; markDirty(); });
     }
+    /* Saving removes what email may not carry (FormEditor::sanitizeEmailBody()); say so before it happens. */
+    var bodyHint = document.createElement('p');
+    bodyHint.className   = 'fabricator-sp-hint';
+    bodyHint.textContent = _i18n.notifBodyHint || 'Removed on save: scripts, embedded content (iframe, object, embed), event handlers (onclick and the like), javascript: links, external stylesheets, form actions, and tags or styles outside the email-safe set.';
+    panel.appendChild(bodyHint);
 
     /* Attachments section */
     var attachSep = document.createElement('div');
@@ -4336,6 +4341,51 @@ function buildNotifSenderTab(notif) {
     sr('reply_to',   _i18n.replyTo   || 'Reply-to email',                  _i18n.emptyMeansSenderEmail || 'Empty = sender email');
     /* CC/BCC live on the Recipients tab — they ARE recipients, and in routing mode they belong to
        the individual rule rather than the notification, which this tab has no concept of. */
+
+    /* A test email with this notification's sender as it stands, saved or not, to the admin's own address
+       (FormEditor::ajaxSendTestMail()): a failing mail setup would lose every submission. */
+    var testRow = document.createElement('div');
+    testRow.className = 'fabricator-sp-row';
+    var testBtn = document.createElement('button');
+    testBtn.type        = 'button';
+    testBtn.className   = 'button';
+    testBtn.id          = 'fabricator-notif-test-mail';
+    testBtn.textContent = _i18n.sendTestMail || 'Send test email';
+    var testHint = document.createElement('p');
+    testHint.className   = 'fabricator-sp-hint';
+    testHint.textContent = _i18n.sendTestMailHint || 'Sends a short email with this sender to your own address.';
+    var testStatus = document.createElement('p');
+    testStatus.className = 'fabricator-sp-notice';
+    testStatus.hidden    = true;
+    testStatus.setAttribute('role', 'status');
+    testRow.appendChild(testBtn);
+    testRow.appendChild(testHint);
+    testRow.appendChild(testStatus);
+    panel.appendChild(testRow);
+
+    function showTestResult(ok, message) {
+        testStatus.className   = 'fabricator-sp-notice fabricator-sp-notice--' + (ok ? 'info' : 'warning');
+        testStatus.textContent = message;
+        testStatus.hidden      = false;
+    }
+    testBtn.addEventListener('click', function () {
+        var current = state.notifications[notifModalIdx] || {};
+        testBtn.disabled = true;
+        testStatus.hidden = true;
+        var fd = new FormData();
+        fd.append('action',     'fabricator_forms_send_test_mail');
+        fd.append('nonce',      NONCE);
+        fd.append('from_name',  current.from_name || '');
+        fd.append('from_email', current.from_email || '');
+        fd.append('form_title', state.formName || '');
+        fetch(AJAX_URL, { method: 'POST', body: fd })
+            .then(function (r) { return r.json(); })
+            .then(function (resp) {
+                showTestResult(!!resp.success, (resp.data && resp.data.message) || (_i18n.unknownError || 'Unknown error'));
+            })
+            .catch(function () { showTestResult(false, _i18n.networkError || 'Network error.'); })
+            .finally(function () { testBtn.disabled = false; });
+    });
 }
 
 /* Submit button preview + settings modal */

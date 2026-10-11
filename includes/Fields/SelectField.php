@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -192,6 +192,7 @@ class SelectField extends BaseField
             }
             return self::validateOtherText($other, $config);
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $allowed = array_map(
             static fn($o) => (string)($o['value'] ?? ''),
             $config['options'] ?? []

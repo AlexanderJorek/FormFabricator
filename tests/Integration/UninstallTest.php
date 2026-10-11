@@ -20,6 +20,7 @@ final class UninstallTest extends TestCase
         'fabricator_forms_seal_key_history',
         'fabricator_forms_trusted_proxies',
         'fabricator_verifier_sweep_due',
+        'fabricator_forms_mail_failures',
     ];
 
     private const ROW_PREFIXES = ['fabricator_rl_', 'fabricator_su_', 'fabricator_cs_', 'fabricator_lock_'];
@@ -42,8 +43,16 @@ final class UninstallTest extends TestCase
         if (!defined('WP_UNINSTALL_PLUGIN')) {
             define('WP_UNINSTALL_PLUGIN', 'formfabricator/formfabricator.php');
         }
-        // The loaded plugin's own: the repository's, or the release zip's (Support\Package).
-        require FABRICATOR_FORMS_PATH . 'uninstall.php';
+        // On a server where WordPress writes files over FTP, which needs credentials an uninstall can't ask for: the
+        // plugin's folder holds copies with submission data and must go all the same.
+        $ftp = static fn(): string => 'ftpext';
+        add_filter('filesystem_method', $ftp);
+        try {
+            // The loaded plugin's own: the repository's, or the release zip's (Support\Package).
+            require FABRICATOR_FORMS_PATH . 'uninstall.php';
+        } finally {
+            remove_filter('filesystem_method', $ftp);
+        }
 
         foreach ($sites as $site) {
             $this->onSite($site, fn() => $this->assertNothingLeft('site ' . $site));
@@ -79,6 +88,8 @@ final class UninstallTest extends TestCase
         foreach (self::ROW_PREFIXES as $prefix) {
             $wpdb->insert($wpdb->options, ['option_name' => $prefix . 'planted', 'option_value' => '1|1', 'autoload' => 'no']);
         }
+        // A form editor's dismissal of the delivery-failure notice, stored per site.
+        update_user_option(get_current_user_id(), 'fabricator_mail_failures_seen', time());
         set_transient('fabricator_uploads_probe', 'x');
         set_transient('fabricator_pdf_randomtoken', 'x');
         set_transient('fabricator_vpending_1', ['tokens' => []]);
@@ -101,6 +112,7 @@ final class UninstallTest extends TestCase
         }
         $left = $wpdb->get_col($wpdb->prepare("SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", '%' . $wpdb->esc_like('fabricator') . '%'));
         self::assertSame([], $left, "$where: no fabricator rows left in the options table");
+        self::assertFalse(get_user_option('fabricator_mail_failures_seen', get_current_user_id()), "$where: the notice dismissal");
         self::assertFalse(wp_next_scheduled('fabricator_rl_sweep_expired'), "$where: hourly sweep unscheduled");
         self::assertFalse(wp_next_scheduled('fabricator_verifier_sweep_expired'), "$where: one-off event unscheduled");
         clearstatcache();

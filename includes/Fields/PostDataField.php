@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -38,6 +38,7 @@ class PostDataField extends BaseField
      */
     public function conditionValue(mixed $raw, array $config): mixed
     {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $read = is_array($raw) ? array_map(
             static fn($v) => is_scalar($v) ? sanitize_text_field(html_entity_decode((string) $v, ENT_QUOTES | ENT_HTML5, 'UTF-8')) : '',
             $raw
@@ -103,6 +104,7 @@ class PostDataField extends BaseField
     private static function selectedFields(array $config): array
     {
         $selected = (array) ($config['post_field'] ?? ['post_title']);
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return array_values(array_filter($selected, static fn($key) => in_array($key, self::ALLOWED_FIELDS, true)));
     }
 
@@ -214,6 +216,7 @@ class PostDataField extends BaseField
             return __('[No entry]', 'formfabricator');
         }
         $filtered = array_intersect_key($value, array_flip(self::selectedFields($config)));
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return implode(', ', array_filter(array_map('strval', $filtered), static fn($v) => $v !== ''));
     }
 

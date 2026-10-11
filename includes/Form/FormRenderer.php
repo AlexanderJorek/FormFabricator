@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -196,6 +196,7 @@ class FormRenderer
             return $html;
         }
         $ids  = array_flip($m[2]);
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $html = (string) preg_replace_callback(
             '/(\s(?:id|for|form|list|headers|aria-(?:describedby|labelledby|controls|owns|activedescendant|errormessage|details|flowto))\s*=\s*)(["\'])(.*?)\2/i',
             static function (array $a) use ($ids, $suffix): string {
@@ -210,6 +211,7 @@ class FormRenderer
             },
             $html
         );
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return (string) preg_replace_callback(
             '/(\shref\s*=\s*)(["\'])#(.*?)\2/i',
             static fn(array $a): string => $a[1] . $a[2] . '#' . (isset($ids[$a[3]]) ? $a[3] . $suffix : $a[3]) . $a[2],
@@ -259,6 +261,7 @@ class FormRenderer
         /* If the form has any pagebreaks, wrap everything in page divs.
          * Open page 0 immediately so fields before the first pagebreak are included. */
         $has_pagebreaks = !$insideGroup && self::anyFieldHandler(
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             array_map(
                 static fn($f) => FieldRegistry::get($f['type'] ?? ''),
                 $fields

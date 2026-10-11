@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -97,6 +97,7 @@ class UploadField extends BaseField
     {
         $names = is_array($raw) ? ($raw['name'] ?? null) : null;
         $names = is_array($names) ? $names : [$names];
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $count = count(array_filter($names, static fn($n) => is_scalar($n) && (string) $n !== ''));
         return $count > 0 ? (string) $count : '';
     }
@@ -227,6 +228,7 @@ class UploadField extends BaseField
         // allowed_types — the deny-list always wins over form-builder config
         $blocked = self::BLOCKED_TYPES;
         $exts    = array_unique(
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             array_filter(
                 $exts,
                 static function (string $e) use ($blocked): bool {
@@ -352,6 +354,7 @@ class UploadField extends BaseField
             // Null without PHP's fileinfo extension: uploads are then refused below, since no file's real type can be read.
             $finfo     = class_exists('finfo') ? new \finfo(FILEINFO_MIME_TYPE) : null;
             // <input accept> from buildAccept() only constrains the browser picker; enforce the allow-list here too.
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $allowed_exts = array_filter(array_map(
                 static function (string $e): string {
                     return ltrim(strtolower(trim($e)), '.');
@@ -359,6 +362,7 @@ class UploadField extends BaseField
                 explode(',', $this->buildAccept($config))
             ));
             foreach ($names as $i => $name) {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- pathinfo() only parses the name, no file access.
                 $ext = strtolower(pathinfo((string)$name, PATHINFO_EXTENSION));
                 if (in_array($ext, self::BLOCKED_TYPES, true)) {
                     // translators: %s: rejected file extension.
@@ -483,12 +487,13 @@ class UploadField extends BaseField
             $name = \FabricatorForms\PDF\PdfUtils::stripBidiControls(sanitize_file_name($file['name'] ?? 'unknown'));
 
             $binary = false;
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- PHP's upload temp file, checked with is_uploaded_file().
             if (!$tmp || !is_readable($tmp) || !is_uploaded_file($tmp)) {
                 \FabricatorForms\fabricator_log(
                     'FabricatorForms: upload not readable: ' . \FabricatorForms\fabricator_log_file((string) $name)
                 );
             } else {
-                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of the uploaded $_FILES tmp_name, not a remote URL; wp_remote_get() would be wrong.
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: PHP's upload temp file, checked with is_uploaded_file().
                 $binary = file_get_contents($tmp);
             }
 

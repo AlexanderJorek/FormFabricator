@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -523,7 +523,9 @@ class FormSelectList
             'i18n'      => $fsel_i18n,
             'ajaxUrl'   => admin_url('admin-ajax.php'),
             'saveNonce' => $save_nonce,
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             'allForms'  => array_map(fn($f) => ['id' => $f->id, 'title' => $f->title], $all_forms),
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             'fselData'  => array_map(fn($s) => ['id' => $s->id, 'title' => $s->title, 'items' => $s->items], $selects),
             ]
         );

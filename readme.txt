@@ -4,7 +4,7 @@ Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.0.9
+Stable tag: 1.1.0
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -122,6 +122,12 @@ Replaced keys stay on your site, so older PDFs remain checkable. After a server 
 Deactivating keeps everything. Deleting removes all forms, settings, seal keys and stored files for good, so keep your key backup files.
 
 == Changelog ==
+
+= 1.1.0 =
+* New: a notification's Sender tab can send a test email to your own address, and an admin notice reports submissions that could not be delivered until one gets through.
+* New: saving a form says when a notification's message lost content an email may not carry, and the message editor lists what is removed.
+* Fixed: a Consent field without any text gave no warning on save.
+* Fixed: deleting the plugin left its folder in uploads behind on servers where WordPress writes files over FTP.
 
 = 1.0.9 =
 * Changed: every file the plugin writes (PDFs, mail attachments, the PDF check's uploads) now lives in one folder, `wp-content/uploads/formfabricator/`, instead of partly in the server's shared temporary-files folder.

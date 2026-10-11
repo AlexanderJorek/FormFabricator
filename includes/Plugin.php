@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -32,6 +32,7 @@ defined('ABSPATH') || exit;
  */
 function fabricator_log_file(string $name): string
 {
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- pathinfo() only parses the name, no file access.
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     return 'file #' . substr(hash('sha256', $name), 0, 8) . (preg_match('/^[a-z0-9]{1,10}$/', $ext) === 1 ? '.' . $ext : '');
 }
@@ -354,6 +355,102 @@ class Plugin
             . '</a></p></div>';
     }
 
+    private const MAIL_FAILURES_DISMISS = 'fabricator_dismiss_mail_failures';
+
+    /* Per user and per site (a user option): when someone who can't clear the record last dismissed the notice. */
+    public const MAIL_FAILURES_SEEN = 'fabricator_mail_failures_seen';
+
+    /**
+     * Tells form managers when submissions could not be delivered (MailSender::failureRecords()). Each visitor was
+     * asked to try again, but nothing is stored, so until the cause is fixed every submission is lost; without this,
+     * only the server log would say so.
+     *
+     * @return void
+     */
+    public static function maybeWarnMailFailures(): void
+    {
+        if (!self::userCan('edit_forms')) {
+            return;
+        }
+        $records = Form\MailSender::failureRecords();
+        if ($records === []) {
+            return;
+        }
+        // Dismissed by a user who can't clear the record: hidden for them until a newer failure is recorded.
+        $seen = (int) get_user_option(self::MAIL_FAILURES_SEEN);
+        if (!current_user_can('manage_options') && max(array_column($records, 'last')) <= $seen) {
+            return;
+        }
+        $causes = [
+            'unroutable' => __('No enabled notification had a usable recipient.', 'formfabricator'),
+            'pdf'        => __('The PDF could not be created.', 'formfabricator'),
+            'uploads'    => __('The uploaded files could not be prepared as attachments. Check that the uploads folder is writable and the disk is not full.', 'formfabricator'),
+            'send'       => __('The site could not send a notification. Check the site\'s mail setup, or the mail plugin it uses.', 'formfabricator'),
+        ];
+        $format  = get_option('date_format') . ' ' . get_option('time_format');
+        $dismiss = wp_nonce_url(add_query_arg(self::MAIL_FAILURES_DISMISS, '1'), self::MAIL_FAILURES_DISMISS);
+
+        echo '<div class="notice notice-error"><p><strong>'
+            . esc_html__('FormFabricator: submissions could not be delivered.', 'formfabricator')
+            . '</strong></p>';
+        // One line per form, newest first: each is cleared by its own form's next delivered submission.
+        foreach ($records as $form_id => $record) {
+            $title = (string) get_post_field('post_title', $form_id);
+            echo '<p>' . esc_html(sprintf(
+                /* translators: 1: form title, 2: date and time of the first failure, 3: number of submissions, 4: date and time of the latest. */
+                _n(
+                    'Form "%1$s": since %2$s, %3$d submission could not be delivered, the latest on %4$s.',
+                    'Form "%1$s": since %2$s, %3$d submissions could not be delivered, the latest on %4$s.',
+                    $record['count'],
+                    'formfabricator'
+                ),
+                $title !== '' ? $title : '#' . $form_id,
+                wp_date($format, $record['first']),
+                $record['count'],
+                wp_date($format, $record['last'])
+            ))
+                . ' ' . esc_html($causes[$record['reason']]) . '</p>';
+        }
+        echo '<p>'
+            . esc_html__(
+                'Each visitor was asked to try again, and nothing was stored. To check the mail setup, send a test email from a notification\'s Sender settings. A form\'s line goes away once a submission to it is delivered.',
+                'formfabricator'
+            )
+            . ' <a href="' . esc_url($dismiss) . '">' . esc_html__('Dismiss', 'formfabricator') . '</a></p></div>';
+    }
+
+    /**
+     * Dismisses the delivery-failure notice. An administrator clears the record for everyone; any other form manager
+     * only stops seeing it until a newer failure is recorded, so no one below them can hide an ongoing loss of
+     * submissions from the administrators the notice is meant to reach.
+     *
+     * @return void
+     */
+    public static function maybeDismissMailFailures(): void
+    {
+        if (!isset($_GET[self::MAIL_FAILURES_DISMISS]) || !self::userCan('edit_forms')) {
+            return;
+        }
+        check_admin_referer(self::MAIL_FAILURES_DISMISS);
+        self::dismissMailFailures();
+        wp_safe_redirect(remove_query_arg([self::MAIL_FAILURES_DISMISS, '_wpnonce']));
+        exit;
+    }
+
+    /**
+     * What dismissing the delivery-failure notice does for the current user (maybeDismissMailFailures()).
+     *
+     * @return void
+     */
+    public static function dismissMailFailures(): void
+    {
+        if (current_user_can('manage_options')) {
+            Form\MailSender::clearFailures();
+            return;
+        }
+        update_user_option(get_current_user_id(), self::MAIL_FAILURES_SEEN, time());
+    }
+
     /**
      * Ensures every recurring sweep is scheduled. Idempotent.
      *
@@ -484,7 +581,9 @@ class Plugin
             add_action('admin_init', [self::class, 'maybeSealSetupRedirect']);
             add_action('admin_notices', [self::class, 'maybeWarnUnprotectedUploads']);
             add_action('admin_notices', [self::class, 'maybeWarnSealKeyUnusable']);
+            add_action('admin_notices', [self::class, 'maybeWarnMailFailures']);
             add_action('admin_init', [self::class, 'maybeDismissUploadsNotice']);
+            add_action('admin_init', [self::class, 'maybeDismissMailFailures']);
             /* Self-heal for sites upgraded in place (no activation hook fires) or whose cron
                array was cleared. Admin-only, so public page loads never pay for the lookup. */
             add_action('admin_init', [self::class, 'scheduleSweeps']);
@@ -534,7 +633,9 @@ class Plugin
             rtrim((string) WP_LANG_DIR, '/\\') . '/plugins',
         ];
         foreach ($dirs as $dir) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- WordPress's own language folders.
             foreach (glob($dir . '/formfabricator-*.mo') ?: [] as $path) {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
                 $is_plugin_mo = preg_match('/^formfabricator-([A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?)\.mo$/', basename($path), $m) === 1;
                 if ($is_plugin_mo && in_array($m[1], $installed, true)) {
                     $langs[$m[1]] = self::localeDisplayName($m[1]);

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -304,7 +304,7 @@ class Generator
             $fonts           = [];
             $expected_pages  = 0;
             $content_hashes  = [];
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of a path this request just wrote; wp_remote_get() is for remote URLs only.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: this request's first pass in the plugin's folder.
             $pdf_raw         = file_get_contents($sl_path);
 
             $image_hashes = [];
@@ -335,6 +335,7 @@ class Generator
             $seal_page_text    = $seal_page_text    ?? '';
             $links             = $links             ?? [];
             wp_delete_file($sl_path);
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- this request's first pass in the plugin's folder.
             if (file_exists($sl_path)) {
                 \FabricatorForms\fabricator_log('FabricatorForms Generator: failed to delete temp PDF: ' . $sl_path);
             }
@@ -549,12 +550,14 @@ class Generator
         $template = [];
 
         $fingerprint = function (string $path, string $name) use ($finfo, &$seen, &$template): void {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a Media Library file (get_attached_file()) or the plugin's own file.
             $real = realpath($path);
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a Media Library file (get_attached_file()) or the plugin's own file.
             if ($real === false || !is_readable($real) || isset($seen[$real])) {
                 return;
             }
             $seen[$real] = true;
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of a resolved image path; wp_remote_get() is for remote URLs only.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: a Media Library file (get_attached_file()) or the plugin's own file.
             $data = file_get_contents($real);
             if ($data === false) {
                 return;
@@ -571,6 +574,7 @@ class Generator
             $post_id   = \attachment_url_to_postid($raw['logo_url']);
             $logo_path = $post_id ? (\get_attached_file($post_id) ?: '') : '';
             if ($logo_path !== '') {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
                 $fingerprint($logo_path, basename($logo_path));
             }
         }
@@ -584,6 +588,7 @@ class Generator
             $post_id  = \attachment_url_to_postid($el['src']);
             $img_path = $post_id ? (\get_attached_file($post_id) ?: '') : '';
             if ($img_path !== '') {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
                 $fingerprint($img_path, basename($img_path));
             }
         }
@@ -792,7 +797,9 @@ class Generator
             $plain = self::plainMathLetter($cp)
                 ?? (class_exists('Normalizer') ? \Normalizer::normalize($char, \Normalizer::NFKC) : false);
             if (is_string($plain) && $plain !== $char && $plain !== '') {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 $codes = array_map(static fn(string $c): int => (int) mb_ord($c, 'UTF-8'), mb_str_split($plain, 1, 'UTF-8'));
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 $where = array_map($glyphs, $codes);
                 if (!in_array(0, $where, true)) {
                     $needs_fallback = $needs_fallback || in_array(2, $where, true);
@@ -801,11 +808,13 @@ class Generator
             }
             return preg_match('/^[\p{Cf}\p{M}]$/u', $char) === 1 ? '' : self::MISSING_GLYPH;
         };
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $out = preg_replace_callback(
             '/&#(?:[xX]([0-9a-fA-F]{1,6})|([0-9]{1,7}));/',
             static fn(array $m): string => $replace($m[1] !== '' ? (int) hexdec($m[1]) : (int) $m[2], $m[0]),
             $text
         );
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $out = $out === null ? null : preg_replace_callback(
             '/[^\x00-\x7F]/u',
             static fn(array $m): string => $replace((int) mb_ord($m[0], 'UTF-8'), $m[0]),
@@ -839,6 +848,7 @@ class Generator
             }
             $pattern = '/([' . $ends . '])(?=[\x{2000}-\x{20FF}\x{2800}-\x{29FF}])/u';
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceDyn -- a pattern this method builds from constants; PHP 8 has no /e modifier.
         return preg_replace($pattern, "\$1\u{034F}", $text) ?? $text;
     }
 

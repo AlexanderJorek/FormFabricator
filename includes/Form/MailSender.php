@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -34,6 +34,27 @@ defined('ABSPATH') || exit;
 class MailSender
 {
     /**
+     * The option holding each form's failures since its last delivered submission (recordFailure()).
+     *
+     * @var string
+     */
+    public const FAILURE_OPTION = 'fabricator_forms_mail_failures';
+
+    /**
+     * What can stop a submission's delivery: no usable recipient, the PDF, the uploads as attachments, or the send.
+     *
+     * @var string[]
+     */
+    public const FAILURE_REASONS = ['unroutable', 'pdf', 'uploads', 'send'];
+
+    /**
+     * How many forms' failures the record keeps, newest first.
+     *
+     * @var int
+     */
+    private const FAILURE_FORMS_KEPT = 20;
+
+    /**
      * Strips newlines from a value before it's interpolated into a log line, preventing a crafted
      * slug/recipient from forging adjacent log entries.
      *
@@ -55,6 +76,7 @@ class MailSender
         if ($value === '') {
             return '(none)';
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return implode(', ', array_map(
             static function (string $addr): string {
                 $addr = trim($addr);
@@ -78,6 +100,7 @@ class MailSender
      */
     private static function maskEmailsIn(string $text): string
     {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return (string) preg_replace_callback(
             self::EMAIL_IN_TEXT_RE,
             static fn(array $m): string => self::maskEmail($m[0]),
@@ -93,6 +116,7 @@ class MailSender
      */
     private static function redactEmailsIn(string $text): string
     {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceDyn -- a pattern this class builds from constants; PHP 8 has no /e modifier.
         return (string) preg_replace(self::EMAIL_IN_TEXT_RE, '[address]', $text);
     }
 
@@ -191,6 +215,7 @@ class MailSender
     public static function notificationsWithoutSignatures(int $form_id, array $fields, mixed $notifications): array
     {
         $takes_signatures = false;
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         array_walk_recursive(
             $fields,
             static function ($leaf, $key) use (&$takes_signatures): void {
@@ -272,11 +297,6 @@ class MailSender
             return;
         }
 
-        $global_from_email = get_option('fabricator_forms_from_email')
-            ?: get_option('admin_email');
-        $global_from_name  = get_option('fabricator_forms_from_name')
-            ?: get_bloginfo('name');
-
         /* ---- Pass 1: resolve every notification before anything is generated or sent ---- */
         $jobs       = [];
         $unroutable = 0;
@@ -333,32 +353,11 @@ class MailSender
                 $form
             );
 
-            // Never a form field: see FormEditor::sanitizeFromEmail(). A stored or imported {field} is ignored here too, and
-            // the site's sender applies.
-            $notif_email = trim(\FabricatorForms\Utils\Cast::stringOrDefault($notif['from_email'] ?? null));
-            if ($notif_email === '{admin_email}') {
-                $notif_email = (string) get_option('admin_email');
-            }
-            // as_html=false: a display-name sink, not markup.
-            $notif_name  = self::replacePlaceholders(
-                \FabricatorForms\Utils\Cast::stringOrDefault($notif['from_name'] ?? null),
-                $mapped,
-                $form,
-                false
-            );
-            $from_email = ('' !== $notif_email && is_email($notif_email))
-                ? $notif_email
-                : $global_from_email;
-            $from_name  = '' !== $notif_name ? $notif_name : $global_from_name;
-
-            /* Strip CR/LF (header injection) and <, >, , from from_name (mailbox smuggling into the From header). */
-            $from_name = sanitize_text_field(str_replace(["\r", "\n", '<', '>', ','], '', $from_name));
-            $from_email = str_replace(["\r", "\n"], '', sanitize_email($from_email));
             $subject = sanitize_text_field(str_replace(["\r", "\n"], '', $subject));
 
             $headers = [
                 'Content-Type: text/html; charset=UTF-8',
-                'From: ' . $from_name . ' <' . $from_email . '>',
+                self::fromHeader($notif, $mapped, $form),
             ];
 
             $reply_to = self::resolveRecipient(
@@ -395,6 +394,7 @@ class MailSender
             if ($unroutable > 0) {
                 self::logFailure("form {$form_id}: no enabled notification has a usable recipient; nothing sent");
                 self::$delivery_failed = true;
+                self::recordFailure($form_id, 'unroutable');
             }
             return;
         }
@@ -408,6 +408,7 @@ class MailSender
                 // Stop before any email: mailing the rest without the PDF would lose it, and a retry would duplicate them.
                 self::logFailure("PDF generation failed for form {$form_id}; no email sent");
                 self::$delivery_failed = true;
+                self::recordFailure($form_id, 'pdf');
                 return;
             }
         }
@@ -423,6 +424,7 @@ class MailSender
                 // files would lose them while the submission reads as sent. The visitor is asked to try again.
                 self::logFailure("form {$form_id}: the uploads could not be prepared as attachments (uploads folder not writable, or disk full?); no email sent");
                 self::$delivery_failed = true;
+                self::recordFailure($form_id, 'uploads');
                 return;
             }
         }
@@ -431,6 +433,7 @@ class MailSender
         $sent_count = 0;
         foreach ($jobs as $job) {
             $attachments = [];
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- this request's PDF in the plugin's folder.
             if ($job['attach_pdf'] && $pdf_path && file_exists($pdf_path)) {
                 $attachments[] = $pdf_path;
                 /* Non-images can't be embedded in the PDF, so always attach them alongside it. */
@@ -494,7 +497,174 @@ class MailSender
         // thanked. The retry may duplicate a sent copy; a duplicate is recoverable, a lost submission is not.
         if ($sent_count < count($jobs)) {
             self::$delivery_failed = true;
+            self::recordFailure($form_id, 'send');
+            return;
         }
+        self::clearFailures($form_id);
+    }
+
+    /**
+     * The From header of a notification: its own sender, else the plugin's, else the site's.
+     *
+     * @param array     $notif  The notification.
+     * @param array     $mapped Mapped submission data, for placeholders in the sender name.
+     * @param FormModel $form   The form.
+     * @return string
+     */
+    private static function fromHeader(array $notif, array $mapped, FormModel $form): string
+    {
+        // Never a form field: see FormEditor::sanitizeFromEmail(). A stored or imported {field} is ignored here too, and
+        // the site's sender applies.
+        $notif_email = trim(\FabricatorForms\Utils\Cast::stringOrDefault($notif['from_email'] ?? null));
+        if ($notif_email === '{admin_email}') {
+            $notif_email = (string) get_option('admin_email');
+        }
+        // as_html=false: a display-name sink, not markup.
+        $notif_name = self::replacePlaceholders(
+            \FabricatorForms\Utils\Cast::stringOrDefault($notif['from_name'] ?? null),
+            $mapped,
+            $form,
+            false
+        );
+        $from_email = ('' !== $notif_email && is_email($notif_email))
+            ? $notif_email
+            : (get_option('fabricator_forms_from_email') ?: get_option('admin_email'));
+        $from_name  = '' !== $notif_name ? $notif_name : (get_option('fabricator_forms_from_name') ?: get_bloginfo('name'));
+
+        /* Strip CR/LF (header injection) and <, >, , from from_name (mailbox smuggling into the From header). */
+        $from_name  = sanitize_text_field(str_replace(["\r", "\n", '<', '>', ','], '', (string) $from_name));
+        $from_email = str_replace(["\r", "\n"], '', sanitize_email((string) $from_email));
+        return 'From: ' . $from_name . ' <' . $from_email . '>';
+    }
+
+    /**
+     * Sends a test email with a notification's sender, so an admin finds out now, not from lost submissions, whether
+     * this site's mail setup delivers it.
+     *
+     * @param array  $notif      The notification as the builder holds it (its sender settings are used).
+     * @param string $to         The address to send to.
+     * @param string $form_title The form's title, for {form_title} in the sender name.
+     * @return string '' when wp_mail() accepted it, else why not.
+     */
+    public static function sendTest(array $notif, string $to, string $form_title): string
+    {
+        $form        = new FormModel();
+        $form->title = $form_title;
+        $site        = wp_specialchars_decode((string) get_bloginfo('name'), ENT_QUOTES);
+        $subject     = sanitize_text_field(sprintf(
+            /* translators: %s: site name. */
+            __('Test email from %s', 'formfabricator'),
+            $site
+        ));
+        $body = '<p>' . esc_html__('This is a test email from FormFabricator. It was sent with the sender this notification uses, so this notification\'s emails can reach this inbox too.', 'formfabricator') . '</p>';
+
+        $mail_error   = '';
+        $errorCatcher = static function (\WP_Error $error) use (&$mail_error): void {
+            $mail_error = $error->get_error_message();
+        };
+        add_action('wp_mail_failed', $errorCatcher);
+        try {
+            $sent = wp_mail($to, $subject, $body, ['Content-Type: text/html; charset=UTF-8', self::fromHeader($notif, [], $form)]);
+        } finally {
+            remove_action('wp_mail_failed', $errorCatcher);
+        }
+        if ($sent) {
+            return '';
+        }
+        return $mail_error !== '' ? $mail_error : __('The mail function reported a failure without a reason.', 'formfabricator');
+    }
+
+    /**
+     * Records that a submission could not be delivered, for the admin notice (Plugin::maybeWarnMailFailures()): when,
+     * which form and what failed, never an address or an answer. Nothing is stored locally, so a mail setup that
+     * keeps failing loses every submission, while the visitors' "try again" reaches no one who can fix it.
+     *
+     * Kept per form, so only that form's next delivered submission clears it: one form that delivers must not hide
+     * another that keeps failing.
+     *
+     * @param int    $form_id The form.
+     * @param string $reason  One of FAILURE_REASONS.
+     * @return void
+     */
+    private static function recordFailure(int $form_id, string $reason): void
+    {
+        // Locked: two submissions failing at once, or one failing while another form's delivery clears its own entry,
+        // must not undo each other's write.
+        \FabricatorForms\Utils\OptionMutex::run(
+            self::FAILURE_OPTION,
+            static function () use ($form_id, $reason): void {
+                $records = self::failureRecords();
+                $now     = time();
+                $entry   = [
+                    'first'  => $records[$form_id]['first'] ?? $now,
+                    'last'   => $now,
+                    'count'  => ($records[$form_id]['count'] ?? 0) + 1,
+                    'reason' => $reason,
+                ];
+                unset($records[$form_id]);
+                // Newest first, so failures within the same second keep their order. Bounded: form IDs come from
+                // submissions, and the notice needs only the most recent few.
+                $records = [$form_id => $entry] + $records;
+                update_option(self::FAILURE_OPTION, array_slice($records, 0, self::FAILURE_FORMS_KEPT, true), false);
+            }
+        );
+    }
+
+    /**
+     * The failures since each form's last delivered submission, newest first.
+     *
+     * @return array<int, array{first: int, last: int, count: int, reason: string}> Keyed by form ID.
+     */
+    public static function failureRecords(): array
+    {
+        $stored  = get_option(self::FAILURE_OPTION);
+        $records = [];
+        foreach (is_array($stored) ? $stored : [] as $form_id => $record) {
+            if ((int) $form_id <= 0 || !is_array($record) || !in_array($record['reason'] ?? null, self::FAILURE_REASONS, true)) {
+                continue;
+            }
+            $records[(int) $form_id] = [
+                'first'  => (int) ($record['first'] ?? 0),
+                'last'   => (int) ($record['last'] ?? 0),
+                'count'  => max(1, (int) ($record['count'] ?? 1)),
+                'reason' => (string) $record['reason'],
+            ];
+        }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
+        uasort($records, static fn(array $a, array $b): int => $b['last'] <=> $a['last']);
+        return $records;
+    }
+
+    /**
+     * Forgets recorded failures: one form's, when a submission to it was delivered, or all, when the admin dismisses
+     * the notice.
+     *
+     * @param int|null $form_id The form, or null for every form.
+     * @return void
+     */
+    public static function clearFailures(?int $form_id = null): void
+    {
+        // Checked first: most submissions find nothing recorded, and taking the lock would cost queries each time.
+        $records = self::failureRecords();
+        if ($records === [] || ($form_id !== null && !isset($records[$form_id]))) {
+            return;
+        }
+        if ($form_id === null) {
+            delete_option(self::FAILURE_OPTION);
+            return;
+        }
+        \FabricatorForms\Utils\OptionMutex::run(
+            self::FAILURE_OPTION,
+            static function () use ($form_id): void {
+                $records = self::failureRecords();
+                unset($records[$form_id]);
+                if ($records === []) {
+                    delete_option(self::FAILURE_OPTION);
+                } else {
+                    update_option(self::FAILURE_OPTION, $records, false);
+                }
+            }
+        );
     }
 
     /**
@@ -509,6 +679,7 @@ class MailSender
     {
         $result  = ['images' => [], 'others' => [], 'complete' => true];
 
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $has_files = (bool) array_filter($mapped, static fn($f) => !empty($f['materialized_files']));
         if (!$has_files) {
             return $result;
@@ -720,6 +891,7 @@ class MailSender
         // A multi-value answer equals an option when it is among those chosen, as in FormProcessor::evalConditionRule().
         if (is_array($raw) && ($operator === 'equals' || $operator === 'not_equals')) {
             unset($raw['__other_text__']);
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $chosen = array_map(static fn($v) => is_scalar($v) ? mb_strtolower((string) $v) : '', $raw);
             $hit    = in_array(mb_strtolower($option !== '' ? $option : $expected), $chosen, true);
             return $operator === 'equals' ? $hit : !$hit;
@@ -915,6 +1087,7 @@ class MailSender
      */
     private static function restrictLinkProtocols(string $html): string
     {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $checked = preg_replace_callback(
             '/\s(href|src)\s*=\s*(["\'])((?:(?!\2).)*)\2/is',
             static function (array $m): string {

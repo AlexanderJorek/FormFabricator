@@ -4,7 +4,7 @@
  * Plugin Name:       FormFabricator
  * Plugin URI:        https://github.com/AlexanderJorek/FormFabricator
  * Description:       Custom drag-and-drop form builder with PDF generation and email delivery.
- * Version:           1.0.9
+ * Version:           1.1.0
  * Requires at least: 6.5
  * Requires PHP:      8.1
  * Author:            Alexander Jorek
@@ -19,9 +19,10 @@ defined('ABSPATH') || exit;
 
 define('FABRICATOR_FORMS_PATH', plugin_dir_path(__FILE__));
 define('FABRICATOR_FORMS_URL', plugin_dir_url(__FILE__));
-define('FABRICATOR_FORMS_VERSION', '1.0.9');
+define('FABRICATOR_FORMS_VERSION', '1.1.0');
 
 $fabricator_composer_autoload = FABRICATOR_FORMS_PATH . 'vendor/autoload.php';
+// phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- the plugin's own file.
 if (!file_exists($fabricator_composer_autoload)) {
     add_action(
         'admin_notices',

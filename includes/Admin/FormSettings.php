@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -1840,9 +1840,12 @@ class FormSettings
             return;
         }
         // wp-config.php can live one directory above ABSPATH — same resolution wp-load.php itself uses.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- wp-config.php, looked up where wp-load.php looks.
         $wp_config_path = file_exists(\ABSPATH . 'wp-config.php')
             ? \ABSPATH . 'wp-config.php'
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- wp-config.php, looked up where wp-load.php looks.
             : dirname(\ABSPATH) . '/wp-config.php';
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- wp-config.php, looked up where wp-load.php looks.
         if (file_exists($wp_config_path)) {
             opcache_invalidate($wp_config_path, true);
         }

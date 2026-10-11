@@ -14,7 +14,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -58,6 +58,7 @@ $fabricator_image_fits = static function (string $path): bool {
     if (\FabricatorForms\PDF\PdfUtils::layoutImageFits($path, \FabricatorForms\PDF\PdfUtils::maxSafePixels())) {
         return true;
     }
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses a Media Library file's name, for the log.
     \FabricatorForms\fabricator_log('FabricatorForms PDF layout: image ' . basename($path) . ' is too large to decode here; left out of the PDF.');
     return false;
 };

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -112,6 +112,7 @@ class EmailField extends BaseField
         $mode     = $config['filter_mode']     ?? '';
         $patterns = trim((string)($config['filter_patterns'] ?? ''));
         if ($mode !== '' && $patterns !== '') {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $list    = array_filter(array_map('trim', preg_split('/[\r\n;]+/', $patterns)));
             $matched = false;
             foreach ($list as $pat) {
