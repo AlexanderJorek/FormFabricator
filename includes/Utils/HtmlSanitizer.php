@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -82,6 +82,7 @@ class HtmlSanitizer
     {
         // Every regex step checks for PCRE giving up (it returns null at a backtrack or JIT limit). Passing that null on made
         // wp_kses() return '', so a large HTML block was saved empty with nothing but a deprecation notice.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- a fixed pattern; PHP 8 has no /e modifier.
         $without_scripts = preg_replace('#<script\b[^>]*+>[\s\S]*?</script>#i', '', $html);
         if ($without_scripts === null) {
             // wp_kses() below still removes the script tags; only their text stays behind, as harmless plain text.
@@ -91,6 +92,7 @@ class HtmlSanitizer
         $html = \wp_kses($without_scripts, self::allowedTags());
 
         // <use href> may only reference an in-document fragment; anything else is stripped.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $narrowed = preg_replace_callback(
             '/<use\b[^>]*>/i',
             static function ($m) {
@@ -107,9 +109,11 @@ class HtmlSanitizer
         $html = $narrowed;
 
         // <source>/<track> may point at remote media, but only http(s)/relative — not javascript:/data:/file:.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $narrowed = preg_replace_callback(
             '/<(source|track)\b[^>]*>/i',
             static function ($m) {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 return preg_replace_callback(
                     '/\ssrc\s*=\s*(["\'])((?:(?!\1).)*)\1/is',
                     static function ($sm) {
@@ -218,10 +222,12 @@ class HtmlSanitizer
             return nl2br(esc_html(wp_strip_all_tags($original)));
         };
 
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $html = preg_replace_callback(
             '/<img\b[^>]*>/i',
             static function ($m) use ($is_allowed) {
                 // (?:(?!\1).)*, not [^"']*: a src="…'…" matched neither quote style, so it kept its remote URL.
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 return preg_replace_callback(
                     '/\ssrc\s*=\s*(["\'])((?:(?!\1).)*)\1/is',
                     static function ($sm) use ($is_allowed) {
@@ -236,11 +242,13 @@ class HtmlSanitizer
             return $as_text();
         }
 
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $html = preg_replace_callback(
             '/\bstyle\s*=\s*(["\'])((?:(?!\1).)*)\1/is',
             static function ($m) use ($is_allowed) {
                 // One branch per quoting style, so every url( comes out checked or replaced: the unquoted branch runs
                 // to the closing parenthesis, through "(" and stray quotes, and an unterminated url( is read too.
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 $style = preg_replace_callback(
                     '/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)]*))\s*\)?/i',
                     static function ($um) use ($is_allowed) {

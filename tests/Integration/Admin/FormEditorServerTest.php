@@ -89,6 +89,123 @@ final class FormEditorServerTest extends AjaxTestCase
         self::assertSame('', $this->saveForm([$written], [self::notification()])['data']['warning']);
     }
 
+    public function testSavingAMessageThatLosesContentNamesItsNotification(): void
+    {
+        $consent = ['id' => 'ok', 'type' => 'consent', 'label' => 'Consent', 'consent_text' => '<p>Newsletter; withdraw by mail to privacy@example.org.</p>'];
+        $removed = [
+            'a script'          => '<p>Hi</p><script>alert(1)</script>',
+            'an event handler'  => '<p onclick="steal()">Hi</p>',
+            'a frame'           => '<p>Hi</p><iframe src="https://example.org/"></iframe>',
+            'a tag outside'     => '<p>Hi <blink>now</blink></p>',
+            'a style property'  => '<p style="color: red; animation: blink 1s">Hi</p>',
+            'a data: image'     => '<img src="data:image/png;base64,iVBORw0KGgo=" alt="Logo">',
+            'an @import'        => '<style>@import url(https://example.org/t.css); p { color: red; }</style><p>Hi</p>',
+            'a link with a form action' => '<form action="https://example.org/"><button>Go</button></form>',
+        ];
+        foreach ($removed as $what => $body) {
+            $warning = $this->saveForm([$consent], [self::notification(['name' => 'Owner copy', 'body' => $body])])['data']['warning'];
+            self::assertStringContainsString('Content was removed from the message', $warning, $what);
+            self::assertStringContainsString('Owner copy', $warning, $what);
+        }
+
+        // What the Visual view writes, and what saving only normalizes: no warning.
+        $kept = [
+            'the Visual view'      => '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><p><b>Hi</b> &amp; <i>welcome</i></p><ul><li>One</li></ul><p><a href="https://example.org/">Link</a></p>{all_fields}</body></html>',
+            'a link to a new tab'  => '<p><a href="https://example.org/" target="_blank">Link</a></p>',
+            'content after </html>' => '<html><body><p>Hi</p></body></html>{all_fields}',
+            'spelling'             => '<P CLASS=intro STYLE="color:red">Hi<BR/>there &copy; 2026</P><!-- note -->',
+            'a style comment'      => '<style>/* brand */ p { color: #333; }</style><p style="">Hi</p>',
+        ];
+        foreach ($kept as $what => $body) {
+            $warning = $this->saveForm([$consent], [self::notification(['name' => 'Owner copy', 'body' => $body])])['data']['warning'];
+            self::assertStringNotContainsString('Content was removed', $warning, $what);
+        }
+
+        // A notification without a name is named by its slug, as in the other warnings.
+        $warning = $this->saveForm([$consent], [self::notification(['slug' => 'copy-2', 'body' => '<script>x</script>'])])['data']['warning'];
+        self::assertStringContainsString('copy-2', $warning);
+    }
+
+    public function testATestEmailGoesToTheUserWithTheNotificationsSender(): void
+    {
+        $user  = wp_get_current_user();
+        $nonce = wp_create_nonce('fabricator_forms_admin_nonce');
+
+        $r = $this->ajax('fabricator_forms_send_test_mail', ['nonce' => $nonce, 'from_name' => 'Acme {form_title}', 'from_email' => 'shop@example.org', 'form_title' => 'Orders']);
+
+        self::assertTrue($r['success'], wp_json_encode($r));
+        self::assertStringContainsString($user->user_email, $r['data']['message']);
+        $mail = self::sentMail();
+        self::assertCount(1, $mail);
+        self::assertSame([$user->user_email], self::addresses($mail[0], 'to'), 'only to the user, whatever the notification names');
+        self::assertStringContainsString('From: Acme Orders <shop@example.org>', $mail[0]->header);
+
+        // A form field as sender is dropped, as when the form is saved: the site's sender applies.
+        reset_phpmailer_instance();
+        $this->ajax('fabricator_forms_send_test_mail', ['nonce' => $nonce, 'from_name' => '', 'from_email' => '{email}', 'form_title' => 'Orders']);
+        self::assertStringContainsString('<' . get_option('admin_email') . '>', self::sentMail()[0]->header);
+
+        // A failure is reported, not hidden.
+        add_filter('pre_wp_mail', '__return_false');
+        $failed = $this->ajax('fabricator_forms_send_test_mail', ['nonce' => $nonce, 'from_name' => '', 'from_email' => '', 'form_title' => '']);
+        remove_filter('pre_wp_mail', '__return_false');
+        self::assertFalse($failed['success']);
+        self::assertStringContainsString('could not be sent', $failed['data']['message']);
+
+        // A form editor who manages nothing else learns that it failed, not what the mail system said.
+        update_option('fabricator_forms_access', ['roles' => ['editor' => ['edit_forms' => true]]]);
+        wp_set_current_user(self::factory()->user->create(['role' => 'editor']));
+        $fail_with_details = static function (): void {
+            do_action('wp_mail_failed', new \WP_Error('wp_mail_failed', 'SMTP Error: could not authenticate as relay@mail.internal'));
+        };
+        add_filter('pre_wp_mail', static function () use ($fail_with_details): bool {
+            $fail_with_details();
+            return false;
+        });
+        $editor = $this->ajax('fabricator_forms_send_test_mail', ['nonce' => wp_create_nonce('fabricator_forms_admin_nonce'), 'from_name' => '', 'from_email' => '', 'form_title' => '']);
+        remove_all_filters('pre_wp_mail');
+        self::assertFalse($editor['success']);
+        self::assertStringContainsString('Ask the site\'s administrator', $editor['data']['message']);
+        self::assertStringNotContainsString('mail.internal', $editor['data']['message']);
+
+        // Only for those who may edit forms.
+        wp_set_current_user(self::factory()->user->create(['role' => 'subscriber']));
+        reset_phpmailer_instance();
+        $refused = $this->ajax('fabricator_forms_send_test_mail', ['nonce' => wp_create_nonce('fabricator_forms_admin_nonce'), 'from_name' => '', 'from_email' => '', 'form_title' => '']);
+        self::assertFalse($refused['success']);
+        self::assertSame([], self::sentMail());
+    }
+
+    public function testTestEmailsAreLimitedPerUser(): void
+    {
+        // Each is a real email: a loop must not use up the site's sending quota, which the notifications need.
+        $nonce = wp_create_nonce('fabricator_forms_admin_nonce');
+        $post  = ['nonce' => $nonce, 'from_name' => '', 'from_email' => '', 'form_title' => ''];
+        for ($i = 0; $i < 5; $i++) {
+            self::assertTrue($this->ajax('fabricator_forms_send_test_mail', $post)['success'], 'test ' . ($i + 1));
+        }
+        $sent = count(self::sentMail());
+
+        $refused = $this->ajax('fabricator_forms_send_test_mail', $post);
+
+        self::assertFalse($refused['success']);
+        self::assertStringContainsString('wait a few minutes', $refused['data']['message']);
+        self::assertCount($sent, self::sentMail(), 'no sixth email');
+    }
+
+    public function testSavingAConsentFieldWithoutTextWarns(): void
+    {
+        // The visitor would agree to nothing, recorded as 'Agreed to ""' (GDPR Art. 4(11), 7(1)).
+        foreach (['', '<p>&nbsp;</p>', ' <p> </p> '] as $text) {
+            $consent = ['id' => 'ok', 'type' => 'consent', 'label' => 'Consent', 'consent_text' => $text];
+            $warning = $this->saveForm([$consent], [self::notification()])['data']['warning'];
+            self::assertStringContainsString('has no text', $warning, var_export($text, true));
+            self::assertStringNotContainsString('still shows its placeholder text', $warning, var_export($text, true));
+        }
+        $grouped = ['id' => 'g', 'type' => 'group', 'label' => 'Group', 'children' => [['id' => 'ok', 'type' => 'consent', 'label' => 'Consent', 'consent_text' => '']]];
+        self::assertStringContainsString('has no text', $this->saveForm([$grouped], [self::notification()])['data']['warning'], 'inside a group too');
+    }
+
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
     public function testTheConsentPlaceholderIsRecognisedInEveryInstalledLanguage(): void

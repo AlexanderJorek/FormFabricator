@@ -5373,3 +5373,70 @@ msgstr "Statisch"
 
 msgid "When your system asks for reduced motion, it is always static."
 msgstr "Wenn Ihr System reduzierte Bewegung verlangt, ist er immer statisch."
+
+msgid "Your user account has no valid email address to send the test to."
+msgstr "Ihr Benutzerkonto hat keine gültige E-Mail-Adresse, an die der Test gehen könnte."
+
+#, php-format
+msgid "The test email could not be sent: %s"
+msgstr "Die Test-E-Mail konnte nicht gesendet werden: %s"
+
+#, php-format
+msgid "Test email sent to %s. If it does not arrive, check the spam folder, then the site's mail setup."
+msgstr "Test-E-Mail an %s gesendet. Kommt sie nicht an, prüfen Sie den Spam-Ordner und danach die E-Mail-Einrichtung der Website."
+
+#, php-format
+msgid "Content was removed from the message of these notifications because email may not carry it (scripts, embedded content, event handlers, external stylesheets, or tags and styles outside the email-safe set). Check the message: %s."
+msgstr "Aus der Nachricht dieser Benachrichtigungen wurden Inhalte entfernt, die eine E-Mail nicht enthalten darf (Skripte, eingebettete Inhalte, Event-Handler, externe Stylesheets oder Tags und Styles außerhalb der für E-Mails sicheren Auswahl). Prüfen Sie die Nachricht: %s."
+
+msgid "A Consent field has no text, so the visitor agrees to nothing. Write what the visitor agrees to and how they can withdraw it."
+msgstr "Ein Einwilligungsfeld hat keinen Text, der Besucher willigt also in nichts ein. Schreiben Sie, worin der Besucher einwilligt und wie er widerrufen kann."
+
+msgid "Send test email"
+msgstr "Test-E-Mail senden"
+
+msgid "Sends a short email with this sender to your own address."
+msgstr "Sendet eine kurze E-Mail mit diesem Absender an Ihre eigene Adresse."
+
+msgid "Removed on save: scripts, embedded content (iframe, object, embed), event handlers (onclick and the like), javascript: links, external stylesheets, form actions, and tags or styles outside the email-safe set."
+msgstr "Beim Speichern entfernt: Skripte, eingebettete Inhalte (iframe, object, embed), Event-Handler (onclick und ähnliche), javascript:-Links, externe Stylesheets, Formular-Ziele sowie Tags oder Styles außerhalb der für E-Mails sicheren Auswahl."
+
+#, php-format
+msgid "Test email from %s"
+msgstr "Test-E-Mail von %s"
+
+msgid "This is a test email from FormFabricator. It was sent with the sender this notification uses, so this notification's emails can reach this inbox too."
+msgstr "Dies ist eine Test-E-Mail von FormFabricator. Sie wurde mit dem Absender dieser Benachrichtigung gesendet, die E-Mails dieser Benachrichtigung können dieses Postfach also auch erreichen."
+
+msgid "The mail function reported a failure without a reason."
+msgstr "Die Mail-Funktion meldete einen Fehler ohne Grund."
+
+msgid "No enabled notification had a usable recipient."
+msgstr "Keine aktive Benachrichtigung hatte einen verwendbaren Empfänger."
+
+msgid "The PDF could not be created."
+msgstr "Das PDF konnte nicht erstellt werden."
+
+msgid "The uploaded files could not be prepared as attachments. Check that the uploads folder is writable and the disk is not full."
+msgstr "Die hochgeladenen Dateien konnten nicht als Anhänge vorbereitet werden. Prüfen Sie, ob der Upload-Ordner beschreibbar und der Speicherplatz nicht voll ist."
+
+msgid "The site could not send a notification. Check the site's mail setup, or the mail plugin it uses."
+msgstr "Die Website konnte eine Benachrichtigung nicht senden. Prüfen Sie die E-Mail-Einrichtung der Website oder das E-Mail-Plugin, das sie verwendet."
+
+msgid "FormFabricator: submissions could not be delivered."
+msgstr "FormFabricator: Einsendungen konnten nicht zugestellt werden."
+
+#, php-format
+msgid "Form \"%1$s\": since %2$s, %3$d submission could not be delivered, the latest on %4$s."
+msgid_plural "Form \"%1$s\": since %2$s, %3$d submissions could not be delivered, the latest on %4$s."
+msgstr[0] "Formular „%1$s“: Seit %2$s konnte %3$d Einsendung nicht zugestellt werden, die letzte am %4$s."
+msgstr[1] "Formular „%1$s“: Seit %2$s konnten %3$d Einsendungen nicht zugestellt werden, die letzte am %4$s."
+
+msgid "Each visitor was asked to try again, and nothing was stored. To check the mail setup, send a test email from a notification's Sender settings. A form's line goes away once a submission to it is delivered."
+msgstr "Jeder Besucher wurde gebeten, es erneut zu versuchen, und nichts wurde gespeichert. Um die E-Mail-Einrichtung zu prüfen, senden Sie eine Test-E-Mail aus den Absender-Einstellungen einer Benachrichtigung. Die Zeile eines Formulars verschwindet, sobald eine Einsendung an dieses Formular zugestellt wurde."
+
+msgid "Please wait a few minutes before sending another test email."
+msgstr "Bitte warten Sie einige Minuten, bevor Sie eine weitere Test-E-Mail senden."
+
+msgid "The test email could not be sent. Ask the site's administrator to check its mail setup."
+msgstr "Die Test-E-Mail konnte nicht gesendet werden. Bitten Sie die Administration der Website, deren E-Mail-Einrichtung zu prüfen."

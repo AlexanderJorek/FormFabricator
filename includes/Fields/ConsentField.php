@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -192,6 +192,20 @@ class ConsentField extends BaseField
     public static function usesPlaceholderText(array $config): bool
     {
         return in_array(trim(wp_strip_all_tags(self::shownText($config))), self::placeholderTexts(), true);
+    }
+
+    /**
+     * Whether the field shows no readable text, for the builder's save warning: the visitor would agree to nothing,
+     * and the record would say so.
+     *
+     * @param array $config Field configuration.
+     * @return bool
+     */
+    public static function hasNoText(array $config): bool
+    {
+        // Decoded first, so a text of only "&nbsp;" or an empty paragraph counts as none.
+        $text = html_entity_decode(wp_strip_all_tags(self::shownText($config)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return preg_replace('/[\s\x{00A0}\x{200B}\x{FEFF}]+/u', '', $text) === '';
     }
 
     /**

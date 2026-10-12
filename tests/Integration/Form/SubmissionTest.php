@@ -290,6 +290,114 @@ final class SubmissionTest extends AjaxTestCase
         self::assertTrue($this->submit($form, ['name' => 'Ada'], $token)['success'], 'the claim was released, so the same token works');
     }
 
+    public function testFailedDeliveriesAreShownToFormManagersUntilASubmissionIsDelivered(): void
+    {
+        // Nothing is stored, so a mail setup that keeps failing loses every submission; the admin must learn of it
+        // from more than the server log. The record says when, which form and what failed, never who or what.
+        $form = $this->createForm(self::FIELDS, [self::notification()]);
+        add_filter('pre_wp_mail', '__return_false');
+        $this->submit($form, ['name' => 'Ada Lovelace', 'email' => 'ada@example.net']);
+        $this->submit($form, ['name' => 'Ada Lovelace', 'email' => 'ada@example.net']);
+        remove_filter('pre_wp_mail', '__return_false');
+        $notice = static function (): string {
+            ob_start();
+            \FabricatorForms\Plugin::maybeWarnMailFailures();
+            return (string) ob_get_clean();
+        };
+
+        wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
+        $shown = $notice();
+        self::assertStringContainsString('2 submissions could not be delivered', $shown);
+        self::assertStringNotContainsString('Ada', $shown, 'no answer is shown');
+        self::assertStringContainsString('could not send a notification', $shown, 'the cause');
+        self::assertStringContainsString(get_the_title($form), $shown, 'the form');
+        $stored = (string) wp_json_encode(get_option(\FabricatorForms\Form\MailSender::FAILURE_OPTION));
+        self::assertStringNotContainsString('Ada', $stored, 'no answer is recorded');
+        self::assertStringNotContainsString('@', $stored, 'no address is recorded');
+
+        wp_set_current_user(self::factory()->user->create(['role' => 'subscriber']));
+        self::assertSame('', $notice(), 'only for those who may edit forms');
+
+        // Another form that delivers ends nothing: it must not hide this one, nor can a visitor clear the notice with it.
+        wp_update_post(['ID' => $form, 'post_title' => 'Failing form']);
+        $other = $this->createForm(self::FIELDS, [self::notification()]);
+        wp_update_post(['ID' => $other, 'post_title' => 'Working form']);
+        wp_set_current_user(0);
+        self::assertTrue($this->submit($other, ['name' => 'Ada Lovelace', 'email' => 'ada@example.net'])['success']);
+        wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
+        self::assertStringContainsString('Form &quot;Failing form&quot;: since', $notice(), 'still shown after another form delivered');
+
+        wp_set_current_user(0);
+        self::assertTrue($this->submit($form, ['name' => 'Ada Lovelace', 'email' => 'ada@example.net'])['success']);
+        wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
+        self::assertSame('', $notice(), 'a delivered submission to the failing form ends it');
+    }
+
+    public function testOnlyAnAdministratorsDismissalClearsTheNoticeForEveryone(): void
+    {
+        // A form editor who dismisses it stops seeing it; the administrators it is meant to reach still do.
+        $form = $this->createForm(self::FIELDS, [self::notification()]);
+        add_filter('pre_wp_mail', '__return_false');
+        $this->submit($form, ['name' => 'Ada Lovelace']);
+        $notice = static function (): string {
+            ob_start();
+            \FabricatorForms\Plugin::maybeWarnMailFailures();
+            return (string) ob_get_clean();
+        };
+        update_option('fabricator_forms_access', ['roles' => ['editor' => ['edit_forms' => true]]]);
+        $editor = self::factory()->user->create(['role' => 'editor']);
+        $admin  = self::factory()->user->create(['role' => 'administrator']);
+        if (is_multisite()) {
+            grant_super_admin($admin);
+        }
+
+        wp_set_current_user($editor);
+        self::assertStringContainsString('could not be delivered', $notice(), 'the editor sees it');
+        \FabricatorForms\Plugin::dismissMailFailures();
+        self::assertSame('', $notice(), 'hidden for the editor');
+        wp_set_current_user($admin);
+        self::assertStringContainsString('could not be delivered', $notice(), 'still there for the administrator');
+
+        // A newer failure shows it to the editor again.
+        sleep(1);
+        wp_set_current_user(0);
+        $this->submit($form, ['name' => 'Ada Lovelace']);
+        remove_filter('pre_wp_mail', '__return_false');
+        wp_set_current_user($editor);
+        self::assertStringContainsString('2 submissions could not be delivered', $notice(), 'shown again after a newer failure');
+
+        // An administrator's dismissal clears it for everyone.
+        wp_set_current_user($admin);
+        \FabricatorForms\Plugin::dismissMailFailures();
+        self::assertSame('', $notice());
+        wp_set_current_user($editor);
+        self::assertSame('', $notice());
+    }
+
+    public function testEachFailingFormHasItsOwnLineInTheNotice(): void
+    {
+        $first  = $this->createForm(self::FIELDS, [self::notification()]);
+        $second = $this->createForm(self::FIELDS, [self::notification()]);
+        wp_update_post(['ID' => $first, 'post_title' => 'Orders']);
+        wp_update_post(['ID' => $second, 'post_title' => 'Returns']);
+        add_filter('pre_wp_mail', '__return_false');
+        $this->submit($first, ['name' => 'Ada Lovelace']);
+        $this->submit($second, ['name' => 'Ada Lovelace']);
+        $this->submit($second, ['name' => 'Ada Lovelace']);
+        remove_filter('pre_wp_mail', '__return_false');
+
+        wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
+        ob_start();
+        \FabricatorForms\Plugin::maybeWarnMailFailures();
+        $shown = (string) ob_get_clean();
+
+        self::assertStringContainsString('Form &quot;Orders&quot;: since', $shown);
+        self::assertStringContainsString('1 submission could not be delivered', $shown);
+        self::assertStringContainsString('Form &quot;Returns&quot;: since', $shown);
+        self::assertStringContainsString('2 submissions could not be delivered', $shown);
+        self::assertLessThan(strpos($shown, 'Orders'), strpos($shown, 'Returns'), 'the newest first');
+    }
+
     public function testOneFailedNotificationOfTwoFailsTheSubmissionAndLogsNoAddress(): void
     {
         // TESTING.md §3: with two notifications, one failing — error for the visitor, a log line naming the form and

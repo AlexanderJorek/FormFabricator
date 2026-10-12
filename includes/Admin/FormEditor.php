@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -54,6 +54,7 @@ class FormEditor
         \add_action('wp_ajax_fabricator_forms_save_form', [self::class, 'ajaxSave']);
         \add_action('wp_ajax_fabricator_forms_preview', [self::class, 'ajaxPreview']);
         \add_action('wp_ajax_fabricator_forms_unlock_form', [self::class, 'ajaxUnlock']);
+        \add_action('wp_ajax_fabricator_forms_send_test_mail', [self::class, 'ajaxSendTestMail']);
         \add_filter('admin_body_class', [self::class, 'bodyClass']);
         \add_filter('heartbeat_received', [self::class, 'heartbeatReceived'], 10, 2);
     }
@@ -161,6 +162,7 @@ class FormEditor
 
         // Release packages leave the perf-overlay script out, so the button needs the file to exist.
         $perf_mode   = defined('WP_DEBUG') && WP_DEBUG && current_user_can('manage_options')
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- the plugin's own file.
             && file_exists(FABRICATOR_FORMS_PATH . 'assets/js/fabricator-perf-debug.js');
         $perf_start  = $perf_mode ? microtime(true) : 0.0;
 
@@ -451,6 +453,54 @@ class FormEditor
     }
 
     /**
+     * Sends a test email with the open notification's sender to the current user, and answers with the outcome.
+     *
+     * @return void
+     */
+    public static function ajaxSendTestMail(): void
+    {
+        \FabricatorForms\Utils\AjaxGuard::require('edit_forms', 'fabricator_forms_admin_nonce', 'nonce');
+
+        // Each test is a real email: unthrottled, a loop could use up the site's sending quota, and the notifications
+        // that then fail would lose submissions.
+        if (\FabricatorForms\Utils\RateLimiter::increment('test_mail_' . get_current_user_id(), 5 * MINUTE_IN_SECONDS) > 5) {
+            \wp_send_json_error(['message' => __('Please wait a few minutes before sending another test email.', 'formfabricator')], 429);
+        }
+
+        // Only the user's own address: anyone who may edit forms could otherwise mail any address from this site.
+        $to = (string) wp_get_current_user()->user_email;
+        if (!is_email($to)) {
+            \wp_send_json_error(['message' => __('Your user account has no valid email address to send the test to.', 'formfabricator')], 400);
+        }
+        // phpcs:disable WordPress.Security.NonceVerification.Missing -- verified via AjaxGuard::require(); sniff can't see through the static call.
+        $notif = [
+            'from_name'  => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['from_name'] ?? ''))),
+            'from_email' => self::sanitizeFromEmail(\sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['from_email'] ?? '')))),
+        ];
+        $title = \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['form_title'] ?? '')));
+        // phpcs:enable WordPress.Security.NonceVerification.Missing
+
+        $error = \FabricatorForms\Form\MailSender::sendTest($notif, $to, $title);
+        if ($error !== '') {
+            // The mail system's own words can name its server or login response: only for those who manage the site's
+            // settings. Form editors may be granted to people who manage nothing else.
+            if (!current_user_can('manage_options')) {
+                \wp_send_json_error(['message' => __('The test email could not be sent. Ask the site\'s administrator to check its mail setup.', 'formfabricator')], 502);
+            }
+            \wp_send_json_error(['message' => sprintf(
+                /* translators: %s: the reason the mail function gave. */
+                __('The test email could not be sent: %s', 'formfabricator'),
+                $error
+            )], 502);
+        }
+        \wp_send_json_success(['message' => sprintf(
+            /* translators: %s: the current user's email address. */
+            __('Test email sent to %s. If it does not arrive, check the spam folder, then the site\'s mail setup.', 'formfabricator'),
+            $to
+        )]);
+    }
+
+    /**
      * AJAX handler that saves form data.
      *
      * @return void
@@ -494,7 +544,8 @@ class FormEditor
         // Catches so a field-handler exception (e.g. malformed HTML block) returns a JSON error
         // instead of breaking WP's response entirely.
         try {
-            $sanitized_notifications = self::sanitizeNotifications(is_array($raw['notifications'] ?? null) ? $raw['notifications'] : []);
+            $trimmed_bodies          = [];
+            $sanitized_notifications = self::sanitizeNotifications(is_array($raw['notifications'] ?? null) ? $raw['notifications'] : [], $trimmed_bodies);
             $sanitized_fields        = self::sanitizeFields(is_array($raw['fields'] ?? null) ? $raw['fields'] : []);
             $id_error                = self::fieldIdError($sanitized_fields);
             if ($id_error !== '') {
@@ -567,9 +618,11 @@ class FormEditor
                     . ' '
                     . self::mandateElementsWarning($sanitized_fields)
                     . ' '
-                    . self::consentPlaceholderWarning($sanitized_fields)
+                    . self::consentTextWarning($sanitized_fields)
                     . ' '
                     . self::signatureDeliveryWarning((int) $result, $sanitized_fields, $sanitized_notifications)
+                    . ' '
+                    . self::trimmedBodyWarning($trimmed_bodies)
                 ),
                 ]
             );
@@ -590,6 +643,28 @@ class FormEditor
      * @var string[]
      */
     private const RESERVED_FIELD_IDS = ['action', 'form_id', 'fabricator_nonce', 'fabricator_submission_token', 'fabricator_hp_field'];
+
+    /**
+     * The save warning for notifications whose message lost content when saved, or ''. The form is saved without it,
+     * so the admin learns now, not from a recipient, that the email differs from what they wrote.
+     *
+     * @param string[] $names The notifications' names (sanitizeNotifications()).
+     * @return string
+     */
+    private static function trimmedBodyWarning(array $names): string
+    {
+        if ($names === []) {
+            return '';
+        }
+        return sprintf(
+            /* translators: %s: notification names, comma-separated. */
+            __(
+                'Content was removed from the message of these notifications because email may not carry it (scripts, embedded content, event handlers, external stylesheets, or tags and styles outside the email-safe set). Check the message: %s.',
+                'formfabricator'
+            ),
+            implode(', ', $names)
+        );
+    }
 
     /**
      * The save warning for notifications whose email would carry no signature image, or ''.
@@ -670,22 +745,24 @@ class FormEditor
     }
 
     /**
-     * The save warning for a Consent field still showing its placeholder text, or ''. That text names no purpose and
-     * no way to withdraw, so the consent would not be valid (GDPR Art. 7(3), 4(11)).
+     * The save warnings for Consent fields without valid wording, or ''. A placeholder text names no purpose and no way
+     * to withdraw, and an empty one names nothing at all, so the consent would not be valid (GDPR Art. 7(3), 4(11)).
      *
      * @param array $fields Sanitized fields, as sanitizeFields() returns them.
      * @return string
      */
-    private static function consentPlaceholderWarning(array $fields): string
+    private static function consentTextWarning(array $fields): string
     {
-        $found = false;
-        $walk  = static function (array $fields) use (&$walk, &$found): void {
+        $placeholder = false;
+        $empty       = false;
+        $walk        = static function (array $fields) use (&$walk, &$placeholder, &$empty): void {
             foreach ($fields as $field) {
                 if (!is_array($field)) {
                     continue;
                 }
-                if (($field['type'] ?? '') === 'consent' && \FabricatorForms\Fields\ConsentField::usesPlaceholderText($field)) {
-                    $found = true;
+                if (($field['type'] ?? '') === 'consent') {
+                    $placeholder = $placeholder || \FabricatorForms\Fields\ConsentField::usesPlaceholderText($field);
+                    $empty       = $empty || \FabricatorForms\Fields\ConsentField::hasNoText($field);
                 }
                 if (is_array($field['children'] ?? null)) {
                     $walk($field['children']);
@@ -693,8 +770,15 @@ class FormEditor
             }
         };
         $walk($fields);
-        $message = __('A Consent field still shows its placeholder text, which names no purpose and no way to withdraw, so it is not valid consent. Write what the visitor agrees to and how they can withdraw it.', 'formfabricator');
-        return $found ? $message : '';
+        return trim(
+            ($placeholder
+                ? __('A Consent field still shows its placeholder text, which names no purpose and no way to withdraw, so it is not valid consent. Write what the visitor agrees to and how they can withdraw it.', 'formfabricator')
+                : '')
+            . ' '
+            . ($empty
+                ? __('A Consent field has no text, so the visitor agrees to nothing. Write what the visitor agrees to and how they can withdraw it.', 'formfabricator')
+                : '')
+        );
     }
 
     /**
@@ -932,16 +1016,22 @@ class FormEditor
     /**
      * Sanitizes the notifications array.
      *
-     * @param array $notifications Raw notifications array.
+     * @param array         $notifications Raw notifications array.
+     * @param string[]|null $trimmed       Set to the names of the notifications whose message lost content.
      * @return array Sanitized notifications array.
      */
-    public static function sanitizeNotifications(array $notifications): array
+    public static function sanitizeNotifications(array $notifications, ?array &$trimmed = null): array
     {
-        $clean = [];
+        $clean   = [];
+        $trimmed = [];
         foreach ($notifications as $n) {
             if (!is_array($n)) {
                 continue;
             }
+            /* Body is always HTML, authored via the Visual or Code view. */
+            $body = self::sanitizeEmailBody(\FabricatorForms\Utils\Cast::stringOrDefault($n['body'] ?? ''), $body_removed);
+            $name = \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['name'] ?? ''));
+
             $routing_rules = [];
             foreach ((array)($n['routing_rules'] ?? []) as $rule) {
                 if (!is_array($rule)) {
@@ -959,7 +1049,7 @@ class FormEditor
             }
             $clean[] = [
                 'slug'             => \sanitize_key(\FabricatorForms\Utils\Cast::stringOrDefault($n['slug'] ?? '', 'notification-' . \wp_generate_uuid4())),
-                'name'             => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['name']       ?? '')),
+                'name'             => $name,
                 'recipient_mode'   => in_array($n['recipient_mode'] ?? '', ['single', 'routing'], true)
                     ? $n['recipient_mode'] : 'single',
                 'to'               => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['to']         ?? '')),
@@ -972,8 +1062,7 @@ class FormEditor
                     \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['routing_fallback_bcc'] ?? '')),
                 'reply_to'         => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['reply_to']   ?? '')),
                 'subject'          => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['subject']    ?? '')),
-                /* Body is always HTML, authored via the Visual or Code view. */
-                'body'             => self::sanitizeEmailBody(\FabricatorForms\Utils\Cast::stringOrDefault($n['body'] ?? '')),
+                'body'             => $body,
                 'from_name'        => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['from_name']  ?? '')),
                 'from_email'       => self::sanitizeFromEmail(\FabricatorForms\Utils\Cast::stringOrDefault($n['from_email'] ?? '')),
                 'cc'               => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['cc']         ?? '')),
@@ -982,6 +1071,9 @@ class FormEditor
                 'attach_uploads'   => !empty($n['attach_uploads']),
                 'enabled'          => !isset($n['enabled']) || !empty($n['enabled']),
             ];
+            if ($body_removed) {
+                $trimmed[] = $name !== '' ? $name : $clean[array_key_last($clean)]['slug'];
+            }
         }
         return $clean;
     }
@@ -1073,15 +1165,18 @@ class FormEditor
     /**
      * Sanitizes an HTML email body in two layers: regex passes reach <style> contents wp_kses skips, then wp_kses() as defense-in-depth.
      *
-     * @param string $html Raw HTML body from the notification editor.
+     * @param string    $html    Raw HTML body from the notification editor.
+     * @param bool|null $removed Set to whether content was removed, for the save warning. Normalizing (an added
+     *                           rel="noopener", content after </html> moved before </body>) removes nothing.
      * @return string Sanitized HTML.
      */
-    private static function sanitizeEmailBody(string $html): string
+    private static function sanitizeEmailBody(string $html, ?bool &$removed = null): string
     {
         $before = $html;
 
         // Embeddable content has no place in an email body, so whole elements go, by a linear scan.
-        $html = self::stripElements($html, ['iframe', 'object']);
+        $html    = self::stripElements($html, ['iframe', 'object']);
+        $removed = $html !== $before;
 
         // No regex below scans unboundedly from a point that may never match: each anchors on a fixed token.
         $passes = [
@@ -1121,6 +1216,7 @@ class FormEditor
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceDyn -- $pattern/$replacements come from the hardcoded arrays above, not attacker input.
             $after = preg_replace($pattern, $replacements[$label], $html) ?? $html;
             if ($after !== $html) {
+                $removed = true;
                 // Count-only, no stripped content logged; fabricator_log() is WP_DEBUG-gated, a debug aid not an audit trail.
                 preg_match_all($pattern, $html, $m);
                 \FabricatorForms\fabricator_log(
@@ -1132,16 +1228,19 @@ class FormEditor
         }
 
         /* wp_kses() only filters tags/attributes, never <style> element contents — scrutinize its CSS here. */
-        $style_before = $html;
+        $neutralized = false;
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- callback is a static closure defined inline, not attacker-controlled/dynamic dispatch.
         $html = preg_replace_callback(
             '#(<style\b[^>]*>)(.*?)(</style\s*>)#is',
-            static function (array $m): string {
-                return $m[1] . self::sanitizeStyleBlockCss($m[2]) . $m[3];
+            static function (array $m) use (&$neutralized): string {
+                $css = self::sanitizeStyleBlockCss($m[2], $block_neutralized);
+                $neutralized = $neutralized || $block_neutralized;
+                return $m[1] . $css . $m[3];
             },
             $html
         ) ?? $html;
-        if ($html !== $style_before) {
+        if ($neutralized) {
+            $removed = true;
             \FabricatorForms\fabricator_log(
                 'FabricatorForms sanitizeEmailBody [style-block-css] neutralized active CSS constructs'
             );
@@ -1151,7 +1250,7 @@ class FormEditor
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- callback is a static closure defined inline, not attacker-controlled/dynamic dispatch.
         $html = preg_replace_callback(
             '/\b(href|src|action|style)\s*=\s*(?:(["\'])((?:(?!\2).)*)\2|([^\s>]+))/is',
-            static function (array $m): string {
+            static function (array $m) use (&$removed): string {
                 $attr    = $m[1];
                 $quoted  = $m[2] !== '';
                 $q       = $quoted ? $m[2] : '';
@@ -1162,6 +1261,7 @@ class FormEditor
                 // Browsers ignore tab/CR/LF in a URL scheme ("jav\tascript:").
                 $decoded = str_replace(["\t", "\n", "\r"], '', (string) $decoded);
                 if (preg_match('/javascript\s*:|vbscript\s*:/i', $decoded)) {
+                    $removed = true;
                     \FabricatorForms\fabricator_log(
                         'FabricatorForms sanitizeEmailBody [encoded-js-uri] stripped '
                         . $attr . ' value: ' . substr($val, 0, 200)
@@ -1315,10 +1415,16 @@ class FormEditor
         };
         // Removed in finally, so a throw inside wp_kses() can't leave it hooked.
         \add_filter('safe_style_css', $allow_email_css);
+        $before_kses = $html;
         try {
             $html = \wp_kses($html, $allowed_email_tags);
         } finally {
             \remove_filter('safe_style_css', $allow_email_css);
+        }
+        // wp_kses() also normalizes what it keeps (quoting, entities, self-closing slashes), so its output is compared
+        // by what it says, not byte for byte.
+        if (!$removed && self::markupSignature($html) !== self::markupSignature($before_kses)) {
+            $removed = true;
         }
 
         $html = $doctype . $html;
@@ -1380,12 +1486,51 @@ class FormEditor
     }
 
     /**
+     * What a piece of markup says, for telling whether wp_kses() removed something: each tag with its attributes (a
+     * style attribute by its property names, which is what wp_kses() drops), then the text. Spelling it keeps alike
+     * (case, quoting, entities, self-closing slashes, whitespace) reads the same. Comments are left out.
+     *
+     * @param string $html Markup.
+     * @return string
+     */
+    private static function markupSignature(string $html): string
+    {
+        $html = (string) preg_replace('/<!--.*?-->/s', '', $html);
+        $decode = static fn(string $s): string => html_entity_decode($s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $tags   = [];
+        // Possessive quantifiers: an unclosed quote fails at once instead of being retried from every position.
+        preg_match_all('#<(/?)([a-zA-Z][a-zA-Z0-9-]*+)((?:[^>"\']++|"[^"]*+"|\'[^\']*+\')*+)>#', $html, $found, PREG_SET_ORDER);
+        foreach ($found as [, $closing, $name, $attrs]) {
+            $parts = [];
+            preg_match_all('#([^\s"\'>/=]++)(?:\s*=\s*(?:"([^"]*+)"|\'([^\']*+)\'|([^\s"\'>]++)))?#', $attrs, $pairs, PREG_SET_ORDER);
+            foreach ($pairs as $pair) {
+                $attr  = strtolower($pair[1]);
+                $value = $decode(($pair[2] ?? '') . ($pair[3] ?? '') . ($pair[4] ?? ''));
+                if ($attr === 'style') {
+                    preg_match_all('/(?:^|;)\s*([-a-zA-Z]++)\s*:/', $value, $props);
+                    if ($props[1] === []) {
+                        // wp_kses() drops a style with no declarations, which held nothing to lose.
+                        continue;
+                    }
+                    $value = strtolower(implode(',', $props[1]));
+                }
+                $parts[] = $attr . '=' . trim($value);
+            }
+            $tags[] = $closing . strtolower($name) . '[' . implode('|', $parts) . ']';
+        }
+        $text = (string) preg_replace('/\s++/u', ' ', $decode(wp_strip_all_tags($html)));
+        return implode('', $tags) . "\n" . trim($text);
+    }
+
+    /**
      * Neutralizes script-executing and remote-fetching constructs inside a <style> block's CSS.
      *
-     * @param string $css Raw CSS text from between <style> and </style>.
+     * @param string    $css         Raw CSS text from between <style> and </style>.
+     * @param bool|null $neutralized Set to whether a construct was neutralized; dropping comments and resolving
+     *                               escapes changes nothing the CSS does.
      * @return string CSS with active constructs neutralized.
      */
-    private static function sanitizeStyleBlockCss(string $css): string
+    private static function sanitizeStyleBlockCss(string $css, ?bool &$neutralized = null): string
     {
         // Comments first: "expr/**/ession(" would otherwise slip past every keyword match below.
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- hardcoded literal pattern stripping CSS comments; no /e modifier.
@@ -1393,6 +1538,7 @@ class FormEditor
 
         // CSS escapes first: a browser reads "@\69 mport" as "@import".
         $css = self::decodeCssEscapes($css);
+        $plain = $css;
 
         // @import pulls a remote stylesheet — a tracking/exfiltration vector in mail, and the
         // fetched CSS would never pass through this function at all. Drop the whole at-rule.
@@ -1424,6 +1570,7 @@ class FormEditor
             $css
         ) ?? $css;
 
+        $neutralized = $css !== $plain;
         return $css;
     }
 
@@ -1659,6 +1806,12 @@ class FormEditor
                 'attachPdfHint'       => __('The completed form is attached as a PDF document.', 'formfabricator'),
                 'attachUploads'       => __('Attach uploaded files', 'formfabricator'),
                 'attachUploadsHint'   => __('All file uploads from the form are forwarded as attachments.', 'formfabricator'),
+                'sendTestMail'        => __('Send test email', 'formfabricator'),
+                'sendTestMailHint'    => __('Sends a short email with this sender to your own address.', 'formfabricator'),
+                'notifBodyHint'       => __(
+                    'Removed on save: scripts, embedded content (iframe, object, embed), event handlers (onclick and the like), javascript: links, external stylesheets, form actions, and tags or styles outside the email-safe set.',
+                    'formfabricator'
+                ),
                 'fromName'            => __('Sender name', 'formfabricator'),
                 'defaultSiteNameHint' => __('{site_name} for default value', 'formfabricator'),
                 'fromEmail'           => __('Sender email address', 'formfabricator'),

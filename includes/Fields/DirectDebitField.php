@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -545,6 +545,7 @@ class DirectDebitField extends BaseField
         if (!($prefix <= 12 || ($prefix >= 21 && $prefix <= 32) || ($prefix >= 61 && $prefix <= 72) || $prefix === 80)) {
             return false;
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $d = array_map('intval', str_split($routing));
         return (3 * ($d[0] + $d[3] + $d[6]) + 7 * ($d[1] + $d[4] + $d[7]) + $d[2] + $d[5] + $d[8]) % 10 === 0;
     }
@@ -685,6 +686,7 @@ class DirectDebitField extends BaseField
         // SEPA countries only, then the field's own filter; front.js checks both too, but only for feedback.
         $filter_mode = $config['country_filter_mode'] ?? 'off';
         $filter_list = is_array($config['country_filter_list'] ?? null)
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             ? array_map('strtoupper', $config['country_filter_list'])
             : [];
         $listed   = in_array($iban_cc, $filter_list, true);
@@ -922,6 +924,7 @@ class DirectDebitField extends BaseField
         // Accented letters as their base letters, as WordPress writes them for the site's language (Ä as "Ae" in German),
         // so a name keeps its letters; whatever else lies outside the SEPA set is left out.
         $prefix = remove_accents(self::configText($config, 'mandate_ref_prefix', ''));
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- a fixed pattern; PHP 8 has no /e modifier.
         $prefix = (string) preg_replace("#[^A-Za-z0-9/?:().,'+ -]#", '', $prefix);
         $prefix = rtrim(substr(trim($prefix), 0, 15), ' -');
         // The site's date, as the date of signing is written: both name the same day in the record.
@@ -1183,6 +1186,7 @@ class DirectDebitField extends BaseField
      */
     private static function plainText(string $html): string
     {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- a fixed pattern; PHP 8 has no /e modifier.
         $text = (string) preg_replace('#<br\s*/?>|</(?:p|div|li|h[1-6])>#i', "\n", $html);
         $text = html_entity_decode(wp_strip_all_tags($text, false), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         return trim((string) preg_replace("/\n{3,}/", "\n\n", preg_replace("/[ \t]*\n[ \t]*/", "\n", $text)));

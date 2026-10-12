@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -111,6 +111,7 @@ class NameField extends BaseField
     {
         return array_merge(
             parent::plainTextConfigKeys(),
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             array_map(static fn($sf) => $sf['key'] . '_label', self::SUBFIELDS)
         );
     }
@@ -423,6 +424,7 @@ class NameField extends BaseField
                 'label'      => __('Sub-fields', 'formfabricator'),
                 'depends_on' => ['expanded' => true],
                 // Translate labels for the builder UI (SUBFIELDS itself can't call __()).
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 'items'      => array_map(
                     static fn(array $sf): array => [...$sf, 'label' => self::subfieldLabel($sf['label'])],
                     self::SUBFIELDS

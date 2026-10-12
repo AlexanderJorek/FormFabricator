@@ -12,6 +12,13 @@
  * - On macOS and Linux MariaDB publishes no portable build to pin, so a server has to be named.
  */
 
+// A dev-only command-line tool: file and process access is its job, without WordPress's APIs. The security linter's
+// warning-only sniffs for that are off here; its error-level checks still apply.
+// phpcs:disable PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem
+// phpcs:disable WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open
+// phpcs:disable WordPress.PHP.NoSilencedErrors.Discouraged
+// phpcs:disable WordPress.WP.AlternativeFunctions
+
 const FABTESTDB_VERSION = '11.4.13';
 const FABTESTDB_SHA256  = 'd62986d433eeebfde218560b276103831604a61e929e87f1a17f5aebd80257e2';
 // A localhost-only server that exists for the length of one build.

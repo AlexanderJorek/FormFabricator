@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -48,7 +48,7 @@ class Cast
      */
     public static function withoutWarnings(callable $fn): mixed
     {
-        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- not debug code: captures the warnings of exactly one call and is restored in the finally below.
+        // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler,PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- not debug code: captures one call's warnings and is restored in the finally below; a fixed callback.
         set_error_handler(static fn(): bool => true, E_WARNING | E_NOTICE | E_DEPRECATED | E_USER_WARNING | E_USER_NOTICE);
         try {
             return $fn();

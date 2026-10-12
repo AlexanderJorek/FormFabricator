@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -47,7 +47,7 @@ function fabricator_uninstall_current_site()
         wp_clear_scheduled_hook($fabricator_cron_hook);
     }
 
-        /* Remove all stored forms (CPT posts + meta) */
+    /* Remove all stored forms (CPT posts + meta) */
     // A page at a time, each round deleting what it read; the counter stops a runaway loop if a delete fails.
     for ($fabricator_round = 0; $fabricator_round < 1000; $fabricator_round++) {
         $fabricator_forms = get_posts(
@@ -93,6 +93,7 @@ function fabricator_uninstall_current_site()
         'fabricator_forms_seal_setup_done',
         'fabricator_forms_access',
         'fabricator_forms_trusted_proxies',
+        'fabricator_forms_mail_failures',
         'fabricator_verifier_sweep_due',
     ];
     foreach ($fabricator_options as $fabricator_option) {
@@ -181,43 +182,47 @@ function fabricator_uninstall_current_site()
     wp_cache_delete('alloptions', 'options');
     wp_cache_delete('notoptions', 'options');
 
+    // When each user last dismissed the delivery-failure notice: a user option, so stored per site under its prefix.
+    delete_metadata('user', 0, $wpdb->get_blog_prefix() . 'fabricator_mail_failures_seen', '', true);
+
     /* Remove the plugin's folder in the uploads directory (PDFs, mail attachments, verifier copies, mPDF's cache) */
     $fabricator_upload_dir = wp_upload_dir();
     $fabricator_plugin_dir = $fabricator_upload_dir['basedir'] . '/formfabricator';
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
     if (is_dir($fabricator_plugin_dir)) {
-        // Runs from an admin-triggered deletion (or privileged WP-CLI), so WP_Filesystem() is safe here.
-        global $wp_filesystem;
-        if (!function_exists('WP_Filesystem')) {
-            require_once ABSPATH . 'wp-admin/includes/file.php';
+        // PHP's own calls, not WP_Filesystem: PHP's user made every file here, while WP_Filesystem may need FTP
+        // credentials an uninstall can't ask for (and would replace the connection deleting the plugin's files).
+        $fabricator_it    = new RecursiveDirectoryIterator($fabricator_plugin_dir, FilesystemIterator::SKIP_DOTS);
+        $fabricator_files = new RecursiveIteratorIterator($fabricator_it, RecursiveIteratorIterator::CHILD_FIRST);
+        foreach ($fabricator_files as $fabricator_file) {
+            // getPathname(), not getRealPath(), so a planted symlink is removed itself, never its target.
+            $fabricator_path = $fabricator_file->getPathname();
+            if ($fabricator_file->isLink() || !$fabricator_file->isDir()) {
+                wp_delete_file($fabricator_path);
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
+                $fabricator_ok = !file_exists($fabricator_path) && !is_link($fabricator_path);
+            } else {
+                // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- see the comment above the loop; a path under the plugin's own folder.
+                $fabricator_ok = @rmdir($fabricator_path);
+            }
+            if (!$fabricator_ok) {
+                // A file's name may be a visitor's (the mail copies keep it), so it is logged as a short hash and its
+                // extension, as fabricator_log_file() does: this script runs without the plugin's functions.
+                $fabricator_name = $fabricator_file->getFilename();
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- string parsing of a name, no file access.
+                $fabricator_ext  = strtolower(pathinfo($fabricator_name, PATHINFO_EXTENSION));
+                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- standalone script, no plugin logging available; the only trace of a copy left behind.
+                error_log(
+                    'FormFabricator uninstall: failed to remove ' . $fabricator_file->getPath() . '/file #'
+                    . substr(hash('sha256', $fabricator_name), 0, 8)
+                    . (preg_match('/^[a-z0-9]{1,10}$/', $fabricator_ext) === 1 ? '.' . $fabricator_ext : '')
+                );
+            }
         }
-        $fabricator_fs_ready = WP_Filesystem() && $wp_filesystem instanceof \WP_Filesystem_Base;
-
-        if (!$fabricator_fs_ready) {
-            // WP_Filesystem() can still fail on servers needing FTP/SSH creds; log and skip rather than fatal on ->rmdir().
-            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see comment above
-            error_log('FormFabricator uninstall: WP_Filesystem unavailable, skipping removal of ' . $fabricator_plugin_dir);
-        } else {
-            $fabricator_it    = new RecursiveDirectoryIterator($fabricator_plugin_dir, FilesystemIterator::SKIP_DOTS);
-            $fabricator_files = new RecursiveIteratorIterator($fabricator_it, RecursiveIteratorIterator::CHILD_FIRST);
-            foreach ($fabricator_files as $fabricator_file) {
-                // getPathname(), not getRealPath(), so a planted symlink is removed itself, never its target.
-                $fabricator_path = $fabricator_file->getPathname();
-                if ($fabricator_file->isLink() || !$fabricator_file->isDir()) {
-                    wp_delete_file($fabricator_path);
-                    $fabricator_ok = !file_exists($fabricator_path) && !is_link($fabricator_path);
-                } else {
-                    $fabricator_ok = $wp_filesystem->rmdir($fabricator_path);
-                }
-                if (!$fabricator_ok) {
-                    // Standalone script, no plugin logging available — use debug logging.
-                    // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see comment above
-                    error_log('FormFabricator uninstall: failed to remove ' . $fabricator_path);
-                }
-            }
-            if (!$wp_filesystem->rmdir($fabricator_plugin_dir)) {
-                // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see justification above.
-                error_log('FormFabricator uninstall: failed to remove directory ' . $fabricator_plugin_dir);
-            }
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- see the comment above the loop; a path under the plugin's own folder.
+        if (!@rmdir($fabricator_plugin_dir)) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- see justification above.
+            error_log('FormFabricator uninstall: failed to remove directory ' . $fabricator_plugin_dir);
         }
     }
 }

@@ -19,6 +19,15 @@
  * Windows, against a portable MariaDB (tools/testdb.php). Dev tooling, never shipped.
  */
 
+// A dev-only command-line tool: file and process access is its job, without WordPress's APIs. The security linter's
+// warning-only sniffs for that are off here; its error-level checks still apply.
+// phpcs:disable PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions
+// phpcs:disable PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem
+// phpcs:disable WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+// phpcs:disable WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv
+// phpcs:disable WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open
+// phpcs:disable WordPress.WP.AlternativeFunctions
+
 if (PHP_SAPI !== 'cli') {
     exit(1);
 }

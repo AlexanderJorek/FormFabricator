@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -46,6 +46,7 @@ class FormSelectModel
         if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
             return [];
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return array_map([self::class, 'fromArray'], self::getRaw());
     }
 
@@ -151,6 +152,7 @@ class FormSelectModel
                 foreach ($all as &$record) {
                     $before = count($record['items'] ?? []);
                     $record['items'] = array_values(
+                        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                         array_filter(
                             $record['items'] ?? [],
                             static fn($item) => (int) ($item['form_id'] ?? 0) !== $post_id
@@ -178,6 +180,7 @@ class FormSelectModel
      *                             see its docblock.
      * @return bool Whether the selection existed and is now deleted.
      */
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a method named delete(), not the filesystem function.
     public static function delete(int $id, bool $nonce_verified = false): bool
     {
         if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
@@ -191,6 +194,7 @@ class FormSelectModel
             self::$option,
             static function () use ($id): bool {
                 $before = self::getRaw();
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 $all    = array_values(array_filter($before, static fn($r) => (int) ($r['id'] ?? 0) !== $id));
                 if (count($all) === count($before)) {
                     return false;
@@ -223,6 +227,7 @@ class FormSelectModel
         $obj              = new self();
         $obj->id          = (int) ($data['id'] ?? 0);
         $obj->title       = (string) ($data['title'] ?? '');
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $obj->items       = array_map(
             static fn($item) => [
                 'form_id'     => (int) ($item['form_id'] ?? 0),

@@ -8,6 +8,14 @@
  *   php languages/make-pot.php --check    exit 1 if the file on disk is out of date, write nothing
  */
 
+// A dev-only command-line tool that never ships: reading and writing files, running processes and calling PHP
+// directly is its job, and WordPress's APIs aren't loaded. The security linter's warning-only sniffs for that are
+// off here; its error-level checks still apply.
+// phpcs:disable PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions
+// phpcs:disable PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem
+// phpcs:disable PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird
+// phpcs:disable WordPress.WP.AlternativeFunctions
+
 if (PHP_SAPI !== 'cli') {
     exit(1);
 }

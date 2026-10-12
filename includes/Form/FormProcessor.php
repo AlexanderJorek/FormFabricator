@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -293,6 +293,7 @@ class FormProcessor
         // Memory is reserved before the token claim, so a rejected visitor can retry. Only uploads this submission
         // processes count: not a hidden field's, nor a $_FILES entry no field declares.
         unset($hidden_set[self::SUBMIT_KEY]);
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $hidden_ids   = array_map('strval', array_keys($hidden_set));
         $uploads      = self::uploadEntries($form->fields, $hidden_ids);
         // Text counts too: mPDF lays out every answer (see MemoryBudget::TEXT_FACTOR); a signature's data URI is image data.
@@ -359,6 +360,7 @@ class FormProcessor
 
         // Released on shutdown, so a fatal can't leak the reservation (its TTL is the backstop).
         \FabricatorForms\Utils\MemoryBudget::raiseTo($mem_estimate);
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions,PHPCS_SecurityAudit.BadFunctions.FunctionHandlingFunctions.WarnFunctionHandling -- the plugin's own cleanup, a fixed callback.
         register_shutdown_function(
             static function () use ($mem_token): void {
                 \FabricatorForms\Utils\MemoryBudget::releaseReservation($mem_token);
@@ -460,6 +462,7 @@ class FormProcessor
     {
         $text  = 0;
         $image = 0;
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         array_walk_recursive(
             $raw,
             static function ($leaf, $key) use (&$text, &$image): void {
@@ -518,6 +521,7 @@ class FormProcessor
             $names = (array) ($file['name'] ?? []);
             $sizes = (array) ($file['size'] ?? []);
             foreach ((array) $file['tmp_name'] as $i => $tmp) {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- is_uploaded_file() on PHP's upload temp file.
                 if (!is_string($tmp) || $tmp === '' || !is_uploaded_file($tmp)) {
                     continue;
                 }
@@ -549,6 +553,7 @@ class FormProcessor
     private static function largestLayoutImage(): int
     {
         $paths = \FabricatorForms\PDF\PdfUtils::layoutImagePaths((array) get_option('fabricator_forms_pdf_layout', []));
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return max([0, ...array_map([\FabricatorForms\PDF\PdfUtils::class, 'filePixels'], $paths)]);
     }
 
@@ -689,6 +694,7 @@ class FormProcessor
         );
 
         // The same answer where the site has switched that handler off.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions,PHPCS_SecurityAudit.BadFunctions.FunctionHandlingFunctions.WarnFunctionHandling -- the plugin's own cleanup, a fixed callback.
         register_shutdown_function(
             static function () use ($claim_key): void {
                 if (wp_is_fatal_error_handler_enabled()) {
@@ -747,6 +753,7 @@ class FormProcessor
      */
     private static function withoutBidiControls(array $raw): array
     {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         array_walk_recursive(
             $raw,
             static function (&$leaf): void {
@@ -769,6 +776,7 @@ class FormProcessor
     {
         $strings = is_string($value) ? [$value] : [];
         if (is_array($value)) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             array_walk_recursive(
                 $value,
                 static function ($leaf) use (&$strings): void {
@@ -995,18 +1003,22 @@ class FormProcessor
         }
         $isArr = is_array($val);
         // Coerces to strings first: a crafted nested-array POST (e.g. checkboxfield[0][0]=x) would otherwise TypeError strtolower().
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $scalars = $isArr ? array_map(static fn($v) => is_scalar($v) ? (string)$v : '', $val) : [];
         $str     = $isArr ? self::lowerLikeJs(implode(',', $scalars)) : self::lowerLikeJs((string)$val);
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $lower   = $isArr ? array_map(static fn(string $v): string => self::lowerLikeJs($v), $scalars) : [];
 
         return match ($op) {
             'equals'       => $isArr ? in_array($rv, $lower, strict: true) : $str === $rv,
             'not_equals'   => $isArr ? !in_array($rv, $lower, strict: true) : $str !== $rv,
             'contains'     => $rv !== '' && ($isArr
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 ? (bool) array_filter($lower, static fn($v) => str_contains($v, $rv))
                 : str_contains($str, $rv)),
             // An empty value is a half-configured rule, not "contains nothing": unsatisfied, like 'contains' above.
             'not_contains' => $rv !== '' && ($isArr
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 ? !array_filter($lower, static fn($v) => str_contains($v, $rv))
                 : !str_contains($str, $rv)),
             'empty'        => $isArr ? empty($val) : $str === '',

@@ -33,6 +33,7 @@ async function save(page) {
     await page.locator('#fabricator-save-btn').click();
     const answer = await (await saved).json();
     expect(answer.success, JSON.stringify(answer)).toBe(true);
+    return answer;
 }
 
 /** The ids of the form's top-level fields as stored, and their widths. */
@@ -207,7 +208,9 @@ test('a notification\'s body typed in its rich-text editor, without touching the
     await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.type('Thank you, we will call back.');
     await page.locator('#fabricator-notif-done').click();
-    await save(page);
+    const answer = await save(page);
 
     expect(wp({ do: 'get-form', id }).notifications[0].body).toContain('Thank you, we will call back.');
+    // What this browser's editor writes is all kept, so saving warns about no removed content.
+    expect(answer.data.warning).not.toContain('Content was removed');
 });

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -167,6 +167,7 @@ class CheckboxField extends BaseField
             $opt_val   = $opt['value'] ?? '';
             $opt_label = $opt['label'] ?? $opt_val;
             $id_i      = $field_id . '-' . $i;
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $checked   = in_array((string)$opt_val, array_map('strval', $selected), true) ? ' checked' : '';
             $inner .= '<label class="fabricator-checkbox-label">'
                 . '<input type="checkbox" id="' . esc_attr($id_i)
@@ -176,6 +177,7 @@ class CheckboxField extends BaseField
         }
         if (!empty($config['other_option'])) {
             $other_id  = $field_id . '-other';
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $other_chk = in_array('__other__', array_map('strval', $selected), true) ? ' checked' : '';
             $inner .= '<label class="fabricator-checkbox-label">'
                 . '<input type="checkbox" id="' . esc_attr($other_id) . '" name="' . esc_attr($field_id) . '[]"'
@@ -225,6 +227,7 @@ class CheckboxField extends BaseField
     private static function selectedOptions(array $value): array
     {
         unset($value['__other_text__']);
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return array_filter($value, static fn($v) => is_string($v) && $v !== '');
     }
 
@@ -263,6 +266,7 @@ class CheckboxField extends BaseField
             // translators: %d: maximum number of options that may be selected.
             return sprintf(_n('Please select at most %d option.', 'Please select at most %d options.', $max, 'formfabricator'), $max);
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $allowed = array_map(
             static fn($o) => (string)($o['value'] ?? ''),
             $config['options'] ?? []

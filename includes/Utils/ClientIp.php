@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -52,6 +52,7 @@ class ClientIp
         }
 
         // Walk from the right, skipping our own trusted proxies, instead of trusting a spoofable left-most entry.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $parts = array_map('trim', explode(',', $forwarded));
         for ($i = count($parts) - 1; $i >= 0; $i--) {
             if (!filter_var($parts[$i], FILTER_VALIDATE_IP)) {
@@ -121,6 +122,7 @@ class ClientIp
             $sources[] = (string) FABRICATOR_TRUSTED_PROXIES;
         }
         $entries = preg_split('/[\s,]+/', implode(',', $sources)) ?: [];
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return array_values(array_filter($entries, static fn(string $e): bool => $e !== ''));
     }
 
@@ -132,6 +134,7 @@ class ClientIp
      */
     public static function wideTrustedEntries(): array
     {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         return array_values(array_filter(
             self::trustedProxyEntries(),
             static function (string $entry): bool {

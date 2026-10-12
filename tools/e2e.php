@@ -8,6 +8,11 @@
  * FABRICATOR_E2E_PLUGIN names another plugin folder to test (the release build passes the plugin unpacked from its zip).
  */
 
+// A dev-only command-line tool: file and process access is its job, without WordPress's APIs. The security linter's
+// warning-only sniffs for that are off here; its error-level checks still apply.
+// phpcs:disable PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem
+// phpcs:disable WordPress.WP.AlternativeFunctions
+
 require __DIR__ . '/build-lib.php';
 require __DIR__ . '/testdb.php';
 

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -253,7 +253,7 @@ class FormList
             </div>
         </div>
 
-<!-- Delete confirmation modal -->
+        <!-- Delete confirmation modal -->
         <div id="fabricator-delete-modal" class="fabricator-modal-backdrop" hidden>
             <div class="fabricator-modal">
                 <p class="fabricator-modal-msg" id="fabricator-modal-msg"><?php esc_html_e('Really delete form?', 'formfabricator'); ?></p>

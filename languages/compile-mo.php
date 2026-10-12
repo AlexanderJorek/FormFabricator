@@ -3,6 +3,13 @@
  * Compiles a .po file to a binary .mo file. Build-time CLI tool only, not run by the plugin.
  */
 
+// A dev-only command-line tool that never ships: reading and writing files, running processes and calling PHP
+// directly is its job, and WordPress's APIs aren't loaded. The security linter's warning-only sniffs for that are
+// off here; its error-level checks still apply.
+// phpcs:disable PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions
+// phpcs:disable PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem
+// phpcs:disable WordPress.WP.AlternativeFunctions
+
 // Build-time only. The release build strips this file from the package, but a repository checked out
 // directly into wp-content/plugins would otherwise leave it reachable over HTTP.
 if (PHP_SAPI !== 'cli') {

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -60,6 +60,7 @@ class SecureDir
 
         // Explicit modes, never umask(), which is process-wide under a threaded SAPI.
         foreach ($dirs as $dir) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a folder or guard file of the plugin's own.
             if (!is_dir($dir)) {
                 // A folder that can't be made (uploads not writable, a full disk, a file in its place) is reported by
                 // its caller's next step; setting its mode or writing into it would only add PHP warnings.
@@ -72,6 +73,7 @@ class SecureDir
 
             // Keyed off the silence file, not directory existence, so a failed silence write self-heals on the next call.
             $silence = $dir . '/index.php';
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a folder or guard file of the plugin's own.
             if (!file_exists($silence)) {
                 self::chmodPath($fs, $dir, 0750);
                 self::write($fs, $silence, self::SILENCE);
@@ -79,6 +81,7 @@ class SecureDir
             }
         }
 
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a folder or guard file of the plugin's own.
         if (!is_dir($base)) {
             return;
         }
@@ -99,6 +102,7 @@ class SecureDir
     private static function ensureGuardFile(?\WP_Filesystem_Base $fs, string $path, string $contents): void
     {
         // Length, not full content comparison, so an operator's deliberately extended rules aren't reverted.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a folder or guard file of the plugin's own.
         if (file_exists($path) && filesize($path) >= strlen($contents)) {
             return;
         }
@@ -158,7 +162,7 @@ class SecureDir
         if ($fs !== null) {
             return (bool) $fs->put_contents($path, $contents, $mode);
         }
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- fallback when WP_Filesystem needs credentials unavailable mid-request; path is always plugin-owned under wp-content/uploads.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- fallback when WP_Filesystem needs credentials unavailable mid-request; a folder or guard file of the plugin's own.
         if (file_put_contents($path, $contents) === false) {
             return false;
         }
@@ -179,7 +183,7 @@ class SecureDir
     {
         $ok = $fs !== null
             ? (bool) $fs->chmod($path, $mode)
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- same rationale as write() above; defense-in-depth on plugin-owned paths.
+            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- as write() above; a folder or guard file of the plugin's own.
             : (bool) Cast::withoutWarnings(static fn() => chmod($path, $mode));
         if (!$ok) {
             // Not fatal (the deny rules still apply), but a directory left group/world-readable should be visible to whoever debugs the host.

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -134,6 +134,7 @@ class PdfUtils
      */
     public static function layoutImageFits(string $path, int $limit): bool
     {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- pathinfo() only parses the name, no file access.
         if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'svg') {
             return true;
         }
@@ -1541,6 +1542,7 @@ class PdfUtils
             if (preg_match('#/Contents\s+(\d+)\s+0\s+R#', $dict, $cm)) {
                 $contents = [(int) $cm[1]];
             } elseif (preg_match('#/Contents\s*\[(.*?)\]#s', $dict, $ca) && preg_match_all('/(\d+)\s+0\s+R/', $ca[1], $cl)) {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 $contents = array_map('intval', $cl[1]);
             }
             $pages[$num] = $contents;
@@ -2152,6 +2154,7 @@ class PdfUtils
         // lengths, so an oversized tail is refused before it is joined.
         $tail_lines = array_slice($lines, $last + 1);
         $tail_count = count($tail_lines);
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $tail_len   = $tail_count === 0 ? 0 : array_sum(array_map('strlen', $tail_lines)) + $tail_count - 1;
         $tail_at    = [];
         $tail_bytes = 0;

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.0.9
+ * @version   1.1.0
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -89,7 +89,9 @@ function fabricator_ajax_verify_push_lines(): void
     $verfiles_dir = $safe_dir . '/verfiles';
 
     /* ---- Path-traversal guard ---- */
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- realpath() of the plugin's folder, to check the copy lies inside it.
     $real_verfiles_dir = realpath($verfiles_dir);
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- realpath() of the requested copy, checked below to lie in the plugin's folder.
     $real_target_path  = realpath($target_path);
     if (!$real_verfiles_dir
         || !$real_target_path
@@ -107,6 +109,7 @@ function fabricator_ajax_verify_push_lines(): void
         wp_send_json_error(['message' => __('File is not a valid PDF', 'formfabricator')], 400);
     }
 
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- the copy in the plugin's folder, checked above.
     $file_size = filesize($real_target_path);
     if ($file_size > Verificationpage::MAX_PDF_BYTES) {
         \FabricatorForms\fabricator_log(
@@ -166,6 +169,7 @@ function fabricator_ajax_verify_push_lines(): void
     }
     // Released on script end (covers wp_die() too); the row's TTL is the rare-case backstop. By reference, since a
     // larger reservation replaces this one below when the file's streams inflate to more than its size suggests.
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions,PHPCS_SecurityAudit.BadFunctions.FunctionHandlingFunctions.WarnFunctionHandling -- the plugin's own cleanup, a fixed callback.
     register_shutdown_function(
         static function () use (&$fabricator_mem_token): void {
             if (is_string($fabricator_mem_token)) {
@@ -178,7 +182,7 @@ function fabricator_ajax_verify_push_lines(): void
 
     // A small file can unpack to far more than its size (CWE-409): reserve what its streams inflate to, plus slack,
     // before anything is unpacked. The reader stays within that allowance (GuardedRawDataParser).
-    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of the stored copy checked above; wp_remote_get() is for remote URLs.
+    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: the copy in the plugin's folder, checked above.
     $fabricator_inflated  = PdfUtils::inflatedStreamBytes((string) file_get_contents($real_target_path), $fabricator_mem_budget);
     $fabricator_allowance = $fabricator_inflated + max(16 * 1024 * 1024, intdiv($fabricator_inflated, 4));
     if ($fabricator_inflated > 0) {
@@ -193,6 +197,7 @@ function fabricator_ajax_verify_push_lines(): void
 
     // The check runs now, whatever its outcome, so its copy and the images taken from it go when this request ends
     // instead of waiting for the unused-copy cleanup.
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions,PHPCS_SecurityAudit.BadFunctions.FunctionHandlingFunctions.WarnFunctionHandling -- the plugin's own cleanup, a fixed callback.
     register_shutdown_function(
         static function () use ($real_target_path, $pdf_token): void {
             Verificationpage::discardCheckedCopy($real_target_path, $pdf_token);
@@ -200,6 +205,7 @@ function fabricator_ajax_verify_push_lines(): void
     );
 
     $file = [
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
     'name'     => preg_replace('/^[0-9a-f]{16}-/i', '', basename($real_target_path)),
     'tmp_name' => $real_target_path,
     'type'     => $detected_mime,
@@ -213,6 +219,7 @@ function fabricator_ajax_verify_push_lines(): void
         Verificationpage::handleUpload($file, $pdf_token, $fabricator_allowance);
     } catch (\Throwable $ajax_err) {
         $fabricator_failure = Verificationpage::reportInternalFailure(
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() of the plugin's own source file, for the log.
             'handleUpload threw ' . get_class($ajax_err) . ': ' . $ajax_err->getMessage() . ' at ' . basename($ajax_err->getFile()) . ':' . $ajax_err->getLine()
         );
         // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- problemCardHtml() escapes.
@@ -333,6 +340,7 @@ function fabricator_sanitize_verifier_html(string $html): string
 
     /* wp_kses regex chokes on multi-MB base64 data URIs, so they're lifted out before kses runs and spliced back after. */
     $data_uris = [];
+    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
     $html = preg_replace_callback(
         '/\bsrc=(["\'])data:[^"\']+\1/i',
         static function (array $m) use (&$data_uris): string {
@@ -492,6 +500,7 @@ final class Verificationpage
 
             // Ensure directories exist with restricted permissions.
             // No '/log': nothing ever writes there, and an empty directory in the uploads folder is one more thing to guard.
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             \FabricatorForms\Utils\SecureDir::harden($safe_dir, array_map(static fn($sub) => $safe_dir . $sub, ['', '/verfiles']));
 
             $verfiles_dir = $safe_dir . '/verfiles';
@@ -528,6 +537,7 @@ final class Verificationpage
                     ? sanitize_file_name($_FILES['pdfs']['name'][$key])
                     : '(unknown)';
 
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- PHP's upload temp file, checked with is_uploaded_file().
                 if (!is_readable($tmpName) || !is_uploaded_file($tmpName)) {
                     \FabricatorForms\fabricator_log(
                         'FabricatorForms Verificationpage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name)
@@ -538,9 +548,11 @@ final class Verificationpage
                 }
 
                 // File size guard — use the actual file on disk, not the browser-reported size.
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- PHP's upload temp file, checked with is_uploaded_file().
                 if (filesize($tmpName) > $max_upload_bytes) {
                     \FabricatorForms\fabricator_log(
                         'FabricatorForms Verificationpage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name) . ' — '
+                        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- PHP's upload temp file, checked with is_uploaded_file().
                         . round(filesize($tmpName) / 1048576, 1) . 'MB exceeds ' . round($max_upload_bytes / 1048576) . 'MB limit.'
                     );
                     $rejected[] = [
@@ -595,6 +607,7 @@ final class Verificationpage
                 $target_path  = $verfiles_dir . '/' . $storage_name;
 
                 /* Not wp_handle_upload(): short-lived, HTTP-denied scratch copies, validated more strictly than its default. */
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- PHP's upload temp file (is_uploaded_file()) copied into the plugin's folder.
                 $moved = is_uploaded_file($tmpName) && copy($tmpName, $target_path);
                 if ($moved) {
                     wp_delete_file($tmpName);
@@ -996,7 +1009,7 @@ final class Verificationpage
         self::setProgress(__('Byte scan: searching for seal…', 'formfabricator'), 5);
 
         // Shadow-attack guard: a legit PDF has exactly one %%EOF; a second means objects were appended after the original xref table.
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of $_FILES tmp_name; wp_remote_get() (the sniff's suggestion) is for remote URLs, not this.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: the upload being checked (PHP's temp file or its copy in the plugin's folder).
         $raw_for_guard = is_readable($file['tmp_name']) ? file_get_contents($file['tmp_name']) : false;
         if ($raw_for_guard === false) {
             \FabricatorForms\fabricator_log('FabricatorForms handleUpload: rejected ' . \FabricatorForms\fabricator_log_file((string) $file_name) . ' — file_get_contents() failed reading the uploaded temp file.');
@@ -1092,7 +1105,9 @@ final class Verificationpage
             || $raw_plain_seal_count > 0;
 
         $text_seal_b64_list = array_values(
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             array_filter(
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 array_map('trim', $seal_bodies),
                 fn($s) => $s !== ''
             )
@@ -1186,7 +1201,7 @@ final class Verificationpage
         $incremental_update_detected = $structure['incremental_update_detected'];
 
         // Read again rather than kept from the preflight, so the parser above ran without the file's bytes held as well.
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of $_FILES tmp_name; wp_remote_get() (the sniff's suggestion) is for remote URLs, not this.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: the upload being checked (PHP's temp file or its copy in the plugin's folder).
         $pdf_raw = is_readable($file['tmp_name']) ? file_get_contents($file['tmp_name']) : false;
         if ($pdf_raw === false) {
             throw new \RuntimeException('Could not re-read the uploaded PDF.');
@@ -1319,6 +1334,7 @@ final class Verificationpage
      */
     private static function fontProgramDifference(string $pdf_raw, array $seal_data): array
     {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $sealed = array_count_values(array_map('strval', (array) ($seal_data['font_prog_hashes'] ?? [])));
         $live   = array_count_values(PdfUtils::hashFontProgramStreams($pdf_raw));
         $beyond = static function (array $from, array $other): array {
@@ -1411,6 +1427,7 @@ final class Verificationpage
         if ($escaped_name !== null) {
             // The name as spelled and as a viewer reads it, printable ASCII only: it is the uploader's bytes, cut short.
             $printable = static fn(string $s): string => (string) preg_replace('/[^\x21-\x7E]/', '?', substr($s, 0, 64));
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $decoded   = (string) preg_replace_callback('/#([0-9A-Fa-f]{2})/', static fn(array $m): string => chr((int) hexdec($m[1])), $escaped_name);
             echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
             echo "<span class='fabricator-pdf-hash-label'>" . esc_html__('Disguised name', 'formfabricator') . "</span>";
@@ -1588,6 +1605,7 @@ final class Verificationpage
 
         // A cursor over the payload fields and a set of seen markers keep this linear. Only shown fields have markers.
         $field_keys        = is_array($fields)
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             ? array_keys(array_filter($fields, static fn($f): bool => is_array($f) && !empty($f['shown'])))
             : [];
         $field_cursor      = 0;
@@ -2102,6 +2120,7 @@ final class Verificationpage
                 $rect = [0,0,0,0];
                 if (preg_match('/\/Rect\s*\[(.*?)\]/s', $rawDict, $r)) {
                     $coords = preg_split('/\s+/', trim($r[1]));
+                    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                     $rect = array_map('floatval', $coords);
                 }
 
@@ -2314,6 +2333,7 @@ final class Verificationpage
         echo "<div class='fabricator-pdf-cmp-list'>";
 
         // Each sealed link target accepts as many annotations as the seal counts it.
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $sealed_links = array_count_values(array_map('strval', (array) ($rebuilt_payload['links'] ?? [])));
 
         // Only a link exactly as mPDF writes one, to a sealed target, is the plugin's own; any other annotation was
@@ -2549,6 +2569,7 @@ final class Verificationpage
                 }
                 $observed_counts[$slot_hash] = ($observed_counts[$slot_hash] ?? 0) + 1;
             }
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $sealed_counts = array_count_values(array_map('strval', $exact_image_hashes));
 
             $missing_images   = 0;
@@ -3436,6 +3457,7 @@ final class Verificationpage
         array $budget
     ): void {
         [$smask_decoded, $sm_width, $sm_height] = $soft_mask;
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- an image file in the plugin's folder, named from hashes.
         if (!file_exists($imgFile)) {
             if ($ext === 'jpg') {
                 \FabricatorForms\Utils\SecureDir::putFile($imgFile, $decoded);
@@ -3493,6 +3515,7 @@ final class Verificationpage
                         );
                     }
                 }
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- an image file in the plugin's folder, named from hashes.
                 imagepng($im, $imgFile, 9);
                 // unset(), not imagedestroy(): a no-op since PHP 8.0 and deprecated in 8.5.
                 unset($im);
@@ -3598,6 +3621,7 @@ final class Verificationpage
             // Any stream added, swapped or removed fails (PdfUtils::verifyContentStreams()).
             $cs_result = \FabricatorForms\PDF\PdfUtils::verifyContentStreams(
                 (string) $pdf_raw,
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 array_map('strval', (array) $allowed_content_hashes),
                 '---BEGIN-SEAL---' . preg_replace('/\s+/', '', (string) $seal_base64) . '---END-SEAL---'
             );
@@ -4102,6 +4126,7 @@ final class Verificationpage
     private static function unsealedStreams(string $pdf_raw, array $seal_data): array
     {
         $sealed_as_index = array_flip(
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             array_map('strval', (array) ($seal_data['all_stream_hashes'] ?? []))
         );
         $unsealed = [];
@@ -4191,6 +4216,7 @@ final class Verificationpage
         if ($file_problem !== null) {
             return [$file_problem, false];
         }
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() of the plugin's own source file, for the log.
         return [self::reportInternalFailure(get_class($e) . ': ' . $raw_msg . ' at ' . basename($e->getFile()) . ':' . $e->getLine() . ' (' . $log_file . ')'), true];
     }
 
@@ -4335,9 +4361,10 @@ final class Verificationpage
     private static function rawPdfHasSeal(string $path): bool
     {
         // Must read the FULL file — large embedded images can push page content streams well outside any 2MB tail window.
-        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local read of a plugin-generated file in wp-content/uploads; wp_remote_get() (the sniff's suggestion) is for remote URLs, not this.
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: the copy in the plugin's folder.
         $raw = is_readable($path) ? file_get_contents($path) : false;
         if ($raw === false) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
             \FabricatorForms\fabricator_log('FabricatorForms rawPdfHasSeal: file_get_contents() failed for ' . \FabricatorForms\fabricator_log_file(basename($path)) . '.');
             return false;
         }
@@ -4376,6 +4403,7 @@ final class Verificationpage
                 $pairs = substr($dec, $start, (strlen($dec) - $start) & ~1);
                 $ascii = preg_replace('/\x00(.)|../s', '$1', $pairs);
                 if ($ascii === null) {
+                    // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
                     \FabricatorForms\fabricator_log('FabricatorForms rawPdfHasSeal: PCRE error ' . preg_last_error() . ' while reading a stream of ' . \FabricatorForms\fabricator_log_file(basename($path)) . '.');
                     continue;
                 }
@@ -4392,6 +4420,7 @@ final class Verificationpage
 
         if ($skipped_oversized_streams > 0 || $skipped_failed_decompress > 0) {
             \FabricatorForms\fabricator_log(
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
                 'FabricatorForms rawPdfHasSeal: no seal found in ' . \FabricatorForms\fabricator_log_file(basename($path)) . ' — '
                 . $skipped_oversized_streams . ' FlateDecode stream(s) skipped for exceeding the 64MB decompression-bomb guard, '
                 . $skipped_failed_decompress . ' stream(s) skipped for failing to decompress or decompressing outside plausible bounds. '
@@ -4659,9 +4688,11 @@ final class Verificationpage
             'content_streams'  => [],
             'image_hashes'     => [],
             'font_prog_hashes'  => array_values(
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 array_map('strval', (array) ($seal_data['font_prog_hashes'] ?? []))
             ),
             'all_stream_hashes' => array_values(
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 array_map('strval', (array) ($seal_data['all_stream_hashes'] ?? []))
             ),
             'pdf_meta'          => (static function ($pdf_meta) {
@@ -4673,6 +4704,7 @@ final class Verificationpage
                     'producer' => (string)($pdf_meta['producer'] ?? ''),
                 ];
             })($seal_data['pdf_meta'] ?? null),
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             'links'             => array_values(array_map('strval', (array) ($seal_data['links'] ?? []))),
             'seal_page_text'    => (string) ($seal_data['seal_page_text'] ?? ''),
         ];
@@ -4717,14 +4749,17 @@ final class Verificationpage
         }
 
         if (is_array($seal_data['fonts'] ?? null)) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $rebuilt['fonts'] = array_values(array_map('strval', $seal_data['fonts']));
         }
 
         if (is_array($seal_data['content_streams'] ?? null)) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $rebuilt['content_streams'] = array_values(array_map('strval', $seal_data['content_streams']));
         }
 
         if (is_array($seal_data['image_hashes'] ?? null)) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $rebuilt['image_hashes'] = array_values(array_map('strval', $seal_data['image_hashes']));
         }
 
@@ -4935,6 +4970,7 @@ final class Verificationpage
             self::$files_to_delete[] = $image_file;
             if (!self::$image_cleanup_registered) {
                 self::$image_cleanup_registered = true;
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions,PHPCS_SecurityAudit.BadFunctions.FunctionHandlingFunctions.WarnFunctionHandling -- the plugin's own cleanup, a fixed callback.
                 register_shutdown_function([self::class, 'discardExtractedImages']);
             }
         }
@@ -5001,6 +5037,7 @@ final class Verificationpage
             'size'   => __('These parts are too large to unpack within the memory reserved for this check, so they were not read.', 'formfabricator'),
         ];
         foreach ($notes as $reason => $note) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $items = array_filter($refused, static fn(array $item): bool => $item['reason'] === $reason);
             if ($items === []) {
                 continue;
@@ -5084,11 +5121,14 @@ final class Verificationpage
     private static function deleteCheckedFiles(array $files): void
     {
         foreach ($files as $file) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- this request's extracted images in the plugin's folder.
             if (!is_file($file)) {
                 continue;
             }
             wp_delete_file($file);
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- this request's extracted images in the plugin's folder.
             if (file_exists($file)) {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
                 \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: could not remove ' . \FabricatorForms\fabricator_log_file(basename($file)) . ' after its check; the unused-copy cleanup retries.');
             }
         }

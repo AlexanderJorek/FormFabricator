@@ -9,7 +9,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadBuilder, settle, wouldWarnOnLeave, saveAndRead, type } = require('./support/admin-page');
+const { loadBuilder, settle, until, wouldWarnOnLeave, saveAndRead, type } = require('./support/admin-page');
 
 const TEXT = (id, extra = {}) => Object.assign({ id, type: 'text', label: id.toUpperCase() }, extra);
 const NOTIFICATION = {
@@ -253,6 +253,48 @@ test('the save status shows the server\'s warning, e.g. a mandate without wordin
     dismiss.click();
     assert.equal(status.textContent, '');
     assert.equal(status.className, '');
+});
+
+test('the test email button sends the sender as it stands, and shows the answer', async () => {
+    const answers = [
+        { success: true, data: { message: 'Test email sent to me@example.org.' } },
+        { success: false, data: { message: 'The test email could not be sent: SMTP connect() failed.' } },
+    ];
+    let tests = 0;
+    const page = await loadBuilder({ fields: [TEXT('name')], notifications: [NOTIFICATION] },
+        (url, body) => (body.action === 'fabricator_forms_send_test_mail' ? answers[tests++] : { success: true, data: {} }));
+    openNotification(page);
+    // Unsaved: the test is of what the admin has just typed.
+    type(page, page.document.getElementById('fabricator-sp-notif-from_email'), 'shop@example.org');
+    type(page, page.document.getElementById('fabricator-sp-notif-from_name'), 'Acme');
+    const button = page.document.getElementById('fabricator-notif-test-mail');
+    const status = button.parentNode.querySelector('[role="status"]');
+    assert.equal(status.hidden, true);
+
+    button.click();
+    await until(page, () => tests === 1 && !status.hidden);
+    const sent = page.requests.find((r) => r.body && r.body.action === 'fabricator_forms_send_test_mail').body;
+    assert.equal(sent.from_email, 'shop@example.org');
+    assert.equal(sent.from_name, 'Acme');
+    assert.equal(sent.form_title, 'Test form');
+    assert.equal(sent.to, undefined, 'the server picks the address, never the page');
+    assert.equal(status.textContent, answers[0].data.message);
+    assert.match(status.className, /--info/);
+
+    button.click();
+    await until(page, () => tests === 2 && /--warning/.test(status.className));
+    assert.equal(status.textContent, answers[1].data.message);
+    assert.equal(button.disabled, false);
+    assert.equal(wouldWarnOnLeave(page), true, 'typing the sender is still an unsaved change; the test saves nothing');
+    assert.deepEqual(page.errors, []);
+});
+
+test('the message editor says what saving removes', async () => {
+    const page = await loadBuilder({ fields: [TEXT('name')], notifications: [NOTIFICATION] });
+    openNotification(page);
+    const hints = Array.from(page.document.getElementById('fabricator-nstab-content').querySelectorAll('.fabricator-sp-hint'))
+        .map((h) => h.textContent);
+    assert.ok(hints.some((h) => h.startsWith('Removed on save: scripts')), JSON.stringify(hints));
 });
 
 test('a field placeholder typed as the sender address shows the warning while typing', async () => {
