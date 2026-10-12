@@ -18,8 +18,9 @@ Release gates in the build (`tools/build.php`): `php -l`, `vendor/bin/phpcs` (PS
 `composer audit`, `composer test` (PHPUnit `unit` + `perf`), `npm test` (JS), the WordPress
 integration suite on a single site and a network (against a throwaway MariaDB or a named server, `tools/testdb.php`),
 the package verification step (no dev files in the zip, ALTCHA hashes in the source and in the package, font trim), and
-against the plugin unpacked from the zip (§10): the integration suite's `package` group and the E2E suite (`tests/e2e/`,
-Playwright) in Chromium, Firefox and WebKit, Safari's engine, on a real WordPress site served by `php -S`.
+against the plugin unpacked from the zip (§10): the integration suite's `package` group, the E2E suite (`tests/e2e/`,
+Playwright) in Chromium, Firefox and WebKit, Safari's engine, on a real WordPress site served by `php -S`, and
+WordPress.org's Plugin Check, failing on any error or warning (`tools/plugincheck.php`).
 
 CI (`.github/workflows/tests.yml`) runs on Linux: the phpcs gates and the `.pot` check on PHP 8.3, `unit` + `perf` on
 PHP 8.1–8.4 (8.1 skips `perf`), the integration suite on PHP 8.1 and 8.3, single site and network, against MySQL 8,

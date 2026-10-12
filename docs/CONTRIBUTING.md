@@ -36,6 +36,7 @@ suite; on macOS and Linux, point `WP_TESTS_DB_*` at a database (see [Integration
 | E2E tests (Chromium, Firefox, WebKit) | `npm run test:e2e` (`php tools/e2e.php`) |
 | Style linter (PSR-1/PSR-2) | `vendor/bin/phpcs` |
 | Security linter | `vendor/bin/phpcs --standard=.phpcs-security.xml` |
+| WordPress.org's Plugin Check on the last build | `php tools/plugincheck.php` |
 | Regenerate the `.pot` | `php languages/make-pot.php` |
 | Check the `.pot` is up to date | `php languages/make-pot.php --check` |
 | Compile a `.po` to `.mo` | `php languages/compile-mo.php languages/formfabricator-de_DE.po` |
@@ -452,7 +453,8 @@ Configured in `tests/phpunit-integration.xml.dist`, tests in `tests/Integration/
 - Runs side by side need their own tables and uploads: `FABRICATOR_TESTS_TABLE_PREFIX` (default `wptests_`) and
   `FABRICATOR_TESTS_CONTENT_DIR` (default WordPress's own `wp-content`). The release build sets both for each of its
   runs, which it starts at the same time once the zip is verified: the suite as a single site and as a network, the
-  `package` group, and the E2E suite once per browser, each on a site of its own (see [E2E suite](#e2e-suite)). They
+  `package` group, the E2E suite once per browser and Plugin Check, each on a site of its own (see [E2E suite](#e2e-suite)
+  and [Plugin Check](#plugin-check)). They
   take as long as the slowest of them, not all in a row. The quick gates (lint, unit, perf, JS) run before, one by one: the perf
   tests measure time and need the machine to themselves.
 
@@ -659,6 +661,26 @@ both dev dependencies. Run `vendor/bin/phpcs --standard=.phpcs-security.xml`.
   checks still cover them. phpcs can't exclude the security-audit sniffs by folder, only everywhere.
 - **A `phpcs:ignore` covers only the next line.** Plugin Check doesn't know this ruleset's `customSanitizingFunctions`,
   so every line using `Cast::stringOrDefault()` still needs its own ignore.
+
+### Plugin Check
+
+WordPress.org reviews a submitted plugin with its Plugin Check plugin. The release build runs the same checks, static
+and runtime, on the plugin unpacked from its zip (`tools/plugincheck.php`), and **any error or warning fails it**:
+errors stop a submission, and warnings are what the review asks about.
+
+- It runs `wp plugin check` with WP-CLI in a site of its own, the E2E suite's (`tests/e2e/site/install.php`, tables
+  `pc_`), with Plugin Check linked in beside the plugin. The site lies in the temp dir, never in the repository:
+  Plugin Check skips every file under a folder named `.git`, matching the whole path, and would pass an empty plugin;
+  the script refuses such a path. `wp plugin check` exits 0 whatever it finds, so the script
+  reads its findings and lists each with file, line and code (`fabpcReport()`).
+- Plugin Check and WP-CLI are downloaded once by the build (or its setup), checked against the SHA-256 pinned in
+  `tools/plugincheck-lib.php`, and kept beside the test database (`%LOCALAPPDATA%\FormFabricator\plugin-check`, or
+  `~/.cache/formfabricator/plugin-check`). An offline build without them skips the gate with a warning. To update
+  either, change its version and SHA-256 together.
+- `php tools/plugincheck.php [plugin folder]` runs it on its own, on the last build's `build/formfabricator` by
+  default, with the test database the build uses.
+- A code-sniffer finding the plugin cannot avoid gets a `phpcs:ignore` with its reason, as for the security linter;
+  Plugin Check's PHPCS-based checks honour it. Its other checks (headers, readme, file types) have no ignore.
 
 ---
 

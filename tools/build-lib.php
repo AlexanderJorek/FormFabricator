@@ -370,6 +370,23 @@ function fabbuildRemove(string $path): void
 }
 
 /**
+ * Makes $link a link to the folder $target: a junction on Windows, which needs no administrator rights as a symlink
+ * does, and a symlink elsewhere. fabbuildRemove() takes it away again without touching $target.
+ */
+function fabbuildLink(string $target, string $link): void
+{
+    if (PHP_OS_FAMILY === 'Windows') {
+        $made = fabbuildRun(['cmd', '/d', '/s', '/c', 'mklink', '/J', str_replace('/', '\\', $link), str_replace('/', '\\', $target)])['code'] === 0;
+    } else {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnSymlink -- a dev tool on the developer's own machine linking a folder it made itself; no open_basedir applies.
+        $made = @symlink($target, $link);
+    }
+    if (!$made || !is_dir($link)) {
+        fabbuildFail('Could not link ' . $link . ' to ' . $target);
+    }
+}
+
+/**
  * The total size of the given files below $base, in bytes.
  *
  * @param string[] $files Relative paths.

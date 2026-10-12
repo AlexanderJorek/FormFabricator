@@ -89,10 +89,21 @@ $link($plugin, $content . '/plugins/formfabricator');
 
 // ---- WordPress finds its wp-config.php in the folder above, which holds no wp-settings.php ----
 $wordpress = $root . '/vendor/roots/wordpress-no-content';
-file_put_contents(
-    dirname($wordpress) . '/wp-config.php',
-    "<?php\n// Written by tests/e2e/site/install.php for the E2E site; the next install writes it again.\nrequire " . var_export(__DIR__ . '/wp-config.php', true) . ";\n"
-);
+// The same for every run, and runs started side by side read it while another installs: written only when it differs,
+// and through a rename, so no run ever reads it half-written.
+$stub = "<?php\n// Written by tests/e2e/site/install.php for the E2E site; the next install writes it again.\nrequire "
+    . var_export(__DIR__ . '/wp-config.php', true) . ";\nrequire_once ABSPATH . 'wp-settings.php';\n";
+$stubFile = dirname($wordpress) . '/wp-config.php';
+if (@file_get_contents($stubFile) !== $stub) {
+    $tmp = $stubFile . '.' . getmypid() . '.tmp';
+    file_put_contents($tmp, $stub);
+    if (!@rename($tmp, $stubFile) && @file_get_contents($stubFile) !== $stub) {
+        @unlink($tmp);
+        fwrite(STDERR, "install.php: could not write $stubFile\n");
+        exit(1);
+    }
+    @unlink($tmp);
+}
 
 // ---- A fresh install: the run's own tables dropped, the integration suite's left alone ----
 $db = mysqli_init();

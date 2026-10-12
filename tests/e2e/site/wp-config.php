@@ -44,4 +44,5 @@ define('WP_ACCESSIBLE_HOSTS', '');
 if (!defined('ABSPATH')) {
     define('ABSPATH', dirname(__DIR__, 3) . '/vendor/roots/wordpress-no-content/');
 }
-require_once ABSPATH . 'wp-settings.php';
+// wp-settings.php is loaded by the wp-config.php install.php writes, on a line of its own: WP-CLI reads that file and
+// refuses one that doesn't load wp-settings.php itself.
