@@ -95,8 +95,8 @@ final class UninstallTest extends TestCase
         set_transient('fabricator_vpending_1', ['tokens' => []]);
         wp_schedule_event(time() + 3600, 'hourly', 'fabricator_rl_sweep_expired');
         wp_schedule_single_event(time() + 600, 'fabricator_verifier_sweep_expired');
-        // Attachment copies a killed request left in the site's folder, and its prepare() transient.
-        $left = \FabricatorForms\Utils\PrivateDir::prepare() . '/mail/' . bin2hex(random_bytes(16));
+        // Attachment copies a killed request left in the site's folder, and its ensure() transient.
+        $left = \FabricatorForms\Utils\PrivateDir::ensure() . '/mail/' . bin2hex(random_bytes(16));
         mkdir($left . '/f1', 0700, true);
         file_put_contents($left . '/f1/passport.jpg', 'x');
     }

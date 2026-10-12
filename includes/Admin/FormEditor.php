@@ -472,13 +472,16 @@ class FormEditor
         if (!is_email($to)) {
             \wp_send_json_error(['message' => __('Your user account has no valid email address to send the test to.', 'formfabricator')], 400);
         }
-        // phpcs:disable WordPress.Security.NonceVerification.Missing -- verified via AjaxGuard::require(); sniff can't see through the static call.
+        // The nonce is verified by AjaxGuard::require() above, and Cast::stringOrDefault() sits before each sanitizer;
+        // the sniffs see through neither, so each line carries its own ignore (Plugin Check reads no ruleset).
         $notif = [
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- see the comment above.
             'from_name'  => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['from_name'] ?? ''))),
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- see the comment above.
             'from_email' => self::sanitizeFromEmail(\sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['from_email'] ?? '')))),
         ];
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- see the comment above.
         $title = \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['form_title'] ?? '')));
-        // phpcs:enable WordPress.Security.NonceVerification.Missing
 
         $error = \FabricatorForms\Form\MailSender::sendTest($notif, $to, $title);
         if ($error !== '') {

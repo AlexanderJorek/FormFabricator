@@ -837,7 +837,7 @@ class PDFLayoutEditor
             // Refused before anything is written, so the page's snapshot stays valid for the corrected save.
             return __('Images from external URLs can only be imported by users who are allowed to upload files. Choose the image from the Media Library instead.', 'formfabricator');
         }
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified at the top of this handler.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified at the top of this handler; Cast::stringOrDefault() sits before esc_url_raw(), which the sniff can't see past.
         $posted_logo = isset($_POST['logo_url']) ? esc_url_raw(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['logo_url']))) : '';
         if (self::$image_too_large || ($posted_logo !== '' && !self::fitsPdf($posted_logo))) {
             return sprintf(

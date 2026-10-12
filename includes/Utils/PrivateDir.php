@@ -68,7 +68,7 @@ final class PrivateDir
     private static string $submission = '';
 
     /**
-     * The folder's path. Not created; see prepare().
+     * The folder's path. Not created; see ensure().
      *
      * @return string
      */
@@ -92,7 +92,7 @@ final class PrivateDir
      *
      * @return string The folder's path.
      */
-    public static function prepare(): string
+    public static function ensure(): string
     {
         $base = self::base();
         $dirs = [$base, $base . '/' . self::MPDF_CACHE];
@@ -126,7 +126,7 @@ final class PrivateDir
             // random_bytes(), not wp_generate_uuid4() (mt_rand()): the name can't be predicted and fetched or planted.
             self::$submission = bin2hex(random_bytes(16));
         }
-        $dir = self::prepare() . '/' . $type . '/' . self::$submission;
+        $dir = self::ensure() . '/' . $type . '/' . self::$submission;
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
         if (!is_dir($dir) && !self::makeDir($dir)) {
             \FabricatorForms\fabricator_log('FabricatorForms PrivateDir: could not create ' . $dir);
@@ -157,7 +157,7 @@ final class PrivateDir
      */
     public static function sharedMpdfTemp(): string
     {
-        return self::prepare() . '/' . self::MPDF_CACHE;
+        return self::ensure() . '/' . self::MPDF_CACHE;
     }
 
     /**

@@ -78,7 +78,7 @@ final class ActivationTest extends TestCase
      */
     private static function submissionFolder(string $type, int $mtime): string
     {
-        $dir = \FabricatorForms\Utils\PrivateDir::prepare() . '/' . $type . '/' . bin2hex(random_bytes(16));
+        $dir = \FabricatorForms\Utils\PrivateDir::ensure() . '/' . $type . '/' . bin2hex(random_bytes(16));
         $sub = $type === 'pdf' ? '/mpdf/ttfontdata' : '/f1';
         mkdir($dir . $sub, 0700, true);
         file_put_contents($dir . $sub . ($type === 'pdf' ? '/dejavusans.mtx.json' : '/passport.jpg'), 'x');

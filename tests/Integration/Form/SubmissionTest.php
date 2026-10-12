@@ -230,7 +230,7 @@ final class SubmissionTest extends AjaxTestCase
         update_option(\FabricatorForms\Plugin::LAST_INLINE_SWEEP_OPTION, time() - 2 * HOUR_IN_SECONDS, false);
         add_option('fabricator_rl_expired_one', '3|' . (time() - 10), '', false);
         // Submission folders of other requests: one a killed request left, one still being sent.
-        $pdf_dir = \FabricatorForms\Utils\PrivateDir::prepare() . '/pdf/';
+        $pdf_dir = \FabricatorForms\Utils\PrivateDir::ensure() . '/pdf/';
         $stale   = $pdf_dir . bin2hex(random_bytes(16));
         $fresh   = $pdf_dir . bin2hex(random_bytes(16));
         mkdir($stale);
