@@ -89,7 +89,7 @@ class FormList
         add_menu_page(
             __('FormFabricator Form List', 'formfabricator'),
             __('FormFabricator', 'formfabricator'),
-            \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
+            \FabricatorForms\Capabilities::ACCESS_CAP_PREFIX . 'view_forms',
             'fabricator-forms',
             [self::class, 'render'],
             // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds a data: URI for inline display; the alternative is writing an HTTP-reachable file. Not obfuscation.
@@ -102,7 +102,7 @@ class FormList
             'fabricator-forms',
             __('FormFabricator Form List', 'formfabricator'),
             __('Form List', 'formfabricator'),
-            \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
+            \FabricatorForms\Capabilities::ACCESS_CAP_PREFIX . 'view_forms',
             'fabricator-forms',
             [self::class, 'render']
         );
@@ -115,7 +115,7 @@ class FormList
      */
     public static function render(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('view_forms')) {
+        if (!\FabricatorForms\Capabilities::userCan('view_forms')) {
             wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
@@ -277,7 +277,7 @@ class FormList
     {
         // wp_send_json_error() terminates the request via wp_die(), so execution
         // never falls through past a failed check below (no explicit return needed).
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
         // Each form has a nonce of its own, so the id is read inside the check.
         if (!isset($_POST['form_id']) || check_ajax_referer('fabricator_forms_delete_' . absint(wp_unslash($_POST['form_id'])), 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
@@ -325,7 +325,7 @@ class FormList
         $shortcode = '[fabricator_form id="' . $form->id . '"]';
         $count     = count($form->fields);
         // Nonces only for users who may act; each handler re-checks the capability too.
-        $can_edit  = \FabricatorForms\Plugin::userCan('edit_forms');
+        $can_edit  = \FabricatorForms\Capabilities::userCan('edit_forms');
         $del_nonce = $can_edit ? wp_create_nonce('fabricator_forms_delete_' . $form->id) : '';
         $dup_nonce = $can_edit ? wp_create_nonce('fabricator_forms_duplicate_' . $form->id) : '';
         $exp_nonce = $can_edit ? wp_create_nonce('fabricator_forms_export_' . $form->id) : '';
@@ -395,7 +395,7 @@ class FormList
      */
     public static function ajaxDuplicate(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
         // Each form has a nonce of its own, so the id is read inside the check.
         if (!isset($_POST['form_id']) || check_ajax_referer('fabricator_forms_duplicate_' . absint(wp_unslash($_POST['form_id'])), 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
@@ -422,7 +422,7 @@ class FormList
      */
     public static function ajaxBulkDelete(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
         // One nonce for the bulk action first; each form's own nonce still decides below whether that form is touched.
         if (check_ajax_referer('fabricator_forms_bulk', 'bulk_nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
@@ -462,7 +462,7 @@ class FormList
      */
     public static function ajaxBulkDuplicate(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
         // One nonce for the bulk action first; each form's own nonce still decides below whether that form is touched.
         if (check_ajax_referer('fabricator_forms_bulk', 'bulk_nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
@@ -503,7 +503,7 @@ class FormList
     public static function ajaxExport(): void
     {
         // edit_forms: the export carries notification addresses view-only users never see.
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
         // Each form has a nonce of its own, so the id is read inside the check.
         if (!isset($_POST['form_id']) || check_ajax_referer('fabricator_forms_export_' . absint(wp_unslash($_POST['form_id'])), 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
@@ -535,7 +535,7 @@ class FormList
      */
     public static function ajaxImport(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
         if (check_ajax_referer('fabricator_forms_import', 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
@@ -571,11 +571,11 @@ class FormList
         // Route imported content through the same sanitizers as ajaxSave() — it's untrusted input.
         $payload_title = $payload['t'];
         $title         = sanitize_text_field(is_string($payload_title) ? $payload_title : '');
-        $clean_fields  = \FabricatorForms\Admin\FormEditor::sanitizeFields($fields);
-        $notifications = \FabricatorForms\Admin\FormEditor::sanitizeNotifications(
+        $clean_fields  = \FabricatorForms\Form\FormSanitizer::sanitizeFields($fields);
+        $notifications = \FabricatorForms\Form\FormSanitizer::sanitizeNotifications(
             is_array($payload['n'] ?? null) ? $payload['n'] : []
         );
-        $id_error = \FabricatorForms\Admin\FormEditor::fieldIdError($clean_fields);
+        $id_error = \FabricatorForms\Form\FormSanitizer::fieldIdError($clean_fields);
         if ($id_error !== '') {
             wp_send_json_error(['message' => $id_error], 422);
         }
@@ -595,7 +595,7 @@ class FormList
             'title'         => $title,
             'fields'        => $clean_fields,
             'notifications' => $notifications,
-            'settings'      => \FabricatorForms\Admin\FormEditor::sanitizeSettings(
+            'settings'      => \FabricatorForms\Form\FormSanitizer::sanitizeSettings(
                 is_array($payload['s'] ?? null) ? $payload['s'] : []
             ),
             ],

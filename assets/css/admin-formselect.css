@@ -1,0 +1,154 @@
+/*!
+ * FormFabricator — Form selections admin page styles
+ * @copyright 2026 Alexander Jorek
+ * @license   GPL-3.0-or-later
+ */
+
+/* Loaded after admin.css, which holds what every admin screen shares. */
+
+/* ── Form Select — modal item editor ── */
+.fabricator-fsel-cols-header {
+    display: grid;
+    grid-template-columns: 16px minmax(80px,110px) 1fr 1fr 24px 28px;
+    gap: 5px;
+    margin-bottom: 3px;
+    padding: 0 8px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--fabricator-text-tertiary);
+}
+
+/* Targets header columns 2-4 (label/desc columns) only, skipping the drag-handle
+   and favourite/remove icon columns which have no matching input to align with */
+.fabricator-fsel-cols-header span:nth-child(n+2):nth-child(-n+4) {
+    padding-left: 9px;
+}
+.fabricator-fsel-cols-header span:nth-child(5) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fabricator-fsel-item {
+    display: grid;
+    grid-template-columns: 16px minmax(80px,110px) 1fr 1fr 24px 28px;
+    gap: 5px;
+    align-items: center;
+    background: var(--fabricator-bg-subtle);
+    border: 1px solid var(--fabricator-border-lighter);
+    border-radius: 6px;
+    padding: 6px 7px;
+}
+
+.fabricator-fsel-item-drag {
+    color: var(--fabricator-border);
+    font-size: 12px;
+    cursor: grab;
+    user-select: none;
+    line-height: 1;
+}
+
+.fabricator-fsel-item-drag:hover { color: var(--fabricator-text-tertiary); }
+.fabricator-fsel-item-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fabricator-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 2px;
+}
+
+.fabricator-fsel-item-label,
+.fabricator-fsel-item-desc {
+    padding: 5px 8px;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 5px;
+    font-size: 12px;
+    font-family: inherit;
+    background: #fff;
+    width: 100%;
+    min-width: 0;
+}
+
+.fabricator-fsel-item-fav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--fabricator-border);
+    font-size: 14px;
+    transition: color .12s;
+}
+
+.fabricator-fsel-item-fav:has(input:checked) { color: #f59e0b; }
+.fabricator-fsel-item-fav input { display: none; }
+.fabricator-fsel-item-remove {
+    background: none;
+    border: none;
+    color: var(--fabricator-border);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 3px 5px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color .1s, background .1s;
+}
+
+.fabricator-fsel-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 40px;
+}
+
+.fabricator-fsel-search-icon {
+    color: var(--fabricator-text-tertiary);
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.fabricator-fsel-search-input {
+    flex: 1;
+    height: 34px !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--fabricator-text);
+    min-width: 0;
+}
+
+.fabricator-fsel-search-input::placeholder { color: var(--fabricator-text-tertiary); }
+.fabricator-fsel-search-input:focus {
+    outline: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.fabricator-fsel-sr-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--fabricator-bg-subtler);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--fabricator-text);
+    font-family: inherit;
+}
+
+.fabricator-fsel-sr-item:last-child { border-bottom: none; }
+.fabricator-fsel-sr-item:hover { background: var(--fabricator-bg-subtle); }
+.fabricator-fsel-sr-empty {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--fabricator-text-muted);
+}

@@ -101,7 +101,7 @@ class ConsentField extends BaseField
             . '" name="' . esc_attr($field_id) . '" value="1"' . (!empty($value) ? ' checked' : '')
             . (!empty($config['required']) ? ' required aria-required="true"' : '') . '>'
             . '<span class="fabricator-consent-text">'
-            . wp_kses(self::shownText($config), \FabricatorForms\Utils\HtmlSanitizer::allowedTags()) . '</span>'
+            . wp_kses(self::shownText($config), \FabricatorForms\Utils\Text\HtmlSanitizer::allowedTags()) . '</span>'
             . '</label>';
 
         return $this->wrap($field_id, $config, $inner);
@@ -153,7 +153,7 @@ class ConsentField extends BaseField
             __('Agreed to "%1$s" on %2$s', 'formfabricator'),
             $consent_text,
             // The moment, unambiguous (GDPR Art. 7(1)), as every signature and agreement records it.
-            \FabricatorForms\Utils\SigningTime::format()
+            \FabricatorForms\Utils\Text\SigningTime::format()
         );
     }
 
@@ -177,7 +177,7 @@ class ConsentField extends BaseField
     private static function shownText(array $config): string
     {
         $text = $config['consent_text'] ?? null;
-        return \FabricatorForms\Utils\HtmlSanitizer::sanitize(is_string($text) ? $text : self::defaultText());
+        return \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize(is_string($text) ? $text : self::defaultText());
     }
 
     /**

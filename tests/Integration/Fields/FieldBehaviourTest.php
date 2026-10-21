@@ -106,7 +106,7 @@ final class FieldBehaviourTest extends TestCase
     }
 
     /**
-     * Asserts the moment as Utils\SigningTime records it (GDPR Art. 7(1)): the UTC date in the site's date format, then
+     * Asserts the moment as Utils\Text\SigningTime records it (GDPR Art. 7(1)): the UTC date in the site's date format, then
      * the UTC time. By pattern and date, so second boundaries don't flake.
      *
      * @param mixed  $value  Submitted value.

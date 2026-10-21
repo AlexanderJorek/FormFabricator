@@ -78,7 +78,7 @@ abstract class BaseField
     }
 
     /**
-     * An answer as the visitor typed it, without the spaces around it: nothing else is changed (Utils\AnswerText refuses
+     * An answer as the visitor typed it, without the spaces around it: nothing else is changed (Utils\Text\AnswerText refuses
      * what can't be recorded as typed). A non-string reads as empty.
      *
      * @param mixed $raw The posted value.
@@ -359,7 +359,7 @@ abstract class BaseField
     }
 
     /**
-     * Whether line breaks and tabs belong in this field's answer (Utils\AnswerText refuses them elsewhere).
+     * Whether line breaks and tabs belong in this field's answer (Utils\Text\AnswerText refuses them elsewhere).
      *
      * @return bool
      */
@@ -369,7 +369,7 @@ abstract class BaseField
     }
 
     /**
-     * Whether this field's answer is what the visitor typed, held to Utils\AnswerText; not for values the site or the
+     * Whether this field's answer is what the visitor typed, held to Utils\Text\AnswerText; not for values the site or the
      * browser makes (a post's details, a file entry, a CAPTCHA token).
      *
      * @return bool
@@ -715,7 +715,7 @@ abstract class BaseField
         return $this->baseGeneralEntries();
     }
 
-    // Keys rendered as plain text; anything else is HTML (Utils\HtmlSanitizer::sanitize()). Extend via plainTextConfigKeys().
+    // Keys rendered as plain text; anything else is HTML (Utils\Text\HtmlSanitizer::sanitize()). Extend via plainTextConfigKeys().
     private const PLAIN_TEXT_CONFIG_KEYS = [
         'label', 'placeholder', 'description', 'custom_class', 'autocomplete', 'validation',
     ];
@@ -741,13 +741,13 @@ abstract class BaseField
         return in_array($key, $this->plainTextConfigKeys(), true);
     }
 
-    // Sanitizes a single string config value. Every HTML value follows one rule set (Utils\HtmlSanitizer).
+    // Sanitizes a single string config value. Every HTML value follows one rule set (Utils\Text\HtmlSanitizer).
     public function sanitizeConfigValue(string $key, string $value): string
     {
         if (in_array($key, $this->plainTextConfigKeys(), true)) {
             return \sanitize_text_field($value);
         }
-        return \FabricatorForms\Utils\HtmlSanitizer::sanitize($value);
+        return \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize($value);
     }
 
     /**

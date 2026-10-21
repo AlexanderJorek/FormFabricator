@@ -143,8 +143,8 @@ class SignatureField extends BaseField
     {
         return [
             'title' => trim((string) ($config['signature_title'] ?? '')),
-            'text'  => \FabricatorForms\Utils\HtmlSanitizer::sanitize((string) ($config['signature_text'] ?? '')),
-            'note'  => \FabricatorForms\Utils\HtmlSanitizer::sanitize((string) ($config['signature_note'] ?? '')),
+            'text'  => \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize((string) ($config['signature_text'] ?? '')),
+            'note'  => \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize((string) ($config['signature_note'] ?? '')),
         ];
     }
 
@@ -226,8 +226,8 @@ class SignatureField extends BaseField
         if (implode('', $texts) !== '') {
             $inner_html = '<div class="fabricator-signature-texts">'
                 . ($texts['title'] !== '' ? '<h3 class="fabricator-signature-title">' . esc_html($texts['title']) . '</h3>' : '')
-                . ($texts['text'] !== '' ? '<div class="fabricator-signature-text">' . wp_kses($texts['text'], \FabricatorForms\Utils\HtmlSanitizer::allowedTags()) . '</div>' : '')
-                . ($texts['note'] !== '' ? '<p class="fabricator-signature-note">' . wp_kses($texts['note'], \FabricatorForms\Utils\HtmlSanitizer::allowedTags()) . '</p>' : '')
+                . ($texts['text'] !== '' ? '<div class="fabricator-signature-text">' . wp_kses($texts['text'], \FabricatorForms\Utils\Text\HtmlSanitizer::allowedTags()) . '</div>' : '')
+                . ($texts['note'] !== '' ? '<p class="fabricator-signature-note">' . wp_kses($texts['note'], \FabricatorForms\Utils\Text\HtmlSanitizer::allowedTags()) . '</p>' : '')
                 . '</div>'
                 . $inner_html;
         }
@@ -407,8 +407,8 @@ class SignatureField extends BaseField
             $title = empty($config['hide_label']) ? $label : '';
             $entries[$field_id]['label_hidden'] = true;
         }
-        $body  = \FabricatorForms\Utils\HtmlSanitizer::plainText($texts['text']);
-        $note  = \FabricatorForms\Utils\HtmlSanitizer::plainText($texts['note']);
+        $body  = \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($texts['text']);
+        $note  = \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($texts['note']);
         return [
             $field_id . '_begin' => [
                 'label'          => $title,
@@ -442,7 +442,7 @@ class SignatureField extends BaseField
         return [$field_id . '_signed' => [
             'label' => $label !== '' ? $label : __('Signed on', 'formfabricator'),
             'type'  => 'text',
-            'value' => \FabricatorForms\Utils\SigningTime::format(),
+            'value' => \FabricatorForms\Utils\Text\SigningTime::format(),
         ]];
     }
 

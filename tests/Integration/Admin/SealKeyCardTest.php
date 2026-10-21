@@ -304,7 +304,7 @@ final class SealKeyCardTest extends AjaxTestCase
     private function sealKeyNotice(): string
     {
         ob_start();
-        \FabricatorForms\Plugin::maybeWarnSealKeyUnusable();
+        \FabricatorForms\Admin\Notices::maybeWarnSealKeyUnusable();
         return (string) ob_get_clean();
     }
 

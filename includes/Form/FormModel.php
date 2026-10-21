@@ -113,14 +113,14 @@ class FormModel
     public static function save(array $data, int $form_id = 0, string $expected_snapshot = ''): int|\WP_Error
     {
         // Defense-in-depth: don't rely solely on callers remembering to gate on edit_forms.
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_forms')) {
             return new \WP_Error('forbidden', __('Insufficient permissions.', 'formfabricator'));
         }
 
         // The snapshot check and the write that follows have to be one step, or two saves landing at the same moment
         // both read the same unchanged timestamp, both pass, and the later one silently overwrites the earlier.
         if ($form_id > 0 && $expected_snapshot !== '') {
-            return \FabricatorForms\Utils\OptionMutex::run(
+            return \FabricatorForms\Utils\Storage\OptionMutex::run(
                 'fabricator_form_save_' . $form_id,
                 static fn() => self::writeForm($form_id, $data, $expected_snapshot)
             );
@@ -234,7 +234,7 @@ class FormModel
     // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a method named delete(), not the filesystem function.
     public static function delete(int $form_id): bool
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms') && !current_user_can('manage_options')) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_forms') && !current_user_can('manage_options')) {
             return false;
         }
         if (get_post_type($form_id) !== 'fabricator_form') {
@@ -250,7 +250,7 @@ class FormModel
      */
     public static function getAll(): array
     {
-        if (!\FabricatorForms\Plugin::userCan('view_forms')) {
+        if (!\FabricatorForms\Capabilities::userCan('view_forms')) {
             return [];
         }
         // Read a page at a time rather than posts_per_page => -1: an unbounded query loads every form in one go, which
@@ -301,7 +301,7 @@ class FormModel
             return;
         }
         // Under OptionMutex, like FormEditor::ajaxSave(): a form saved at the same moment rewrites this option too.
-        \FabricatorForms\Utils\OptionMutex::run(
+        \FabricatorForms\Utils\Storage\OptionMutex::run(
             'fabricator_forms_pdf_settings',
             static function () use ($post_id): void {
                 $saved = get_option('fabricator_forms_pdf_settings', []);

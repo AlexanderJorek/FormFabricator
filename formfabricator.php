@@ -36,14 +36,14 @@ if (!file_exists($fabricator_composer_autoload)) {
             . '</p></div>';
         }
     );
-    // Bail out — without the autoloader, Plugin.php's Composer-vendored deps would fatal.
+    // Bail out — without the autoloader, the plugin's classes and its Composer-vendored deps would fatal.
     return;
 }
 include_once $fabricator_composer_autoload;
 
-// Composer's autoloader finds the plugin's own classes too (PSR-4, FabricatorForms\ => includes/). Plugin.php is
-// required explicitly because it also defines fabricator_log(), a function no autoloader finds.
-require_once FABRICATOR_FORMS_PATH . 'includes/Plugin.php';
+// Composer's autoloader finds the plugin's own classes too (PSR-4, FabricatorForms\ => includes/). functions.php is
+// required explicitly: it defines fabricator_log(), a function no autoloader finds.
+require_once FABRICATOR_FORMS_PATH . 'includes/functions.php';
 
 // No load_plugin_textdomain(): core loads the translation itself, and calling it here triggers _doing_it_wrong().
 add_action(

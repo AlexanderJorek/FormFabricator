@@ -163,16 +163,16 @@ final class SettingsSaveTest extends AjaxTestCase
         self::assertSame([$member], array_keys(get_option('fabricator_forms_access')['users']), 'only this site\'s member is saved');
 
         // Removing the member from the site ends the grant, though the stored list still names them.
-        self::assertTrue(\FabricatorForms\Plugin::userCan('edit_forms', $member));
+        self::assertTrue(\FabricatorForms\Capabilities::userCan('edit_forms', $member));
         remove_user_from_blog($member, get_current_blog_id());
-        self::assertFalse(\FabricatorForms\Plugin::userCan('edit_forms', $member));
+        self::assertFalse(\FabricatorForms\Capabilities::userCan('edit_forms', $member));
 
-        // The list reaches the page as the settings script's localized data.
-        wp_register_script('fabricator-forms-admin-settings', false, [], '1');
+        // The list reaches the page as the access script's localized data.
+        wp_register_script('fabricator-forms-admin-settings-access', false, [], '1');
         ob_start();
         FormSettings::renderSettingsPage();
         ob_end_clean();
-        $data = (string) wp_scripts()->get_data('fabricator-forms-admin-settings', 'data');
+        $data = (string) wp_scripts()->get_data('fabricator-forms-admin-settings-access', 'data');
         self::assertStringContainsString('Unknown user (#' . $member . ')', $data, 'no longer named to this site\'s admin');
         self::assertStringNotContainsString('Member Mia', $data);
     }

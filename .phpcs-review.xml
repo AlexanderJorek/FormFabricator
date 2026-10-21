@@ -9,11 +9,10 @@
         A release gate: zero findings. Usage: vendor/bin/phpcs --standard=.phpcs-review.xml
     </description>
 
-    <!-- What the package ships; _ExampleField.php is left out of it (tools/build-config.php). -->
+    <!-- What the package ships. -->
     <file>formfabricator.php</file>
     <file>uninstall.php</file>
     <file>includes</file>
-    <exclude-pattern>includes/Fields/_ExampleField.php</exclude-pattern>
 
     <arg name="ignore-annotations"/>
 

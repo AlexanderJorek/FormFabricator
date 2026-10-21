@@ -63,12 +63,12 @@ class FormSelectList
      */
     public static function menu(): void
     {
-        if (\FabricatorForms\Plugin::userCan('edit_forms')) {
+        if (\FabricatorForms\Capabilities::userCan('edit_forms')) {
             add_submenu_page(
                 'fabricator-forms',
                 __('Form Selection', 'formfabricator'),
                 __('Form Selection', 'formfabricator'),
-                \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'edit_forms',
+                \FabricatorForms\Capabilities::ACCESS_CAP_PREFIX . 'edit_forms',
                 'fabricator-forms-select',
                 [self::class, 'render']
             );
@@ -86,7 +86,7 @@ class FormSelectList
      */
     public static function render(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_forms')) {
             wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
@@ -314,7 +314,7 @@ class FormSelectList
      */
     public static function ajaxSave(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
         check_ajax_referer('fabricator_fsel_save', 'nonce');
 
         $id        = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
@@ -355,7 +355,7 @@ class FormSelectList
      */
     public static function ajaxDelete(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
         $id = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
         check_ajax_referer('fabricator_fsel_delete_' . $id, 'nonce');
 

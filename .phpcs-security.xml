@@ -19,6 +19,8 @@
     <file>languages/compile-mo.php</file>
     <file>languages/make-pot.php</file>
     <file>tools</file>
+    <!-- The example field: a template new fields are copied from, so it holds the shipped code's bar. -->
+    <file>docs/examples</file>
 
     <exclude-pattern>vendor/*</exclude-pattern>
     <exclude-pattern>assets/*</exclude-pattern>

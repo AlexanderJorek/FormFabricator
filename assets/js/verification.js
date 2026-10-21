@@ -33,7 +33,7 @@ function _fabricatorCreateProgressCard(name) {
     return card;
 }
 
-/* The card of a file that could not be checked: the same markup as Verificationpage::problemCardHtml(), so a failure
+/* The card of a file that could not be checked: the same markup as VerificationPage::problemCardHtml(), so a failure
    reads alike whether the server or this script met it. Text nodes only. */
 function _fabricatorProblemCard(name, message) {
     var i18n = (window.FabricatorVerifier && window.FabricatorVerifier.i18n) || {};
@@ -73,7 +73,7 @@ function _fabricatorUpdateCard(card, step, pct) {
     if (p) p.textContent = Math.round(shown) + ' %';
 }
 
-/* ── Queue of PDFs to verify, localized once by Verificationpage.php's upload handler. ── */
+/* ── Queue of PDFs to verify, localized once by VerificationPage.php's upload handler. ── */
 window.FABRICATOR_VERIFICATION_QUEUE = window.FabricatorVerifierQueueData || [];
 
 /* Staggers server calls to match the 1-per-5s rate limit; slots reserved by start time, not chained after responses. */
@@ -300,7 +300,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
         done();
 
         if (json.success === true && json.data && typeof json.data.html === 'string') {
-            // Escaped server-side (Verificationpage.php).
+            // Escaped server-side (VerificationPage.php).
             const tmp = document.createElement('div');
             tmp.innerHTML = json.data.html;
             card.parentNode.replaceChild(tmp.firstElementChild || tmp, card);

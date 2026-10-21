@@ -21,7 +21,7 @@ defined('ABSPATH') || exit;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\PDF\PdfUtils;
 
-/* The two AJAX endpoints below are hooked in Verificationpage::register(), not when this file is included. */
+/* The two AJAX endpoints below are hooked in VerificationPage::register(), not when this file is included. */
 
 /**
  * AJAX: verifies one stored PDF against its seal and returns the rendered result.
@@ -33,7 +33,7 @@ use FabricatorForms\PDF\PdfUtils;
 function fabricator_ajax_verify_push_lines(): void
 {
     /* ---- Capability + Nonce ---- */
-    \FabricatorForms\Utils\AjaxGuard::capability(
+    \FabricatorForms\Utils\Security\AjaxGuard::capability(
         'use_verifier',
         __('Forbidden', 'formfabricator'),
         'FabricatorForms fabricator_verify_push_lines: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.'
@@ -41,7 +41,7 @@ function fabricator_ajax_verify_push_lines(): void
     check_ajax_referer('fabricator_verifier_nonce', 'nonce');
 
     // The page is still working through its batch: keep this user's waiting copies.
-    \FabricatorForms\Utils\VerifierCleanup::refreshPending();
+    \FabricatorForms\Utils\Storage\VerifierCleanup::refreshPending();
 
     /* ---- Hard limits for heavy PDF parsing, raised only after the auth checks (the soft budget aborts first) ---- */
     // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.IniSet.Risky -- resource-limit raise for heavy PDF parsing of uploaded files; scans are linear and the parse-time budget bounds the rest.
@@ -56,7 +56,7 @@ function fabricator_ajax_verify_push_lines(): void
 
     /* ---- Rate limit: bounds self-DoS from repeated raised-limit requests ---- */
     $rl_key = 'verify_' . get_current_user_id();
-    if (\FabricatorForms\Utils\RateLimiter::increment($rl_key, 5) > 1) {
+    if (\FabricatorForms\Utils\Security\RateLimiter::increment($rl_key, 5) > 1) {
         \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rate-limited user ' . get_current_user_id() . '.');
         wp_send_json_error(['message' => __('Please wait before verifying another PDF.', 'formfabricator')], 429);
     }
@@ -83,7 +83,7 @@ function fabricator_ajax_verify_push_lines(): void
     }
     $target_path = $pdf_transient['path'];
 
-    $safe_dir     = \FabricatorForms\Utils\PrivateDir::base();
+    $safe_dir     = \FabricatorForms\Utils\Storage\PrivateDir::base();
     $verfiles_dir = $safe_dir . '/verfiles';
 
     /* ---- Path-traversal guard ---- */
@@ -109,11 +109,11 @@ function fabricator_ajax_verify_push_lines(): void
 
     // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- the copy in the plugin's folder, checked above.
     $file_size = filesize($real_target_path);
-    if ($file_size > Verificationpage::MAX_PDF_BYTES) {
+    if ($file_size > VerificationPage::MAX_PDF_BYTES) {
         \FabricatorForms\fabricator_log(
             'FabricatorForms fabricator_verify_push_lines: rejected — stored file is '
             . round($file_size / 1048576, 1) . 'MB, exceeds MAX_PDF_BYTES ('
-            . round(Verificationpage::MAX_PDF_BYTES / 1048576) . 'MB).'
+            . round(VerificationPage::MAX_PDF_BYTES / 1048576) . 'MB).'
         );
         wp_send_json_error(
             [
@@ -121,7 +121,7 @@ function fabricator_ajax_verify_push_lines(): void
                 /* translators: %1$s: file size in MB, %2$d: maximum accepted size in MB */
                 __('PDF too large (%1$s MB). Maximum for verification is %2$d MB.', 'formfabricator'),
                 round($file_size / 1048576, 1),
-                (int) round(Verificationpage::MAX_PDF_BYTES / 1048576)
+                (int) round(VerificationPage::MAX_PDF_BYTES / 1048576)
             ),
             ],
             400
@@ -129,8 +129,8 @@ function fabricator_ajax_verify_push_lines(): void
     }
 
     /* ---- Reserve memory for the PDF's real size, from the budget public submissions share ---- */
-    $fabricator_mem_estimate = \FabricatorForms\Utils\MemoryBudget::estimateBytes($file_size);
-    $fabricator_mem_budget   = \FabricatorForms\Utils\MemoryBudget::budgetBytes();
+    $fabricator_mem_estimate = \FabricatorForms\Utils\Security\MemoryBudget::estimateBytes($file_size);
+    $fabricator_mem_budget   = \FabricatorForms\Utils\Security\MemoryBudget::budgetBytes();
     // Logs and answers a reservation that doesn't fit; wp_send_json_error() ends the request.
     $fabricator_refuse_memory = static function (int $needed) use ($fabricator_mem_budget): void {
         $fabricator_needed_mb = (int) round($needed / 1048576);
@@ -138,7 +138,7 @@ function fabricator_ajax_verify_push_lines(): void
         \FabricatorForms\fabricator_log(
             'FabricatorForms fabricator_verify_push_lines: rejected — memory budget unavailable (needed '
             . $fabricator_needed_mb . 'MB, budget ' . $fabricator_budget_mb . 'MB, '
-            . (int) round(\FabricatorForms\Utils\MemoryBudget::reservedBytes() / 1048576) . 'MB already reserved).'
+            . (int) round(\FabricatorForms\Utils\Security\MemoryBudget::reservedBytes() / 1048576) . 'MB already reserved).'
         );
         /* A job larger than the entire budget will never succeed no matter how long the user
            waits, so say that instead of inviting a pointless retry. */
@@ -161,7 +161,7 @@ function fabricator_ajax_verify_push_lines(): void
     };
     // Always a slot, however small the file: a check parses the whole PDF, so its cost doesn't follow the size the way a
     // submission's does, and without a slot every PDF up to 8 MB ran uncounted, so MAX_HOLDERS never limited them.
-    $fabricator_mem_token = \FabricatorForms\Utils\MemoryBudget::reserve($fabricator_mem_estimate, 900, true);
+    $fabricator_mem_token = \FabricatorForms\Utils\Security\MemoryBudget::reserve($fabricator_mem_estimate, 900, true);
     if ($fabricator_mem_token === false) {
         $fabricator_refuse_memory($fabricator_mem_estimate);
     }
@@ -171,12 +171,12 @@ function fabricator_ajax_verify_push_lines(): void
     register_shutdown_function(
         static function () use (&$fabricator_mem_token): void {
             if (is_string($fabricator_mem_token)) {
-                \FabricatorForms\Utils\MemoryBudget::releaseReservation($fabricator_mem_token);
+                \FabricatorForms\Utils\Security\MemoryBudget::releaseReservation($fabricator_mem_token);
             }
         }
     );
     // Not restored: this handler always ends the request via wp_send_json_*().
-    \FabricatorForms\Utils\MemoryBudget::raiseTo($fabricator_mem_estimate);
+    \FabricatorForms\Utils\Security\MemoryBudget::raiseTo($fabricator_mem_estimate);
 
     // A small file can unpack to far more than its size (CWE-409): reserve what its streams inflate to, plus slack,
     // before anything is unpacked. The reader stays within that allowance (GuardedRawDataParser).
@@ -184,13 +184,13 @@ function fabricator_ajax_verify_push_lines(): void
     $fabricator_inflated  = PdfUtils::inflatedStreamBytes((string) file_get_contents($real_target_path), $fabricator_mem_budget);
     $fabricator_allowance = $fabricator_inflated + max(16 * 1024 * 1024, intdiv($fabricator_inflated, 4));
     if ($fabricator_inflated > 0) {
-        \FabricatorForms\Utils\MemoryBudget::releaseReservation($fabricator_mem_token);
+        \FabricatorForms\Utils\Security\MemoryBudget::releaseReservation($fabricator_mem_token);
         $fabricator_mem_estimate += $fabricator_allowance;
-        $fabricator_mem_token     = \FabricatorForms\Utils\MemoryBudget::reserve($fabricator_mem_estimate, 900, true);
+        $fabricator_mem_token     = \FabricatorForms\Utils\Security\MemoryBudget::reserve($fabricator_mem_estimate, 900, true);
         if ($fabricator_mem_token === false) {
             $fabricator_refuse_memory($fabricator_mem_estimate);
         }
-        \FabricatorForms\Utils\MemoryBudget::raiseTo($fabricator_mem_estimate);
+        \FabricatorForms\Utils\Security\MemoryBudget::raiseTo($fabricator_mem_estimate);
     }
 
     // The check runs now, whatever its outcome, so its copy and the images taken from it go when this request ends
@@ -198,7 +198,7 @@ function fabricator_ajax_verify_push_lines(): void
     // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions,PHPCS_SecurityAudit.BadFunctions.FunctionHandlingFunctions.WarnFunctionHandling -- the plugin's own cleanup, a fixed callback.
     register_shutdown_function(
         static function () use ($real_target_path, $pdf_token): void {
-            Verificationpage::discardCheckedCopy($real_target_path, $pdf_token);
+            VerificationPage::discardCheckedCopy($real_target_path, $pdf_token);
         }
     );
 
@@ -213,17 +213,17 @@ function fabricator_ajax_verify_push_lines(): void
 
     /* ---- The report ---- */
     try {
-        $raw_html = Verificationpage::handleUpload($file, $pdf_token, $fabricator_allowance);
+        $raw_html = VerificationPage::handleUpload($file, $pdf_token, $fabricator_allowance);
     } catch (\Throwable $ajax_err) {
-        $fabricator_failure = Verificationpage::reportInternalFailure(
+        $fabricator_failure = VerificationPage::reportInternalFailure(
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() of the plugin's own source file, for the log.
             'handleUpload threw ' . get_class($ajax_err) . ': ' . $ajax_err->getMessage() . ' at ' . basename($ajax_err->getFile()) . ':' . $ajax_err->getLine()
         );
-        $raw_html = Verificationpage::problemCardHtml(sanitize_file_name((string) $file['name']), $fabricator_failure, true);
+        $raw_html = VerificationPage::problemCardHtml(sanitize_file_name((string) $file['name']), $fabricator_failure, true);
     }
 
     if ($raw_html === '') {
-        wp_send_json_error(['message' => Verificationpage::reportInternalFailure('handleUpload produced no report')], 500);
+        wp_send_json_error(['message' => VerificationPage::reportInternalFailure('handleUpload produced no report')], 500);
         return;
     }
 
@@ -231,15 +231,15 @@ function fabricator_ajax_verify_push_lines(): void
     try {
         $safe_html = fabricator_sanitize_verifier_html($raw_html);
     } catch (\Throwable $san_err) {
-        wp_send_json_error(['message' => Verificationpage::reportInternalFailure('fabricator_sanitize_verifier_html threw ' . get_class($san_err) . ': ' . $san_err->getMessage())], 500);
+        wp_send_json_error(['message' => VerificationPage::reportInternalFailure('fabricator_sanitize_verifier_html threw ' . get_class($san_err) . ': ' . $san_err->getMessage())], 500);
         return;
     }
 
     if ($safe_html === '') {
         // wp_kses() left nothing of a report this plugin wrote: an internal failure, shown as such.
-        $safe_html = Verificationpage::problemCardHtml(
+        $safe_html = VerificationPage::problemCardHtml(
             sanitize_file_name((string) $file['name']),
-            Verificationpage::reportInternalFailure('the report was sanitized to nothing (raw length ' . strlen($raw_html) . ')'),
+            VerificationPage::reportInternalFailure('the report was sanitized to nothing (raw length ' . strlen($raw_html) . ')'),
             true
         );
     }
@@ -266,13 +266,13 @@ function fabricator_ajax_verify_push_lines(): void
 function fabricator_ajax_verify_progress(): void
 {
     // Capability first, as in the other verifier handlers.
-    if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
+    if (!\FabricatorForms\Capabilities::userCan('use_verifier')) {
         \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_progress: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
         wp_send_json_error([], 403);
     }
     check_ajax_referer('fabricator_verifier_nonce', 'nonce');
     // Polled throughout a check, so a batch keeps its waiting copies for as long as the page is open.
-    \FabricatorForms\Utils\VerifierCleanup::refreshPending();
+    \FabricatorForms\Utils\Storage\VerifierCleanup::refreshPending();
     $key  = isset($_POST['token']) ? sanitize_key(wp_unslash($_POST['token'])) : '';
     $data = $key ? get_transient('fabricator_vp_' . $key) : false;
     if ($data && (int)($data['uid'] ?? -1) !== get_current_user_id()) {
@@ -380,7 +380,7 @@ function fabricator_sanitize_verifier_html(string $html): string
 /**
  * Admin page for uploading and verifying PDF seal signatures.
  */
-final class Verificationpage
+final class VerificationPage
 {
     /**
      * Registers the verification page's menu entry, its body class and its AJAX actions.
@@ -413,7 +413,7 @@ final class Verificationpage
      */
     private static function relativeTempPath(string $absolute): string
     {
-        $base = \FabricatorForms\Utils\PrivateDir::base();
+        $base = \FabricatorForms\Utils\Storage\PrivateDir::base();
         $norm = str_replace(chr(92), '/', $absolute);
         $base = rtrim(str_replace(chr(92), '/', $base), '/') . '/';
         if (strncmp($norm, $base, strlen($base)) !== 0) {
@@ -445,12 +445,12 @@ final class Verificationpage
      */
     public static function menu(): void
     {
-        if (\FabricatorForms\Plugin::userCan('use_verifier')) {
+        if (\FabricatorForms\Capabilities::userCan('use_verifier')) {
             $hook = add_submenu_page(
                 'fabricator-forms',
                 __('FormFabricator Verification', 'formfabricator'),
                 __('PDF Verification', 'formfabricator'),
-                \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'use_verifier',
+                \FabricatorForms\Capabilities::ACCESS_CAP_PREFIX . 'use_verifier',
                 'fabricator-pdf-verification',
                 [self::class, 'render']
             );
@@ -482,15 +482,15 @@ final class Verificationpage
             return;
         }
         // This handles file uploads to disk, so it re-checks explicitly rather than relying solely on the page's capability.
-        if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
-            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage::handleUploadPost: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
+        if (!\FabricatorForms\Capabilities::userCan('use_verifier')) {
+            \FabricatorForms\fabricator_log('FabricatorForms VerificationPage::handleUploadPost: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
             wp_die(esc_html__('Insufficient permissions.', 'formfabricator'), '', ['response' => 403]);
         }
         // Nonce is the unconditional first gate — before touching any $_FILES.
         if (!isset($_POST['fabricator_verifier_nonce'])
             || !check_admin_referer('fabricator_verifier_upload', 'fabricator_verifier_nonce')
         ) {
-            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage::handleUploadPost: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
+            \FabricatorForms\fabricator_log('FabricatorForms VerificationPage::handleUploadPost: rejected — nonce verification failed (user ' . get_current_user_id() . ').');
             wp_die(esc_html__('Security check failed', 'formfabricator'), 'Error', ['response' => 403]);
         }
 
@@ -502,12 +502,12 @@ final class Verificationpage
         $stored_tokens      = [];
         if (!empty($_FILES['pdfs']['name'][0])) {
             // Process uploaded files
-            $safe_dir = \FabricatorForms\Utils\PrivateDir::base();
+            $safe_dir = \FabricatorForms\Utils\Storage\PrivateDir::base();
 
             // Ensure directories exist with restricted permissions.
             // No '/log': nothing ever writes there, and an empty directory in the uploads folder is one more thing to guard.
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-            \FabricatorForms\Utils\SecureDir::harden($safe_dir, array_map(static fn($sub) => $safe_dir . $sub, ['', '/verfiles']));
+            \FabricatorForms\Utils\Storage\SecureDir::harden($safe_dir, array_map(static fn($sub) => $safe_dir . $sub, ['', '/verfiles']));
 
             $verfiles_dir = $safe_dir . '/verfiles';
 
@@ -524,7 +524,7 @@ final class Verificationpage
             $max_files = max(1, (int)(ini_get('max_file_uploads') ?: 20));
             if (count($uploaded_tmp_names) > $max_files) {
                 \FabricatorForms\fabricator_log(
-                    'FabricatorForms Verificationpage::handleUploadPost: batch upload truncated — '
+                    'FabricatorForms VerificationPage::handleUploadPost: batch upload truncated — '
                     . count($uploaded_tmp_names) . ' files submitted, max_file_uploads limit is ' . $max_files . '.'
                 );
                 $notices[] = [
@@ -543,7 +543,7 @@ final class Verificationpage
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- PHP's upload temp file, checked with is_uploaded_file().
                 if (!is_readable($tmpName) || !is_uploaded_file($tmpName)) {
                     \FabricatorForms\fabricator_log(
-                        'FabricatorForms Verificationpage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name)
+                        'FabricatorForms VerificationPage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name)
                         . ' — failed is_uploaded_file()/is_readable() check (possible spoofed or malformed multipart entry).'
                     );
                     $rejected[] = [$original_name, __('The upload could not be read.', 'formfabricator'), true];
@@ -554,7 +554,7 @@ final class Verificationpage
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- PHP's upload temp file, checked with is_uploaded_file().
                 if (filesize($tmpName) > $max_upload_bytes) {
                     \FabricatorForms\fabricator_log(
-                        'FabricatorForms Verificationpage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name) . ' — '
+                        'FabricatorForms VerificationPage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name) . ' — '
                         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- PHP's upload temp file, checked with is_uploaded_file().
                         . round(filesize($tmpName) / 1048576, 1) . 'MB exceeds ' . round($max_upload_bytes / 1048576) . 'MB limit.'
                     );
@@ -575,7 +575,7 @@ final class Verificationpage
 
                 if (($type_check['ext'] ?? '') !== 'pdf') {
                     \FabricatorForms\fabricator_log(
-                        'FabricatorForms Verificationpage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name)
+                        'FabricatorForms VerificationPage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name)
                         . ' — wp_check_filetype_and_ext() did not resolve to pdf (ext: '
                         . ($type_check['ext'] ?? '(none)') . ', type: ' . ($type_check['type'] ?? '(none)') . ').'
                     );
@@ -587,7 +587,7 @@ final class Verificationpage
                 $detected_mime = $finfo->file($tmpName);
                 if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
                     \FabricatorForms\fabricator_log(
-                        'FabricatorForms Verificationpage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name)
+                        'FabricatorForms VerificationPage::handleUploadPost: upload skipped for ' . \FabricatorForms\fabricator_log_file((string) $original_name)
                         . ' — finfo MIME re-check detected "' . $detected_mime . '" instead of application/pdf.'
                     );
                     $rejected[] = [$original_name, __('This file is not a PDF.', 'formfabricator'), false];
@@ -598,7 +598,7 @@ final class Verificationpage
 
                 if ($safe_name === '' || !preg_match('/\.pdf$/i', $safe_name)) {
                     \FabricatorForms\fabricator_log(
-                        'FabricatorForms Verificationpage::handleUploadPost: upload skipped — '
+                        'FabricatorForms VerificationPage::handleUploadPost: upload skipped — '
                         . \FabricatorForms\fabricator_log_file((string) $original_name) . ' is not a valid .pdf name.'
                     );
                     $rejected[] = [$original_name, __('The file name does not end in .pdf.', 'formfabricator'), false];
@@ -621,7 +621,7 @@ final class Verificationpage
                     set_transient(
                         'fabricator_pdf_' . $token,
                         ['path' => $target_path, 'uid' => get_current_user_id()],
-                        \FabricatorForms\Utils\VerifierCleanup::UNUSED_TTL
+                        \FabricatorForms\Utils\Storage\VerifierCleanup::UNUSED_TTL
                     );
                     $stored_tokens[] = $token;
 
@@ -635,7 +635,7 @@ final class Verificationpage
             }
         }
 
-        \FabricatorForms\Utils\VerifierCleanup::trackPending($stored_tokens);
+        \FabricatorForms\Utils\Storage\VerifierCleanup::trackPending($stored_tokens);
 
         set_transient(
             self::BATCH_TRANSIENT_PREFIX . get_current_user_id(),
@@ -654,8 +654,8 @@ final class Verificationpage
     public static function render(): void
     {
         // This handles file uploads to disk, so it re-checks explicitly rather than relying solely on admin_menu's submenu registration.
-        if (!\FabricatorForms\Plugin::userCan('use_verifier')) {
-            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage::render: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
+        if (!\FabricatorForms\Capabilities::userCan('use_verifier')) {
+            \FabricatorForms\fabricator_log('FabricatorForms VerificationPage::render: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
             wp_die(esc_html__('Insufficient permissions.', 'formfabricator'), '', ['response' => 403]);
         }
         echo '<canvas id="fabricator-particle-canvas" aria-hidden="true"></canvas>';
@@ -1049,9 +1049,9 @@ final class Verificationpage
         }
 
         // The protected folder the checks write their images to.
-        $safe_dir = \FabricatorForms\Utils\PrivateDir::base();
+        $safe_dir = \FabricatorForms\Utils\Storage\PrivateDir::base();
 
-        \FabricatorForms\Utils\SecureDir::harden($safe_dir, [$safe_dir]);
+        \FabricatorForms\Utils\Storage\SecureDir::harden($safe_dir, [$safe_dir]);
 
         self::setProgress(__('Byte scan: searching for seal…', 'formfabricator'), 5);
 
@@ -1128,7 +1128,7 @@ final class Verificationpage
         } catch (\Exception $e) {
             // pdfparser throws for a file whose structure it can't follow (no startxref, a broken cross-reference
             // table, undecodable data): the file is damaged, which the reader is told, not an error of this plugin.
-            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: pdfparser refused the file: ' . get_class($e) . ': ' . $e->getMessage());
+            \FabricatorForms\fabricator_log('FabricatorForms VerificationPage: pdfparser refused the file: ' . get_class($e) . ': ' . $e->getMessage());
             if (str_contains($e->getMessage(), 'Object list not found') || str_contains($e->getMessage(), 'Secured pdf')) {
                 throw new \RuntimeException('Object list not found.');
             }
@@ -2026,7 +2026,7 @@ final class Verificationpage
                             $vr    = HashSeal::verify($rp, (string)($sd['seal'] ?? ''));
                             $is_ok = $vr['valid'];
                         } catch (\Throwable $sve) {
-                            \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: seal HMAC check threw: ' . $sve->getMessage());
+                            \FabricatorForms\fabricator_log('FabricatorForms VerificationPage: seal HMAC check threw: ' . $sve->getMessage());
                             $is_ok     = false;
                             $parse_err = __('The seal check could not be completed.', 'formfabricator');
                         }
@@ -2551,12 +2551,12 @@ final class Verificationpage
 
 
             // The image output directory (HTTP-blocked), prepared once for the whole walk.
-            $safe_dir   = \FabricatorForms\Utils\PrivateDir::base();
+            $safe_dir   = \FabricatorForms\Utils\Storage\PrivateDir::base();
             $ver_dir    = $safe_dir . '/verimages';
             // Random per request, so whoever made the PDF can't predict the image file names.
             $verimage_prefix = bin2hex(random_bytes(12));
 
-            \FabricatorForms\Utils\SecureDir::harden($safe_dir, [$safe_dir, $ver_dir]);
+            \FabricatorForms\Utils\Storage\SecureDir::harden($safe_dir, [$safe_dir, $ver_dir]);
 
             // Shared by every level of the walk. nested_bytes bounds the nested scans in total: $visited only stops
             // cycles along one path.
@@ -3364,7 +3364,7 @@ final class Verificationpage
                 $sm_over_cap = $sm_width > 20000 || $sm_height > 20000
                     || $sm_width * $sm_height > (int) (PdfUtils::maxSafePixels() / 2);
                 if ($sm_over_cap) {
-                    \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: soft mask ' . $sm_num . ' declares ' . $sm_width . 'x' . $sm_height . ' pixels; not decoded.');
+                    \FabricatorForms\fabricator_log('FabricatorForms VerificationPage: soft mask ' . $sm_num . ' declares ' . $sm_width . 'x' . $sm_height . ' pixels; not decoded.');
                 } elseif (preg_match('/stream\r?\n(.*?)\r?\nendstream/s', $sm_body, $_sm_s)) {
                     $sm_raw  = $_sm_s[1];
                     $sm_data = $sm_raw;
@@ -3476,7 +3476,7 @@ final class Verificationpage
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- an image file in the plugin's folder, named from hashes.
         if (!file_exists($imgFile)) {
             if ($ext === 'jpg') {
-                \FabricatorForms\Utils\SecureDir::putFile($imgFile, $decoded);
+                \FabricatorForms\Utils\Storage\SecureDir::putFile($imgFile, $decoded);
             } else {
                 $im = imagecreatetruecolor($width, $height);
                 // Enable alpha so the SMask can be written as transparency.
@@ -4195,7 +4195,7 @@ final class Verificationpage
         $raw_msg = $e->getMessage();
         // The file name is logged here rather than carried in the exception: messages stay constant strings.
         $log_file = \FabricatorForms\fabricator_log_file($file_name);
-        \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: ' . $raw_msg . ' (' . $log_file . ')');
+        \FabricatorForms\fabricator_log('FabricatorForms VerificationPage: ' . $raw_msg . ' (' . $log_file . ')');
         // Plain text: the problem card escapes it and names the file in its header.
         $file_problem = match (true) {
             str_contains($raw_msg, 'PDF structure unreadable')
@@ -5123,7 +5123,7 @@ final class Verificationpage
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- this request's extracted images in the plugin's folder.
             if (file_exists($file)) {
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
-                \FabricatorForms\fabricator_log('FabricatorForms Verificationpage: could not remove ' . \FabricatorForms\fabricator_log_file(basename($file)) . ' after its check; the unused-copy cleanup retries.');
+                \FabricatorForms\fabricator_log('FabricatorForms VerificationPage: could not remove ' . \FabricatorForms\fabricator_log_file(basename($file)) . ' after its check; the unused-copy cleanup retries.');
             }
         }
     }
@@ -5160,7 +5160,7 @@ final class Verificationpage
         $height = (int) $info[1];
 
         // Half the actual headroom: GD costs more than w*h*4, and the caller still builds HTML.
-        $limit     = \FabricatorForms\Utils\MemoryBudget::phpMemoryLimitBytes();
+        $limit     = \FabricatorForms\Utils\Security\MemoryBudget::phpMemoryLimitBytes();
         $available = $limit > 0 ? max(0, $limit - memory_get_usage(true)) : PHP_INT_MAX;
         $headroom  = intdiv($available, 2);
 

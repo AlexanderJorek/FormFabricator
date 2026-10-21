@@ -5,7 +5,7 @@ namespace FabricatorForms\Tests\Integration;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\Tests\Integration\Support\PhpUnit10Compat;
 use FabricatorForms\Tests\Support\Overrides;
-use FabricatorForms\Utils\SingleUseToken;
+use FabricatorForms\Utils\Security\SingleUseToken;
 
 /**
  * Base case for tests that submit a form as the browser does, with the nonce and one-time token front.js fetches.

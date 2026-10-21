@@ -202,7 +202,7 @@ return [
                     $raw   = $el['content'] ?? $el['text'] ?? '{form_title}';
                     $raw   = str_replace('{form_title}', esc_html($title), $raw);
                     // WordPress's CSS filter keeps background-image:url(http://…) in a style attribute; remove it.
-                    $title_html = \FabricatorForms\Utils\HtmlSanitizer::stripRemoteResourcesForPdf(
+                    $title_html = \FabricatorForms\Utils\Text\HtmlSanitizer::stripRemoteResourcesForPdf(
                         wp_kses($raw, FABRICATOR_PDF_HEADER_TITLE_ALLOWED_TAGS)
                     );
                     $out_html .= '<div style="font-size:' . absint($fs) . 'pt;color:' . esc_attr($color)

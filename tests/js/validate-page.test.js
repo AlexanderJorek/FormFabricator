@@ -70,7 +70,7 @@ test('the first error message is written into the field', () => {
     assert.equal(el.querySelector('.fabricator-field-error').textContent, page.window.FabricatorForms.i18n.email_invalid);
 });
 
-/* What an answer may hold: front.js refuses what the server's Utils\AnswerText refuses, before anything is sent. */
+/* What an answer may hold: front.js refuses what the server's Utils\Text\AnswerText refuses, before anything is sent. */
 test('an answer is refused in the browser exactly where the server refuses it', () => {
     const disagreements = [];
     for (const [typed, oneLineOk, multiLineOk] of fixture.answerText) {

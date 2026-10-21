@@ -137,7 +137,7 @@ class Assets
                 'validation_both'         => __('Please fill in all required fields and correct the invalid entries.', 'formfabricator'),
                 'validation_required'     => __('Please fill in all required fields.', 'formfabricator'),
                 'validation_invalid'      => __('Please enter valid data.', 'formfabricator'),
-                // What an answer may hold (the same wording as Utils\AnswerText)
+                // What an answer may hold (the same wording as Utils\Text\AnswerText)
                 'answer_one_line'         => __('This answer can\'t hold line breaks or tabs. Please write it on one line.', 'formfabricator'),
                 // translators: %s: the character's code point, e.g. "U+200B" (substituted client-side).
                 'answer_invisible'        => __('This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it.', 'formfabricator'),
@@ -350,6 +350,42 @@ class Assets
     }
 
     /**
+     * The admin screens with a stylesheet of their own, after admin.css (what every screen shares): the end of the
+     * screen's hook suffix => its file in assets/css/. The verification page's is enqueued with its scripts.
+     *
+     * @var array<string, string>
+     */
+    private const SCREEN_STYLES = [
+        'fabricator-forms'            => 'admin-formlist.css',
+        'fabricator-forms-editor'     => 'admin-builder.css',
+        'fabricator-forms-select'     => 'admin-formselect.css',
+        'fabricator-forms-settings'   => 'admin-settings.css',
+        'fabricator-forms-pdf-layout' => 'admin-pdflayout.css',
+    ];
+
+    /**
+     * Enqueues the current admin screen's own stylesheet, if it has one, after admin.css.
+     *
+     * @param string $hook Current admin page hook suffix.
+     * @return void
+     */
+    private static function enqueueScreenStyle(string $hook): void
+    {
+        foreach (self::SCREEN_STYLES as $screen => $file) {
+            // The ending, not a substring: every screen's suffix contains "fabricator-forms".
+            if (str_ends_with($hook, $screen)) {
+                \wp_enqueue_style(
+                    'fabricator-forms-admin-screen',
+                    FABRICATOR_FORMS_URL . 'assets/css/' . $file,
+                    ['fabricator-forms-admin'],
+                    FABRICATOR_FORMS_VERSION
+                );
+                return;
+            }
+        }
+    }
+
+    /**
      * Enqueues admin CSS and JS for FormFabricator admin pages.
      *
      * @param string $hook Current admin page hook suffix.
@@ -367,14 +403,25 @@ class Assets
                 FABRICATOR_FORMS_VERSION
             );
             self::addAdminCssVars();
+            self::enqueueScreenStyle($hook);
 
             \wp_enqueue_style('wp-color-picker');
             \wp_enqueue_script('wp-color-picker');
 
+            // The builder's parts load first: admin-builder.js runs them at the end of its own script.
+            foreach (['controls', 'notifications', 'submit'] as $part) {
+                \wp_register_script(
+                    'fabricator-forms-builder-' . $part,
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-builder-' . $part . '.js',
+                    [],
+                    FABRICATOR_FORMS_VERSION,
+                    true
+                );
+            }
             \wp_enqueue_script(
                 'fabricator-forms-builder',
                 FABRICATOR_FORMS_URL . 'assets/js/admin-builder.js',
-                [],
+                ['fabricator-forms-builder-controls', 'fabricator-forms-builder-notifications', 'fabricator-forms-builder-submit'],
                 FABRICATOR_FORMS_VERSION,
                 true
             );
@@ -405,6 +452,7 @@ class Assets
                 FABRICATOR_FORMS_VERSION
             );
             self::addAdminCssVars();
+            self::enqueueScreenStyle($hook);
             if (str_ends_with($hook, 'fabricator-forms')) {
                 \wp_enqueue_script(
                     'fabricator-forms-editor-canvas',
@@ -452,8 +500,8 @@ class Assets
                     true
                 );
                 \wp_enqueue_script(
-                    'fabricator-forms-settings-lock',
-                    FABRICATOR_FORMS_URL . 'assets/js/admin-settings-lock.js',
+                    'fabricator-forms-admin-lock',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-lock.js',
                     ['jquery'],
                     FABRICATOR_FORMS_VERSION,
                     true
@@ -462,6 +510,20 @@ class Assets
                     'fabricator-forms-admin-settings',
                     FABRICATOR_FORMS_URL . 'assets/js/admin-settings.js',
                     ['jquery', 'wp-color-picker'],
+                    FABRICATOR_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'fabricator-forms-admin-settings-keys',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-settings-keys.js',
+                    [],
+                    FABRICATOR_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'fabricator-forms-admin-settings-access',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-settings-access.js',
+                    ['jquery'],
                     FABRICATOR_FORMS_VERSION,
                     true
                 );
@@ -475,8 +537,8 @@ class Assets
                     true
                 );
                 \wp_enqueue_script(
-                    'fabricator-forms-pdflayout-lock',
-                    FABRICATOR_FORMS_URL . 'assets/js/admin-pdflayout-lock.js',
+                    'fabricator-forms-admin-lock',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-lock.js',
                     ['jquery'],
                     FABRICATOR_FORMS_VERSION,
                     true
@@ -561,7 +623,7 @@ class Assets
                     'server_error'     => __('Server error (HTTP %d)', 'formfabricator'),
                     'network_error'    => __('Network error', 'formfabricator'),
                     'unknown_error'    => __('Unknown server error', 'formfabricator'),
-                    // The pill of a file that could not be checked, as Verificationpage::problemCardHtml() writes it.
+                    // The pill of a file that could not be checked, as VerificationPage::problemCardHtml() writes it.
                     'error_pill'       => __('Error', 'formfabricator'),
                 ],
                 ]

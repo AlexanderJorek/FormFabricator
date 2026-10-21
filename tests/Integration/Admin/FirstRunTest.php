@@ -2,9 +2,10 @@
 
 namespace FabricatorForms\Tests\Integration\Admin;
 
+use FabricatorForms\Admin\SealKeySettings;
+use FabricatorForms\Admin\Notices;
 use FabricatorForms\Admin\FormSettings;
 use FabricatorForms\PDF\HashSeal;
-use FabricatorForms\Plugin;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
 use PHPUnit\Framework\Attributes\Group;
 
@@ -137,7 +138,7 @@ final class FirstRunTest extends AjaxTestCase
         // A page load, not the AJAX request WP_Ajax_UnitTestCase pretends every test is.
         add_filter('wp_doing_ajax', '__return_false', 99);
         try {
-            Plugin::maybeSealSetupRedirect();
+            SealKeySettings::maybeSealSetupRedirect();
             return null;
         } catch (\RuntimeException $e) {
             return $e->getMessage();
@@ -152,7 +153,7 @@ final class FirstRunTest extends AjaxTestCase
     {
         wp_set_current_user(get_current_user_id() ?: self::factory()->user->create(['role' => 'administrator']));
         ob_start();
-        Plugin::maybeWarnSealKeyUnusable();
+        Notices::maybeWarnSealKeyUnusable();
         return (string) ob_get_clean();
     }
 

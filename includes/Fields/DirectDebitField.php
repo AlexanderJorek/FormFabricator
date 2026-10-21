@@ -80,7 +80,7 @@ class DirectDebitField extends BaseField
 
     /**
      * Adds the label-like keys to the plain-text allowlist; the mandate texts and notes stay excluded since their
-     * schema allows HTML (\FabricatorForms\Utils\HtmlSanitizer::sanitize()).
+     * schema allows HTML (\FabricatorForms\Utils\Text\HtmlSanitizer::sanitize()).
      *
      * @return string[]
      */
@@ -244,7 +244,7 @@ class DirectDebitField extends BaseField
         // A mandate without wording records a signature under empty terms, which is no valid mandate; until the text is
         // entered the field takes no details. The hint is for whoever can fix it, as in CaptchaField::render().
         if (!self::hasWording($terms)) {
-            $message = \FabricatorForms\Plugin::userCan('edit_forms')
+            $message = \FabricatorForms\Capabilities::userCan('edit_forms')
                 ? __("Direct Debit Mandate: enter the mandate text in this field's settings. Until then, visitors cannot give a mandate here.", 'formfabricator')
                 : __('Direct debits cannot be set up with this form at the moment.', 'formfabricator');
             return '<div class="fabricator-field fabricator-field--directdebit" data-field-id="' . esc_attr($field_id) . '">'
@@ -259,10 +259,10 @@ class DirectDebitField extends BaseField
         $html .= '<div class="fabricator-debit-mandate">';
         $html .= '<h3 class="fabricator-debit-title">' . esc_html($terms['title']) . '</h3>';
         if ($terms['text'] !== '') {
-            $html .= '<div class="fabricator-debit-text">' . wp_kses($terms['text'], \FabricatorForms\Utils\HtmlSanitizer::allowedTags()) . '</div>';
+            $html .= '<div class="fabricator-debit-text">' . wp_kses($terms['text'], \FabricatorForms\Utils\Text\HtmlSanitizer::allowedTags()) . '</div>';
         }
         if ($terms['note'] !== '') {
-            $html .= '<p class="fabricator-debit-note">' . wp_kses($terms['note'], \FabricatorForms\Utils\HtmlSanitizer::allowedTags()) . '</p>';
+            $html .= '<p class="fabricator-debit-note">' . wp_kses($terms['note'], \FabricatorForms\Utils\Text\HtmlSanitizer::allowedTags()) . '</p>';
         }
 
         foreach (self::parts($config) as $part) {
@@ -785,8 +785,8 @@ class DirectDebitField extends BaseField
         }
 
         $terms = $this->shownTerms($config, $scheme);
-        $body  = \FabricatorForms\Utils\HtmlSanitizer::plainText($terms['text']);
-        $note  = \FabricatorForms\Utils\HtmlSanitizer::plainText($terms['note']);
+        $body  = \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($terms['text']);
+        $note  = \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($terms['note']);
 
         $entries = [
             $field_id . '_begin' => [
@@ -824,7 +824,7 @@ class DirectDebitField extends BaseField
         $entries[$field_id . '_date'] = [
             'label' => self::configText($config, 'date_label', __('Date of signing', 'formfabricator')),
             'type'  => 'directdebit',
-            'value' => \FabricatorForms\Utils\SigningTime::format(),
+            'value' => \FabricatorForms\Utils\Text\SigningTime::format(),
         ];
 
         $sig_label = self::configText($config, 'sig_label', __('Signature', 'formfabricator'));
@@ -909,10 +909,10 @@ class DirectDebitField extends BaseField
         $prefix = $sepa ? 'mandate_' : $scheme . '_';
         return [
             'title'       => self::configText($config, $prefix . 'title', self::defaultTitle($scheme)),
-            'text'        => \FabricatorForms\Utils\HtmlSanitizer::sanitize(
+            'text'        => \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize(
                 self::configText($config, $prefix . 'text', $sepa ? $this->defaultMandateText() : '')
             ),
-            'note'        => \FabricatorForms\Utils\HtmlSanitizer::sanitize(
+            'note'        => \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize(
                 self::configText($config, $prefix . 'note', $sepa ? $this->defaultMandateNote() : '')
             ),
             'creditor_id' => self::configText($config, $sepa ? 'creditor_id' : $scheme . '_creditor_id', ''),
@@ -937,7 +937,7 @@ class DirectDebitField extends BaseField
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- a fixed pattern; PHP 8 has no /e modifier.
         $prefix = (string) preg_replace("#[^A-Za-z0-9/?:().,'+ -]#", '', $prefix);
         $prefix = rtrim(substr(trim($prefix), 0, 15), ' -');
-        // The UTC day, as the date of signing records it (Utils\SigningTime): both name the same day in the record.
+        // The UTC day, as the date of signing records it (Utils\Text\SigningTime): both name the same day in the record.
         $unique = wp_date('Ymd', null, new \DateTimeZone('UTC')) . '-' . strtoupper(bin2hex(random_bytes(5)));
         return $prefix !== '' ? $prefix . '-' . $unique : $unique;
     }
@@ -1019,7 +1019,7 @@ class DirectDebitField extends BaseField
      */
     private static function hasWording(array $terms): bool
     {
-        return \FabricatorForms\Utils\HtmlSanitizer::plainText($terms['text']) !== '' || \FabricatorForms\Utils\HtmlSanitizer::plainText($terms['note']) !== '';
+        return \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($terms['text']) !== '' || \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($terms['note']) !== '';
     }
 
     /**

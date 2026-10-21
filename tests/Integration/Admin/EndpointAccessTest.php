@@ -10,7 +10,7 @@ use FabricatorForms\Tests\Integration\AjaxTestCase;
  * a user granted one permission reaches exactly its endpoints, a Subscriber none.
  *
  * Calls carry no valid nonce, so nothing changes: a refused user stops at the capability check ("Forbidden"), an
- * allowed one at the nonce check, in Utils\AjaxGuard's order.
+ * allowed one at the nonce check, in Utils\Security\AjaxGuard's order.
  *
  * A new wp_ajax_fabricator_* action fails testEveryActionIsListed() until it is added to ACTIONS with its permission.
  */
@@ -67,7 +67,8 @@ final class EndpointAccessTest extends AjaxTestCase
         Admin\FormSelectList::init();
         Admin\FormSettings::init();
         Admin\PDFLayoutEditor::init();
-        Admin\Verificationpage::register();
+        Admin\VerificationPage::register();
+        \FabricatorForms\Utils\Storage\AdminLock::init();
     }
 
     // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- overrides WP_UnitTestCase's snake_case fixture method.
@@ -129,7 +130,7 @@ final class EndpointAccessTest extends AjaxTestCase
             'form selections' => [[Admin\FormSelectList::class, 'render'], 'edit_forms'],
             'settings'        => [[Admin\FormSettings::class, 'renderSettingsPage'], 'settings'],
             'PDF layout'      => [[Admin\PDFLayoutEditor::class, 'render'], 'edit_pdf_layout'],
-            'PDF verifier'    => [[Admin\Verificationpage::class, 'render'], 'use_verifier'],
+            'PDF verifier'    => [[Admin\VerificationPage::class, 'render'], 'use_verifier'],
         ];
         foreach ($this->profiles() as $profile => [$user, $holds]) {
             foreach ($screens as $screen => [$callback, $needs]) {
@@ -152,7 +153,7 @@ final class EndpointAccessTest extends AjaxTestCase
         $handlers = [
             'settings post'   => [[Admin\FormSettings::class, 'handleSettingsPost'], 'settings', 'fabricator_settings_nonce', 'fabricator_forms_settings'],
             'PDF layout post' => [[Admin\PDFLayoutEditor::class, 'handleLayoutPost'], 'edit_pdf_layout', 'fabricator_pdf_layout_nonce', 'fabricator_pdf_layout'],
-            'verifier upload' => [[Admin\Verificationpage::class, 'handleUploadPost'], 'use_verifier', 'fabricator_verifier_nonce', 'fabricator_verifier_upload'],
+            'verifier upload' => [[Admin\VerificationPage::class, 'handleUploadPost'], 'use_verifier', 'fabricator_verifier_nonce', 'fabricator_verifier_upload'],
         ];
         $_SERVER['REQUEST_METHOD'] = 'POST';
         $trap = static function (string $location): string {

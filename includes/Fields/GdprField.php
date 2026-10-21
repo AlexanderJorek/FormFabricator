@@ -219,7 +219,7 @@ class GdprField extends BaseField
             $policy_text,
             $policy_url,
             // The moment, unambiguous, as every signature and agreement records it.
-            \FabricatorForms\Utils\SigningTime::format()
+            \FabricatorForms\Utils\Text\SigningTime::format()
         );
     }
 

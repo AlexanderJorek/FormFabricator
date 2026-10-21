@@ -29,7 +29,7 @@
 
     /* ── Client-side validation ──────────────────────────────────────────── */
 
-    /* What an answer may hold, as Utils\AnswerText checks it on the server: an answer is recorded as typed or refused,
+    /* What an answer may hold, as Utils\Text\AnswerText checks it on the server: an answer is recorded as typed or refused,
        never changed. Refused are control and invisible format characters, line breaks and tabs outside a textarea, and
        HTML character references, which a page or email shows as the character they name. */
     var REFUSED_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
@@ -151,7 +151,7 @@
                 });
             }
 
-            /* 3 — What the answer holds: the server refuses the same (Utils\AnswerText) */
+            /* 3 — What the answer holds: the server refuses the same (Utils\Text\AnswerText) */
             if (untypedTypes.indexOf(type) === -1) {
                 var problem = fieldAnswerProblem(fieldEl, i18n);
                 if (problem) {
@@ -427,7 +427,7 @@
                     case 'contains':     return rv !== '' && (isArr
                         ? val.some(function (v) { return v.toLowerCase().indexOf(rv) !== -1; })
                         : str.indexOf(rv) !== -1);
-                    /* Empty value = half-configured rule: unsatisfied, matching FormProcessor::evalConditionRule(). */
+                    /* Empty value = half-configured rule: unsatisfied, matching ConditionRule::holds(). */
                     case 'not_contains': return rv !== '' && (isArr
                         ? val.every(function (v) { return v.toLowerCase().indexOf(rv) === -1; })
                         : str.indexOf(rv) === -1);
@@ -437,7 +437,7 @@
                        which is another way client and server disagreed on whether a field is visible. */
                     case 'greater':      { var a = asNumber(str), b = asNumber(rv); return a !== null && b !== null && a > b; }
                     case 'less':         { var a2 = asNumber(str), b2 = asNumber(rv); return a2 !== null && b2 !== null && a2 < b2; }
-                    /* Unsatisfied, like FormProcessor::evalConditionRule(): "true" showed a field the server then treated as hidden and dropped. */
+                    /* Unsatisfied, like ConditionRule::holds(): "true" showed a field the server then treated as hidden and dropped. */
                     default:             return false;
                 }
             }

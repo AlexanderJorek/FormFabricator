@@ -31,7 +31,7 @@ suite; on macOS and Linux, point `WP_TESTS_DB_*` at a database (see [Integration
 | What | Command |
 |---|---|
 | Unit + perf tests | `composer test` |
-| Integration tests (real WordPress + DB) | `composer test:integration` |
+| Integration tests (real WordPress + DB) | `php tools/integration.php`, or `composer test:integration` against a database you name |
 | JS tests | `npm test` |
 | E2E tests (Chromium, Firefox, WebKit) | `npm run test:e2e` (`php tools/e2e.php`) |
 | Style linter (PSR-1/PSR-2) | `vendor/bin/phpcs` |
@@ -77,14 +77,18 @@ The short version. Each point links to its full explanation.
 assets/                 CSS, JS front-end assets; assets/vendor/ holds the hand-vendored Font Awesome
 includes/               PHP plugin source (Admin, Fields, Form, PDF, Utils)
 includes/PDF/templates/ mPDF layout templates
+includes/Utils/         shared helpers: Security/ (request guards, CAPTCHA, limits), Storage/ (files, locks,
+                        options), Text/ (answers, sanitizers, signing time); Assets and Cast beside them
 languages/              .pot (ships), German .po/.mo and the translation tools (don't ship)
 vendor/                 Composer dependencies + the manually-vendored ALTCHA widget
 formfabricator.php      plugin entry point
 uninstall.php           cleanup on uninstall
 
-docs/                   CONTRIBUTING.md, TESTING.md                    (dev-only)
+docs/                   CONTRIBUTING.md, TESTING.md, HEADER-RENDERING.md (the PDF header builder), and
+                        examples/: the example field to copy new fields from  (dev-only)
 tests/                  the test suites and their phpunit*.xml.dist    (dev-only)
-tools/                  the release build and its test database        (dev-only)
+tools/                  the release build, its test database, the review sniffs, and
+                        dev-assets/ (the form editor's perf overlay)   (dev-only)
 build.cmd, build.sh     launchers for tools/build.php                  (dev-only)
 ```
 
@@ -98,8 +102,12 @@ and the build refuses to package an edited, missing or unlisted file.
   `includes/X/Y.php`.
 - `Plugin::load()` loads only the field classes up front, because `FieldRegistry::registerDefaults()` discovers them
   among the declared classes.
-- `Plugin.php` is required explicitly, because it also defines the global function `fabricator_log()`, which no
-  autoloader can find.
+- `includes/functions.php` is required explicitly (by `formfabricator.php` and the unit bootstrap), because it
+  defines `fabricator_log()` and `fabricator_log_file()`, which no autoloader can find. Not through Composer's
+  `autoload.files`: that would run it wherever `vendor/autoload.php` loads, before WordPress defines `ABSPATH`, and
+  its `ABSPATH` guard would end the request.
+- `Plugin` bootstraps: it loads the field classes and wires the hooks. Who may do what is `Capabilities`; the admin
+  notices are `Admin\Notices`, the suggested privacy text `Admin\PrivacyPolicy`.
 
 ---
 
@@ -134,7 +142,7 @@ A changed answer is a different statement: a mandate's account holder with a cha
 its `<` removed. So an answer is recorded exactly as the visitor typed it, only the spaces around it trimmed
 (`BaseField::answer()`, `answers()`), and the IBAN and BIC formatted for reading. What can't be recorded as typed is
 refused at its field, in the browser first (front.js `answerProblem()`) and again on the server
-(`Utils\AnswerText`, checked in FormProcessor for every field whose `typedAnswer()` is true):
+(`Utils\Text\AnswerText`, checked in FormProcessor for every field whose `typedAnswer()` is true):
 
 - invalid UTF-8;
 - control and invisible format characters (`\p{Cc}`, `\p{Cf}`, line and paragraph separators): direction controls,
@@ -149,9 +157,9 @@ refused at its field, in the browser first (front.js `answerProblem()`) and agai
 Everything else, `<` and `%` included, is kept, and escaped wherever it is shown. WordPress's sanitizers would change
 it, so `FormProcessor::handle()` reads the answers unsanitized: a named review exception. Values a visitor's answer is
 compared with (an option's value, a rule's value) are saved as the plain text the browser posts
-(`FormEditor::answerText()`): `sanitize_text_field()` alone writes a lone `<` as `&lt;`.
+(`FormSanitizer::answerText()`): `sanitize_text_field()` alone writes a lone `<` as `&lt;`.
 
-**When something was signed or agreed to** is recorded one way (`Utils\SigningTime`): the date in the site's date
+**When something was signed or agreed to** is recorded one way (`Utils\Text\SigningTime`): the date in the site's date
 format, then the time, both in UTC, from the server's clock when the form is sent. A site format that leaves out the
 year, the month or the day (a custom `F j`) gives way to `Y-m-d`, so the record always names its day; the format is
 judged by what it writes for a few test dates, not by its letters. A Signature field adds it as its own
@@ -223,7 +231,7 @@ One provider per field, picked by the admin:
 
 - **ALTCHA** (the default; also what a field without the setting reads as). A proof-of-work check with no third
   party. The widget is `vendor/altcha/`, an unmodified npm release pinned by its `VERSION` file. The
-  server side is `Utils\Altcha`: it signs each challenge with a secret derived from the site's salts, and checks an
+  server side is `Utils\Security\Altcha`: it signs each challenge with a secret derived from the site's salts, and checks an
   answer with two HMACs (no key is derived again). Each challenge counts once (`SingleUseToken`).
   `tests/js/altcha.test.js` checks the server against ALTCHA's own solver and verifier, from the npm dev dependency
   of the same version. Update both together.
@@ -236,7 +244,7 @@ One provider per field, picked by the admin:
 **No form submission data is ever stored locally.** All data goes to email and/or PDF only.
 
 - There are no custom database tables for entries.
-- Every file the plugin writes is in `uploads/formfabricator/` (`Utils\PrivateDir`), hardened by `SecureDir`. Nothing
+- Every file the plugin writes is in `uploads/formfabricator/` (`Utils\Storage\PrivateDir`), hardened by `SecureDir`. Nothing
   goes to the system temp dir, which other accounts on the server may share.
 
   ```
@@ -253,7 +261,7 @@ One provider per field, picked by the admin:
   can't be written (uploads not writable, disk full), the submission stops before the first email and the visitor is
   asked to try again (`MailSender::deliveryFailed()`).
 - A failed delivery leaves a record for the admin notice, one per form: when, how often and what failed, never an
-  address or an answer (`MailSender::failureRecords()`, shown by `Plugin::maybeWarnMailFailures()`). Only that form's
+  address or an answer (`MailSender::failureRecords()`, shown by `Notices::maybeWarnMailFailures()`). Only that form's
   next delivered submission removes it, so a form that delivers can't hide one that keeps failing. Dismissing the notice
   clears it only for an administrator; any other form manager just stops seeing it until a newer failure (a per-site
   user option), so no one can hide a loss from the administrators. Without the record, a mail setup that keeps failing
@@ -314,7 +322,7 @@ markers with the value stored in the seal.
     U+2800–U+29FF (starting with byte 0x20, 0x28 or 0x29: a space or a parenthesis) gets an invisible U+034F between
     them (`separateEscapePairs()`).
   - The seal is written in lines of `SEAL_LINE_CHARS`, without ligatures.
-  - The verifier compares a field's text without whitespace (`Verificationpage::comparableText()`): pdfparser loses
+  - The verifier compares a field's text without whitespace (`VerificationPage::comparableText()`): pdfparser loses
     a space at a line wrap and adds one at a font switch. With the intl extension, Unicode normalization also sorts
     combining marks across a lost space, so the text is normalized again once the spaces are gone. CI runs with intl,
     a local run usually without: both paths get tested.
@@ -334,7 +342,7 @@ uploaded images. Neither may carry structure.
   normalization (`PdfUtils::normalizeText()`, shared by both sides), is refused at its field
   (`PdfUtils::reservedMarker()`, checked in FormProcessor).
 - **Text direction.** mPDF lays text out by the Unicode bidi algorithm. The explicit controls (U+202A–U+202E,
-  U+2066–U+2069) can reverse Latin text into a marker, so an answer holding one is refused (`Utils\AnswerText`); an
+  U+2066–U+2069) can reverse Latin text into a marker, so an answer holding one is refused (`Utils\Text\AnswerText`); an
   upload's file name has them removed (`PdfUtils::stripBidiControls()`). Without them, in the left-to-right paragraphs
   the PDF uses, no reordering can assemble a marker. A right-to-left PDF layout would need this argument made again.
 - **Mail markers.** A notification can add automation markers: every answer its email lists stands between
@@ -611,10 +619,11 @@ Configured in `tests/phpunit-integration.xml.dist`, tests in `tests/Integration/
 - **Built-ins a test cannot reach otherwise**, in the same file and reset the same way:
   - `function_exists()` (in `FabricatorForms\Admin` and `\PDF`) denies the functions in `Overrides::$missingFunctions`,
     as a PHP built without openssl would.
-  - `register_shutdown_function()` (in `FabricatorForms\Form` and `\PDF`) holds the callbacks back while
+  - `register_shutdown_function()` (in `FabricatorForms\Form` and `\Utils\Storage`) holds the callbacks back while
     `Overrides::$shutdownFunctions` is an array; `Overrides::runShutdownFunctions()` then plays the end of the request.
     Callbacks a test never ran go to PHP at reset, so nothing they remove outlives the run.
-  - An override catches only unqualified calls in its namespace: `\function_exists()` in the plugin bypasses it.
+  - An override catches only unqualified calls in its namespace: `\function_exists()` in the plugin bypasses it, and a
+    class moved to another namespace needs its override moved too.
 - **Constants and `WP_DEBUG`.** A test that needs `FABRICATOR_SEAL_MASTER_KEY` defined, or `WP_DEBUG` off
   (`FABRICATOR_TESTS_WP_DEBUG=0`, read by `wp-tests-config.php`), runs with `#[RunInSeparateProcess]`, so no later test
   sees the constant. The bootstrap sets `WP_TESTS_SKIP_INSTALL=1` after installing, so the child process reuses the
@@ -648,7 +657,7 @@ call it. Don't rebuild the globals anywhere else.
 
 A test that needs the server's answer to what a script produced at test time runs PHP itself:
 `builder-conditions.test.js` hands the form the builder saved to `tests/js/render-form.php`, which runs the save's
-`FormEditor::sanitizeFields()`, `FormRenderer` and `FormProcessor::resolveVisibility()` on it.
+`FormSanitizer::sanitizeFields()`, `FormRenderer` and `FormProcessor::resolveVisibility()` on it.
 
 #### Front-end and server must agree on conditions
 
@@ -656,7 +665,7 @@ Conditional logic runs twice: in front.js while the user fills in the form, and 
 submitted. Both sides must reach the same result.
 
 - **Parity test.** `condition-parity.test.js` checks front.js's condition logic against
-  `FormProcessor::evalConditionRule()` on every case the fixture lists, and whole cascades against
+  `ConditionRule::holds()` on every case the fixture lists, and whole cascades against
   `FormProcessor::resolveVisibility()`. A change to either side must keep them agreeing. Add new edge values to the
   fixture.
 - **Hidden fields read as empty.** `BaseField::hiddenConditionValue()` returns `[]` for fields whose inputs are
@@ -679,7 +688,7 @@ submitted. Both sides must reach the same result.
   build-fixture.php's `$compositeCases`.
 - **Text is compared as the server reads it**: as typed, trimmed by PHP's `trim()` (front.js `phpTrim()`, not
   `String.prototype.trim()`, which also removes U+FEFF). The fixture records the real fields' `extractValue()`.
-- **The browser refuses what the server refuses.** front.js's `answerProblem()` is checked against `Utils\AnswerText`
+- **The browser refuses what the server refuses.** front.js's `answerProblem()` is checked against `Utils\Text\AnswerText`
   on the fixture's `answerText` cases (`validate-page.test.js`).
 
 #### Admin scripts
@@ -687,7 +696,7 @@ submitted. Both sides must reach the same result.
 The admin scripts load in `support/admin-page.js` with what WordPress hands them, from the same fixture:
 `FormEditor::render()`'s markup and `builderI18n()` for the builder, and `FormList::render()`,
 `FormSelectList::render()`, `FormSettings::renderSettingsPage()`, `PDFLayoutEditor::render()` and
-`Verificationpage::render()` with the objects they localize (`fixture.admin`, the edit locks' objects included).
+`VerificationPage::render()` with the objects they localize (`fixture.admin`, the edit locks' objects included).
 
 - Drive the scripts through their own controls and check what they send (a stubbed `fetch()`), not through test hooks.
 - Work an admin script defers to animation frames (jsdom paces them at display rate) is awaited with `until()`, not a

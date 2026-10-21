@@ -2,13 +2,13 @@
 
 namespace FabricatorForms\Tests\Integration\PDF;
 
-use FabricatorForms\Admin\Verificationpage;
+use FabricatorForms\Admin\VerificationPage;
 use FabricatorForms\Fields\FieldRegistry;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\PDF\Generator;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\PDF\PdfUtils;
-use FabricatorForms\Utils\AnswerText;
+use FabricatorForms\Utils\Text\AnswerText;
 use FabricatorForms\Tests\Integration\TestCase;
 use FabricatorForms\Tests\Support\Reflect;
 use PHPUnit\Framework\Attributes\Group;
@@ -63,7 +63,7 @@ final class SealRoundTripTest extends TestCase
         $pdf  = $this->sealedPdf();
         $html = $this->verify($pdf, 'fresh.pdf');
         self::assertSame('pass', self::verdict($html), self::failedRows($html));
-        // The signature's moment is part of the sealed record (Utils\SigningTime).
+        // The signature's moment is part of the sealed record (Utils\Text\SigningTime).
         self::assertMatchesRegularExpression('/Signed on\s*.*\d{2}:\d{2}:\d{2} UTC/', (new \Smalot\PdfParser\Parser())->parseContent($pdf)->getText());
         self::assertDoesNotMatchRegularExpression('#/BaseFont\s*/(?:[A-Z]{6}\+)?FreeSerif#', $pdf, 'no fallback font where none is needed');
         self::assertStringContainsString('HMAC valid: the seal holds exactly what was signed', $html, 'the seal section opens with the HMAC verdict');
@@ -225,7 +225,7 @@ final class SealRoundTripTest extends TestCase
      */
     public function testAChangedFieldShowsTheChangedWordsInContext(): void
     {
-        $diff  = static fn(string $sealed, string $pdf): string => Reflect::call(Verificationpage::class, 'differenceHtml', $sealed, $pdf);
+        $diff  = static fn(string $sealed, string $pdf): string => Reflect::call(VerificationPage::class, 'differenceHtml', $sealed, $pdf);
         $words = array_map(static fn(int $i): string => 'word' . $i, range(1, 300));
         $text  = implode(' ', $words);
 
@@ -495,7 +495,7 @@ final class SealRoundTripTest extends TestCase
     public function testAnAnswerWithBidiControlsIsRefusedSinceItCouldFormAMarker(): void
     {
         // After U+202E RLO, mPDF lays the rest out right to left: the typed text reversed, its brackets mirrored, which
-        // puts "[FABRICATOR_PDF_FIELD_END]" into the PDF's text. FormProcessor refuses the answer (Utils\AnswerText).
+        // puts "[FABRICATOR_PDF_FIELD_END]" into the PDF's text. FormProcessor refuses the answer (Utils\Text\AnswerText).
         $typed = "\u{05D0}\u{202E}[DNE_DLEIF_FDP_ROTACIRBAF]";
         self::assertNull(PdfUtils::reservedMarker($typed), 'nothing to see in the typed text');
         $html = $this->verify($this->sealedPdf(true, null, $typed), 'rlo.pdf');
@@ -1074,7 +1074,7 @@ final class SealRoundTripTest extends TestCase
     {
         $path = $this->dir . '/' . $name;
         file_put_contents($path, $bytes);
-        return Verificationpage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
+        return VerificationPage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
     }
 
     /**

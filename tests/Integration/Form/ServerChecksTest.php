@@ -5,8 +5,8 @@ namespace FabricatorForms\Tests\Integration\Form;
 use FabricatorForms\Form\FormRenderer;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
 use FabricatorForms\Tests\Support\Overrides;
-use FabricatorForms\Utils\MemoryBudget;
-use FabricatorForms\Utils\SingleUseToken;
+use FabricatorForms\Utils\Security\MemoryBudget;
+use FabricatorForms\Utils\Security\SingleUseToken;
 use PHPUnit\Framework\Attributes\Group;
 
 /**
@@ -286,7 +286,7 @@ final class ServerChecksTest extends AjaxTestCase
         self::assertSame(['Entry', 'terms.pdf'], [substr(basename($attached[0]), 0, 5), basename($attached[1])]);
         $copies = dirname($attached[1], 2);
         // One folder per kind in the plugin's folder in uploads, both named for the submission.
-        $base = \FabricatorForms\Utils\PrivateDir::base();
+        $base = \FabricatorForms\Utils\Storage\PrivateDir::base();
         self::assertSame([$base . '/pdf', $base . '/mail'], [dirname($attached[0], 2), dirname($copies)]);
         self::assertSame(basename(dirname($attached[0])), basename($copies));
         foreach ($attached as $path) {
@@ -306,8 +306,8 @@ final class ServerChecksTest extends AjaxTestCase
     {
         // Whatever removed mail/ (a cleanup tool, a restore) did so while the day-long "folders ready" transient still
         // stands: the upload must still reach the notification, not be left out of a submission reported as sent.
-        \FabricatorForms\Utils\PrivateDir::ensure();
-        \FabricatorForms\Utils\PrivateDir::removeTree(\FabricatorForms\Utils\PrivateDir::base() . '/mail');
+        \FabricatorForms\Utils\Storage\PrivateDir::ensure();
+        \FabricatorForms\Utils\Storage\PrivateDir::removeTree(\FabricatorForms\Utils\Storage\PrivateDir::base() . '/mail');
         $form = $this->createForm([self::uploadField('doc', 'Document')], [self::notification(['attach_uploads' => true])]);
         $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
 
@@ -315,7 +315,7 @@ final class ServerChecksTest extends AjaxTestCase
 
         self::assertTrue($r['success'], wp_json_encode($r));
         self::assertSame(['terms.pdf'], array_map('basename', $this->mailed[0]['attachments']));
-        self::assertFileExists(\FabricatorForms\Utils\PrivateDir::base() . '/mail/index.php', 'hardened again');
+        self::assertFileExists(\FabricatorForms\Utils\Storage\PrivateDir::base() . '/mail/index.php', 'hardened again');
     }
 
     public function testUploadsThatCannotBePreparedAsAttachmentsStopTheSubmissionBeforeAnyEmail(): void
@@ -323,8 +323,8 @@ final class ServerChecksTest extends AjaxTestCase
         // Nothing is stored locally: mailing the notifications without the visitor's files would lose them while the
         // submission reads as sent. A file where mail/ belongs can't be made a folder, as an unwritable uploads folder
         // or a full disk can't.
-        $mail_dir = \FabricatorForms\Utils\PrivateDir::ensure() . '/mail';
-        \FabricatorForms\Utils\PrivateDir::removeTree($mail_dir);
+        $mail_dir = \FabricatorForms\Utils\Storage\PrivateDir::ensure() . '/mail';
+        \FabricatorForms\Utils\Storage\PrivateDir::removeTree($mail_dir);
         file_put_contents($mail_dir, 'not a folder');
         $form  = $this->createForm([self::uploadField('doc', 'Document')], [self::notification(['attach_uploads' => true])]);
         $token = SingleUseToken::issue($form);
@@ -348,8 +348,8 @@ final class ServerChecksTest extends AjaxTestCase
     public function testANotificationWithoutAttachmentsIsSentWhateverTheAttachmentFolder(): void
     {
         // The files are prepared only for a notification that carries them.
-        $mail_dir = \FabricatorForms\Utils\PrivateDir::ensure() . '/mail';
-        \FabricatorForms\Utils\PrivateDir::removeTree($mail_dir);
+        $mail_dir = \FabricatorForms\Utils\Storage\PrivateDir::ensure() . '/mail';
+        \FabricatorForms\Utils\Storage\PrivateDir::removeTree($mail_dir);
         file_put_contents($mail_dir, 'not a folder');
         $form = $this->createForm([self::uploadField('doc', 'Document')], [self::notification(['attach_uploads' => false, 'attach_pdf' => false])]);
         $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];

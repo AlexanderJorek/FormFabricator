@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace FabricatorForms\Utils;
+namespace FabricatorForms\Utils\Storage;
 
 defined('ABSPATH') || exit;
 
@@ -147,7 +147,7 @@ final class PrivateDir
     {
         // mkdir() with 0700, not wp_mkdir_p(), which copies the parent's mode.
         // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- runs in front-end submissions without WP_Filesystem credentials; $dir is built from the uploads dir and random_bytes(), never request input.
-        return (bool) Cast::withoutWarnings(static fn() => mkdir($dir, 0700));
+        return (bool) \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => mkdir($dir, 0700));
     }
 
     /**
@@ -181,7 +181,7 @@ final class PrivateDir
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
             if (is_file($file) && !is_link($file) && !file_exists($target)
                 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_copy,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- mPDF's own cache files between two folders of this plugin.
-                && !Cast::withoutWarnings(static fn() => link($file, $target)) && !Cast::withoutWarnings(static fn() => copy($file, $target))
+                && !\FabricatorForms\Utils\Cast::withoutWarnings(static fn() => link($file, $target)) && !\FabricatorForms\Utils\Cast::withoutWarnings(static fn() => copy($file, $target))
             ) {
                 return;
             }
@@ -212,7 +212,7 @@ final class PrivateDir
                 continue;
             }
             // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- an atomic move within the plugin's own folder; WP_Filesystem's move() copies and deletes.
-            Cast::withoutWarnings(static fn() => rename($file, $shared . '/' . $name));
+            \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => rename($file, $shared . '/' . $name));
         }
     }
 
@@ -258,7 +258,7 @@ final class PrivateDir
             }
         }
         // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- an emptied folder of the plugin's own, removed at shutdown or by WP-Cron, where no WP_Filesystem credentials can be asked for.
-        if (!Cast::withoutWarnings(static fn() => rmdir($dir))) {
+        if (!\FabricatorForms\Utils\Cast::withoutWarnings(static fn() => rmdir($dir))) {
             \FabricatorForms\fabricator_log('FabricatorForms PrivateDir: failed to remove folder ' . $dir);
         }
     }
@@ -283,7 +283,7 @@ final class PrivateDir
                 }
                 // A concurrent request may remove the folder meanwhile; false is then the right answer.
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a path in the plugin's own folder in uploads.
-                $mtime = Cast::withoutWarnings(static fn() => filemtime($dir));
+                $mtime = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => filemtime($dir));
                 if ($mtime !== false && ($now - $mtime) > $max_age) {
                     self::removeTree($dir);
                 }

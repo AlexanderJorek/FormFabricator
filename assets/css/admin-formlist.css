@@ -1,0 +1,136 @@
+/*!
+ * FormFabricator — Form list admin page styles
+ * @copyright 2026 Alexander Jorek
+ * @license   GPL-3.0-or-later
+ */
+
+/* Loaded after admin.css, which holds what every admin screen shares. */
+
+#fabricator-delete-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999999;
+    background: rgba(0,0,0,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#fabricator-delete-modal[hidden] { display: none !important; }
+#fabricator-delete-modal .fabricator-modal {
+    padding: 28px 32px 24px;
+    min-width: 300px;
+    max-width: 420px;
+    gap: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+
+.fabricator-modal--wide {
+    max-width: 560px;
+}
+.fabricator-modal--wide .fabricator-modal-title {
+    padding: 20px 20px 0;
+}
+.fabricator-modal--wide .fabricator-modal-hint {
+    padding: 8px 20px 0;
+    margin: 0;
+    font-size: 13px;
+    color: var(--fabricator-text-alt);
+    line-height: 1.5;
+}
+
+.fabricator-modal--wide .fabricator-modal-actions {
+    padding: 12px 20px 20px;
+}
+
+#fabricator-export-loading {
+    padding: 20px 20px 24px;
+}
+.fabricator-export-loading-label {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--fabricator-text-alt);
+}
+
+.fabricator-export-bar-track {
+    height: 6px;
+    background: var(--fabricator-border-lighter);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.fabricator-export-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: #f59e0b;
+    border-radius: 3px;
+}
+
+.fabricator-modal-textarea {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 12px 0 0;
+    padding: 10px 20px;
+    border: none;
+    border-top: 1px solid var(--fabricator-border-lighter);
+    border-bottom: 1px solid var(--fabricator-border-lighter);
+    font-size: 12px;
+    font-family: ui-monospace, "Cascadia Code", "Fira Mono", monospace;
+    color: var(--fabricator-text-alt);
+    background: var(--fabricator-bg-subtle);
+    resize: none;
+    max-height: 40vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    line-height: 1.6;
+    outline: none;
+    box-shadow: none;
+    cursor: default;
+    user-select: all;
+}
+
+.fabricator-modal-textarea:focus {
+    outline: none;
+    box-shadow: none;
+    background: var(--fabricator-bg-subtle);
+}
+
+.fabricator-import-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+.fabricator-import-wrap input[type="text"] {
+    height: 24px !important;
+    min-height: 0 !important;
+    max-height: 24px !important;
+    padding: 0 8px !important;
+    box-sizing: border-box !important;
+    border: 1px solid var(--fabricator-border) !important;
+    border-right: none !important;
+    border-radius: 3px 0 0 3px !important;
+    font-size: 12px !important;
+    font-family: inherit !important;
+    color: var(--fabricator-text) !important;
+    background: #fff !important;
+    width: 200px !important;
+    outline: none !important;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.fabricator-import-wrap input[type="text"]:focus {
+    border-color: var(--fabricator-admin-accent);
+    box-shadow: 0 0 0 1px var(--fabricator-admin-accent);
+    z-index: 1;
+}
+.fabricator-import-wrap input[type="text"]::placeholder {
+    color: var(--fabricator-text-tertiary);
+}
+
+@media (max-width: 782px) {
+    .fabricator-import-wrap input[type="text"] {
+        width: 100px !important;
+        max-width: 100px !important;
+        min-width: 0 !important;
+    }
+}

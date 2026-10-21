@@ -4,13 +4,13 @@ namespace FabricatorForms\Tests\Integration\Form;
 
 use FabricatorForms\Tests\Integration\AjaxTestCase;
 use FabricatorForms\Tests\Support\Reflect;
-use FabricatorForms\Utils\Altcha;
+use FabricatorForms\Utils\Security\Altcha;
 use PHPUnit\Framework\Attributes\Group;
 
 /**
- * A submission with an ALTCHA CAPTCHA field (Utils\Altcha): a challenge from the plugin's endpoint, solved as the widget
+ * A submission with an ALTCHA CAPTCHA field (Utils\Security\Altcha): a challenge from the plugin's endpoint, solved as the widget
  * solves it, lets the submission through once; a reused, changed, expired or made-up answer is refused at the CAPTCHA.
- * That ALTCHA's own solver and verifier agree with Utils\Altcha is checked in the JS suite (tests/js/altcha.test.js).
+ * That ALTCHA's own solver and verifier agree with Utils\Security\Altcha is checked in the JS suite (tests/js/altcha.test.js).
  */
 #[Group('package')]
 final class AltchaTest extends AjaxTestCase

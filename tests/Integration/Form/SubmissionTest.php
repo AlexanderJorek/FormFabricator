@@ -3,7 +3,7 @@
 namespace FabricatorForms\Tests\Integration\Form;
 
 use FabricatorForms\Tests\Integration\AjaxTestCase;
-use FabricatorForms\Utils\SingleUseToken;
+use FabricatorForms\Utils\Security\SingleUseToken;
 use PHPUnit\Framework\Attributes\Group;
 
 /**
@@ -209,7 +209,7 @@ final class SubmissionTest extends AjaxTestCase
         $rows  = static fn(): int => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like('fabricator_rl_') . '%'));
         $key48 = 'submit_48_' . hash_hmac('sha256', '2001:db8:1234::/48', wp_salt('auth'));
         for ($i = 0; $i < 200; $i++) {
-            \FabricatorForms\Utils\RateLimiter::increment($key48, 5 * MINUTE_IN_SECONDS);
+            \FabricatorForms\Utils\Security\RateLimiter::increment($key48, 5 * MINUTE_IN_SECONDS);
         }
 
         $_SERVER['REMOTE_ADDR'] = '2001:db8:1234:77::1';
@@ -235,7 +235,7 @@ final class SubmissionTest extends AjaxTestCase
         update_option(\FabricatorForms\Plugin::LAST_INLINE_SWEEP_OPTION, time() - 2 * HOUR_IN_SECONDS, false);
         add_option('fabricator_rl_expired_one', '3|' . (time() - 10), '', false);
         // Submission folders of other requests: one a killed request left, one still being sent.
-        $pdf_dir = \FabricatorForms\Utils\PrivateDir::ensure() . '/pdf/';
+        $pdf_dir = \FabricatorForms\Utils\Storage\PrivateDir::ensure() . '/pdf/';
         $stale   = $pdf_dir . bin2hex(random_bytes(16));
         $fresh   = $pdf_dir . bin2hex(random_bytes(16));
         mkdir($stale);
@@ -248,7 +248,7 @@ final class SubmissionTest extends AjaxTestCase
         self::assertFalse($stored('fabricator_rl_expired_one'), 'swept by the submission');
         self::assertDirectoryDoesNotExist($stale, 'a PDF left behind over an hour ago is removed');
         self::assertFileExists($fresh . '/Entry.pdf', 'one still being sent is not');
-        \FabricatorForms\Utils\PrivateDir::removeTree($fresh);
+        \FabricatorForms\Utils\Storage\PrivateDir::removeTree($fresh);
 
         add_option('fabricator_rl_expired_two', '3|' . (time() - 10), '', false);
         self::assertTrue($this->submit($form, ['name' => 'Ada again'])['success']);
@@ -306,7 +306,7 @@ final class SubmissionTest extends AjaxTestCase
         remove_filter('pre_wp_mail', '__return_false');
         $notice = static function (): string {
             ob_start();
-            \FabricatorForms\Plugin::maybeWarnMailFailures();
+            \FabricatorForms\Admin\Notices::maybeWarnMailFailures();
             return (string) ob_get_clean();
         };
 
@@ -346,7 +346,7 @@ final class SubmissionTest extends AjaxTestCase
         $this->submit($form, ['name' => 'Ada Lovelace']);
         $notice = static function (): string {
             ob_start();
-            \FabricatorForms\Plugin::maybeWarnMailFailures();
+            \FabricatorForms\Admin\Notices::maybeWarnMailFailures();
             return (string) ob_get_clean();
         };
         update_option('fabricator_forms_access', ['roles' => ['editor' => ['edit_forms' => true]]]);
@@ -358,7 +358,7 @@ final class SubmissionTest extends AjaxTestCase
 
         wp_set_current_user($editor);
         self::assertStringContainsString('could not be delivered', $notice(), 'the editor sees it');
-        \FabricatorForms\Plugin::dismissMailFailures();
+        \FabricatorForms\Admin\Notices::dismissMailFailures();
         self::assertSame('', $notice(), 'hidden for the editor');
         wp_set_current_user($admin);
         self::assertStringContainsString('could not be delivered', $notice(), 'still there for the administrator');
@@ -373,7 +373,7 @@ final class SubmissionTest extends AjaxTestCase
 
         // An administrator's dismissal clears it for everyone.
         wp_set_current_user($admin);
-        \FabricatorForms\Plugin::dismissMailFailures();
+        \FabricatorForms\Admin\Notices::dismissMailFailures();
         self::assertSame('', $notice());
         wp_set_current_user($editor);
         self::assertSame('', $notice());
@@ -393,7 +393,7 @@ final class SubmissionTest extends AjaxTestCase
 
         wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
         ob_start();
-        \FabricatorForms\Plugin::maybeWarnMailFailures();
+        \FabricatorForms\Admin\Notices::maybeWarnMailFailures();
         $shown = (string) ob_get_clean();
 
         self::assertStringContainsString('Form &quot;Orders&quot;: since', $shown);

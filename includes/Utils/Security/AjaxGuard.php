@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace FabricatorForms\Utils;
+namespace FabricatorForms\Utils\Security;
 
 defined('ABSPATH') || exit;
 
@@ -39,7 +39,7 @@ class AjaxGuard
      */
     public static function capability($capability, ?string $forbidden_message = null, ?string $log_message = null): void
     {
-        $allowed = is_callable($capability) ? (bool) $capability() : \FabricatorForms\Plugin::userCan($capability);
+        $allowed = is_callable($capability) ? (bool) $capability() : \FabricatorForms\Capabilities::userCan($capability);
         if (!$allowed) {
             if ($log_message !== null) {
                 \FabricatorForms\fabricator_log($log_message);

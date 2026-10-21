@@ -88,43 +88,6 @@ class PDFLayoutEditor
         add_action('admin_body_class', [self::class, 'bodyClass']);
         add_action('wp_ajax_fabricator_forms_pdf_preview', [self::class, 'ajaxPreview']);
         add_action('wp_ajax_fabricator_save_pdf_layout', [self::class, 'handleSave']);
-        add_action('wp_ajax_fabricator_forms_unlock_pdf_layout', [self::class, 'ajaxUnlock']);
-        add_filter('heartbeat_received', [self::class, 'heartbeatReceived'], 10, 2);
-    }
-
-    /**
-     * Refreshes or reports a conflict on the PDF Layout page's advisory edit lock — see Utils\AdminLock.
-     *
-     * @param array $response Heartbeat response payload being built.
-     * @param array $data     Data sent by the client in this heartbeat tick.
-     * @return array Modified heartbeat response.
-     */
-    public static function heartbeatReceived(array $response, array $data): array
-    {
-        if (empty($data['fabricator_pdf_layout_lock']) || !\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
-            return $response;
-        }
-        $lock_owner = \FabricatorForms\Utils\AdminLock::check('pdf_layout');
-        if ($lock_owner) {
-            $user = get_userdata($lock_owner);
-            $response['fabricator_pdf_layout_lock_conflict'] = $user ? $user->display_name : __('another user', 'formfabricator');
-        } else {
-            \FabricatorForms\Utils\AdminLock::acquire('pdf_layout');
-        }
-        return $response;
-    }
-
-    /**
-     * Releases the current user's PDF Layout edit lock, fired via sendBeacon() on unload.
-     *
-     * @return void
-     */
-    public static function ajaxUnlock(): void
-    {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_pdf_layout');
-        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
-        \FabricatorForms\Utils\AdminLock::release('pdf_layout', get_current_user_id());
-        wp_send_json_success();
     }
 
     /**
@@ -134,12 +97,12 @@ class PDFLayoutEditor
      */
     public static function ajaxPreview(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_pdf_layout');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_pdf_layout');
         check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
         /* ---- Rate limit: PDF generation is expensive; throttle per-user preview requests. ---- */
         $rl_key = 'pdf_layout_preview_' . get_current_user_id();
-        if (\FabricatorForms\Utils\RateLimiter::increment($rl_key, 5) > 5) {
+        if (\FabricatorForms\Utils\Security\RateLimiter::increment($rl_key, 5) > 5) {
             wp_send_json_error(['message' => __('Please wait before requesting another preview.', 'formfabricator')], 429);
         }
 
@@ -236,16 +199,16 @@ class PDFLayoutEditor
      */
     public static function addPage(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_pdf_layout')) {
             return;
         }
-        // A real capability (Plugin::grantAccessCaps() maps it to userCan()), so WordPress refuses the screen itself even if
+        // A real capability (Capabilities::grantAccessCaps() maps it to userCan()), so WordPress refuses the screen itself even if
         // a future callback forgets its own check.
         $hook = add_submenu_page(
             'fabricator-forms',
             __('FormFabricator PDF Layout', 'formfabricator'),
             __('PDF Layout', 'formfabricator'),
-            \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'edit_pdf_layout',
+            \FabricatorForms\Capabilities::ACCESS_CAP_PREFIX . 'edit_pdf_layout',
             'fabricator-forms-pdf-layout',
             [self::class, 'render']
         );
@@ -263,7 +226,7 @@ class PDFLayoutEditor
      */
     public static function handleLayoutPost(): void
     {
-        if (!isset($_POST['fabricator_pdf_layout_nonce']) || !\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!isset($_POST['fabricator_pdf_layout_nonce']) || !\FabricatorForms\Capabilities::userCan('edit_pdf_layout')) {
             return;
         }
         if (!wp_verify_nonce(sanitize_key(wp_unslash($_POST['fabricator_pdf_layout_nonce'])), 'fabricator_pdf_layout')) {
@@ -282,7 +245,7 @@ class PDFLayoutEditor
      */
     public static function render(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_pdf_layout')) {
             wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
@@ -328,28 +291,8 @@ class PDFLayoutEditor
         $dummy_upload    = self::dummyUploadPng();
 
         // Advisory notice only — save()'s snapshot-hash check is the real guard.
-        $lock_owner_name = '';
-        $lock_owner_id   = \FabricatorForms\Utils\AdminLock::check('pdf_layout');
-        if ($lock_owner_id) {
-            $lock_owner_user = get_userdata($lock_owner_id);
-            $lock_owner_name = $lock_owner_user ? $lock_owner_user->display_name : __('another user', 'formfabricator');
-        } else {
-            \FabricatorForms\Utils\AdminLock::acquire('pdf_layout');
-        }
-        wp_enqueue_script('heartbeat');
-        $lock_admin_nonce = wp_create_nonce('fabricator_forms_admin_nonce');
-        wp_localize_script(
-            'fabricator-forms-pdflayout-lock',
-            'FabricatorPdfLayoutLock',
-            [
-            'nonce'   => $lock_admin_nonce,
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'i18n'    => [
-                // translators: %s: display name of the user currently editing this page.
-                'lockConflict' => __('Currently being edited by %s. Saving may conflict.', 'formfabricator'),
-            ],
-            ]
-        );
+        $lock_owner_name = \FabricatorForms\Utils\Storage\AdminLock::claim('pdf_layout');
+        \FabricatorForms\Utils\Storage\AdminLock::localize('pdf_layout');
         wp_localize_script(
             'fabricator-forms-admin-pdflayout',
             'FabricatorPdfLayoutPage',
@@ -365,8 +308,8 @@ class PDFLayoutEditor
                 'dummyUpload'     => $dummy_upload,
                 'fieldLayoutMode' => $field_layout_mode,
                 // Dates as the PDF writes them, so the live preview matches the PDF: the metadata's creation time
-                // (Utils\SigningTime) and the footer's {date} (the site's date format, as layout.php fills it in).
-                'createdDate'     => \FabricatorForms\Utils\SigningTime::format(),
+                // (Utils\Text\SigningTime) and the footer's {date} (the site's date format, as layout.php fills it in).
+                'createdDate'     => \FabricatorForms\Utils\Text\SigningTime::format(),
                 'footerDate'      => (string) wp_date((string) (get_option('date_format') ?: 'Y-m-d')),
             ],
             ]
@@ -407,7 +350,7 @@ class PDFLayoutEditor
                 ?>
             </span>
         </div>
-        <?php // Heartbeat lock notice: assets/js/admin-pdflayout-lock.js (enqueued in Utils/Assets.php). ?>
+        <?php // Heartbeat lock notice: assets/js/admin-lock.js (enqueued in Utils/Assets.php). ?>
 
     <form method="post" id="fabricator-pdf-layout-form">
         <?php wp_nonce_field('fabricator_pdf_layout', 'fabricator_pdf_layout_nonce'); ?>
@@ -731,7 +674,7 @@ class PDFLayoutEditor
      */
     public static function handleSave(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_pdf_layout');
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_pdf_layout');
         check_ajax_referer('fabricator_pdf_layout', 'fabricator_pdf_layout_nonce');
         $error = self::save();
         if ($error !== '') {
@@ -795,7 +738,7 @@ class PDFLayoutEditor
     private static function save(): string
     {
         // Defense-in-depth: callers already gate on this, but don't rely solely on them remembering to check.
-        if (!\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_pdf_layout')) {
             return __('Insufficient permissions.', 'formfabricator');
         }
         if (!isset($_POST['fabricator_pdf_layout_nonce'])

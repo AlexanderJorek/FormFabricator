@@ -2,13 +2,13 @@
 
 namespace FabricatorForms\Tests\Integration\Form;
 
-use FabricatorForms\Admin\FormEditor;
+use FabricatorForms\Form\FormSanitizer;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
 
 /**
  * An answer is recorded as the visitor typed it, trimmed of the spaces around it, or refused at its field: nothing in it
- * is removed or replaced (Utils\AnswerText). Rules compare it as typed, as front.js reads it.
+ * is removed or replaced (Utils\Text\AnswerText). Rules compare it as typed, as front.js reads it.
  */
 final class AnswersAsTypedTest extends AjaxTestCase
 {
@@ -88,7 +88,7 @@ final class AnswersAsTypedTest extends AjaxTestCase
     public function testAnOptionSavedInTheBuilderMatchesWhatTheFormPosts(): void
     {
         // sanitize_text_field() writes a lone "<" as "&lt;"; the form shows and posts "<", the answer as typed.
-        $fields = FormEditor::sanitizeFields([
+        $fields = FormSanitizer::sanitizeFields([
             ['id' => 'size', 'type' => 'radio', 'label' => 'Size', 'options' => [['label' => 'a < b', 'value' => 'a < b'], ['label' => 'Tom & Jerry', 'value' => 'Tom &amp; Jerry']]],
             ['id' => 'note', 'type' => 'text', 'label' => 'Note', 'required' => true, 'conditions' => [
                 'action' => 'show', 'match' => 'all', 'rules' => [['field_id' => 'size', 'operator' => 'equals', 'value' => 'a < b']],

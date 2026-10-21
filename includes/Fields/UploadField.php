@@ -195,7 +195,7 @@ class UploadField extends BaseField
     {
         return min(
             (int)($config['max_size_mb'] ?? 10),
-            intdiv(\FabricatorForms\Utils\MemoryBudget::largestUploadBytes(), 1024 * 1024)
+            intdiv(\FabricatorForms\Utils\Security\MemoryBudget::largestUploadBytes(), 1024 * 1024)
         );
     }
 

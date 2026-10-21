@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace FabricatorForms\Utils;
+namespace FabricatorForms\Utils\Security;
 
 defined('ABSPATH') || exit;
 

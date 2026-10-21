@@ -23,7 +23,6 @@
             "FabricatorForms\\": "includes/"
         },
         "exclude-from-classmap": [
-            "includes/Fields/_ExampleField.php",
             "includes/PDF/templates/"
         ]
     },

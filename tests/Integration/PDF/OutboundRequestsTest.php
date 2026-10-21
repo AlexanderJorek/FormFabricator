@@ -8,7 +8,7 @@ use FabricatorForms\PDF\Generator;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\Tests\Integration\Support\RequestRecorder;
 use FabricatorForms\Tests\Integration\TestCase;
-use FabricatorForms\Utils\HtmlSanitizer;
+use FabricatorForms\Utils\Text\HtmlSanitizer;
 use PHPUnit\Framework\Attributes\Group;
 
 /**
@@ -108,7 +108,7 @@ final class OutboundRequestsTest extends TestCase
         } finally {
             $_SERVER = $server_before;
             $site->stop();
-            \FabricatorForms\Utils\PrivateDir::removeTree($docroot);
+            \FabricatorForms\Utils\Storage\PrivateDir::removeTree($docroot);
             @rmdir($docroot);
         }
     }

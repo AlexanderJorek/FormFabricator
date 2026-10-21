@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace FabricatorForms\Utils;
+namespace FabricatorForms\Utils\Storage;
 
 defined('ABSPATH') || exit;
 
@@ -184,7 +184,7 @@ class SecureDir
         $ok = $fs !== null
             ? (bool) $fs->chmod($path, $mode)
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- as write() above; a folder or guard file of the plugin's own.
-            : (bool) Cast::withoutWarnings(static fn() => chmod($path, $mode));
+            : (bool) \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => chmod($path, $mode));
         if (!$ok) {
             // Not fatal (the deny rules still apply), but a directory left group/world-readable should be visible to whoever debugs the host.
             \FabricatorForms\fabricator_log('FabricatorForms SecureDir: could not set mode ' . decoct($mode) . ' on ' . $path . '.');

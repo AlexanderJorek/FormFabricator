@@ -70,7 +70,7 @@ final class PdfLayoutTest extends TestCase
 
         $text = implode("\n", self::pageTexts($this->generate()));
 
-        self::assertMatchesRegularExpression('/Created:\s*\d{1,2}\. \w+ \d{4}, \d{2}:\d{2}:\d{2} UTC/u', $text, 'Utils\SigningTime');
+        self::assertMatchesRegularExpression('/Created:\s*\d{1,2}\. \w+ \d{4}, \d{2}:\d{2}:\d{2} UTC/u', $text, 'Utils\Text\SigningTime');
     }
 
     public function testEveryFontTheEditorOffersIsEmbeddedAndKeptByTheBuild(): void
@@ -191,13 +191,13 @@ final class PdfLayoutTest extends TestCase
         $this->generate();
         $folders = [];
         foreach (\FabricatorForms\Tests\Support\Overrides::$shutdownFunctions as [$callback, $args]) {
-            if ($callback === [\FabricatorForms\Utils\PrivateDir::class, 'removeTree'] && str_contains((string) $args[0], '/pdf/')) {
+            if ($callback === [\FabricatorForms\Utils\Storage\PrivateDir::class, 'removeTree'] && str_contains((string) $args[0], '/pdf/')) {
                 $folders[] = (string) $args[0];
             }
         }
         self::assertNotEmpty($folders, 'the removal of the PDF folder is registered');
         $folder = $folders[0];
-        $shared = glob(\FabricatorForms\Utils\PrivateDir::sharedMpdfTemp() . '/mpdf/ttfontdata/*') ?: [];
+        $shared = glob(\FabricatorForms\Utils\Storage\PrivateDir::sharedMpdfTemp() . '/mpdf/ttfontdata/*') ?: [];
         self::assertNotEmpty($shared, 'the font metrics this PDF needed are in the shared cache');
         self::assertFileExists($folder . '/mpdf/ttfontdata/' . basename($shared[0]), 'and reach the next PDF in its own folder');
         // What a request stopped before the inline delete leaves behind.

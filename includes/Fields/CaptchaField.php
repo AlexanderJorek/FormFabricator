@@ -25,7 +25,7 @@ defined('ABSPATH') || exit;
 
 /**
  * CAPTCHA field, by one of two providers chosen per field: ALTCHA, a proof-of-work check this site hosts and verifies
- * itself (Utils\Altcha, vendor/altcha), or Google reCAPTCHA v2, which loads only after a click.
+ * itself (Utils\Security\Altcha, vendor/altcha), or Google reCAPTCHA v2, which loads only after a click.
  */
 class CaptchaField extends BaseField
 {
@@ -86,7 +86,7 @@ class CaptchaField extends BaseField
         $site_key = get_option('fabricator_forms_recaptcha_site_key', '');
         if ($site_key === '') {
             // The setup hint only for whoever can fix it. The form stays blocked: skipping the check would invite spam.
-            $message = \FabricatorForms\Plugin::userCan('settings')
+            $message = \FabricatorForms\Capabilities::userCan('settings')
                 ? __('reCAPTCHA: Please enter the site key in the plugin settings.', 'formfabricator')
                 : __('This form cannot be sent at the moment. Please try again later.', 'formfabricator');
             return '<div class="fabricator-field fabricator-field--captcha">'
@@ -193,7 +193,7 @@ class CaptchaField extends BaseField
     public function validate(mixed $value, array $config): bool|string
     {
         if (self::provider($config) === 'altcha') {
-            return is_string($value) && $value !== '' && \FabricatorForms\Utils\Altcha::verify($value)
+            return is_string($value) && $value !== '' && \FabricatorForms\Utils\Security\Altcha::verify($value)
                 ? true
                 : __('Please confirm the CAPTCHA.', 'formfabricator');
         }

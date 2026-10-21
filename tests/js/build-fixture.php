@@ -6,11 +6,11 @@
  * - localization: Assets::frontLocalization(), the window.FabricatorForms object.
  * - globals:      Assets::frontFieldAssets()['globals'], every field's validators, empty checks and inits.
  * - conditionFixtures: real FormRenderer markup, one field per type conditioned directly and through a group.
- * - parity:       FormProcessor::evalConditionRule()'s answer for every value × rule value × operator, so the JS
+ * - parity:       ConditionRule::holds()'s answer for every value × rule value × operator, so the JS
  *                 suite can check front.js decides each one the same way the server does.
  * - cascades:     chained conditions as real FormRenderer markup, with the values posted and the ids
  *                 FormProcessor::resolveVisibility() hides, so the JS suite can check the whole cascade.
- * - altcha:       a Utils\Altcha challenge, its answer and the server's verdicts on it, for ALTCHA's own solver and
+ * - altcha:       a Utils\Security\Altcha challenge, its answer and the server's verdicts on it, for ALTCHA's own solver and
  *                 verifier to check against.
  * - debit:        each direct debit scheme's real markup, with typed account details and whether
  *                 DirectDebitField::validate() accepts each one, so the JS suite can check the browser's rules agree.
@@ -20,6 +20,7 @@
  */
 
 use Brain\Monkey;
+use FabricatorForms\Form\ConditionRule;
 use FabricatorForms\Form\FormProcessor;
 use FabricatorForms\Form\FormRenderer;
 use FabricatorForms\Tests\Support\FieldStubs;
@@ -61,9 +62,7 @@ $serverReads = static function (array $strings): array {
 
 // What the server's rule sees is the submitted text as extractValue() reads it; front.js reads it the same way.
 $sanitizedValues = array_combine($values, array_column($serverReads($values), 0));
-$decide = static fn(string $op, string $ruleValue, mixed $submitted): bool => Reflect::call(
-    FormProcessor::class,
-    'evalConditionRule',
+$decide = static fn(string $op, string $ruleValue, mixed $submitted): bool => ConditionRule::holds(
     ['field_id' => 'f', 'operator' => $op, 'value' => $ruleValue],
     ['f' => is_array($submitted) ? $submitted : $sanitizedValues[$submitted]]
 );
@@ -81,7 +80,7 @@ foreach ($serverReads($sanitizeCorpus) as $i => [$asText, $asTextarea]) {
     $sanitizePairs[] = [$sanitizeCorpus[$i], $asText, $asTextarea];
 }
 
-// What an answer may hold: Utils\AnswerText's verdict on each string, as a one-line and as a multi-line answer, for
+// What an answer may hold: Utils\Text\AnswerText's verdict on each string, as a one-line and as a multi-line answer, for
 // front.js's answerProblem(). A text input can't hold a line break, so those are checked as a textarea only.
 $answerCorpus = [
     'Ada Lovelace', '  Ada  ', 'a<b and c>d', '20%AB', 'AT&T R&D', 'Tom & Jerry;', '&foo;', '&amp', 'x&nbsp',
@@ -93,8 +92,8 @@ $answerCases = [];
 foreach ($answerCorpus as $typed) {
     $answerCases[] = [
         $typed,
-        \FabricatorForms\Utils\AnswerText::problem(trim($typed), false) === null,
-        \FabricatorForms\Utils\AnswerText::problem(trim($typed), true) === null,
+        \FabricatorForms\Utils\Text\AnswerText::problem(trim($typed), false) === null,
+        \FabricatorForms\Utils\Text\AnswerText::problem(trim($typed), true) === null,
     ];
 }
 
@@ -316,9 +315,7 @@ foreach ($compositeCases as $name => [$field, $dom, $posted]) {
     $equalsValue = is_array($read) ? (string) ($read[0] ?? '') : (string) $read;
     $decisions   = [];
     foreach ([['equals', $equalsValue], ['empty', ''], ['greater', '0'], ['less', '1']] as [$op, $ruleValue]) {
-        $decisions[] = [$op, $ruleValue, Reflect::call(
-            FormProcessor::class,
-            'evalConditionRule',
+        $decisions[] = [$op, $ruleValue, ConditionRule::holds(
             ['field_id' => $field['id'], 'operator' => $op, 'value' => $ruleValue],
             [$field['id'] => $read]
         )];
@@ -570,9 +567,11 @@ Brain\Monkey\Functions\when('wp_roles')->justReturn($GLOBALS['wp_roles']);
 Brain\Monkey\Functions\when('translate_user_role')->returnArg(1);
 ob_start();
 \FabricatorForms\Admin\FormSettings::renderSettingsPage();
-$admin['settings']     = (string) ob_get_clean();
-$admin['settingsPage'] = $localized['FabricatorSettingsPage'] ?? null;
-$admin['settingsLock'] = $localized['FabricatorSettingsLock'] ?? null;
+$admin['settings']       = (string) ob_get_clean();
+$admin['settingsPage']   = $localized['FabricatorSettingsPage'] ?? null;
+$admin['settingsKeys']   = $localized['FabricatorSealKeys'] ?? null;
+$admin['settingsAccess'] = $localized['FabricatorAccessSettings'] ?? null;
+$admin['settingsLock']   = $localized['FabricatorAdminLock'] ?? null;
 
 // FormFabricator → Form Selection (FormSelectList::render()) with four saved selections, and its localized object.
 $formSelects = array_map(
@@ -590,10 +589,10 @@ ob_start();
 $admin['formSelect']     = (string) ob_get_clean();
 $admin['formSelectPage'] = $localized['FabricatorFormSelectPage'] ?? null;
 
-// FormFabricator → PDF Verification (Verificationpage::render()) before any upload.
+// FormFabricator → PDF Verification (VerificationPage::render()) before any upload.
 Brain\Monkey\Functions\when('get_transient')->justReturn(false);
 ob_start();
-\FabricatorForms\Admin\Verificationpage::render();
+\FabricatorForms\Admin\VerificationPage::render();
 $admin['verifier'] = (string) ob_get_clean();
 
 // FormFabricator → PDF Layout (PDFLayoutEditor::render()) with the default layout, and the objects it localizes. The
@@ -609,16 +608,16 @@ ob_start();
 \FabricatorForms\Admin\PDFLayoutEditor::render();
 $admin['pdfLayout']     = (string) ob_get_clean();
 $admin['pdfLayoutPage'] = $localized['FabricatorPdfLayoutPage'] ?? null;
-$admin['pdfLayoutLock'] = $localized['FabricatorPdfLayoutLock'] ?? null;
+$admin['pdfLayoutLock'] = $localized['FabricatorAdminLock'] ?? null;
 
 // ALTCHA: a challenge with a small answer, that answer, and the server's verdicts on it (accepted, refused as used,
 // refused when tampered). The JS suite checks ALTCHA's own solver and verifier agree.
 \FabricatorForms\Tests\Support\FakeWordPress::install();
 Brain\Monkey\Functions\when('wp_salt')->justReturn('altcha-fixture-salt');
 Brain\Monkey\Functions\when('get_current_blog_id')->justReturn(1);
-$altchaChallenge = Reflect::call(\FabricatorForms\Utils\Altcha::class, 'challengeFor', 37);
+$altchaChallenge = Reflect::call(\FabricatorForms\Utils\Security\Altcha::class, 'challengeFor', 37);
 $altchaKey       = Reflect::call(
-    \FabricatorForms\Utils\Altcha::class,
+    \FabricatorForms\Utils\Security\Altcha::class,
     'deriveKey',
     (string) hex2bin($altchaChallenge['parameters']['nonce']),
     (string) hex2bin($altchaChallenge['parameters']['salt']),
@@ -633,14 +632,14 @@ $altchaChanged['parameters']['expiresAt'] += 3600;
 $altcha = [
     'challenge' => $altchaChallenge,
     'secrets'   => [
-        'challenge' => Reflect::call(\FabricatorForms\Utils\Altcha::class, 'secret', 'challenge'),
-        'key'       => Reflect::call(\FabricatorForms\Utils\Altcha::class, 'secret', 'key'),
+        'challenge' => Reflect::call(\FabricatorForms\Utils\Security\Altcha::class, 'secret', 'challenge'),
+        'key'       => Reflect::call(\FabricatorForms\Utils\Security\Altcha::class, 'secret', 'key'),
     ],
     'solution'  => ['counter' => 37, 'derivedKey' => bin2hex($altchaKey)],
     'verdicts'  => [
-        \FabricatorForms\Utils\Altcha::verify($altchaPayload($altchaChallenge)),
-        \FabricatorForms\Utils\Altcha::verify($altchaPayload($altchaChallenge)),
-        \FabricatorForms\Utils\Altcha::verify($altchaPayload($altchaChanged)),
+        \FabricatorForms\Utils\Security\Altcha::verify($altchaPayload($altchaChallenge)),
+        \FabricatorForms\Utils\Security\Altcha::verify($altchaPayload($altchaChallenge)),
+        \FabricatorForms\Utils\Security\Altcha::verify($altchaPayload($altchaChanged)),
     ],
 ];
 

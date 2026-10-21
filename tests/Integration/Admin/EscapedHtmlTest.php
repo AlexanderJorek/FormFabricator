@@ -28,7 +28,7 @@ final class EscapedHtmlTest extends AjaxTestCase
 
     public function testARefusedFileCardKeepsEveryTagAndAttribute(): void
     {
-        $card = \FabricatorForms\Admin\Verificationpage::problemCardHtml('report.pdf', 'This file is no PDF.', false);
+        $card = \FabricatorForms\Admin\VerificationPage::problemCardHtml('report.pdf', 'This file is no PDF.', false);
 
         self::assertSame(self::dom($card), self::dom(wp_kses($card, \FabricatorForms\Admin\fabricator_verifier_allowed_html())));
     }

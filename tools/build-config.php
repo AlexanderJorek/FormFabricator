@@ -24,17 +24,11 @@ return [
         'package.json', 'package-lock.json',
     ],
 
-    // Dev-only files inside shipped folders. The example field is a template that is never loaded, and WordPress.org
-    // asks plugins not to ship unreachable code.
+    // Dev-only files inside shipped folders: the translation tools, kept beside the files they write. Other dev-only
+    // files live in docs/ or tools/, which never ship.
     'nestedExclude' => [
-        'includes/PDF/templates/HEADER-RENDERING.md',
         'languages/compile-mo.php',
         'languages/make-pot.php',
-        'includes/Fields/_ExampleField.php',
-        'assets/js/fabricator-perf-debug.js',
-        'assets/js/fields/ExampleField.clientInitClickHandler.js',
-        'assets/js/fields/ExampleField.clientValidationZip.js',
-        'assets/css/fields/ExampleField.stylesComposite.css',
     ],
 
     // npm packages placed by hand (Composer doesn't manage them), each pinned by the SHA-256 list in its VERSION file.
@@ -131,7 +125,7 @@ return [
             'reason' => 'FormProcessor::handle() reads a form submission\'s answers unsanitized, after its nonce check, so each is '
                 . 'recorded as the visitor typed it: a sanitizer would change it ("a<b and c>d" to "ad", "20%AB" to "20"), '
                 . 'and a changed answer is a different statement (a direct debit mandate\'s account holder, a signed '
-                . 'declaration). Each answer is validated at its field instead (Utils\\AnswerText refuses invalid UTF-8, '
+                . 'declaration). Each answer is validated at its field instead (Utils\\Text\\AnswerText refuses invalid UTF-8, '
                 . 'control and invisible characters; each field checks its own format), never stored, and escaped wherever '
                 . 'it is shown: in the email, the PDF and the verification page.',
         ],

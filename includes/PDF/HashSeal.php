@@ -230,7 +230,7 @@ class HashSeal
     // Under rotateKey()'s lock, failing closed: a rotation in between would lose a key for good.
     public static function encryptExistingKeys(?array $only = null): void
     {
-        \FabricatorForms\Utils\OptionMutex::run(
+        \FabricatorForms\Utils\Storage\OptionMutex::run(
             'fabricator_forms_seal_key_history',
             static function () use ($only): void {
                 self::encryptExistingKeysLocked($only);
@@ -422,7 +422,7 @@ class HashSeal
      *
      * Never creates a key (only createInitialKey() and rotateKey() do): concurrent requests would each store their own,
      * and a record that merely failed to decode would be replaced. Throwing fails the submission closed, and
-     * Plugin::maybeWarnSealKeyUnusable() tells the admin to rotate.
+     * Notices::maybeWarnSealKeyUnusable() tells the admin to rotate.
      *
      * @return array{uuid: string, key: string}
      * @throws \RuntimeException When the record is absent, unreadable or can't be decrypted.
@@ -729,7 +729,7 @@ class HashSeal
 
         // One lock around read and write, or concurrent rotations drop each other's retired key. Fail closed: a lost
         // key can't be redone.
-        return \FabricatorForms\Utils\OptionMutex::run(
+        return \FabricatorForms\Utils\Storage\OptionMutex::run(
             'fabricator_forms_seal_key_history',
             static fn(): array => self::rotateKeyLocked($compromised, $user_id, $user_login, $retired_at, $master_key_lost),
             3000,
@@ -1052,7 +1052,7 @@ class HashSeal
         }
 
         // Under rotateKey()'s lock, failing closed: a rotation between read and write would lose the key it retired.
-        \FabricatorForms\Utils\OptionMutex::run(
+        \FabricatorForms\Utils\Storage\OptionMutex::run(
             'fabricator_forms_seal_key_history',
             static function () use ($uuid, $key_value, $created_at, $status): void {
                 self::addLegacyKeyLocked($uuid, $key_value, $created_at, $status);

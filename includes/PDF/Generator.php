@@ -25,7 +25,7 @@ use Mpdf\Mpdf;
 use Mpdf\MpdfException;
 use Mpdf\HTMLParserMode;
 use FabricatorForms\Fields\FieldRegistry;
-use FabricatorForms\Utils\HtmlSanitizer;
+use FabricatorForms\Utils\Text\HtmlSanitizer;
 
 defined('ABSPATH') || exit;
 
@@ -33,7 +33,7 @@ class Generator
 {
     /**
      * How the seal records when a PDF was made (wp_date()): site-local time plus UTC offset, which the verifier parses
-     * to check the PDF's own dates. The metadata block shows the same moment as Utils\SigningTime writes it.
+     * to check the PDF's own dates. The metadata block shows the same moment as Utils\Text\SigningTime writes it.
      *
      * @var string
      */
@@ -117,7 +117,7 @@ class Generator
             // Sealed, and read back by the verifier to check the PDF's own dates (METADATA_DATE_FORMAT).
             'generated'       => wp_date(self::METADATA_DATE_FORMAT, $now),
             // The same moment for the reader of the metadata block, as every signature and agreement records it.
-            'generated_shown' => \FabricatorForms\Utils\SigningTime::format($now),
+            'generated_shown' => \FabricatorForms\Utils\Text\SigningTime::format($now),
             'nonce'     => bin2hex(random_bytes(16)),
             'form_id'   => $form_id,
             'form_name' => $title,
@@ -243,11 +243,11 @@ class Generator
             }
 
             // The submission's folder is mPDF's temp dir too, so mPDF's copies of the visitor's images go with it.
-            $work = \FabricatorForms\Utils\PrivateDir::forSubmission('pdf');
+            $work = \FabricatorForms\Utils\Storage\PrivateDir::forSubmission('pdf');
             if ($work === '') {
                 throw new \RuntimeException('No folder for the PDF.');
             }
-            \FabricatorForms\Utils\PrivateDir::linkFontCache($work);
+            \FabricatorForms\Utils\Storage\PrivateDir::linkFontCache($work);
             $grid_svg = FABRICATOR_FORMS_PATH . 'includes/PDF/templates/construction-grid.svg';
 
 
@@ -379,7 +379,7 @@ class Generator
                     'all_stream_hashes' => $all_stream_hashes,
                     'pdf_meta'          => $pdf_meta,
                     'links'             => $links,
-                    // Key order is part of the HMAC input; Verificationpage::rebuildPayload() builds the same order.
+                    // Key order is part of the HMAC input; VerificationPage::rebuildPayload() builds the same order.
                     'seal_page_text'    => $seal_page_text,
                 ];
 
@@ -423,7 +423,7 @@ class Generator
             // Random filename: a guessable one could be fetched directly on servers that ignore .htaccess.
             $final_path = $work . '/Entry_' . bin2hex(random_bytes(16)) . '.pdf';
             $mpdf->Output($final_path, \Mpdf\Output\Destination::FILE);
-            \FabricatorForms\Utils\PrivateDir::shareFontCache($work);
+            \FabricatorForms\Utils\Storage\PrivateDir::shareFontCache($work);
 
             return $final_path;
         } catch (MpdfException $e) {
@@ -464,7 +464,7 @@ class Generator
      */
     public static function sweepTmpDirs(int $max_age): void
     {
-        \FabricatorForms\Utils\PrivateDir::sweep($max_age);
+        \FabricatorForms\Utils\Storage\PrivateDir::sweep($max_age);
     }
 
     /* ------------------------------------------------------------------ */
@@ -605,7 +605,7 @@ class Generator
     }
 
     /**
-     * Hashes image XObject streams, skipping SMask alpha channels; matches Verificationpage's decoding so hashes agree.
+     * Hashes image XObject streams, skipping SMask alpha channels; matches VerificationPage's decoding so hashes agree.
      *
      * @param string $pdf_raw Raw PDF binary string.
      * @return array SHA-256 hashes of raw compressed image XObject streams.
@@ -656,7 +656,7 @@ class Generator
                 continue;
             }
 
-            // Extract stream — use same boundary logic as Verificationpage.
+            // Extract stream — use same boundary logic as VerificationPage.
             $sp  = PdfUtils::nextAt($pdf_raw, 'stream', $obj_start, $walk_cache);
             $esp = $sp !== false ? PdfUtils::nextAt($pdf_raw, 'endstream', $sp, $walk_cache) : false;
             if ($sp === false || $esp === false) {
@@ -785,7 +785,7 @@ class Generator
     private static function glyphTest(string $family): ?\Closure
     {
         try {
-            $mpdf  = new \Mpdf\Mpdf(['tempDir' => \FabricatorForms\Utils\PrivateDir::sharedMpdfTemp()] + self::fontConfig());
+            $mpdf  = new \Mpdf\Mpdf(['tempDir' => \FabricatorForms\Utils\Storage\PrivateDir::sharedMpdfTemp()] + self::fontConfig());
             $maps  = [];
             foreach (['', 'B', 'I', 'BI'] as $style) {
                 $mpdf->SetFont($family, $style);
@@ -954,7 +954,7 @@ class Generator
 
     /**
      * A value as the seal records it: as the PDF shows it. Text is escaped there, so it is sealed as it is, "<" and line
-     * breaks included (a typed answer holds no character reference, Utils\AnswerText; one in a text the site set shows
+     * breaks included (a typed answer holds no character reference, Utils\Text\AnswerText; one in a text the site set shows
      * as its character, so it is decoded). Markup (an HTML block) is sealed as its text.
      *
      * @param string $value   The entry's value.

@@ -42,8 +42,8 @@ class FormSelectModel
     public static function getAll(): array
     {
         // Defense-in-depth: all current call sites are already gated on
-        // Plugin::userCan('edit_forms') before reaching here, same as save()/delete().
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
+        // Capabilities::userCan('edit_forms') before reaching here, same as save()/delete().
+        if (!\FabricatorForms\Capabilities::userCan('edit_forms')) {
             return [];
         }
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
@@ -77,7 +77,7 @@ class FormSelectModel
     public static function save(array $data, int $id = 0): int
     {
         // Defense-in-depth: don't rely solely on callers remembering to gate on edit_forms.
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_forms')) {
             return 0;
         }
         $title = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($data['title'] ?? null));
@@ -101,7 +101,7 @@ class FormSelectModel
 
         // Read and write under one lock, as FormModel and FormEditor do for their shared options: two saves landing
         // together each rewrote the whole list from what they had read, so the later one dropped the earlier change.
-        return \FabricatorForms\Utils\OptionMutex::run(
+        return \FabricatorForms\Utils\Storage\OptionMutex::run(
             self::$option,
             static function () use ($id, $title, $items): int {
                 $all = self::getRaw();
@@ -136,7 +136,7 @@ class FormSelectModel
             return;
         }
         // Under the same lock as save(): this runs from before_delete_post, which can land while a save is running.
-        \FabricatorForms\Utils\OptionMutex::run(
+        \FabricatorForms\Utils\Storage\OptionMutex::run(
             self::$option,
             static function () use ($post_id): void {
                 $all     = self::getRaw();
@@ -171,11 +171,11 @@ class FormSelectModel
     // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a method named delete(), not the filesystem function.
     public static function delete(int $id): bool
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_forms')) {
             return false;
         }
         // Whether a selection with this ID was there and is now gone, for the caller to report.
-        return (bool) \FabricatorForms\Utils\OptionMutex::run(
+        return (bool) \FabricatorForms\Utils\Storage\OptionMutex::run(
             self::$option,
             static function () use ($id): bool {
                 $before = self::getRaw();

@@ -3,10 +3,10 @@
 namespace FabricatorForms\Tests\Integration\Utils;
 
 use FabricatorForms\Tests\Integration\TestCase;
-use FabricatorForms\Utils\ConcurrencySlot;
-use FabricatorForms\Utils\OptionMutex;
-use FabricatorForms\Utils\RateLimiter;
-use FabricatorForms\Utils\SingleUseToken;
+use FabricatorForms\Utils\Security\ConcurrencySlot;
+use FabricatorForms\Utils\Storage\OptionMutex;
+use FabricatorForms\Utils\Security\RateLimiter;
+use FabricatorForms\Utils\Security\SingleUseToken;
 
 /**
  * The helpers that let the database decide a race (RateLimiter, SingleUseToken, ConcurrencySlot, OptionMutex),

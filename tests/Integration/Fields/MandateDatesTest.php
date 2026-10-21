@@ -6,7 +6,7 @@ use FabricatorForms\Fields\FieldRegistry;
 use FabricatorForms\Tests\Integration\TestCase;
 
 /**
- * A mandate's generated reference and its date of signing (Utils\SigningTime) name the same UTC day, whatever the
+ * A mandate's generated reference and its date of signing (Utils\Text\SigningTime) name the same UTC day, whatever the
  * site's timezone.
  */
 final class MandateDatesTest extends TestCase

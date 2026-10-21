@@ -7,6 +7,7 @@ use FabricatorForms\Admin\FormSettings;
 use FabricatorForms\Admin\PDFLayoutEditor;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
+use FabricatorForms\Utils\Storage\AdminLock;
 
 /**
  * Two admins on the same screen (TESTING.md §2, §6): the second one is told who is editing, the notice clears once the
@@ -27,6 +28,7 @@ final class EditLockTest extends AjaxTestCase
         FormEditor::init();
         PDFLayoutEditor::init();
         FormSettings::init();
+        AdminLock::init();
         $this->first  = self::factory()->user->create(['role' => 'administrator', 'display_name' => 'Ada First']);
         $this->second = self::factory()->user->create(['role' => 'administrator', 'display_name' => 'Bob Second']);
     }

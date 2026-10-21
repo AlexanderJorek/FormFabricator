@@ -5,7 +5,7 @@ namespace FabricatorForms\Tests\Unit\Utils;
 use Brain\Monkey\Functions;
 use FabricatorForms\Tests\Support\FieldStubs;
 use FabricatorForms\Tests\Support\TestCase;
-use FabricatorForms\Utils\SigningTime;
+use FabricatorForms\Utils\Text\SigningTime;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**

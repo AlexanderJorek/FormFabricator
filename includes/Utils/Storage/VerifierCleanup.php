@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace FabricatorForms\Utils;
+namespace FabricatorForms\Utils\Storage;
 
 defined('ABSPATH') || exit;
 
@@ -119,7 +119,7 @@ class VerifierCleanup
                 }
                 // A concurrent request may delete the file between is_file() and here; false is then the right answer.
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a copy in the plugin's own folder in uploads.
-                $mtime = Cast::withoutWarnings(static fn() => filemtime($file));
+                $mtime = \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => filemtime($file));
                 if ($mtime === false) {
                     continue;
                 }
@@ -201,7 +201,7 @@ class VerifierCleanup
                     }
                     // The sweep goes by modification time, so this is what keeps the copy.
                     // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem,WordPress.WP.AlternativeFunctions.file_system_operations_touch -- $path comes from this plugin's own serving transient and points into verfiles/; WP_Filesystem::touch() may go through FTP, which this per-request refresh must not.
-                    Cast::withoutWarnings(static fn() => touch($path));
+                    \FabricatorForms\Utils\Cast::withoutWarnings(static fn() => touch($path));
                     set_transient('fabricator_pdf_' . $token, $entry, self::UNUSED_TTL);
                     $alive[] = $token;
                 }

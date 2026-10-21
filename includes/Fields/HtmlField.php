@@ -84,7 +84,7 @@ class HtmlField extends BaseField
     }
 
     /**
-     * Already passed through Utils\HtmlSanitizer::sanitize() at save/render time, so MailSender injects it as-is.
+     * Already passed through Utils\Text\HtmlSanitizer::sanitize() at save/render time, so MailSender injects it as-is.
      *
      * @return bool
      */
@@ -94,11 +94,11 @@ class HtmlField extends BaseField
     }
 
     /* No sanitizeConfigValue() override: BaseField's sends every non-plain-text key, html_content included, through
-       Utils\HtmlSanitizer::sanitize(), the one rule set every HTML-capable text in a form shares. */
+       Utils\Text\HtmlSanitizer::sanitize(), the one rule set every HTML-capable text in a form shares. */
 
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $html  = \FabricatorForms\Utils\HtmlSanitizer::sanitize($config['html_content'] ?? '');
+        $html  = \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize($config['html_content'] ?? '');
         $label = (string) ($config['label'] ?? '');
         $label_html = empty($config['hide_label']) && $label !== ''
             ? '<div class="fabricator-label">' . esc_html($label) . '</div>'
@@ -131,7 +131,7 @@ class HtmlField extends BaseField
         if (!($config['show_in_output'] ?? true)) {
             return [];
         }
-        $html = \FabricatorForms\Utils\HtmlSanitizer::sanitize($config['html_content'] ?? '');
+        $html = \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize($config['html_content'] ?? '');
         if ($html === '') {
             return [];
         }
@@ -165,7 +165,7 @@ class HtmlField extends BaseField
     {
         // mPDF fetches any non-local <img src>/CSS url() server-side with no host allow-list of its own —
         // this field's HTML is form-builder-authored and unrestricted, so strip remote refs to avoid SSRF.
-        $html = \FabricatorForms\Utils\HtmlSanitizer::stripRemoteResourcesForPdf((string)($field['value'] ?? ''));
+        $html = \FabricatorForms\Utils\Text\HtmlSanitizer::stripRemoteResourcesForPdf((string)($field['value'] ?? ''));
         $desc = $this->pdf($field)->rawHtml($html, true);
         if (empty($field['label'])) {
             $desc->unlabeled();

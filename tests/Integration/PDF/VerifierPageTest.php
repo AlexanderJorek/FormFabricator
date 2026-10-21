@@ -2,14 +2,14 @@
 
 namespace FabricatorForms\Tests\Integration\PDF;
 
-use FabricatorForms\Admin\Verificationpage;
+use FabricatorForms\Admin\VerificationPage;
 use FabricatorForms\Fields\FieldRegistry;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\PDF\Generator;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
 use FabricatorForms\Tests\Support\Overrides;
-use FabricatorForms\Utils\MemoryBudget;
+use FabricatorForms\Utils\Security\MemoryBudget;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
@@ -33,7 +33,7 @@ final class VerifierPageTest extends AjaxTestCase
         }
         // The plugin loads the admin classes only when is_admin(), which the test bootstrap is not; hook them as
         // admin-ajax.php would.
-        Verificationpage::register();
+        VerificationPage::register();
     }
 
     // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- overrides WP_UnitTestCase's snake_case fixture method.
@@ -93,7 +93,7 @@ final class VerifierPageTest extends AjaxTestCase
             throw new \RuntimeException($location);
         });
         try {
-            Verificationpage::handleUploadPost();
+            VerificationPage::handleUploadPost();
         } catch (\RuntimeException $e) {
             // the Post/Redirect/Get answer
         } finally {
@@ -125,7 +125,7 @@ final class VerifierPageTest extends AjaxTestCase
             throw new \RuntimeException($location);
         });
         try {
-            Verificationpage::handleUploadPost();
+            VerificationPage::handleUploadPost();
             self::fail('the upload ends in a redirect (Post/Redirect/Get)');
         } catch (\RuntimeException $e) {
             self::assertStringContainsString('page=fabricator-pdf-verification', $e->getMessage());
@@ -268,7 +268,7 @@ final class VerifierPageTest extends AjaxTestCase
         $path = get_temp_dir() . wp_generate_password(8, false) . '-' . $name;
         file_put_contents($path, $bytes);
         try {
-            return Verificationpage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
+            return VerificationPage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
         } finally {
             unlink($path);
         }

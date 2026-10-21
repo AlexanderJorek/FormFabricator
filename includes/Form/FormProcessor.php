@@ -24,7 +24,7 @@ namespace FabricatorForms\Form;
 defined('ABSPATH') || exit;
 
 use FabricatorForms\Fields\FieldRegistry;
-use FabricatorForms\Utils\AnswerText;
+use FabricatorForms\Utils\Text\AnswerText;
 
 /**
  * Handles fabricator_form AJAX submissions, validates fields, and fires the
@@ -68,7 +68,7 @@ class FormProcessor
         /* ---- The answers, read once ---- */
         // Fields read these, never the request, and record each answer as the visitor typed it, trimmed: a sanitizer would
         // change it ("a<b and c>d" to "ad", "20%AB" to "20"), and a changed answer is a different statement (a mandate's
-        // account holder). What can't be recorded as typed is refused at its field instead (Utils\AnswerText, below).
+        // account holder). What can't be recorded as typed is refused at its field instead (Utils\Text\AnswerText, below).
         // Nothing is stored, and every place that shows an answer escapes it there.
         // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- answers are validated per field below and escaped wherever shown; sanitizing would change them.
         $post  = wp_unslash($_POST);
@@ -92,7 +92,7 @@ class FormProcessor
         /* ---- Replay-protection token ---- */
         // Not the nonce, which visitors share. Issued and signed per submit by Plugin::ajaxGetToken().
         $submission_token = is_string($post['fabricator_submission_token'] ?? null) ? $post['fabricator_submission_token'] : '';
-        if ($submission_token === '' || !\FabricatorForms\Utils\SingleUseToken::verifyIssued($submission_token, $form_id)) {
+        if ($submission_token === '' || !\FabricatorForms\Utils\Security\SingleUseToken::verifyIssued($submission_token, $form_id)) {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
         }
         $claim_key = 'submit_' . md5($submission_token . '_' . $form_id);
@@ -330,21 +330,21 @@ class FormProcessor
         $attaches_pdf = $makes_pdf;
         // The form's own text in the PDF (HTML blocks), twice: laid out in its cell, and again inside the seal.
         $form_text_bytes = $attaches_pdf ? 2 * self::configTextBytes($form->fields, $hidden_ids) : 0;
-        $mem_estimate    = \FabricatorForms\Utils\MemoryBudget::estimateBytes(
+        $mem_estimate    = \FabricatorForms\Utils\Security\MemoryBudget::estimateBytes(
             self::uploadPayloadBytes($uploads) + $image_bytes,
             $text_bytes + $form_text_bytes
         );
-        if ($mem_estimate > \FabricatorForms\Utils\MemoryBudget::budgetBytes()) {
+        if ($mem_estimate > \FabricatorForms\Utils\Security\MemoryBudget::budgetBytes()) {
             // Waiting can't help a submission larger than the whole budget, so say what can change instead: the
             // visitor's files, or, when the form's own text alone is too much, the form.
-            $form_alone = \FabricatorForms\Utils\MemoryBudget::estimateBytes(0, $form_text_bytes) > \FabricatorForms\Utils\MemoryBudget::budgetBytes();
+            $form_alone = \FabricatorForms\Utils\Security\MemoryBudget::estimateBytes(0, $form_text_bytes) > \FabricatorForms\Utils\Security\MemoryBudget::budgetBytes();
             \FabricatorForms\fabricator_log(
                 sprintf(
                     'FabricatorForms FormProcessor: a submission of form %d needs %dMB, more than the whole %dMB budget; '
                     . 'refused as too large%s. If this host has headroom, raise it with FABRICATOR_MEMORY_BUDGET_MB in wp-config.php.',
                     $form_id,
                     (int) round($mem_estimate / 1048576),
-                    (int) round(\FabricatorForms\Utils\MemoryBudget::budgetBytes() / 1048576),
+                    (int) round(\FabricatorForms\Utils\Security\MemoryBudget::budgetBytes() / 1048576),
                     $form_alone ? ' (the HTML blocks alone are too large; shorten them)' : ''
                 )
             );
@@ -365,7 +365,7 @@ class FormProcessor
             $mem_estimate  = self::estimateWithImage($mem_estimate, max($largest_image, self::largestLayoutImage()));
         }
 
-        $mem_token    = \FabricatorForms\Utils\MemoryBudget::reserve($mem_estimate, 300);
+        $mem_token    = \FabricatorForms\Utils\Security\MemoryBudget::reserve($mem_estimate, 300);
         if ($mem_token === false) {
             \FabricatorForms\fabricator_log(
                 sprintf(
@@ -374,8 +374,8 @@ class FormProcessor
                     . 'raise it with FABRICATOR_MEMORY_BUDGET_MB in wp-config.php.',
                     $form_id,
                     (int) round($mem_estimate / 1048576),
-                    (int) round(\FabricatorForms\Utils\MemoryBudget::budgetBytes() / 1048576),
-                    (int) round(\FabricatorForms\Utils\MemoryBudget::reservedBytes() / 1048576)
+                    (int) round(\FabricatorForms\Utils\Security\MemoryBudget::budgetBytes() / 1048576),
+                    (int) round(\FabricatorForms\Utils\Security\MemoryBudget::reservedBytes() / 1048576)
                 )
             );
             wp_send_json_error(
@@ -388,11 +388,11 @@ class FormProcessor
         }
 
         // Released on shutdown, so a fatal can't leak the reservation (its TTL is the backstop).
-        \FabricatorForms\Utils\MemoryBudget::raiseTo($mem_estimate);
+        \FabricatorForms\Utils\Security\MemoryBudget::raiseTo($mem_estimate);
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions,PHPCS_SecurityAudit.BadFunctions.FunctionHandlingFunctions.WarnFunctionHandling -- the plugin's own cleanup, a fixed callback.
         register_shutdown_function(
             static function () use ($mem_token): void {
-                \FabricatorForms\Utils\MemoryBudget::releaseReservation($mem_token);
+                \FabricatorForms\Utils\Security\MemoryBudget::releaseReservation($mem_token);
             }
         );
         if ($largest_image > \FabricatorForms\PDF\PdfUtils::maxSafePixels()) {
@@ -415,7 +415,7 @@ class FormProcessor
 
         /* ---- Claim the replay-protection token ---- */
         // Right before the side effects, so an earlier failure can retry.
-        if (!\FabricatorForms\Utils\SingleUseToken::claim($claim_key, \FabricatorForms\Utils\SingleUseToken::CLAIM_TTL)) {
+        if (!\FabricatorForms\Utils\Security\SingleUseToken::claim($claim_key, \FabricatorForms\Utils\Security\SingleUseToken::CLAIM_TTL)) {
             wp_send_json_error(['message' => __('This submission has already been received.', 'formfabricator')], 409);
         }
 
@@ -426,7 +426,7 @@ class FormProcessor
 
         // Nothing is stored locally, so an undelivered submission is lost: say so, and release the claim for the retry.
         if (MailSender::deliveryFailed()) {
-            \FabricatorForms\Utils\SingleUseToken::release($claim_key);
+            \FabricatorForms\Utils\Security\SingleUseToken::release($claim_key);
             wp_send_json_error(
                 ['message' => __('Your submission could not be delivered. Please try again later.', 'formfabricator')],
                 500
@@ -615,7 +615,7 @@ class FormProcessor
      */
     private static function imageSizeErrors(array $images, int $pixel_limit, int $base, int $total_bytes): array
     {
-        $budget = \FabricatorForms\Utils\MemoryBudget::budgetBytes();
+        $budget = \FabricatorForms\Utils\Security\MemoryBudget::budgetBytes();
         $errors = [];
         foreach ($images as $image) {
             if (isset($errors[$image['field']])) {
@@ -632,7 +632,7 @@ class FormProcessor
                     number_format_i18n(floor($pixel_limit / 100000) / 10, 1)
                 );
             } elseif (self::estimateWithImage($base, $image['pixels']) > $budget) {
-                $room = \FabricatorForms\Utils\MemoryBudget::largestUploadBytes(
+                $room = \FabricatorForms\Utils\Security\MemoryBudget::largestUploadBytes(
                     $image['pixels'] * \FabricatorForms\PDF\PdfUtils::DECODE_BYTES_PER_PIXEL
                 );
                 $errors[$image['field']] = sprintf(
@@ -750,8 +750,8 @@ class FormProcessor
         if (!self::isMemoryExhaustion($error)) {
             return null;
         }
-        \FabricatorForms\Utils\MemoryBudget::raiseTo(\FabricatorForms\Utils\MemoryBudget::phpMemoryLimitBytes() + 32 * 1024 * 1024);
-        \FabricatorForms\Utils\SingleUseToken::release($claim_key);
+        \FabricatorForms\Utils\Security\MemoryBudget::raiseTo(\FabricatorForms\Utils\Security\MemoryBudget::phpMemoryLimitBytes() + 32 * 1024 * 1024);
+        \FabricatorForms\Utils\Security\SingleUseToken::release($claim_key);
         \FabricatorForms\fabricator_log('FabricatorForms FormProcessor: ran out of memory while handling uploads: ' . (string) ($error['message'] ?? ''));
         return ['message' => self::uploadsTooLargeMessage()];
     }
@@ -857,7 +857,7 @@ class FormProcessor
      */
     private static function rateLimitRetryAfter(int $form_id): ?int
     {
-        $ip = \FabricatorForms\Utils\ClientIp::resolve();
+        $ip = \FabricatorForms\Utils\Security\ClientIp::resolve();
         if ($ip === '') {
             // Unknown client: fail closed rather than pooling requests into one shared rate-limit bucket.
             \FabricatorForms\fabricator_log(
@@ -869,23 +869,23 @@ class FormProcessor
         }
         // Bucketed per IPv6 /64, so rotating addresses within it doesn't escape the limit, and counted per form and
         // across all forms. The /48 comes first, and once full nothing else is written: a /48 holds 65,536 /64s.
-        $prefix48 = \FabricatorForms\Utils\ClientIp::prefix48($ip);
+        $prefix48 = \FabricatorForms\Utils\Security\ClientIp::prefix48($ip);
         if ($prefix48 !== null) {
             $key48 = 'submit_48_' . hash_hmac('sha256', $prefix48, wp_salt('auth'));
-            if (\FabricatorForms\Utils\RateLimiter::increment($key48, 5 * MINUTE_IN_SECONDS) > self::SENDS_PER_PREFIX48) {
-                return max(1, \FabricatorForms\Utils\RateLimiter::secondsUntilReset($key48));
+            if (\FabricatorForms\Utils\Security\RateLimiter::increment($key48, 5 * MINUTE_IN_SECONDS) > self::SENDS_PER_PREFIX48) {
+                return max(1, \FabricatorForms\Utils\Security\RateLimiter::secondsUntilReset($key48));
             }
         }
-        $bucket = \FabricatorForms\Utils\ClientIp::bucket($ip);
+        $bucket = \FabricatorForms\Utils\Security\ClientIp::bucket($ip);
         $limits = [
             'submit_' . hash_hmac('sha256', $bucket . '_' . $form_id, wp_salt('auth')) => self::SENDS_PER_FORM,
             'submit_all_' . hash_hmac('sha256', $bucket, wp_salt('auth'))             => self::SENDS_PER_SITE,
         ];
         $retry = null;
         foreach ($limits as $key => $limit) {
-            if (\FabricatorForms\Utils\RateLimiter::increment($key, 5 * MINUTE_IN_SECONDS) > $limit) {
+            if (\FabricatorForms\Utils\Security\RateLimiter::increment($key, 5 * MINUTE_IN_SECONDS) > $limit) {
                 // secondsUntilReset() re-reads the row just written, so a just-reset window counts.
-                $retry = max($retry ?? 1, \FabricatorForms\Utils\RateLimiter::secondsUntilReset($key));
+                $retry = max($retry ?? 1, \FabricatorForms\Utils\Security\RateLimiter::secondsUntilReset($key));
             }
         }
         return $retry;
@@ -1002,7 +1002,7 @@ class FormProcessor
         $results = [];
         foreach ($rules as $r) {
             if (is_array($r)) {
-                $results[] = self::evalConditionRule($r, $flat);
+                $results[] = ConditionRule::holds($r, $flat);
             }
         }
 
@@ -1011,70 +1011,5 @@ class FormProcessor
             : !in_array(false, $results, strict: true);
 
         return $action === 'hide' ? $pass : !$pass;
-    }
-
-    /**
-     * Lowercases as front.js's String.prototype.toLowerCase() does, on every supported PHP version.
-     *
-     * Before PHP 8.3, mb_strtolower() lowercases a word-final "Σ" to "σ" where JavaScript gives "ς".
-     *
-     * @param string $s        Text to lowercase.
-     * @param bool   $emulated Apply the final-sigma rule by hand; tests set it to check the rule on PHP 8.3+.
-     * @return string
-     */
-    private static function lowerLikeJs(string $s, bool $emulated = PHP_VERSION_ID < 80300): string
-    {
-        if ($emulated && str_contains($s, 'Σ')) {
-            // Final_Sigma: after a letter (skipping case-ignorable marks such as the acute accent) and before none.
-            $s = (string) preg_replace('/(?<=\p{L})([\p{Mn}\p{Me}\p{Lm}\p{Sk}\x{0027}\x{2019}]*)Σ(?![\p{Mn}\p{Me}]*\p{L})/u', '$1ς', $s);
-        }
-        return mb_strtolower($s);
-    }
-
-    /**
-     * Evaluates one condition rule against the flat value map.
-     *
-     * @param array $rule Rule: field_id, operator, value.
-     * @param array $flat Flat field_id → value map.
-     */
-    private static function evalConditionRule(array $rule, array $flat): bool
-    {
-        $fid   = $rule['field_id'] ?? '';
-        $op    = $rule['operator'] ?? 'equals';
-        // Multibyte-aware, as front.js lowercases "Ä" too.
-        $rv    = self::lowerLikeJs((string)($rule['value'] ?? ''));
-        $val   = $flat[$fid] ?? '';
-        // Strip the "Other" free-text key so it can't accidentally satisfy an equals/contains condition rule.
-        if (is_array($val)) {
-            unset($val['__other_text__']);
-        }
-        $isArr = is_array($val);
-        // Coerces to strings first: a crafted nested-array POST (e.g. checkboxfield[0][0]=x) would otherwise TypeError strtolower().
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-        $scalars = $isArr ? array_map(static fn($v) => is_scalar($v) ? (string)$v : '', $val) : [];
-        $str     = $isArr ? self::lowerLikeJs(implode(',', $scalars)) : self::lowerLikeJs((string)$val);
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-        $lower   = $isArr ? array_map(static fn(string $v): string => self::lowerLikeJs($v), $scalars) : [];
-
-        return match ($op) {
-            'equals'       => $isArr ? in_array($rv, $lower, strict: true) : $str === $rv,
-            'not_equals'   => $isArr ? !in_array($rv, $lower, strict: true) : $str !== $rv,
-            'contains'     => $rv !== '' && ($isArr
-                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-                ? (bool) array_filter($lower, static fn($v) => str_contains($v, $rv))
-                : str_contains($str, $rv)),
-            // An empty value is a half-configured rule, not "contains nothing": unsatisfied, like 'contains' above.
-            'not_contains' => $rv !== '' && ($isArr
-                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-                ? !array_filter($lower, static fn($v) => str_contains($v, $rv))
-                : !str_contains($str, $rv)),
-            'empty'        => $isArr ? empty($val) : $str === '',
-            'not_empty'    => $isArr ? !empty($val) : $str !== '',
-            // Never for a list, as in front.js: a ticked checkbox worth "10" is no number.
-            'greater'      => !$isArr && is_numeric($str) && is_numeric($rv) && (float)$str > (float)$rv,
-            'less'         => !$isArr && is_numeric($str) && is_numeric($rv) && (float)$str < (float)$rv,
-            // Fail safe on an unrecognized operator: treat as unsatisfied rather than silently hiding/showing.
-            default        => false,
-        };
     }
 }

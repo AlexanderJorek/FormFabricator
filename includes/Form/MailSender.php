@@ -23,7 +23,6 @@ namespace FabricatorForms\Form;
 
 use FabricatorForms\Fields\FieldRegistry;
 use FabricatorForms\Form\FormModel;
-use FabricatorForms\Admin\FormSettings;
 use FabricatorForms\PDF\Generator;
 
 defined('ABSPATH') || exit;
@@ -283,8 +282,11 @@ class MailSender
      */
     private static function notificationAttachesPdf(int $form_id, array $notif): bool
     {
-        return !empty($notif['attach_pdf'])
-            || FormSettings::shouldAttachPdf($form_id, $notif['slug'] ?? '');
+        if (!empty($notif['attach_pdf'])) {
+            return true;
+        }
+        $saved = get_option('fabricator_forms_pdf_settings', []);
+        return is_array($saved) && !empty($saved[$form_id . '|' . ($notif['slug'] ?? '')]);
     }
 
     /**
@@ -529,7 +531,7 @@ class MailSender
      */
     private static function fromHeader(array $notif, array $mapped, FormModel $form): string
     {
-        // Never a form field: see FormEditor::sanitizeFromEmail(). A stored or imported {field} is ignored here too, and
+        // Never a form field: see FormSanitizer::sanitizeFromEmail(). A stored or imported {field} is ignored here too, and
         // the site's sender applies.
         $notif_email = trim(\FabricatorForms\Utils\Cast::stringOrDefault($notif['from_email'] ?? null));
         if ($notif_email === '{admin_email}') {
@@ -591,7 +593,7 @@ class MailSender
     }
 
     /**
-     * Records that a submission could not be delivered, for the admin notice (Plugin::maybeWarnMailFailures()): when,
+     * Records that a submission could not be delivered, for the admin notice (Notices::maybeWarnMailFailures()): when,
      * which form and what failed, never an address or an answer. Nothing is stored locally, so a mail setup that
      * keeps failing loses every submission, while the visitors' "try again" reaches no one who can fix it.
      *
@@ -606,7 +608,7 @@ class MailSender
     {
         // Locked: two submissions failing at once, or one failing while another form's delivery clears its own entry,
         // must not undo each other's write.
-        \FabricatorForms\Utils\OptionMutex::run(
+        \FabricatorForms\Utils\Storage\OptionMutex::run(
             self::FAILURE_OPTION,
             static function () use ($form_id, $reason): void {
                 $records = self::failureRecords();
@@ -669,7 +671,7 @@ class MailSender
             delete_option(self::FAILURE_OPTION);
             return;
         }
-        \FabricatorForms\Utils\OptionMutex::run(
+        \FabricatorForms\Utils\Storage\OptionMutex::run(
             self::FAILURE_OPTION,
             static function () use ($form_id): void {
                 $records = self::failureRecords();
@@ -702,7 +704,7 @@ class MailSender
         }
 
         // The submission's mail folder (PrivateDir), which removes itself at the end of the request.
-        $tmp_dir = \FabricatorForms\Utils\PrivateDir::forSubmission('mail');
+        $tmp_dir = \FabricatorForms\Utils\Storage\PrivateDir::forSubmission('mail');
         if ($tmp_dir === '') {
             $result['complete'] = false;
             return $result;
@@ -724,7 +726,7 @@ class MailSender
                 }
                 // One subfolder per file keeps the original names without collisions.
                 $file_dir = $tmp_dir . '/f' . bin2hex(random_bytes(8)) . '/';
-                if (!\FabricatorForms\Utils\PrivateDir::makeDir($file_dir)) {
+                if (!\FabricatorForms\Utils\Storage\PrivateDir::makeDir($file_dir)) {
                     \FabricatorForms\fabricator_log("FabricatorForms: could not create temp dir {$file_dir}");
                     $result['complete'] = false;
                     continue;
@@ -732,7 +734,7 @@ class MailSender
                 $dest = $file_dir . $name;
                 // Same helper the directory hardening uses: WP_Filesystem where the host's
                 // transport is 'direct', a direct write (justified once, in SecureDir) elsewhere.
-                if (!\FabricatorForms\Utils\SecureDir::putFile($dest, $binary, 0600)) {
+                if (!\FabricatorForms\Utils\Storage\SecureDir::putFile($dest, $binary, 0600)) {
                     // The upload's own name, which may name a person, only as fabricator_log_file() records it.
                     \FabricatorForms\fabricator_log('FabricatorForms: failed to write temp file ' . \FabricatorForms\fabricator_log_file($name));
                     $result['complete'] = false;
@@ -830,7 +832,7 @@ class MailSender
                 (string) ($rule['value'] ?? '')
             );
             $raw = array_key_exists($field_id, $raw_values) ? $raw_values[$field_id] : null;
-            if (self::ruleMatches($actual, $operator, $expected, $raw, (string) ($rule['value'] ?? ''))) {
+            if (ConditionRule::routes($actual, $operator, $expected, $raw, (string) ($rule['value'] ?? ''))) {
                 // Cc/Bcc travel with the matched rule, not the notification, so routing can send different groups to different copy lists.
                 return [
                     'to'  => implode(', ', $to),
@@ -885,108 +887,6 @@ class MailSender
             }
         }
         return $raw;
-    }
-
-    /**
-     * Evaluates a single routing-rule comparison against a submitted value.
-     *
-     * @param string $actual   The field's display value, as it appears in the email and PDF.
-     * @param string $operator One of the supported comparison operators.
-     * @param string $expected The rule's comparison value.
-     * @param mixed  $raw      The value as submitted, or null when it isn't available.
-     * @param string $option   The rule's value as stored (an option value, before its label replaced it in $expected).
-     * @return bool Whether the rule matches.
-     */
-    private static function ruleMatches(
-        string $actual,
-        string $operator,
-        string $expected,
-        mixed $raw = null,
-        string $option = ''
-    ): bool {
-        // A multi-value answer equals an option when it is among those chosen, as in FormProcessor::evalConditionRule().
-        if (is_array($raw) && ($operator === 'equals' || $operator === 'not_equals')) {
-            unset($raw['__other_text__']);
-            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-            $chosen = array_map(static fn($v) => is_scalar($v) ? mb_strtolower((string) $v) : '', $raw);
-            $hit    = in_array(mb_strtolower($option !== '' ? $option : $expected), $chosen, true);
-            return $operator === 'equals' ? $hit : !$hit;
-        }
-        switch ($operator) {
-            case 'not_equals':
-                return mb_strtolower($actual) !== mb_strtolower($expected);
-            case 'contains':
-                return $expected !== '' && mb_stripos($actual, $expected) !== false;
-            case 'not_contains':
-                // Empty value = half-configured routing rule: unsatisfied, or it would route every submission.
-                return $expected !== '' && mb_stripos($actual, $expected) === false;
-            case 'empty':
-                return self::valueIsEmpty($actual, $raw);
-            case 'not_empty':
-                return !self::valueIsEmpty($actual, $raw);
-            case 'greater':
-                $number = self::numericValue($actual, $raw);
-                return $number !== null && is_numeric($expected) && $number > (float) $expected;
-            case 'less':
-                $number = self::numericValue($actual, $raw);
-                return $number !== null && is_numeric($expected) && $number < (float) $expected;
-            case 'equals':
-            default:
-                return mb_strtolower($actual) === mb_strtolower($expected);
-        }
-    }
-
-    /**
-     * Whether a field was left blank, judged on the value as submitted.
-     *
-     * A visitor can type "[No entry]", so the display value decides only when the submitted one is unavailable.
-     *
-     * @param string $display The field's display value.
-     * @param mixed  $raw     The value as submitted, or null when it isn't available.
-     * @return bool
-     */
-    private static function valueIsEmpty(string $display, mixed $raw): bool
-    {
-        if ($raw === null) {
-            return trim($display) === '';
-        }
-        if (is_array($raw)) {
-            foreach ($raw as $item) {
-                if (is_scalar($item) && trim((string) $item) !== '') {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return trim((string) $raw) === '';
-    }
-
-    /**
-     * The number behind a field value, for the greater/less operators.
-     *
-     * Prefers the value as submitted; a display value ("1.234,56 €") is read back through the site's number format.
-     *
-     * @param string $display The field's display value.
-     * @param mixed  $raw     The value as submitted, or null when it isn't available.
-     * @return float|null Null when neither holds a number.
-     */
-    private static function numericValue(string $display, mixed $raw): ?float
-    {
-        if (is_numeric($raw)) {
-            return (float) $raw;
-        }
-        $display = trim($display);
-        if (is_numeric($display)) {
-            return (float) $display;
-        }
-        global $wp_locale;
-        $decimal   = is_object($wp_locale) ? (string) ($wp_locale->number_format['decimal_point'] ?? '.') : '.';
-        $thousands = is_object($wp_locale) ? (string) ($wp_locale->number_format['thousands_sep'] ?? ',') : ',';
-        $plain     = str_replace([$thousands, ' ', "\xc2\xa0"], '', $display);
-        if ($decimal !== '') {
-            $plain = str_replace($decimal, '.', $plain);
-        }
-        return preg_match('/-?\d+(?:\.\d+)?/', $plain, $m) === 1 ? (float) $m[0] : null;
     }
 
     /**

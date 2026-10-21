@@ -3,7 +3,7 @@
 namespace FabricatorForms\Tests\Unit\Fields;
 
 use Brain\Monkey\Functions;
-use FabricatorForms\Admin\FormEditor;
+use FabricatorForms\Form\FormSanitizer;
 use FabricatorForms\Tests\Support\FieldStubs;
 use FabricatorForms\Tests\Support\TestCase;
 
@@ -41,7 +41,7 @@ final class ImportTypesTest extends TestCase
             $hostile['placeholder']  = ['array', 'label'];
             $hostile['custom_class'] = ['a', 'b'];
 
-            $clean = FormEditor::sanitizeFields([$hostile]);
+            $clean = FormSanitizer::sanitizeFields([$hostile]);
             self::assertCount(1, $clean, "$type: the field itself survives sanitizing");
             $cfg = $clean[0];
 
@@ -95,7 +95,7 @@ final class ImportTypesTest extends TestCase
                         $hostile[$key] = [['a'], ['b' => ['c']]];
                     }
                 }
-                $cfg = array_merge($defaults, FormEditor::sanitizeFields([$hostile])[0]);
+                $cfg = array_merge($defaults, FormSanitizer::sanitizeFields([$hostile])[0]);
                 $cfg['expanded'] = false;
 
                 foreach ($posted as $post) {
@@ -128,7 +128,7 @@ final class ImportTypesTest extends TestCase
         // An option valued "" could not satisfy "required"; two options sharing a value became one in conditions,
         // routing and the email.
         FieldStubs::registry();
-        $select = FormEditor::sanitizeFields([[
+        $select = FormSanitizer::sanitizeFields([[
             'id'      => 's1',
             'type'    => 'select',
             'label'   => 'Pick',
@@ -160,7 +160,7 @@ final class ImportTypesTest extends TestCase
     public function testLegitimateValuesKeepTheirKind(): void
     {
         FieldStubs::registry();
-        $select = FormEditor::sanitizeFields([[
+        $select = FormSanitizer::sanitizeFields([[
             'id'         => 's1',
             'type'       => 'select',
             'label'      => 'Pick',

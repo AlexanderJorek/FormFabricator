@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace FabricatorForms\Utils;
+namespace FabricatorForms\Utils\Security;
 
 defined('ABSPATH') || exit;
 
@@ -380,11 +380,11 @@ class MemoryBudget
     private static function readSmallFile(string $path): ?string
     {
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- $path is always one of three hardcoded literals, never request input.
-        if (!Cast::withoutWarnings(static fn(): bool => is_readable($path))) {
+        if (!\FabricatorForms\Utils\Cast::withoutWarnings(static fn(): bool => is_readable($path))) {
             return null;
         }
         // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_get_contents,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- kernel pseudo-file, hardcoded path; see method docblock.
-        $raw = Cast::withoutWarnings(static fn(): string|false => file_get_contents($path, false, null, 0, 65536));
+        $raw = \FabricatorForms\Utils\Cast::withoutWarnings(static fn(): string|false => file_get_contents($path, false, null, 0, 65536));
         if ($raw === false) {
             return null;
         }

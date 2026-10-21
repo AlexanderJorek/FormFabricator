@@ -262,7 +262,7 @@ final class RecordedTermsTest extends TestCase
     }
 
     /**
-     * The moment as Utils\SigningTime writes it with the stubbed date format ('Y-m-d'): the UTC date, then the UTC time.
+     * The moment as Utils\Text\SigningTime writes it with the stubbed date format ('Y-m-d'): the UTC date, then the UTC time.
      * A run that straddles UTC midnight is tolerated.
      */
     private static function signedAt(bool $whole = true): string

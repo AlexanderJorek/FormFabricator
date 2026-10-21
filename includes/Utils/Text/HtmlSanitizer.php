@@ -19,7 +19,7 @@
  * of the License, or (at your option) any later version.
  */
 
-namespace FabricatorForms\Utils;
+namespace FabricatorForms\Utils\Text;
 
 defined('ABSPATH') || exit;
 
@@ -176,7 +176,7 @@ class HtmlSanitizer
      * Strips remote <img src>/CSS url() refs from rich text bound for the PDF before mPDF fetches them, keeping
      * same-origin and data: only.
      *
-     * @param string $html Already wp_kses()-sanitized HTML (\FabricatorForms\Utils\HtmlSanitizer::sanitize() output).
+     * @param string $html Already wp_kses()-sanitized HTML (\FabricatorForms\Utils\Text\HtmlSanitizer::sanitize() output).
      * @return string HTML with disallowed remote resource references stripped.
      */
     public static function stripRemoteResourcesForPdf(string $html): string

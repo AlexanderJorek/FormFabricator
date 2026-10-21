@@ -2,7 +2,7 @@
 
 namespace FabricatorForms\Tests\Integration\PDF;
 
-use FabricatorForms\Admin\Verificationpage;
+use FabricatorForms\Admin\VerificationPage;
 use FabricatorForms\Tests\Integration\TestCase;
 use FabricatorForms\Tests\Support\Reflect;
 
@@ -33,7 +33,7 @@ final class VerifierImageTest extends TestCase
         $level = ob_get_level();
         ob_start();
         try {
-            $uri = (string) Reflect::call(Verificationpage::class, 'displayDataUri', $file, $mime);
+            $uri = (string) Reflect::call(VerificationPage::class, 'displayDataUri', $file, $mime);
         } finally {
             $printed = (string) ob_get_clean();
             unlink($file);

@@ -4,6 +4,156 @@
  * @license   GPL-3.0-or-later
  */
 
+/* Upload form stretches inside #fabricator-verification-body so idle-state (flex:1) fills the space */
+#pdf-upload-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Verification wrap: transparent so the fixed canvas shows through; z-index:1 above canvas (z-index:0) */
+.fabricator-verification-wrap {
+    position: relative;
+    z-index: 1;
+    background: transparent !important;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 20px 40px !important;
+    margin: 0 !important;
+    box-sizing: border-box;
+}
+
+/* Inner body div: fills remaining height so idle-state flex:1 works */
+#fabricator-verification-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Per-PDF inline progress card */
+.fabricator-vpc {
+    background: #fff;
+    border: 1px solid var(--fabricator-border-light);
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+
+.fabricator-vpc--error {
+    border-color: var(--fabricator-danger);
+    background: #fcf0f1;
+}
+.fabricator-vpc--queued {
+    border-color: #dba617;
+    background: #fcf9e8;
+}
+
+.fabricator-vpc--queued .fabricator-vpc__step {
+    color: #8a6d00;
+    font-weight: 600;
+}
+.fabricator-vpc--queued .fabricator-vpc__bar {
+    background: #dba617;
+}
+
+.fabricator-vpc__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.fabricator-vpc__icon .dashicons {
+    color: var(--fabricator-text-muted);
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.fabricator-vpc__name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--fabricator-text);
+    word-break: break-all;
+}
+
+.fabricator-vpc__step {
+    font-size: 12px;
+    color: var(--fabricator-text-alt);
+    margin-bottom: 8px;
+}
+
+.fabricator-vpc--error .fabricator-vpc__step {
+    color: var(--fabricator-danger);
+    font-weight: 600;
+}
+.fabricator-vpc--error .fabricator-vpc__bar-wrap,
+.fabricator-vpc--error .fabricator-vpc__foot {
+    display: none;
+}
+
+.fabricator-vpc__bar-wrap {
+    background: var(--fabricator-border-light);
+    border-radius: 3px;
+    height: 6px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.fabricator-vpc__bar {
+    height: 6px;
+    background: var(--fabricator-admin-accent);
+    border-radius: 3px;
+    transition: width .25s ease;
+}
+
+.fabricator-vpc--error .fabricator-vpc__bar {
+    background: var(--fabricator-danger);
+}
+
+.fabricator-vpc__foot {
+    display: flex;
+    gap: 8px;
+}
+
+.fabricator-vpc__pct {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fabricator-admin-accent);
+}
+
+.fabricator-vpc--error .fabricator-vpc__pct {
+    color: var(--fabricator-danger);
+}
+
+.fabricator-vpc__elapsed {
+    font-size: 11px;
+    color: var(--fabricator-text-muted);
+}
+
+@media (max-width: 782px) {
+    #fabricator-verification-body {
+        padding: 60px 12px 40px;
+    }
+
+    /* On mobile the WP sidebar is a fly-out overlay, so the content area is full-width:
+       reset the +80px desktop sidebar offset back to a true 50% centre. */
+    #fabricator-pdf-scan-more-btn {
+        left: 50% !important;
+    }
+    .fabricator-pdf-idle-card,
+    #fabricator-pdf-scan-more-backdrop .fabricator-pdf-idle-card {
+        padding: 28px 20px !important;
+    }
+    #fabricator-pdf-idle-state {
+        padding: 32px 12px !important;
+    }
+}
+
 /* ── Detail panels, hash lists and comparison cards ──
    Here only, not in admin.css, so nothing depends on load order; first, so the page rules below come later. */
 .fabricator-pdf-detail-content {

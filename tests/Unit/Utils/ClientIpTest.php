@@ -4,7 +4,7 @@ namespace FabricatorForms\Tests\Unit\Utils;
 
 use Brain\Monkey\Functions;
 use FabricatorForms\Tests\Support\TestCase;
-use FabricatorForms\Utils\ClientIp;
+use FabricatorForms\Utils\Security\ClientIp;
 
 /**
  * Trusted proxy ranges wide enough to trust a large part of the internet are warned about on the settings page: any

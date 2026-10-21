@@ -28,8 +28,9 @@ defined('ABSPATH') || exit;
  *  HOW TO ADD A NEW FIELD
  * ════════════════════════════════════════════════════════════
  *
- * This file is a teaching document and never loads: Plugin::load() loads only the classes FieldRegistry::FIELD_MAP
- * names, and the file name doesn't match its class for the autoloader either. The release build leaves it out of the package.
+ * This file is a teaching document and never loads: it lives in docs/, outside the plugin's classes, and the release
+ * build leaves docs/ out of the package. Its CSS and JS sit beside it under docs/examples/assets/, at the paths a real
+ * field's files take under the plugin's assets/ folder.
  * CONTRIBUTING.md ("Fields", "Coding rules", "JS suite") holds the rules referred to below.
  *
  * QUICK START
@@ -499,7 +500,7 @@ class ExampleField extends BaseField
     private function examplePdfDataRawHtml(array $field): array
     {
         return $this->pdf($field)
-            ->rawHtml(\FabricatorForms\Utils\HtmlSanitizer::sanitize((string) ($field['value'] ?? '')), true)
+            ->rawHtml(\FabricatorForms\Utils\Text\HtmlSanitizer::sanitize((string) ($field['value'] ?? '')), true)
             ->build();
     }
 
