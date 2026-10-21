@@ -445,15 +445,15 @@ class DirectDebitField extends BaseField
      */
     public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        $raw = isset($post[$field_id]) ? map_deep(self::capRawArray($post[$field_id]), 'sanitize_text_field') : [];
+        $raw = isset($post[$field_id]) ? self::answers(self::capRawArray($post[$field_id])) : [];
         if (!is_array($raw)) {
             return null;
         }
         $out = [];
         foreach (self::ALL_PARTS as $part) {
-            $out[$part] = is_scalar($raw[$part] ?? null) ? sanitize_text_field((string) $raw[$part]) : '';
+            $out[$part] = self::answer($raw[$part] ?? null);
         }
-        $out['sig'] = is_string($post[$field_id . '-sig'] ?? null) ? sanitize_text_field($post[$field_id . '-sig']) : '';
+        $out['sig'] = self::answer($post[$field_id . '-sig'] ?? null);
         return $out;
     }
 

@@ -59,21 +59,18 @@ final class SubmissionTest extends AjaxTestCase
         self::assertTrue($this->submit($form, ['name' => 'Ada [urgent] --- ok', 'addr' => ['street' => 'Main St 1', 'city' => 'Berlin']])['success']);
     }
 
-    public function testBidiControlsAreRemovedBeforeTheMarkerCheckAndThePdf(): void
+    public function testBidiControlsAreRefusedAtTheirField(): void
     {
-        // mPDF reorders text by U+202E and the isolates, so they could turn typed text into a marker only in the PDF.
-        // Removed first, a control can neither hide a marker nor reverse one into being.
+        // mPDF reorders text by U+202E and the isolates, so they could turn typed text into a marker only in the PDF, or
+        // hide one. An answer holding one is refused, never changed.
         $form = $this->createForm([['id' => 'name', 'type' => 'text', 'label' => 'Name']], [self::notification()]);
 
-        $hidden = $this->submit($form, ['name' => "[FABRICATOR\u{2066}_PDF_FIELD_END]"]);
-        self::assertFalse($hidden['success']);
-        self::assertArrayHasKey('name', $hidden['data']['errors'] ?? []);
-
-        $r = $this->submit($form, ['name' => "\u{05D0}\u{202E}[DNE_DLEIF_FDP_ROTACIRBAF]"]);
-        self::assertTrue($r['success'], json_encode($r['data']));
-        $body = self::sentMail()[0]->body;
-        self::assertStringContainsString("\u{05D0}[DNE_DLEIF_FDP_ROTACIRBAF]", $body);
-        self::assertStringNotContainsString("\u{202E}", $body);
+        foreach (["[FABRICATOR\u{2066}_PDF_FIELD_END]", "\u{05D0}\u{202E}[DNE_DLEIF_FDP_ROTACIRBAF]"] as $typed) {
+            $r = $this->submit($form, ['name' => $typed]);
+            self::assertFalse($r['success']);
+            self::assertArrayHasKey('name', $r['data']['errors'] ?? []);
+        }
+        self::assertSame([], self::sentMail());
     }
 
     public function testFieldPlaceholdersResolveInRecipientsAndHeaders(): void
@@ -121,9 +118,17 @@ final class SubmissionTest extends AjaxTestCase
 
     public function testAVisitorCannotInjectHeadersThroughAPlaceholder(): void
     {
-        $form = $this->createForm(self::FIELDS, [self::notification(['subject' => 'From {name}'])]);
+        // A one-line answer can't hold a line break at all; a textarea's can, and its placeholder still adds no header.
+        $form = $this->createForm(
+            array_merge(self::FIELDS, [['id' => 'msg', 'type' => 'textarea', 'label' => 'Message']]),
+            [self::notification(['subject' => 'From {name} {msg}'])]
+        );
 
-        self::assertTrue($this->submit($form, ['name' => "Ada\r\nBcc: victim@example.com", 'email' => ''])['success']);
+        $refused = $this->submit($form, ['name' => "Ada\r\nBcc: victim@example.com", 'email' => '']);
+        self::assertFalse($refused['success']);
+        self::assertArrayHasKey('name', $refused['data']['errors'] ?? []);
+
+        self::assertTrue($this->submit($form, ['name' => 'Ada', 'email' => '', 'msg' => "Hi\r\nBcc: victim@example.com"])['success']);
         $mail = self::sentMail()[0];
         self::assertSame([], self::addresses($mail, 'bcc'));
         self::assertStringNotContainsString("\nBcc: victim", $mail->header);

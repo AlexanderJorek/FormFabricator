@@ -252,7 +252,7 @@ class NameField extends BaseField
      */
     public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        $raw = isset($post[$field_id]) ? map_deep(self::capRawArray($post[$field_id]), 'sanitize_text_field') : '';
+        $raw = isset($post[$field_id]) ? self::answers(self::capRawArray($post[$field_id])) : '';
         if (is_array($raw)) {
             // Flatten nested leaves: a direct POST can send name[first][0]=x, which
             // map_deep() preserves and map() would stringify to the literal "Array".

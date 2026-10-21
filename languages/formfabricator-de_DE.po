@@ -5481,3 +5481,18 @@ msgstr "Als Box anzeigen"
 
 msgid "A box around the group's fields, headed by its label, on the page, in the PDF and in the email, like the direct debit mandate."
 msgstr "Ein Rahmen um die Felder der Gruppe, mit ihrer Bezeichnung als Überschrift, auf der Seite, im PDF und in der E-Mail, wie beim Lastschriftmandat."
+
+msgid "This answer can't hold line breaks or tabs. Please write it on one line."
+msgstr "Diese Antwort darf keine Zeilenumbrüche oder Tabulatoren enthalten. Bitte schreiben Sie sie in eine Zeile."
+
+msgid "This answer contains a character the PDF can't show (%s). Please leave it out or write it differently."
+msgstr "Diese Antwort enthält ein Zeichen, das im PDF nicht dargestellt werden kann (%s). Bitte lassen Sie es weg oder schreiben Sie es anders."
+
+msgid "This answer contains an HTML character reference (such as \"&amp;\"). Please write the character itself."
+msgstr "Diese Antwort enthält einen HTML-Zeichenverweis (etwa „&amp;“). Bitte schreiben Sie das Zeichen selbst."
+
+msgid "This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it."
+msgstr "Diese Antwort enthält ein unsichtbares Zeichen (%s). Bitte entfernen Sie es oder tippen Sie die Antwort, statt sie einzufügen."
+
+msgid "This answer contains characters that can't be read. Please type it again."
+msgstr "Diese Antwort enthält Zeichen, die nicht gelesen werden können. Bitte geben Sie sie erneut ein."

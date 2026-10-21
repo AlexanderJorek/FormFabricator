@@ -301,4 +301,14 @@ class PostDataField extends BaseField
             ],
         ];
     }
+
+    /**
+     * The post's details are the site's, not typed (BaseField::typedAnswer()).
+     *
+     * @return bool
+     */
+    public function typedAnswer(): bool
+    {
+        return false;
+    }
 }

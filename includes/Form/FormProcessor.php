@@ -24,6 +24,7 @@ namespace FabricatorForms\Form;
 defined('ABSPATH') || exit;
 
 use FabricatorForms\Fields\FieldRegistry;
+use FabricatorForms\Utils\AnswerText;
 
 /**
  * Handles fabricator_form AJAX submissions, validates fields, and fires the
@@ -65,8 +66,12 @@ class FormProcessor
         }
 
         /* ---- The answers, read once ---- */
-        // Fields read these, never the request. The textarea sanitizer keeps line breaks; each field narrows further.
-        $post  = map_deep(wp_unslash($_POST), 'sanitize_textarea_field');
+        // Fields read these, never the request, and record each answer as the visitor typed it, trimmed: a sanitizer would
+        // change it ("a<b and c>d" to "ad", "20%AB" to "20"), and a changed answer is a different statement (a mandate's
+        // account holder). What can't be recorded as typed is refused at its field instead (Utils\AnswerText, below).
+        // Nothing is stored, and every place that shows an answer escapes it there.
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- answers are validated per field below and escaped wherever shown; sanitizing would change them.
+        $post  = wp_unslash($_POST);
         // Each part sanitized for what it is ($_FILES is never slashed). Field ids are saved through sanitize_text_field(),
         // so a key it would change matches no field.
         $files = [];
@@ -191,10 +196,6 @@ class FormProcessor
         $submit_conditions = (array) ($form->settings['submit_conditions'] ?? []);
         [$hidden_set, $flat] = self::resolveVisibility($form->fields, $flat, $submit_conditions);
 
-        // Bidi controls go before anything checks or prints the answers, as they can reorder typed text into a marker
-        // (PdfUtils::stripBidiControls()). $flat keeps them, so the conditions agree with front.js.
-        $raw = self::withoutBidiControls($raw);
-
         /* ---- Submit-button conditions ---- */
         // The button is only hidden in the browser, which stops nobody from posting, so the same rules decide here.
         if (isset($hidden_set[self::SUBMIT_KEY])) {
@@ -208,6 +209,8 @@ class FormProcessor
         $errors = [];
         // An answer may not forge the automation markers a notification of this form writes around each answer.
         $mail_markers = MailSender::marksAnswers($form);
+        // A PDF draws every answer: a character it can't draw is refused at its field (undrawableError()).
+        $makes_pdf = MailSender::attachesPdf($form_id, $form->notifications);
         // Checks that reach outside this request (the single-use CAPTCHA token) run only once every other field is valid.
         $deferred = [];
 
@@ -253,6 +256,10 @@ class FormProcessor
                         // Not escaped: front.js shows it via .textContent.
                         // translators: %s: field label.
                         $errors[$child_id] = sprintf(__('%s is a required field.', 'formfabricator'), $child_cfg['label'] ?? $child_id);
+                    } elseif ($ch->typedAnswer() && ($problem = AnswerText::problemIn($val, $ch->multilineAnswer())) !== null) {
+                        $errors[$child_id] = $problem;
+                    } elseif ($makes_pdf && $ch->typedAnswer() && ($problem = self::undrawableError($val)) !== null) {
+                        $errors[$child_id] = $problem;
                     } elseif (($reserved = self::reservedMarkerError($val, $mail_markers)) !== null) {
                         $errors[$child_id] = $reserved;
                     } else {
@@ -272,6 +279,16 @@ class FormProcessor
 
             $value             = $raw[$field_id] ?? '';
             $field_cfg['field_id'] = $field_id;
+            // Invisible characters (direction controls among them, which can reorder text into a PDF marker) and line
+            // breaks where none belong are refused, not removed: the answer is recorded as typed or not at all.
+            if ($handler->typedAnswer() && ($problem = AnswerText::problemIn($value, $handler->multilineAnswer())) !== null) {
+                $errors[$field_id] = $problem;
+                continue;
+            }
+            if ($makes_pdf && $handler->typedAnswer() && ($problem = self::undrawableError($value)) !== null) {
+                $errors[$field_id] = $problem;
+                continue;
+            }
             if (($reserved = self::reservedMarkerError($value, $mail_markers)) !== null) {
                 $errors[$field_id] = $reserved;
                 continue;
@@ -310,7 +327,7 @@ class FormProcessor
         $uploads      = self::uploadEntries($form->fields, $hidden_ids, $files);
         // Text counts too: mPDF lays out every answer (see MemoryBudget::TEXT_FACTOR); a signature's data URI is image data.
         [$text_bytes, $image_bytes] = self::answerPayloadBytes(array_diff_key($raw, array_flip($hidden_ids)));
-        $attaches_pdf = MailSender::attachesPdf($form_id, $form->notifications);
+        $attaches_pdf = $makes_pdf;
         // The form's own text in the PDF (HTML blocks), twice: laid out in its cell, and again inside the seal.
         $form_text_bytes = $attaches_pdf ? 2 * self::configTextBytes($form->fields, $hidden_ids) : 0;
         $mem_estimate    = \FabricatorForms\Utils\MemoryBudget::estimateBytes(
@@ -752,23 +769,34 @@ class FormProcessor
     }
 
     /**
-     * $raw with every string in it, nested ones included, passed through PdfUtils::stripBidiControls().
+     * The error for an answer, sub-values included, holding a character the PDF can't draw as itself
+     * (PDF\Generator::undrawableCharacter()), or null: the PDF would show a stand-in instead of what was typed.
      *
-     * @param array<string, mixed> $raw What the fields' extractValue() returned, by field id.
-     * @return array<string, mixed>
+     * @param mixed $value What the field's extractValue() returned.
+     * @return string|null
      */
-    private static function withoutBidiControls(array $raw): array
+    private static function undrawableError(mixed $value): ?string
     {
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-        array_walk_recursive(
-            $raw,
-            static function (&$leaf): void {
-                if (is_string($leaf)) {
-                    $leaf = \FabricatorForms\PDF\PdfUtils::stripBidiControls($leaf);
+        $strings = is_array($value) ? $value : [$value];
+        foreach ($strings as $item) {
+            if (is_array($item)) {
+                $nested = self::undrawableError($item);
+                if ($nested !== null) {
+                    return $nested;
                 }
+                continue;
             }
-        );
-        return $raw;
+            $char = is_string($item) ? \FabricatorForms\PDF\Generator::undrawableCharacter($item) : null;
+            if ($char !== null) {
+                // Not escaped: front.js shows it via .textContent.
+                return sprintf(
+                    /* translators: %s: the character's code point, e.g. "U+1F600". */
+                    __('This answer contains a character the PDF can\'t show (%s). Please leave it out or write it differently.', 'formfabricator'),
+                    sprintf('U+%04X', mb_ord($char, 'UTF-8'))
+                );
+            }
+        }
+        return null;
     }
 
     /**

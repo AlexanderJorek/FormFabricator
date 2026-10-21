@@ -169,7 +169,7 @@ class RadioField extends BaseField
      */
     public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        $selected = is_string($post[$field_id] ?? null) ? sanitize_text_field($post[$field_id]) : '';
+        $selected = self::answer($post[$field_id] ?? null);
         if ($selected === '__other__' && isset($post[$field_id . '_other'])) {
             return [
                 'value'          => $selected,

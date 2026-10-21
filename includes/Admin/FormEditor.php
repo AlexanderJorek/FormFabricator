@@ -906,7 +906,7 @@ class FormEditor
                         continue;
                     }
                     $label = \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($opt['label'] ?? ''));
-                    $value = \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($opt['value'] ?? ''));
+                    $value = self::answerText($opt['value'] ?? '');
                     // A value is what the form posts and what rules, routing and the email compare: never empty (an
                     // option valued "" could not satisfy "required"), never shared (two options became one).
                     if ($value === '') {
@@ -928,6 +928,19 @@ class FormEditor
             $clean[] = $f;
         }
         return $clean;
+    }
+
+    /**
+     * A value an answer is compared with (an option's value, a rule's value) as the browser posts it: sanitized as text,
+     * then as plain characters, since answers are recorded as typed. sanitize_text_field() writes a lone "<" as "&lt;",
+     * which a form shows and posts as "<". Escaped wherever it is printed.
+     *
+     * @param mixed $raw The saved value.
+     * @return string
+     */
+    private static function answerText(mixed $raw): string
+    {
+        return html_entity_decode(\sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($raw)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     /**
@@ -957,7 +970,7 @@ class FormEditor
     }
 
     /**
-     * Sanitizes a field's conditional-logic block; rule values must match sanitize_text_field()'d option values.
+     * Sanitizes a field's conditional-logic block; rule values are compared with answers as typed (answerText()).
      *
      * @param array $raw Raw conditions block: action, match, rules[].
      * @return array Sanitized conditions block.
@@ -972,7 +985,7 @@ class FormEditor
             $rules[] = [
                 'field_id' => self::sanitizeFieldRef($rule['field_id'] ?? null),
                 'operator' => \sanitize_key(\FabricatorForms\Utils\Cast::stringOrDefault($rule['operator'] ?? 'equals', 'equals')),
-                'value'    => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['value'] ?? '')),
+                'value'    => self::answerText($rule['value'] ?? ''),
             ];
         }
         return [
@@ -1039,7 +1052,7 @@ class FormEditor
                 $routing_rules[] = [
                     'field_id' => self::sanitizeFieldRef($rule['field_id'] ?? null),
                     'operator' => \sanitize_key(\FabricatorForms\Utils\Cast::stringOrDefault($rule['operator'] ?? 'equals', 'equals')),
-                    'value'    => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['value'] ?? '')),
+                    'value'    => self::answerText($rule['value'] ?? ''),
                     // An address or a placeholder, whose braces sanitize_email() would strip.
                     'email'    => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['email'] ?? '')),
                     'cc'       => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($rule['cc'] ?? '')),

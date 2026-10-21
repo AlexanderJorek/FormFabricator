@@ -91,7 +91,7 @@ class TextareaField extends BaseField
     }
 
     /**
-     * Returns the submitted textarea content sanitized with sanitize_textarea_field() to preserve intentional newlines.
+     * The textarea's answer as typed (answer()), its line breaks included.
      *
      * @param string $field_id The field element ID.
      * @param array  $post     The posted answers (BaseField::extractValue()).
@@ -99,7 +99,17 @@ class TextareaField extends BaseField
      */
     public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        return is_string($post[$field_id] ?? null) ? sanitize_textarea_field($post[$field_id]) : '';
+        return self::answer($post[$field_id] ?? null);
+    }
+
+    /**
+     * Line breaks belong in a textarea's answer.
+     *
+     * @return bool
+     */
+    public function multilineAnswer(): bool
+    {
+        return true;
     }
 
     /**

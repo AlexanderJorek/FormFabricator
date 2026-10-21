@@ -190,9 +190,9 @@ for (const composite of fixture.composites) {
 }
 
 /*
- * front.js compares a value the way the server receives it: after WordPress's sanitize_text_field() (text inputs) or
- * sanitize_textarea_field() (textareas). build-fixture.php records the real functions' results (tests/js/wp-sanitize.php);
- * an "equals" rule on that result must match what the visitor typed.
+ * front.js compares a value the way the server reads it: as typed, trimmed (BaseField::answer()). build-fixture.php
+ * records the real TextField's and TextareaField's extractValue(); an "equals" rule on that result must match what the
+ * visitor typed.
  */
 function frontJsMatches(tag, typed, expected) {
     const wrap = document.createElement('div');
@@ -209,7 +209,7 @@ function frontJsMatches(tag, typed, expected) {
     }
 }
 
-test('front.js reads typed text as sanitize_text_field() / sanitize_textarea_field() leave it', () => {
+test('front.js reads typed text as the server reads it', () => {
     const disagreements = [];
     for (const [typed, asText, asTextarea] of fixture.sanitize) {
         // A text input cannot hold a line break (the browser strips it before anything reads or posts the value).

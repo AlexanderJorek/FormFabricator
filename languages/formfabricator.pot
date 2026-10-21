@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-21T08:34:30+00:00\n"
+"POT-Creation-Date: 2026-10-21T19:17:38+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: FormFabricator languages/make-pot.php\n"
 "X-Domain: formfabricator\n"
@@ -65,7 +65,7 @@ msgstr ""
 
 #: includes/Admin/FormEditor.php:145
 #: includes/Admin/FormEditor.php:198
-#: includes/Admin/FormEditor.php:1617
+#: includes/Admin/FormEditor.php:1630
 msgid "New Form"
 msgstr ""
 
@@ -78,16 +78,16 @@ msgid "Permission denied."
 msgstr ""
 
 #: includes/Admin/FormEditor.php:202
-#: includes/Admin/FormEditor.php:1152
-#: includes/Admin/FormEditor.php:1618
+#: includes/Admin/FormEditor.php:1165
+#: includes/Admin/FormEditor.php:1631
 #: includes/Form/FormRenderer.php:85
 msgid "Submit"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:203
-#: includes/Admin/FormEditor.php:1620
-#: includes/Form/FormProcessor.php:119
-#: includes/Form/FormProcessor.php:421
+#: includes/Admin/FormEditor.php:1633
+#: includes/Form/FormProcessor.php:124
+#: includes/Form/FormProcessor.php:438
 msgid "Thank you for your submission!"
 msgstr ""
 
@@ -120,8 +120,8 @@ msgstr ""
 #: includes/Admin/FormEditor.php:287
 #: includes/Admin/FormEditor.php:288
 #: includes/Admin/FormEditor.php:445
-#: includes/Admin/FormEditor.php:1764
-#: includes/Admin/FormEditor.php:1858
+#: includes/Admin/FormEditor.php:1777
+#: includes/Admin/FormEditor.php:1871
 msgid "Preview"
 msgstr ""
 
@@ -155,7 +155,7 @@ msgstr ""
 #: includes/Admin/FormList.php:514
 #: includes/Form/FormModel.php:169
 #: includes/Form/FormModel.php:214
-#: includes/Form/FormProcessor.php:98
+#: includes/Form/FormProcessor.php:103
 msgid "Form not found."
 msgstr ""
 
@@ -245,1148 +245,1148 @@ msgstr ""
 msgid "These field IDs cannot be used: %s. A field ID may contain only letters, digits and hyphens, must be unique within the form, and must not be a reserved name such as \"action\"."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1153
-#: includes/Admin/FormEditor.php:1619
+#: includes/Admin/FormEditor.php:1166
+#: includes/Admin/FormEditor.php:1632
 #: includes/Form/FormRenderer.php:86
 #: includes/Utils/Assets.php:134
 msgid "Sending…"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1155
+#: includes/Admin/FormEditor.php:1168
 #: includes/Form/FormRenderer.php:87
-#: includes/Utils/Assets.php:140
+#: includes/Utils/Assets.php:145
 msgid "Thank you!"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1589
+#: includes/Admin/FormEditor.php:1602
 msgid "Notification 1"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1594
-#: includes/Admin/FormEditor.php:1625
+#: includes/Admin/FormEditor.php:1607
+#: includes/Admin/FormEditor.php:1638
 msgid "New Entry: {form_title}"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1596
+#: includes/Admin/FormEditor.php:1609
 msgid "A new entry has been received.<br><br>{all_fields}"
 msgstr ""
 
 #. translators: %d: running number of the notification being added.
-#: includes/Admin/FormEditor.php:1624
+#: includes/Admin/FormEditor.php:1637
 #, php-format
 msgid "Notification %d"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1626
-#: includes/Admin/FormEditor.php:1744
+#: includes/Admin/FormEditor.php:1639
+#: includes/Admin/FormEditor.php:1757
 msgid "Option"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1627
-#: includes/Admin/FormEditor.php:1686
-#: includes/Admin/FormEditor.php:1745
+#: includes/Admin/FormEditor.php:1640
+#: includes/Admin/FormEditor.php:1699
+#: includes/Admin/FormEditor.php:1758
 msgid "Value"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1628
-#: includes/Admin/FormEditor.php:1765
+#: includes/Admin/FormEditor.php:1641
+#: includes/Admin/FormEditor.php:1778
 msgid "Visual"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1629
-#: includes/Admin/FormEditor.php:1763
+#: includes/Admin/FormEditor.php:1642
+#: includes/Admin/FormEditor.php:1776
 msgid "Code"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1630
+#: includes/Admin/FormEditor.php:1643
 msgid "No"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1631
+#: includes/Admin/FormEditor.php:1644
 msgid "Yes"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1634
+#: includes/Admin/FormEditor.php:1647
 msgid "Unsaved changes"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1635
+#: includes/Admin/FormEditor.php:1648
 msgid "This form has unsaved changes. Leave anyway?"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1636
+#: includes/Admin/FormEditor.php:1649
 msgid "Stay"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1637
+#: includes/Admin/FormEditor.php:1650
 msgid "Leave"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1640
+#: includes/Admin/FormEditor.php:1653
 msgid "None"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1641
+#: includes/Admin/FormEditor.php:1654
 msgid "Integers only"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1642
+#: includes/Admin/FormEditor.php:1655
 msgid "Positive numbers"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1643
+#: includes/Admin/FormEditor.php:1656
 msgid "Positive integers"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1646
+#: includes/Admin/FormEditor.php:1659
 msgid "is equal to"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1647
+#: includes/Admin/FormEditor.php:1660
 msgid "is not equal to"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1648
+#: includes/Admin/FormEditor.php:1661
 msgid "contains"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1649
+#: includes/Admin/FormEditor.php:1662
 msgid "does not contain"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1650
+#: includes/Admin/FormEditor.php:1663
 msgid "is empty"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1651
+#: includes/Admin/FormEditor.php:1664
 msgid "is not empty"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1652
+#: includes/Admin/FormEditor.php:1665
 msgid "is greater than"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1653
+#: includes/Admin/FormEditor.php:1666
 msgid "is less than"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1656
+#: includes/Admin/FormEditor.php:1669
 msgid "No fields found."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1657
+#: includes/Admin/FormEditor.php:1670
 msgid "No fields yet"
 msgstr ""
 
 #. translators: %s: the "Add field" button's name, shown in bold (substituted client-side).
-#: includes/Admin/FormEditor.php:1659
+#: includes/Admin/FormEditor.php:1672
 #, php-format
 msgid "Add your first field via %s"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1660
+#: includes/Admin/FormEditor.php:1673
 msgid "(no label)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1661
-#: includes/Admin/FormEditor.php:1681
+#: includes/Admin/FormEditor.php:1674
+#: includes/Admin/FormEditor.php:1694
 #: includes/Admin/FormList.php:357
 #: includes/Admin/FormSelectList.php:284
 msgid "Edit"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1662
+#: includes/Admin/FormEditor.php:1675
 #: includes/Admin/FormList.php:176
 #: includes/Admin/FormList.php:369
 msgid "Duplicate"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1663
-#: includes/Admin/FormEditor.php:1701
+#: includes/Admin/FormEditor.php:1676
+#: includes/Admin/FormEditor.php:1714
 #: includes/Admin/FormSelectList.php:509
-#: includes/Utils/Assets.php:520
+#: includes/Utils/Assets.php:534
 msgid "Remove"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1664
+#: includes/Admin/FormEditor.php:1677
 msgid "copied"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1665
+#: includes/Admin/FormEditor.php:1678
 #: includes/Fields/GroupField.php:185
 #: includes/Fields/GroupField.php:286
 msgid "Field group"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1666
+#: includes/Admin/FormEditor.php:1679
 msgid "Add fields to group"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1667
+#: includes/Admin/FormEditor.php:1680
 #: includes/Admin/FormSettings.php:126
 #: includes/Admin/FormSettings.php:440
 #: includes/Admin/FormSettings.php:1391
 msgid "Settings"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1668
+#: includes/Admin/FormEditor.php:1681
 msgid "Conditions active"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1671
+#: includes/Admin/FormEditor.php:1684
 msgid "Add field"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1672
+#: includes/Admin/FormEditor.php:1685
 msgid "Search field type…"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1675
+#: includes/Admin/FormEditor.php:1688
 msgid "Field settings"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1676
+#: includes/Admin/FormEditor.php:1689
 msgid "Copy field ID"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1677
+#: includes/Admin/FormEditor.php:1690
 #: includes/Admin/FormSelectList.php:170
 msgid "General"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1678
+#: includes/Admin/FormEditor.php:1691
 #: includes/Fields/FieldRegistry.php:231
 msgid "Advanced"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1679
+#: includes/Admin/FormEditor.php:1692
 msgid "Conditions"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1680
-#: includes/Utils/Assets.php:545
+#: includes/Admin/FormEditor.php:1693
+#: includes/Utils/Assets.php:559
 msgid "Done"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1682
-#: includes/Admin/FormEditor.php:1754
-#: includes/Admin/FormEditor.php:1839
+#: includes/Admin/FormEditor.php:1695
+#: includes/Admin/FormEditor.php:1767
+#: includes/Admin/FormEditor.php:1852
 #: includes/Admin/FormSelectList.php:187
 #: includes/Admin/FormSelectList.php:506
 msgid "Label"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1683
+#: includes/Admin/FormEditor.php:1696
 msgid "Hide label"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1684
+#: includes/Admin/FormEditor.php:1697
 msgid "Required field"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1685
+#: includes/Admin/FormEditor.php:1698
 msgid "(no other fields)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1687
+#: includes/Admin/FormEditor.php:1700
 msgid "Media library"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1688
+#: includes/Admin/FormEditor.php:1701
 msgid "Use"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1689
+#: includes/Admin/FormEditor.php:1702
 #: includes/Admin/PDFLayoutEditor.php:668
 msgid "Image URL:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1690
+#: includes/Admin/FormEditor.php:1703
 msgid "Enter link URL:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1693
+#: includes/Admin/FormEditor.php:1706
 #: includes/Admin/PDFLayoutEditor.php:696
 msgid "Bold"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1694
+#: includes/Admin/FormEditor.php:1707
 #: includes/Admin/PDFLayoutEditor.php:697
 msgid "Italic"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1695
+#: includes/Admin/FormEditor.php:1708
 #: includes/Admin/PDFLayoutEditor.php:698
 msgid "Underline"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1696
+#: includes/Admin/FormEditor.php:1709
 #: includes/Admin/FormSettings.php:1387
 msgid "List"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1697
+#: includes/Admin/FormEditor.php:1710
 msgid "Numbered list"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1698
+#: includes/Admin/FormEditor.php:1711
 msgid "Link"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1702
+#: includes/Admin/FormEditor.php:1715
 msgid "Whole values"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1703
+#: includes/Admin/FormEditor.php:1716
 msgid "Half values"
 msgstr ""
 
 #. translators: %d: page number (substituted client-side).
-#: includes/Admin/FormEditor.php:1705
+#: includes/Admin/FormEditor.php:1718
 #, php-format
 msgid "Page %d"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1706
+#: includes/Admin/FormEditor.php:1719
 msgid "Use in emails:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1707
+#: includes/Admin/FormEditor.php:1720
 msgid "Field ID"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1710
+#: includes/Admin/FormEditor.php:1723
 msgid "Validation"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1711
+#: includes/Admin/FormEditor.php:1724
 msgid "Validation rule"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1712
+#: includes/Admin/FormEditor.php:1725
 msgid "Browser autocomplete"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1713
+#: includes/Admin/FormEditor.php:1726
 msgid "Enable browser autofill"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1714
+#: includes/Admin/FormEditor.php:1727
 msgid "Autocomplete value"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1715
+#: includes/Admin/FormEditor.php:1728
 msgid "E.g. \"name\", \"email\", \"tel\". Empty = browser default."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1716
+#: includes/Admin/FormEditor.php:1729
 msgid "Appearance"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1717
+#: includes/Admin/FormEditor.php:1730
 msgid "CSS class(es)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1718
+#: includes/Admin/FormEditor.php:1731
 msgid "Separate multiple classes with spaces."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1721
+#: includes/Admin/FormEditor.php:1734
 msgid "Country filter"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1722
+#: includes/Admin/FormEditor.php:1735
 msgid "Country list"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1723
+#: includes/Admin/FormEditor.php:1736
 #: includes/Fields/EmailField.php:204
 msgid "Off"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1724
+#: includes/Admin/FormEditor.php:1737
 #: includes/Fields/EmailField.php:204
 msgid "Allowed"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1725
+#: includes/Admin/FormEditor.php:1738
 msgid "Disallowed"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1726
+#: includes/Admin/FormEditor.php:1739
 msgid "Format validation"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1727
+#: includes/Admin/FormEditor.php:1740
 msgid "Any valid format: min. 7 digits, optionally with + and country code."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1728
+#: includes/Admin/FormEditor.php:1741
 msgid "Any"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1729
+#: includes/Admin/FormEditor.php:1742
 msgid "Countries"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1730
+#: includes/Admin/FormEditor.php:1743
 msgid "Dial codes"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1733
+#: includes/Admin/FormEditor.php:1746
 msgid "Show"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1734
+#: includes/Admin/FormEditor.php:1747
 msgid "Hide"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1735
+#: includes/Admin/FormEditor.php:1748
 msgid "this field when"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1736
+#: includes/Admin/FormEditor.php:1749
 msgid "all"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1737
+#: includes/Admin/FormEditor.php:1750
 msgid "any"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1738
+#: includes/Admin/FormEditor.php:1751
 msgid "of the following conditions match:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1739
+#: includes/Admin/FormEditor.php:1752
 msgid "Add condition"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1740
+#: includes/Admin/FormEditor.php:1753
 msgid "Remove condition"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1741
+#: includes/Admin/FormEditor.php:1754
 msgid "Remove rule"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1742
+#: includes/Admin/FormEditor.php:1755
 msgid "Add rule"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1743
+#: includes/Admin/FormEditor.php:1756
 msgid "Choose option"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1746
+#: includes/Admin/FormEditor.php:1759
 msgid "(no fields)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1749
+#: includes/Admin/FormEditor.php:1762
 msgid "Search and add country…"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1750
+#: includes/Admin/FormEditor.php:1763
 msgid "Search dial code (+49)…"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1753
+#: includes/Admin/FormEditor.php:1766
 msgid "Preselected"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1755
+#: includes/Admin/FormEditor.php:1768
 msgid "value"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1756
+#: includes/Admin/FormEditor.php:1769
 msgid "Add option"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1759
+#: includes/Admin/FormEditor.php:1772
 msgid "Characters"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1760
+#: includes/Admin/FormEditor.php:1773
 msgid "Words"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1768
+#: includes/Admin/FormEditor.php:1781
 msgid "Format"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1769
+#: includes/Admin/FormEditor.php:1782
 msgid "24h"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1770
+#: includes/Admin/FormEditor.php:1783
 msgid "12h (AM/PM)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1771
+#: includes/Admin/FormEditor.php:1784
 msgid "Prefill now"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1774
+#: includes/Admin/FormEditor.php:1787
 msgid "Subfields"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1775
+#: includes/Admin/FormEditor.php:1788
 msgid "Enable subfield"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1776
+#: includes/Admin/FormEditor.php:1789
 #: includes/Fields/AddressField.php:427
-#: includes/Fields/BaseField.php:642
+#: includes/Fields/BaseField.php:698
 #: includes/Fields/NameField.php:451
 msgid "Placeholder"
 msgstr ""
 
 #. translators: %s: the "Add notification" button's name, shown in bold (substituted client-side).
-#: includes/Admin/FormEditor.php:1780
+#: includes/Admin/FormEditor.php:1793
 #, php-format
 msgid "No notifications yet. Click %s."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1781
+#: includes/Admin/FormEditor.php:1794
 msgid "Add notification"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1782
+#: includes/Admin/FormEditor.php:1795
 msgid "Routing active"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1783
+#: includes/Admin/FormEditor.php:1796
 msgid "(no name)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1784
+#: includes/Admin/FormEditor.php:1797
 msgid "Notification"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1785
+#: includes/Admin/FormEditor.php:1798
 msgid "Recipient"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1786
+#: includes/Admin/FormEditor.php:1799
 msgid "Content"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1787
+#: includes/Admin/FormEditor.php:1800
 msgid "Sender"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1788
+#: includes/Admin/FormEditor.php:1801
 msgid "Recipient mode"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1789
+#: includes/Admin/FormEditor.php:1802
 msgid "Direct"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1790
+#: includes/Admin/FormEditor.php:1803
 msgid "Routing"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1791
+#: includes/Admin/FormEditor.php:1804
 msgid "Active"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1792
+#: includes/Admin/FormEditor.php:1805
 msgid "All entries are sent to a fixed address."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1793
+#: includes/Admin/FormEditor.php:1806
 msgid "The email address is chosen based on field conditions."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1794
+#: includes/Admin/FormEditor.php:1807
 msgid "To (email)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1795
+#: includes/Admin/FormEditor.php:1808
 msgid "→ To:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1796
+#: includes/Admin/FormEditor.php:1809
 #: includes/Admin/PDFLayoutEditor.php:1082
 #: includes/Fields/EmailField.php:43
 msgid "Email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1797
+#: includes/Admin/FormEditor.php:1810
 msgid "Fallback email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1798
+#: includes/Admin/FormEditor.php:1811
 msgid "Used when no rule matches"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1799
+#: includes/Admin/FormEditor.php:1812
 msgid "Fallback CC"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1800
+#: includes/Admin/FormEditor.php:1813
 msgid "Fallback BCC"
 msgstr ""
 
 #. translators: prefix on a routing rule's CC row, matching the "→ To:" arrow above it.
-#: includes/Admin/FormEditor.php:1802
+#: includes/Admin/FormEditor.php:1815
 msgid "→ Cc:"
 msgstr ""
 
 #. translators: prefix on a routing rule's BCC row, matching the "→ To:" arrow above it.
-#: includes/Admin/FormEditor.php:1804
+#: includes/Admin/FormEditor.php:1817
 msgid "→ Bcc:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1805
+#: includes/Admin/FormEditor.php:1818
 #: includes/Admin/PDFLayoutEditor.php:1094
 msgid "Subject"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1806
+#: includes/Admin/FormEditor.php:1819
 #: includes/Admin/PDFLayoutEditor.php:1102
 msgid "Message"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1807
+#: includes/Admin/FormEditor.php:1820
 msgid "Attachments"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1808
+#: includes/Admin/FormEditor.php:1821
 msgid "Attach generated PDF"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1809
+#: includes/Admin/FormEditor.php:1822
 msgid "The completed form is attached as a PDF document."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1810
+#: includes/Admin/FormEditor.php:1823
 msgid "Attach uploaded files"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1811
+#: includes/Admin/FormEditor.php:1824
 msgid "All file uploads from the form are forwarded as attachments."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1812
+#: includes/Admin/FormEditor.php:1825
 msgid "Automation"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1813
+#: includes/Admin/FormEditor.php:1826
 msgid "Add automation markers"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1815
+#: includes/Admin/FormEditor.php:1828
 msgid "Each answer in the email is written between [FABRICATOR_FIELD_<field id>] and [FABRICATOR_FIELD_END], so a mail parser can find it. Answers containing \"[FABRICATOR_FIELD_\" are then refused."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1816
+#: includes/Admin/FormEditor.php:1829
 msgid "Send test email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1817
+#: includes/Admin/FormEditor.php:1830
 msgid "Sends a short email with this sender to your own address."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1818
+#: includes/Admin/FormEditor.php:1831
 msgid "Removed on save: scripts, embedded content (iframe, object, embed), event handlers (onclick and the like), javascript: links, external stylesheets, form actions, and tags or styles outside the email-safe set."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1822
+#: includes/Admin/FormEditor.php:1835
 #: includes/Admin/FormSettings.php:634
 msgid "Sender name"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1823
+#: includes/Admin/FormEditor.php:1836
 msgid "{site_name} for default value"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1824
+#: includes/Admin/FormEditor.php:1837
 msgid "Sender email address"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1825
+#: includes/Admin/FormEditor.php:1838
 msgid "{admin_email}, or a fixed address of this site."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1826
+#: includes/Admin/FormEditor.php:1839
 msgid "A form field cannot be the sender: mail claiming to come from a visitor's address is often discarded by their provider after sending. It will not be saved. Put the field into \"Reply-to email\" instead."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1830
+#: includes/Admin/FormEditor.php:1843
 msgid "Reply-to email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1831
+#: includes/Admin/FormEditor.php:1844
 msgid "Empty = sender email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1832
+#: includes/Admin/FormEditor.php:1845
 msgid "CC emails"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1833
+#: includes/Admin/FormEditor.php:1846
 msgid "BCC emails"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1834
+#: includes/Admin/FormEditor.php:1847
 msgid "Separate multiple with semicolons"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1837
+#: includes/Admin/FormEditor.php:1850
 msgid "Submit button"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1838
+#: includes/Admin/FormEditor.php:1851
 msgid "Labeling"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1840
+#: includes/Admin/FormEditor.php:1853
 msgid "Visible text of the button"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1841
+#: includes/Admin/FormEditor.php:1854
 msgid "Label while sending"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1842
+#: includes/Admin/FormEditor.php:1855
 msgid "Shown while the submission is in progress"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1843
+#: includes/Admin/FormEditor.php:1856
 msgid "Success message"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1844
+#: includes/Admin/FormEditor.php:1857
 msgid "Message shown after a successful submission"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1845
+#: includes/Admin/FormEditor.php:1858
 msgid "Show button when"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1846
+#: includes/Admin/FormEditor.php:1859
 msgid "of the conditions match:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1847
+#: includes/Admin/FormEditor.php:1860
 msgid "Configure button"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1848
+#: includes/Admin/FormEditor.php:1861
 msgid "Visibility: conditions active"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1849
+#: includes/Admin/FormEditor.php:1862
 msgid "conditional"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1852
+#: includes/Admin/FormEditor.php:1865
 #: includes/Admin/FormSettings.php:1405
 #: includes/Admin/PDFLayoutEditor.php:681
 msgid "Saving…"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1853
+#: includes/Admin/FormEditor.php:1866
 msgid "Saved"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1854
+#: includes/Admin/FormEditor.php:1867
 #: includes/Plugin.php:418
 msgid "Dismiss"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1855
+#: includes/Admin/FormEditor.php:1868
 #: includes/Admin/FormList.php:134
 #: includes/Admin/FormSettings.php:1375
 #: includes/Admin/Verificationpage.php:4847
-#: includes/Utils/Assets.php:551
+#: includes/Utils/Assets.php:565
 msgid "Error"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1856
+#: includes/Admin/FormEditor.php:1869
 msgid "Unknown error"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1857
+#: includes/Admin/FormEditor.php:1870
 msgid "Server error"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1859
+#: includes/Admin/FormEditor.php:1872
 msgid "Preview failed."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1860
+#: includes/Admin/FormEditor.php:1873
 msgid "Network error."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1865
+#: includes/Admin/FormEditor.php:1878
 #: includes/Fields/DirectDebitField.php:1463
 msgid "Andorra"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1866
+#: includes/Admin/FormEditor.php:1879
 #: includes/Fields/DirectDebitField.php:1463
 msgid "Albania"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1867
-#: includes/Admin/FormEditor.php:1924
+#: includes/Admin/FormEditor.php:1880
+#: includes/Admin/FormEditor.php:1937
 #: includes/Fields/DirectDebitField.php:1463
 msgid "Austria"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1868
-#: includes/Admin/FormEditor.php:1917
+#: includes/Admin/FormEditor.php:1881
+#: includes/Admin/FormEditor.php:1930
 #: includes/Fields/DirectDebitField.php:1464
 msgid "Belgium"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1869
-#: includes/Admin/FormEditor.php:1965
+#: includes/Admin/FormEditor.php:1882
+#: includes/Admin/FormEditor.php:1978
 #: includes/Fields/DirectDebitField.php:1464
 msgid "Bulgaria"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1870
-#: includes/Admin/FormEditor.php:1923
+#: includes/Admin/FormEditor.php:1883
+#: includes/Admin/FormEditor.php:1936
 #: includes/Fields/DirectDebitField.php:1464
 msgid "Switzerland"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1871
-#: includes/Admin/FormEditor.php:1963
+#: includes/Admin/FormEditor.php:1884
+#: includes/Admin/FormEditor.php:1976
 #: includes/Fields/DirectDebitField.php:1465
 msgid "Cyprus"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1872
-#: includes/Admin/FormEditor.php:1972
+#: includes/Admin/FormEditor.php:1885
+#: includes/Admin/FormEditor.php:1985
 #: includes/Fields/DirectDebitField.php:1465
 msgid "Czechia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1873
-#: includes/Admin/FormEditor.php:1930
+#: includes/Admin/FormEditor.php:1886
+#: includes/Admin/FormEditor.php:1943
 #: includes/Fields/DirectDebitField.php:1465
 msgid "Germany"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1874
-#: includes/Admin/FormEditor.php:1926
+#: includes/Admin/FormEditor.php:1887
+#: includes/Admin/FormEditor.php:1939
 #: includes/Fields/DirectDebitField.php:1466
 msgid "Denmark"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1875
-#: includes/Admin/FormEditor.php:1968
+#: includes/Admin/FormEditor.php:1888
+#: includes/Admin/FormEditor.php:1981
 #: includes/Fields/DirectDebitField.php:1466
 msgid "Estonia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1876
-#: includes/Admin/FormEditor.php:1919
+#: includes/Admin/FormEditor.php:1889
+#: includes/Admin/FormEditor.php:1932
 #: includes/Fields/DirectDebitField.php:1466
 msgid "Spain"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1877
-#: includes/Admin/FormEditor.php:1964
+#: includes/Admin/FormEditor.php:1890
+#: includes/Admin/FormEditor.php:1977
 #: includes/Fields/DirectDebitField.php:1467
 msgid "Finland"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1878
-#: includes/Admin/FormEditor.php:1918
+#: includes/Admin/FormEditor.php:1891
+#: includes/Admin/FormEditor.php:1931
 #: includes/Fields/DirectDebitField.php:1467
 msgid "France"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1879
-#: includes/Admin/FormEditor.php:1925
+#: includes/Admin/FormEditor.php:1892
+#: includes/Admin/FormEditor.php:1938
 #: includes/Fields/DirectDebitField.php:1467
 msgid "United Kingdom"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1880
+#: includes/Admin/FormEditor.php:1893
 #: includes/Fields/DirectDebitField.php:1468
 msgid "Gibraltar"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1881
-#: includes/Admin/FormEditor.php:1915
+#: includes/Admin/FormEditor.php:1894
+#: includes/Admin/FormEditor.php:1928
 #: includes/Fields/DirectDebitField.php:1468
 msgid "Greece"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1882
-#: includes/Admin/FormEditor.php:1970
+#: includes/Admin/FormEditor.php:1895
+#: includes/Admin/FormEditor.php:1983
 #: includes/Fields/DirectDebitField.php:1468
 msgid "Croatia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1883
-#: includes/Admin/FormEditor.php:1920
+#: includes/Admin/FormEditor.php:1896
+#: includes/Admin/FormEditor.php:1933
 #: includes/Fields/DirectDebitField.php:1469
 msgid "Hungary"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1884
-#: includes/Admin/FormEditor.php:1960
+#: includes/Admin/FormEditor.php:1897
+#: includes/Admin/FormEditor.php:1973
 #: includes/Fields/DirectDebitField.php:1469
 msgid "Ireland"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1885
-#: includes/Admin/FormEditor.php:1961
+#: includes/Admin/FormEditor.php:1898
+#: includes/Admin/FormEditor.php:1974
 #: includes/Fields/DirectDebitField.php:1469
 msgid "Iceland"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1886
-#: includes/Admin/FormEditor.php:1921
+#: includes/Admin/FormEditor.php:1899
+#: includes/Admin/FormEditor.php:1934
 #: includes/Fields/DirectDebitField.php:1470
 msgid "Italy"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1887
-#: includes/Admin/FormEditor.php:1974
+#: includes/Admin/FormEditor.php:1900
+#: includes/Admin/FormEditor.php:1987
 #: includes/Fields/DirectDebitField.php:1470
 msgid "Liechtenstein"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1888
-#: includes/Admin/FormEditor.php:1966
+#: includes/Admin/FormEditor.php:1901
+#: includes/Admin/FormEditor.php:1979
 #: includes/Fields/DirectDebitField.php:1470
 msgid "Lithuania"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1889
-#: includes/Admin/FormEditor.php:1959
+#: includes/Admin/FormEditor.php:1902
+#: includes/Admin/FormEditor.php:1972
 #: includes/Fields/DirectDebitField.php:1471
 msgid "Luxembourg"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1890
-#: includes/Admin/FormEditor.php:1967
+#: includes/Admin/FormEditor.php:1903
+#: includes/Admin/FormEditor.php:1980
 #: includes/Fields/DirectDebitField.php:1471
 msgid "Latvia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1891
+#: includes/Admin/FormEditor.php:1904
 #: includes/Fields/DirectDebitField.php:1471
 msgid "Monaco"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1892
+#: includes/Admin/FormEditor.php:1905
 #: includes/Fields/DirectDebitField.php:1472
 msgid "Moldova"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1893
+#: includes/Admin/FormEditor.php:1906
 #: includes/Fields/DirectDebitField.php:1472
 msgid "Montenegro"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1894
+#: includes/Admin/FormEditor.php:1907
 #: includes/Fields/DirectDebitField.php:1472
 msgid "North Macedonia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1895
-#: includes/Admin/FormEditor.php:1962
+#: includes/Admin/FormEditor.php:1908
+#: includes/Admin/FormEditor.php:1975
 #: includes/Fields/DirectDebitField.php:1473
 msgid "Malta"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1896
-#: includes/Admin/FormEditor.php:1916
+#: includes/Admin/FormEditor.php:1909
+#: includes/Admin/FormEditor.php:1929
 #: includes/Fields/DirectDebitField.php:1473
 msgid "Netherlands"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1897
-#: includes/Admin/FormEditor.php:1928
+#: includes/Admin/FormEditor.php:1910
+#: includes/Admin/FormEditor.php:1941
 #: includes/Fields/DirectDebitField.php:1473
 msgid "Norway"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1898
-#: includes/Admin/FormEditor.php:1929
+#: includes/Admin/FormEditor.php:1911
+#: includes/Admin/FormEditor.php:1942
 #: includes/Fields/DirectDebitField.php:1474
 msgid "Poland"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1899
-#: includes/Admin/FormEditor.php:1958
+#: includes/Admin/FormEditor.php:1912
+#: includes/Admin/FormEditor.php:1971
 #: includes/Fields/DirectDebitField.php:1474
 msgid "Portugal"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1900
-#: includes/Admin/FormEditor.php:1922
+#: includes/Admin/FormEditor.php:1913
+#: includes/Admin/FormEditor.php:1935
 #: includes/Fields/DirectDebitField.php:1474
 msgid "Romania"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1901
+#: includes/Admin/FormEditor.php:1914
 #: includes/Fields/DirectDebitField.php:1475
 msgid "Serbia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1902
-#: includes/Admin/FormEditor.php:1927
+#: includes/Admin/FormEditor.php:1915
+#: includes/Admin/FormEditor.php:1940
 #: includes/Fields/DirectDebitField.php:1475
 msgid "Sweden"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1903
-#: includes/Admin/FormEditor.php:1971
+#: includes/Admin/FormEditor.php:1916
+#: includes/Admin/FormEditor.php:1984
 #: includes/Fields/DirectDebitField.php:1475
 msgid "Slovenia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1904
-#: includes/Admin/FormEditor.php:1973
+#: includes/Admin/FormEditor.php:1917
+#: includes/Admin/FormEditor.php:1986
 #: includes/Fields/DirectDebitField.php:1476
 msgid "Slovakia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1905
+#: includes/Admin/FormEditor.php:1918
 #: includes/Fields/DirectDebitField.php:1476
 msgid "San Marino"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1906
+#: includes/Admin/FormEditor.php:1919
 #: includes/Fields/DirectDebitField.php:1476
 msgid "Vatican City"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1911
+#: includes/Admin/FormEditor.php:1924
 msgid "USA / Canada"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1912
+#: includes/Admin/FormEditor.php:1925
 msgid "Russia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1913
+#: includes/Admin/FormEditor.php:1926
 msgid "Egypt"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1914
+#: includes/Admin/FormEditor.php:1927
 msgid "South Africa"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1931
+#: includes/Admin/FormEditor.php:1944
 msgid "Peru"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1932
+#: includes/Admin/FormEditor.php:1945
 msgid "Mexico"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1933
+#: includes/Admin/FormEditor.php:1946
 msgid "Argentina"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1934
+#: includes/Admin/FormEditor.php:1947
 msgid "Brazil"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1935
+#: includes/Admin/FormEditor.php:1948
 msgid "Chile"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1936
+#: includes/Admin/FormEditor.php:1949
 msgid "Colombia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1937
+#: includes/Admin/FormEditor.php:1950
 msgid "Australia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1938
+#: includes/Admin/FormEditor.php:1951
 msgid "Indonesia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1939
+#: includes/Admin/FormEditor.php:1952
 msgid "Philippines"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1940
+#: includes/Admin/FormEditor.php:1953
 msgid "New Zealand"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1941
+#: includes/Admin/FormEditor.php:1954
 msgid "Singapore"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1942
+#: includes/Admin/FormEditor.php:1955
 msgid "Thailand"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1943
+#: includes/Admin/FormEditor.php:1956
 msgid "Japan"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1944
+#: includes/Admin/FormEditor.php:1957
 msgid "South Korea"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1945
+#: includes/Admin/FormEditor.php:1958
 msgid "Vietnam"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1946
+#: includes/Admin/FormEditor.php:1959
 msgid "China"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1947
+#: includes/Admin/FormEditor.php:1960
 msgid "Turkey"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1948
+#: includes/Admin/FormEditor.php:1961
 msgid "India"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1949
+#: includes/Admin/FormEditor.php:1962
 msgid "Pakistan"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1950
+#: includes/Admin/FormEditor.php:1963
 msgid "Sri Lanka"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1951
+#: includes/Admin/FormEditor.php:1964
 msgid "Iran"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1952
+#: includes/Admin/FormEditor.php:1965
 msgid "Morocco"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1953
+#: includes/Admin/FormEditor.php:1966
 msgid "Algeria"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1954
+#: includes/Admin/FormEditor.php:1967
 msgid "Tunisia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1955
+#: includes/Admin/FormEditor.php:1968
 msgid "Gambia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1956
+#: includes/Admin/FormEditor.php:1969
 msgid "Nigeria"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1957
+#: includes/Admin/FormEditor.php:1970
 msgid "Kenya"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1969
+#: includes/Admin/FormEditor.php:1982
 msgid "Ukraine"
 msgstr ""
 
@@ -1667,7 +1667,7 @@ msgstr ""
 
 #: includes/Admin/FormSelectList.php:188
 #: includes/Admin/FormSelectList.php:507
-#: includes/Fields/BaseField.php:647
+#: includes/Fields/BaseField.php:703
 #: includes/Fields/CheckboxField.php:367
 #: includes/Fields/DateField.php:340
 #: includes/Fields/GroupField.php:306
@@ -2329,7 +2329,7 @@ msgstr ""
 
 #: includes/Admin/FormSettings.php:1242
 #: includes/Fields/CaptchaField.php:126
-#: includes/Utils/Assets.php:536
+#: includes/Utils/Assets.php:550
 msgid "Loading…"
 msgstr ""
 
@@ -2379,7 +2379,7 @@ msgstr ""
 
 #: includes/Admin/FormSettings.php:1376
 #: includes/Admin/PDFLayoutEditor.php:680
-#: includes/Utils/Assets.php:548
+#: includes/Utils/Assets.php:562
 msgid "Network error"
 msgstr ""
 
@@ -4245,7 +4245,7 @@ msgstr ""
 #: includes/Fields/AddressField.php:291
 #: includes/Fields/AddressField.php:296
 #: includes/Fields/AddressField.php:313
-#: includes/Fields/BaseField.php:530
+#: includes/Fields/BaseField.php:586
 #: includes/Fields/CheckboxField.php:297
 #: includes/Fields/CurrencyField.php:155
 #: includes/Fields/DateField.php:305
@@ -4298,36 +4298,37 @@ msgstr ""
 msgid "Sub-fields"
 msgstr ""
 
-#. translators: %1$d: maximum word count allowed, %2$d: current word count.
-#. translators: %1$d: maximum word count allowed, %2$d: current word count (both substituted client-side).
-#: includes/Fields/BaseField.php:113
-#: includes/Utils/Assets.php:189
-#, php-format
-msgid "Please enter at most %1$d words for \"Other\" (currently: %2$d)."
-msgstr ""
-
 #. translators: %1$d: maximum character count allowed, %2$d: current character count.
-#: includes/Fields/BaseField.php:120
+#: includes/Fields/BaseField.php:139
+#: includes/Fields/BaseField.php:156
 #, php-format
 msgid "Please enter at most %1$d characters for \"Other\" (currently: %2$d)."
 msgstr ""
 
+#. translators: %1$d: maximum word count allowed, %2$d: current word count.
+#. translators: %1$d: maximum word count allowed, %2$d: current word count (both substituted client-side).
+#: includes/Fields/BaseField.php:149
+#: includes/Utils/Assets.php:194
+#, php-format
+msgid "Please enter at most %1$d words for \"Other\" (currently: %2$d)."
+msgstr ""
+
 #. translators: %1$d: absolute maximum character count allowed, %2$d: current character count.
 #. translators: %1$d: maximum character count allowed, %2$d: current character count.
-#: includes/Fields/BaseField.php:148
+#: includes/Fields/BaseField.php:183
 #: includes/Fields/TextField.php:111
-#: includes/Fields/TextareaField.php:140
+#: includes/Fields/TextareaField.php:150
 #, php-format
 msgid "Please enter at most %1$d characters (currently: %2$d)."
 msgstr ""
 
 #. translators: %s: the name the visitor typed as their signature.
-#: includes/Fields/BaseField.php:183
+#: includes/Fields/BaseField.php:218
 #, php-format
 msgid "%s (signed by typing the name)"
 msgstr ""
 
-#: includes/Fields/BaseField.php:519
+#: includes/Fields/BaseField.php:575
 #: includes/Fields/CheckboxField.php:243
 #: includes/Fields/RadioField.php:207
 #: includes/Fields/SelectField.php:188
@@ -4335,14 +4336,14 @@ msgid "Field"
 msgstr ""
 
 #. translators: %s: field label.
-#: includes/Fields/BaseField.php:521
+#: includes/Fields/BaseField.php:577
 #: includes/Fields/DirectDebitField.php:708
 #: includes/Fields/RadioField.php:209
 #: includes/Fields/RatingField.php:236
 #: includes/Fields/SelectField.php:190
 #: includes/Fields/SignatureField.php:172
 #: includes/Fields/SignatureField.php:328
-#: includes/Form/FormProcessor.php:255
+#: includes/Form/FormProcessor.php:258
 #, php-format
 msgid "%s is a required field."
 msgstr ""
@@ -4357,7 +4358,7 @@ msgid "reCAPTCHA: Please enter the site key in the plugin settings."
 msgstr ""
 
 #: includes/Fields/CaptchaField.php:91
-#: includes/Form/FormProcessor.php:108
+#: includes/Form/FormProcessor.php:113
 msgid "This form cannot be sent at the moment. Please try again later."
 msgstr ""
 
@@ -4598,12 +4599,12 @@ msgid "Currency"
 msgstr ""
 
 #: includes/Fields/CurrencyField.php:117
-#: includes/Utils/Assets.php:193
+#: includes/Utils/Assets.php:198
 msgid "Please enter a valid amount."
 msgstr ""
 
 #: includes/Fields/CurrencyField.php:122
-#: includes/Utils/Assets.php:194
+#: includes/Utils/Assets.php:199
 msgid "Please enter an amount with at most two decimal places."
 msgstr ""
 
@@ -4613,9 +4614,9 @@ msgstr ""
 #: includes/Fields/NumberField.php:146
 #: includes/Fields/SliderField.php:210
 #: includes/Fields/SliderField.php:240
-#: includes/Utils/Assets.php:181
-#: includes/Utils/Assets.php:196
-#: includes/Utils/Assets.php:208
+#: includes/Utils/Assets.php:186
+#: includes/Utils/Assets.php:201
+#: includes/Utils/Assets.php:213
 #, php-format
 msgid "Minimum value: %s"
 msgstr ""
@@ -4626,9 +4627,9 @@ msgstr ""
 #: includes/Fields/NumberField.php:150
 #: includes/Fields/SliderField.php:214
 #: includes/Fields/SliderField.php:244
-#: includes/Utils/Assets.php:183
-#: includes/Utils/Assets.php:198
-#: includes/Utils/Assets.php:210
+#: includes/Utils/Assets.php:188
+#: includes/Utils/Assets.php:203
+#: includes/Utils/Assets.php:215
 #, php-format
 msgid "Maximum value: %s"
 msgstr ""
@@ -4672,13 +4673,13 @@ msgstr ""
 #. translators: %s: expected date pattern, e.g. DD.MM.YYYY.
 #. translators: %s: expected date pattern, e.g. DD.MM.YYYY (substituted client-side).
 #: includes/Fields/DateField.php:268
-#: includes/Utils/Assets.php:201
+#: includes/Utils/Assets.php:206
 #, php-format
 msgid "Please enter a date in %s format."
 msgstr ""
 
 #: includes/Fields/DateField.php:272
-#: includes/Utils/Assets.php:202
+#: includes/Utils/Assets.php:207
 msgid "Please enter a valid date."
 msgstr ""
 
@@ -4779,7 +4780,7 @@ msgstr ""
 
 #. translators: %s: two-letter IBAN country code, e.g. "CH".
 #: includes/Fields/DirectDebitField.php:596
-#: includes/Utils/Assets.php:165
+#: includes/Utils/Assets.php:170
 #, php-format
 msgid "The BIC is needed for IBANs from %s."
 msgstr ""
@@ -4794,33 +4795,33 @@ msgid "The signature could not be read. Please sign again."
 msgstr ""
 
 #: includes/Fields/DirectDebitField.php:636
-#: includes/Utils/Assets.php:157
+#: includes/Utils/Assets.php:162
 msgid "Please enter a valid BIC."
 msgstr ""
 
 #: includes/Fields/DirectDebitField.php:639
-#: includes/Utils/Assets.php:159
+#: includes/Utils/Assets.php:164
 msgid "Please enter a valid sort code (6 digits)."
 msgstr ""
 
 #: includes/Fields/DirectDebitField.php:642
-#: includes/Utils/Assets.php:160
+#: includes/Utils/Assets.php:165
 msgid "Please enter a valid routing number."
 msgstr ""
 
 #: includes/Fields/DirectDebitField.php:646
-#: includes/Utils/Assets.php:161
+#: includes/Utils/Assets.php:166
 msgid "Please enter a valid account number (8 digits)."
 msgstr ""
 
 #: includes/Fields/DirectDebitField.php:649
-#: includes/Utils/Assets.php:162
+#: includes/Utils/Assets.php:167
 msgid "Please enter a valid account number (4 to 17 digits)."
 msgstr ""
 
 #: includes/Fields/DirectDebitField.php:652
 #: includes/Fields/DirectDebitField.php:715
-#: includes/Utils/Assets.php:169
+#: includes/Utils/Assets.php:174
 msgid "Please choose the account type."
 msgstr ""
 
@@ -5269,7 +5270,7 @@ msgid "Note: I can request a refund of the debited amount within eight weeks, st
 msgstr ""
 
 #: includes/Fields/EmailField.php:109
-#: includes/Utils/Assets.php:204
+#: includes/Utils/Assets.php:209
 msgid "Please enter a valid email address."
 msgstr ""
 
@@ -5414,28 +5415,28 @@ msgstr ""
 #: includes/Fields/NumberField.php:116
 #: includes/Fields/SliderField.php:218
 #: includes/Fields/SliderField.php:248
-#: includes/Utils/Assets.php:215
+#: includes/Utils/Assets.php:220
 #, php-format
 msgid "Please enter a value in steps of %s."
 msgstr ""
 
 #: includes/Fields/NumberField.php:142
-#: includes/Utils/Assets.php:206
+#: includes/Utils/Assets.php:211
 msgid "Please enter a valid number."
 msgstr ""
 
 #: includes/Fields/NumberField.php:161
-#: includes/Utils/Assets.php:211
+#: includes/Utils/Assets.php:216
 msgid "Please enter a whole number."
 msgstr ""
 
 #: includes/Fields/NumberField.php:166
-#: includes/Utils/Assets.php:212
+#: includes/Utils/Assets.php:217
 msgid "Please enter a positive number."
 msgstr ""
 
 #: includes/Fields/NumberField.php:171
-#: includes/Utils/Assets.php:213
+#: includes/Utils/Assets.php:218
 msgid "Please enter a positive whole number."
 msgstr ""
 
@@ -5498,18 +5499,18 @@ msgstr ""
 
 #: includes/Fields/PhoneField.php:121
 #: includes/Fields/PhoneField.php:131
-#: includes/Utils/Assets.php:173
+#: includes/Utils/Assets.php:178
 msgid "Please enter a valid phone number."
 msgstr ""
 
 #: includes/Fields/PhoneField.php:127
-#: includes/Utils/Assets.php:174
+#: includes/Utils/Assets.php:179
 msgid "Please enter the number with international prefix (+...)."
 msgstr ""
 
 #: includes/Fields/PhoneField.php:158
 #: includes/Fields/PhoneField.php:161
-#: includes/Utils/Assets.php:175
+#: includes/Utils/Assets.php:180
 msgid "This phone number is not allowed for your country."
 msgstr ""
 
@@ -5649,7 +5650,7 @@ msgstr ""
 #: includes/Fields/SliderField.php:205
 #: includes/Fields/SliderField.php:228
 #: includes/Fields/SliderField.php:235
-#: includes/Utils/Assets.php:177
+#: includes/Utils/Assets.php:182
 msgid "Please enter a valid value."
 msgstr ""
 
@@ -5668,14 +5669,14 @@ msgstr ""
 #. translators: %1$d: maximum word count allowed, %2$d: current word count.
 #. translators: %1$d: maximum word count allowed, %2$d: current word count (both substituted client-side).
 #: includes/Fields/TextField.php:102
-#: includes/Fields/TextareaField.php:131
-#: includes/Utils/Assets.php:186
+#: includes/Fields/TextareaField.php:141
+#: includes/Utils/Assets.php:191
 #, php-format
 msgid "Please enter at most %1$d words (currently: %2$d)."
 msgstr ""
 
 #: includes/Fields/TextField.php:166
-#: includes/Fields/TextareaField.php:202
+#: includes/Fields/TextareaField.php:212
 msgid "Limit"
 msgstr ""
 
@@ -5683,11 +5684,11 @@ msgstr ""
 msgid "Text area"
 msgstr ""
 
-#: includes/Fields/TextareaField.php:196
+#: includes/Fields/TextareaField.php:206
 msgid "Rows"
 msgstr ""
 
-#: includes/Fields/TextareaField.php:197
+#: includes/Fields/TextareaField.php:207
 msgid "Visible height of the field (number of text rows)"
 msgstr ""
 
@@ -5850,7 +5851,7 @@ msgstr ""
 
 #: includes/Fields/WebsiteField.php:107
 #: includes/Fields/WebsiteField.php:113
-#: includes/Utils/Assets.php:191
+#: includes/Utils/Assets.php:196
 msgid "Please enter a valid URL (e.g. https://example.com)."
 msgstr ""
 
@@ -5868,75 +5869,81 @@ msgstr ""
 msgid "%s (Copy)"
 msgstr ""
 
-#: includes/Form/FormProcessor.php:60
-#: includes/Form/FormProcessor.php:64
-#: includes/Form/FormProcessor.php:91
+#: includes/Form/FormProcessor.php:61
+#: includes/Form/FormProcessor.php:65
+#: includes/Form/FormProcessor.php:96
 msgid "Security check failed."
 msgstr ""
 
 #. translators: %d: number of minutes until the visitor can submit again
-#: includes/Form/FormProcessor.php:130
+#: includes/Form/FormProcessor.php:135
 #, php-format
 msgid "Too many submissions. Please try again in %d minutes."
 msgstr ""
 
 #. translators: %d: number of seconds until the visitor can submit again
-#: includes/Form/FormProcessor.php:135
+#: includes/Form/FormProcessor.php:140
 #, php-format
 msgid "Too many submissions. Please try again in %d seconds."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:202
+#: includes/Form/FormProcessor.php:203
 msgid "This form cannot be submitted with the answers given."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:290
-#: includes/Form/FormProcessor.php:302
-#: includes/Form/FormProcessor.php:345
-#: includes/Form/FormProcessor.php:385
+#: includes/Form/FormProcessor.php:307
+#: includes/Form/FormProcessor.php:319
+#: includes/Form/FormProcessor.php:362
+#: includes/Form/FormProcessor.php:402
 msgid "Please correct the highlighted fields."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:366
+#: includes/Form/FormProcessor.php:383
 msgid "The server is busy processing other submissions. Please try again in a moment."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:402
+#: includes/Form/FormProcessor.php:419
 msgid "This submission has already been received."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:414
+#: includes/Form/FormProcessor.php:431
 msgid "Your submission could not be delivered. Please try again later."
 msgstr ""
 
 #. translators: 1: file name, 2: the image's megapixels, 3: its file size in MB, 4: largest accepted image in megapixels.
-#: includes/Form/FormProcessor.php:611
+#: includes/Form/FormProcessor.php:628
 #, php-format
 msgid "\"%1$s\" has %2$s megapixels (%3$s MB), but images can have at most %4$s megapixels. Please upload a smaller image."
 msgstr ""
 
 #. translators: 1: image file name, 2: size of all uploaded files together in MB, 3: largest total in MB that fits with this image.
-#: includes/Form/FormProcessor.php:623
+#: includes/Form/FormProcessor.php:640
 #, php-format
 msgid "All files together are %2$s MB, but with \"%1$s\" they can be at most %3$s MB. Please upload smaller files."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:640
+#: includes/Form/FormProcessor.php:657
 msgid "The attached files are too large in total. Please attach fewer or smaller files."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:650
+#: includes/Form/FormProcessor.php:667
 msgid "This form is too large for the server to create its PDF. Please let the site operator know."
 msgstr ""
 
+#. translators: %s: the character's code point, e.g. "U+1F600".
+#: includes/Form/FormProcessor.php:794
+#, php-format
+msgid "This answer contains a character the PDF can't show (%s). Please leave it out or write it differently."
+msgstr ""
+
 #. translators: %s: the character sequence that is not allowed, e.g. "---BEGIN-SEAL---".
-#: includes/Form/FormProcessor.php:803
+#: includes/Form/FormProcessor.php:831
 #, php-format
 msgid "This answer contains \"%s\", which the sealed PDF uses for itself. Please remove it."
 msgstr ""
 
 #. translators: %s: the character sequence that is not allowed, "[FABRICATOR_FIELD_".
-#: includes/Form/FormProcessor.php:815
+#: includes/Form/FormProcessor.php:843
 #, php-format
 msgid "This answer contains \"%s\", which the notification email uses to mark answers. Please remove it."
 msgstr ""
@@ -6075,6 +6082,28 @@ msgstr ""
 msgid "Edit Form"
 msgstr ""
 
+#: includes/Utils/AnswerText.php:57
+msgid "This answer contains characters that can't be read. Please type it again."
+msgstr ""
+
+#: includes/Utils/AnswerText.php:62
+#: includes/Utils/Assets.php:141
+msgid "This answer can't hold line breaks or tabs. Please write it on one line."
+msgstr ""
+
+#. translators: %s: the character's code point, e.g. "U+200B".
+#. translators: %s: the character's code point, e.g. "U+200B" (substituted client-side).
+#: includes/Utils/AnswerText.php:66
+#: includes/Utils/Assets.php:143
+#, php-format
+msgid "This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it."
+msgstr ""
+
+#: includes/Utils/AnswerText.php:73
+#: includes/Utils/Assets.php:144
+msgid "This answer contains an HTML character reference (such as \"&amp;\"). Please write the character itself."
+msgstr ""
+
 #: includes/Utils/Assets.php:135
 msgid "Server error. Please try again."
 msgstr ""
@@ -6095,127 +6124,127 @@ msgstr ""
 msgid "Please enter valid data."
 msgstr ""
 
-#: includes/Utils/Assets.php:142
+#: includes/Utils/Assets.php:147
 msgid "Could not load CAPTCHA. Please disable content blockers for this site or try another browser."
 msgstr ""
 
 #. translators: %s: file name (substituted client-side). Read out by screen readers for the button that removes the file.
-#: includes/Utils/Assets.php:145
+#: includes/Utils/Assets.php:150
 #, php-format
 msgid "Remove %s"
 msgstr ""
 
 #. translators: %d: maximum number of files allowed (substituted client-side).
-#: includes/Utils/Assets.php:147
+#: includes/Utils/Assets.php:152
 #, php-format
 msgid "Too many files. Maximum %d allowed."
 msgstr ""
 
-#: includes/Utils/Assets.php:148
+#: includes/Utils/Assets.php:153
 msgid "No allowed file types in selection."
 msgstr ""
 
-#: includes/Utils/Assets.php:149
+#: includes/Utils/Assets.php:154
 msgid "1 file was skipped due to file type."
 msgstr ""
 
 #. translators: %d: number of files skipped due to file type (substituted client-side).
-#: includes/Utils/Assets.php:151
+#: includes/Utils/Assets.php:156
 #, php-format
 msgid "%d files were skipped due to file type."
 msgstr ""
 
 #. translators: %1$d: total number of files submitted, %2$d: maximum allowed per submission (both substituted client-side).
-#: includes/Utils/Assets.php:153
+#: includes/Utils/Assets.php:158
 #, php-format
 msgid "Too many files total (%1$d). Max. %2$d per submission."
 msgstr ""
 
-#: includes/Utils/Assets.php:155
+#: includes/Utils/Assets.php:160
 msgid "Invalid IBAN (check digit incorrect)."
 msgstr ""
 
-#: includes/Utils/Assets.php:156
+#: includes/Utils/Assets.php:161
 msgid "Please enter a complete and valid IBAN."
 msgstr ""
 
-#: includes/Utils/Assets.php:158
+#: includes/Utils/Assets.php:163
 msgid "This country is not allowed."
 msgstr ""
 
-#: includes/Utils/Assets.php:163
+#: includes/Utils/Assets.php:168
 msgid "IBAN is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:166
+#: includes/Utils/Assets.php:171
 msgid "Sort code is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:167
+#: includes/Utils/Assets.php:172
 msgid "Routing number is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:168
+#: includes/Utils/Assets.php:173
 msgid "Account number is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:170
+#: includes/Utils/Assets.php:175
 msgid "Account holder is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:171
+#: includes/Utils/Assets.php:176
 msgid "Please sign."
 msgstr ""
 
 #. translators: %1$s: minimum allowed value, %2$s: maximum allowed value (both substituted client-side).
-#: includes/Utils/Assets.php:179
+#: includes/Utils/Assets.php:184
 #, php-format
 msgid "Value outside the allowed range (%1$s–%2$s)."
 msgstr ""
 
-#: includes/Utils/Assets.php:217
+#: includes/Utils/Assets.php:222
 msgid "AM"
 msgstr ""
 
-#: includes/Utils/Assets.php:218
+#: includes/Utils/Assets.php:223
 msgid "PM"
 msgstr ""
 
-#: includes/Utils/Assets.php:537
+#: includes/Utils/Assets.php:551
 msgid "Checking on the server…"
 msgstr ""
 
 #. translators: %1$d: seconds remaining before this PDF's verification request is sent (substituted client-side).
-#: includes/Utils/Assets.php:539
+#: includes/Utils/Assets.php:553
 #, php-format
 msgid "Waiting in queue (%1$ds)…"
 msgstr ""
 
-#: includes/Utils/Assets.php:540
+#: includes/Utils/Assets.php:554
 msgid "Waiting for a free verification slot…"
 msgstr ""
 
-#: includes/Utils/Assets.php:541
+#: includes/Utils/Assets.php:555
 msgid "Rate limited — retrying…"
 msgstr ""
 
 #. translators: %1$d: seconds remaining before the next automatic retry (substituted client-side).
-#: includes/Utils/Assets.php:543
+#: includes/Utils/Assets.php:557
 #, php-format
 msgid "Server busy — retrying in %1$ds…"
 msgstr ""
 
-#: includes/Utils/Assets.php:544
+#: includes/Utils/Assets.php:558
 msgid "Processing response…"
 msgstr ""
 
 #. translators: %d: HTTP status code (substituted client-side).
-#: includes/Utils/Assets.php:547
+#: includes/Utils/Assets.php:561
 #, php-format
 msgid "Server error (HTTP %d)"
 msgstr ""
 
-#: includes/Utils/Assets.php:549
+#: includes/Utils/Assets.php:563
 msgid "Unknown server error"
 msgstr ""
 

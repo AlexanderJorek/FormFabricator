@@ -368,4 +368,14 @@ class CaptchaField extends BaseField
             ],
         ];
     }
+
+    /**
+     * The CAPTCHA's answer is a token, checked as such (BaseField::typedAnswer()).
+     *
+     * @return bool
+     */
+    public function typedAnswer(): bool
+    {
+        return false;
+    }
 }

@@ -77,13 +77,45 @@ abstract class BaseField
         return $out;
     }
 
-    // Always >= other_max_length so truncation never pre-empts the "too long" error.
+    /**
+     * An answer as the visitor typed it, without the spaces around it: nothing else is changed (Utils\AnswerText refuses
+     * what can't be recorded as typed). A non-string reads as empty.
+     *
+     * @param mixed $raw The posted value.
+     * @return string
+     */
+    protected static function answer(mixed $raw): string
+    {
+        return is_string($raw) ? trim($raw) : '';
+    }
+
+    /**
+     * answer() for every string in $raw, nested ones included; anything else stays as it is.
+     *
+     * @param mixed $raw The posted value, capped with capRawArray() first.
+     * @return mixed
+     */
+    protected static function answers(mixed $raw): mixed
+    {
+        if (is_string($raw)) {
+            return trim($raw);
+        }
+        if (!is_array($raw)) {
+            return $raw;
+        }
+        foreach ($raw as $key => $value) {
+            $raw[$key] = self::answers($value);
+        }
+        return $raw;
+    }
+
+    // The longest "Other" text taken, configured limit or not; longer is refused (validateOtherText()), never cut.
     private const OTHER_TEXT_HARD_CAP = 5000;
 
-    // Shared cap so the limit can't drift between fields' implementations.
+    // The "Other" text as typed (answer()).
     protected static function capOtherText(mixed $raw): string
     {
-        return mb_substr(is_string($raw) ? sanitize_text_field($raw) : '', 0, self::OTHER_TEXT_HARD_CAP);
+        return self::answer($raw);
     }
 
     // Client-side hint attribute for the configurable "Other" text limit;
@@ -102,6 +134,10 @@ abstract class BaseField
     // other_max_length limit.
     protected static function validateOtherText(string $other, array $config): bool|string
     {
+        if (mb_strlen($other) > self::OTHER_TEXT_HARD_CAP) {
+            // translators: %1$d: maximum character count allowed, %2$d: current character count.
+            return sprintf(__('Please enter at most %1$d characters for "Other" (currently: %2$d).', 'formfabricator'), self::OTHER_TEXT_HARD_CAP, mb_strlen($other));
+        }
         $max = self::clampOtherMax((int)($config['other_max_length'] ?? 0));
         if ($max <= 0 || $other === '') {
             return true;
@@ -122,8 +158,7 @@ abstract class BaseField
         return true;
     }
 
-    // Clamps an admin-configured other_max_length to OTHER_TEXT_HARD_CAP so
-    // validateOtherText() can't expect text longer than capOtherText() allows.
+    // Clamps an admin-configured other_max_length to OTHER_TEXT_HARD_CAP, the most validateOtherText() takes anyway.
     private static function clampOtherMax(int $configured): int
     {
         return $configured > 0 ? min($configured, self::OTHER_TEXT_HARD_CAP) : $configured;
@@ -324,6 +359,27 @@ abstract class BaseField
     }
 
     /**
+     * Whether line breaks and tabs belong in this field's answer (Utils\AnswerText refuses them elsewhere).
+     *
+     * @return bool
+     */
+    public function multilineAnswer(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Whether this field's answer is what the visitor typed, held to Utils\AnswerText; not for values the site or the
+     * browser makes (a post's details, a file entry, a CAPTCHA token).
+     *
+     * @return bool
+     */
+    public function typedAnswer(): bool
+    {
+        return true;
+    }
+
+    /**
      * front.js's reading of a field's "id[key]" inputs: the non-empty values of $keys, trimmed, in this order (the order
      * the field renders them), joined by one space. Keys starting with "_" are internal and never read.
      *
@@ -494,13 +550,13 @@ abstract class BaseField
      * Override for a different value shape; a field never reads the request itself.
      *
      * @param string $field_id The field's id, its input's name.
-     * @param array  $post     The posted answers, unslashed and run through sanitize_textarea_field().
+     * @param array  $post     The posted answers, unslashed and otherwise as sent: read with answer()/answers().
      * @param array  $files    The uploaded files' entries, each part sanitized, shaped as $_FILES.
      * @return mixed
      */
     public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        return is_string($post[$field_id] ?? null) ? sanitize_text_field($post[$field_id]) : '';
+        return self::answer($post[$field_id] ?? null);
     }
 
     /**

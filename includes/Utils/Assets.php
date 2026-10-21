@@ -137,6 +137,11 @@ class Assets
                 'validation_both'         => __('Please fill in all required fields and correct the invalid entries.', 'formfabricator'),
                 'validation_required'     => __('Please fill in all required fields.', 'formfabricator'),
                 'validation_invalid'      => __('Please enter valid data.', 'formfabricator'),
+                // What an answer may hold (the same wording as Utils\AnswerText)
+                'answer_one_line'         => __('This answer can\'t hold line breaks or tabs. Please write it on one line.', 'formfabricator'),
+                // translators: %s: the character's code point, e.g. "U+200B" (substituted client-side).
+                'answer_invisible'        => __('This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it.', 'formfabricator'),
+                'answer_reference'        => __('This answer contains an HTML character reference (such as "&amp;"). Please write the character itself.', 'formfabricator'),
                 'thank_you'               => __('Thank you!', 'formfabricator'),
                 // CAPTCHA
                 'recaptcha_blocked'       => __('Could not load CAPTCHA. Please disable content blockers for this site or try another browser.', 'formfabricator'),
@@ -236,6 +241,7 @@ class Assets
         $seenRules   = [];
         $inits       = [];
         $skip        = [];
+        $untyped     = [];
 
         foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
             $handler = new $class();
@@ -267,6 +273,10 @@ class Assets
             if ($handler->skipValidation()) {
                 $skip[] = wp_json_encode($type);
             }
+
+            if (!$handler->typedAnswer()) {
+                $untyped[] = wp_json_encode($type);
+            }
         }
 
         $globals = [];
@@ -281,6 +291,10 @@ class Assets
         }
         if (!empty($skip)) {
             $globals['FabricatorSkipValidation'] = '[' . implode(',', $skip) . ']';
+        }
+        if (!empty($untyped)) {
+            // The types front.js leaves to their own checks: their answers aren't typed text (BaseField::typedAnswer()).
+            $globals['FabricatorUntypedAnswers'] = '[' . implode(',', $untyped) . ']';
         }
 
         return ['css' => implode("\n", $fieldCss), 'globals' => $globals];

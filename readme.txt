@@ -132,6 +132,7 @@ Deactivating keeps everything. Deleting removes all forms, settings, seal keys a
 * Changed: in the notification email, the direct debit mandate and the signature now sit in a bordered box headed by their title, as in the PDF, instead of ending with an "End of …" line.
 * Changed: "Hide label" now also hides a field's label in the notification email and the PDF, for every field type and inside groups.
 * Fixed: Every signing and agreement time (signature, direct debit mandate, Consent, GDPR), and the creation time in the PDF's metadata block, is now written the same way: the date as the site writes dates, then the time, both in UTC. If the site's date format leaves out the year, the month or the day, the date is written as year-month-day instead, so every record names its day.
+* Changed: answers are recorded exactly as typed, only the spaces around them trimmed. Before, `<…>` and codes such as `%AB` were removed ("a<b and c>d" arrived as "ad"). What can't be kept as typed is refused at its field instead: invisible characters, line breaks outside a text area, HTML character references and, in forms with a PDF, characters the PDF can't show.
 * Fixed: in the form builder, a field group, and a field inside a group, did not show the icon for conditions after its label.
 * Fixed: in the form builder, a field dragged past the edge of the field list could only be dropped where the list had ended before it scrolled.
 * Fixed: an HTML block left a larger gap below it in the notification email than other fields.

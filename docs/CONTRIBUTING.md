@@ -66,6 +66,8 @@ The short version. Each point links to its full explanation.
 8. **Comments explain what and why, never history.** → [Comments](#comments)
 9. **Inputs and output pass where they are read and printed, without `phpcs:ignore`.** WordPress.org's reviewers
    honour no ignore comment and no custom helper. → [Request input and output](#request-input-and-output)
+10. **An answer is recorded as typed, or refused.** Nothing in it is removed or replaced. →
+    [Answers are recorded as typed](#answers-are-recorded-as-typed)
 
 ---
 
@@ -125,6 +127,29 @@ Mapping keeps the label in the entry and marks it (`FieldRegistry::withHiddenLab
 then show the answer without it, while the seal still records it and the verification page still names the answer.
 Only the field's own entry (keyed by its id) is marked; entries a field adds under their own labels (a mandate's parts,
 a signature's "Signed on") keep them.
+
+### Answers are recorded as typed
+
+A changed answer is a different statement: a mandate's account holder with a character dropped, a declaration with
+its `<` removed. So an answer is recorded exactly as the visitor typed it, only the spaces around it trimmed
+(`BaseField::answer()`, `answers()`), and the IBAN and BIC formatted for reading. What can't be recorded as typed is
+refused at its field, in the browser first (front.js `answerProblem()`) and again on the server
+(`Utils\AnswerText`, checked in FormProcessor for every field whose `typedAnswer()` is true):
+
+- invalid UTF-8;
+- control and invisible format characters (`\p{Cc}`, `\p{Cf}`, line and paragraph separators): direction controls,
+  zero-width characters, the soft hyphen. They change how text reads without showing, and a direction control can
+  reorder text into a PDF marker (see [Text direction](#submitters-must-not-be-able-to-forge-structure));
+- line breaks and tabs outside a multi-line answer (`multilineAnswer()`, a textarea);
+- HTML character references (`&amp;`, `&#65;`): `esc_html()` leaves a reference as it is, so a page or an email would
+  show the character it names instead of what was typed;
+- while the form makes a PDF, a character no shipped font draws (`Generator::undrawableCharacter()`): the PDF would
+  show a stand-in. The browser can't know the fonts, so only the server checks this.
+
+Everything else, `<` and `%` included, is kept, and escaped wherever it is shown. WordPress's sanitizers would change
+it, so `FormProcessor::handle()` reads the answers unsanitized: a named review exception. Values a visitor's answer is
+compared with (an option's value, a rule's value) are saved as the plain text the browser posts
+(`FormEditor::answerText()`): `sanitize_text_field()` alone writes a lone `<` as `&lt;`.
 
 **When something was signed or agreed to** is recorded one way (`Utils\SigningTime`): the date in the site's date
 format, then the time, both in UTC, from the server's clock when the form is sent. A site format that leaves out the
@@ -277,7 +302,10 @@ markers with the value stored in the seal.
   PDF's field markers, in order. A hidden field has no markers.
 - **The PDF draws exactly what the seal records.** The verifier reads the text back with pdfparser, so the generator
   writes only text that reads back as itself (`Generator::drawableText()`, applied to the values both the PDF and the
-  seal are made from; the mail keeps what was sent):
+  seal are made from; the mail keeps what was sent). A typed answer never needs it: one holding a character the PDF
+  can't draw is refused (see [Answers are recorded as typed](#answers-are-recorded-as-typed)). The seal holds a value
+  as the PDF shows it, `<` and line breaks included; only an HTML block's markup is sealed as its text.
+  For the texts the site sets:
   - A character no shipped font draws becomes U+FFFD, or its plain form ("𝔏" as "L") when that can be drawn.
     FreeSerif.ttf, then Quivira.otf, draw what the layout font lacks (`Generator::FALLBACK_FONTS`), but only below
     U+FFFF: beyond it, mPDF's text doesn't read back.
@@ -306,16 +334,16 @@ uploaded images. Neither may carry structure.
   normalization (`PdfUtils::normalizeText()`, shared by both sides), is refused at its field
   (`PdfUtils::reservedMarker()`, checked in FormProcessor).
 - **Text direction.** mPDF lays text out by the Unicode bidi algorithm. The explicit controls (U+202A–U+202E,
-  U+2066–U+2069) can reverse Latin text into a marker, so FormProcessor removes them from answers before the marker
-  check (`PdfUtils::stripBidiControls()`). Without them, in the left-to-right paragraphs the PDF uses, no reordering
-  can assemble a marker. A right-to-left PDF layout would need this argument made again.
+  U+2066–U+2069) can reverse Latin text into a marker, so an answer holding one is refused (`Utils\AnswerText`); an
+  upload's file name has them removed (`PdfUtils::stripBidiControls()`). Without them, in the left-to-right paragraphs
+  the PDF uses, no reordering can assemble a marker. A right-to-left PDF layout would need this argument made again.
 - **Mail markers.** A notification can add automation markers: every answer its email lists stands between
   `[FABRICATOR_FIELD_<id>]` and `[FABRICATOR_FIELD_END]` (`MailSender::FIELD_MARKER`), for a mail parser. While an
   enabled notification of the form does, an answer containing `[FABRICATOR_FIELD_` is refused at its field
   (`MailSender::marksAnswers()`, checked in FormProcessor). Upload file names can't carry one: `sanitize_file_name()`
   removes the brackets. The check reads the answer as the mail shows it, entities decoded and case ignored:
-  `esc_html()` keeps references such as `&#91;`, which a mail program reads as `[`. The mail itself keeps `esc_html()`,
-  because WordPress stores a typed `<` as `&lt;`, which encoding twice would show literally.
+  `esc_html()` keeps references such as `&#91;`, which a mail program reads as `[` (a typed answer holding one is
+  refused anyway, see [Answers are recorded as typed](#answers-are-recorded-as-typed)).
   An answer made of parts (an expanded Name or Address, a range slider, Post data) is marked part by part on its one
   line: an empty `<id>_begin` pair, a pair per enabled part (`<id>_<sub-field key>`, empty when the part is), an empty
   `<id>_end` pair, none nested. The parts ride on the entry (`BaseField::withMarkerParts()`, from the same
@@ -434,9 +462,11 @@ WPCS recognises. `.phpcs-review.xml` runs exactly that, and the release fails on
   around `wp_unslash()`. A type guard goes in the condition (`is_string($_POST[k] ?? null)`), never between sanitizer
   and input. An array is read with `map_deep(wp_unslash(…), 'sanitize_…')`; JSON that may hold markup is sent
   base64-encoded and read as `base64_decode(sanitize_text_field(wp_unslash(…)))`, then sanitized value by value.
-- **A field never reads the request.** `FormProcessor::handle()` verifies the nonce, reads `$_POST` once through
-  `map_deep(wp_unslash(…), 'sanitize_textarea_field')` and the file entries part by part, and hands both to every
-  `extractValue($field_id, $post, $files)`, which sanitizes its own value for its type and never unslashes again.
+- **A field never reads the request.** `FormProcessor::handle()` verifies the nonce, reads `$_POST` once with
+  `wp_unslash()` and no sanitizer (a named review exception: answers are recorded as typed and checked at their field,
+  see [Answers are recorded as typed](#answers-are-recorded-as-typed)) and the file entries part by part, and hands
+  both to every `extractValue($field_id, $post, $files)`, which reads its value with `answer()`/`answers()` (a value
+  the site or the browser makes, such as a CAPTCHA token, with its sanitizer) and never unslashes again.
 - **Output** is escaped as it is printed. Markup built elsewhere is printed through `wp_kses()` with an allowlist of its
   own (`FormList::rowAllowedHtml()`, `fabricator_verifier_allowed_html()`), checked complete by `EscapedHtmlTest`. The
   verifier's report is never printed: its stages append to a string, which the AJAX handler sanitizes once and sends as
@@ -647,9 +677,10 @@ submitted. Both sides must reach the same result.
 
   A new field type whose inputs aren't named after its id overrides `conditionValue()` and gets a case in
   build-fixture.php's `$compositeCases`.
-- **Text is compared as the server receives it.** front.js's `sanitizeLikeWp()` mirrors `sanitize_text_field()` (and
-  the textarea variant). It is checked against the real functions, which `tests/js/wp-sanitize.php` runs in a process
-  of its own for the fixture.
+- **Text is compared as the server reads it**: as typed, trimmed by PHP's `trim()` (front.js `phpTrim()`, not
+  `String.prototype.trim()`, which also removes U+FEFF). The fixture records the real fields' `extractValue()`.
+- **The browser refuses what the server refuses.** front.js's `answerProblem()` is checked against `Utils\AnswerText`
+  on the fixture's `answerText` cases (`validate-page.test.js`).
 
 #### Admin scripts
 

@@ -42,7 +42,8 @@ audit` and the package build run only in the release build.
 | A deleted form selection's ID is never handed out again; a refused or missing delete is reported | `tests/Integration/Form/FormSelectModelTest.php` |
 | Routing rules: "equals" against a multi-choice answer matches each ticked option; "is empty" vs "[No entry]", 20,00 € > 10, option labels in groups | `tests/Unit/Form/RoutingRulesTest.php` |
 | Post data never shows a private or password-protected post; website URLs with umlaut domains pass, invisible characters in them (bidi override, zero-width, non-breaking space) are refused, in the browser too (`tests/js/validators.test.js`) | `tests/Integration/Fields/FieldBehaviourTest.php` |
-| Rule values read in the browser as WordPress's real `sanitize_text_field()` / `sanitize_textarea_field()` leave them | `tests/js/condition-parity.test.js`, `tests/js/wp-sanitize.php` |
+| Rule values read in the browser as the server reads the answer: as typed, trimmed | `tests/js/condition-parity.test.js` |
+| Answers recorded as typed in mail, PDF and seal; invisible characters, stray line breaks, character references and (with a PDF) undrawable characters refused at their field, in the browser as on the server; option and rule values saved as the browser posts them | `tests/Integration/Form/AnswersAsTypedTest.php`, `tests/Integration/PDF/SealRoundTripTest.php`, `tests/js/validate-page.test.js` |
 | Every PDF object reader ends a crafted object at the same byte; a huge soft mask ends in a verdict, not a fatal | `tests/Unit/PDF/ObjectLookupTest.php`, `tests/Integration/PDF/SealRoundTripTest.php` |
 | Option values never empty, never shared | `tests/Unit/Fields/ImportTypesTest.php` |
 | A key backup file whose fingerprint no longer matches its key is refused on import; one without a fingerprint still imports | `tests/Integration/Admin/KeyImportTest.php` |

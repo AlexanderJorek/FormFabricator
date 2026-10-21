@@ -729,6 +729,53 @@ class Generator
     }
 
     /**
+     * The glyph test for the PDF layout's body font (glyphTest()), once read in this request; null when the fonts can't
+     * be read.
+     *
+     * @var \Closure(int): int|null
+     */
+    private static ?\Closure $layoutGlyphs = null;
+
+    /**
+     * Whether $layoutGlyphs was read in this request.
+     *
+     * @var bool
+     */
+    private static bool $layoutGlyphsRead = false;
+
+    /**
+     * The first character of $text the PDF can't draw as itself: no shipped font has it in every style, or it lies
+     * beyond U+FFFF, where mPDF's text doesn't read back. FormProcessor refuses an answer holding one, so the PDF and its
+     * seal never hold a stand-in for what was typed (drawableText()). Null when every character can be drawn, or when the
+     * fonts can't be read (the PDF then draws the text as it is).
+     *
+     * @param string $text An answer.
+     * @return string|null
+     */
+    public static function undrawableCharacter(string $text): ?string
+    {
+        if (preg_match('/[^\x00-\x7F]/', $text) !== 1) {
+            return null;
+        }
+        if (!self::$layoutGlyphsRead) {
+            self::$layoutGlyphsRead = true;
+            $layout                 = include FABRICATOR_FORMS_PATH . 'includes/PDF/templates/layout.php';
+            self::$layoutGlyphs     = self::glyphTest(is_string($layout['font_family'] ?? null) ? $layout['font_family'] : 'dejavusans');
+        }
+        $glyphs = self::$layoutGlyphs;
+        if ($glyphs === null) {
+            return null;
+        }
+        foreach (mb_str_split($text, 1, 'UTF-8') as $char) {
+            $code = (int) mb_ord($char, 'UTF-8');
+            if ($code > 0x7F && $glyphs($code) === 0) {
+                return $char;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Where the PDF can draw a code point: 1 in every style of $family (a value may be bold or italic), 2 only in
      * FALLBACK_FONTS, 0 nowhere.
      *
@@ -898,11 +945,25 @@ class Generator
                     ($seal_handler === null || $seal_handler->includeValueInSeal($field))
                     && isset($field['value'])
                     && is_string($field['value'])
-                ) ? self::normalizeFieldValue($field['value']) : '',
+                ) ? self::sealValue($field['value'], $seal_handler !== null && $seal_handler->rawEmailHtml()) : '',
                 'shown' => isset($shown[$key]),
             ];
         }
         return $fields;
+    }
+
+    /**
+     * A value as the seal records it: as the PDF shows it. Text is escaped there, so it is sealed as it is, "<" and line
+     * breaks included (a typed answer holds no character reference, Utils\AnswerText; one in a text the site set shows
+     * as its character, so it is decoded). Markup (an HTML block) is sealed as its text.
+     *
+     * @param string $value   The entry's value.
+     * @param bool   $is_html Whether the value is markup the PDF renders (BaseField::rawEmailHtml()).
+     * @return string
+     */
+    private static function sealValue(string $value, bool $is_html): string
+    {
+        return $is_html ? self::normalizeFieldValue($value) : html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     /**

@@ -43,31 +43,24 @@ $arrayRules = ['Ja', 'ÄRZTE', '', '10', '1', '5', '-3', '0'];
 $operators  = ['equals', 'not_equals', 'contains', 'not_contains', 'empty', 'not_empty', 'greater', 'less'];
 
 /**
- * WordPress's real sanitize_text_field() / sanitize_textarea_field() on each string (tests/js/wp-sanitize.php, run in a
- * process of its own), as [text, textarea] pairs.
+ * Each string as the server reads it from a submission: the real TextField's and TextareaField's extractValue(), as
+ * [text, textarea] pairs. Answers are recorded as typed, trimmed.
  *
  * @param string[] $strings
  * @return array<int, array{0: string, 1: string}>
  */
-$wpSanitize = static function (array $strings): array {
-    $proc = proc_open([PHP_BINARY, __DIR__ . '/wp-sanitize.php'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w']], $pipes);
-    if (!is_resource($proc)) {
-        fwrite(STDERR, "build-fixture: cannot run wp-sanitize.php\n");
-        exit(1);
+$serverReads = static function (array $strings): array {
+    $text     = \FabricatorForms\Fields\FieldRegistry::get('text');
+    $textarea = \FabricatorForms\Fields\FieldRegistry::get('textarea');
+    $out      = [];
+    foreach ($strings as $s) {
+        $out[] = [$text->extractValue('t', ['t' => $s]), $textarea->extractValue('t', ['t' => $s])];
     }
-    fwrite($pipes[0], json_encode(array_values($strings), JSON_THROW_ON_ERROR));
-    fclose($pipes[0]);
-    $out = (string) stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    if (proc_close($proc) !== 0) {
-        fwrite(STDERR, "build-fixture: wp-sanitize.php failed\n");
-        exit(1);
-    }
-    return json_decode($out, true, 512, JSON_THROW_ON_ERROR);
+    return $out;
 };
 
-// What the server's rule sees is the submitted text after sanitize_text_field() (extractValue()); front.js mirrors that.
-$sanitizedValues = array_combine($values, array_column($wpSanitize($values), 0));
+// What the server's rule sees is the submitted text as extractValue() reads it; front.js reads it the same way.
+$sanitizedValues = array_combine($values, array_column($serverReads($values), 0));
 $decide = static fn(string $op, string $ruleValue, mixed $submitted): bool => Reflect::call(
     FormProcessor::class,
     'evalConditionRule',
@@ -75,8 +68,8 @@ $decide = static fn(string $op, string $ruleValue, mixed $submitted): bool => Re
     ['f' => is_array($submitted) ? $submitted : $sanitizedValues[$submitted]]
 );
 
-// front.js's sanitizeLikeWp() against the real functions, on the inputs where they do most: tags, a lone "<", %xx
-// octets, entities, tabs and runs of spaces, non-breaking spaces, and line breaks (kept only by the textarea version).
+// front.js's reading against the server's, on inputs a sanitizer would change: tags, a lone "<", %xx octets, entities,
+// tabs and runs of spaces, non-breaking spaces, and line breaks.
 $sanitizeCorpus = [
     '  Ada   Lovelace ', "tab\there", 'a<b>bold</b>c', 'x < y', 'a < b > c', '1 <2', '<script>alert(1)</script>ok',
     '<!-- note -->text', '<style>p{}</style>styled', '100%20off', '%41%42', '50% of 10%ab', 'fish &amp; chips',
@@ -84,8 +77,25 @@ $sanitizeCorpus = [
     '<p>para</p><p>two</p>', 'a<br>b', '<a href="x">link</a> & more', '5 < 6 and 7 > 3',
 ];
 $sanitizePairs = [];
-foreach ($wpSanitize($sanitizeCorpus) as $i => [$asText, $asTextarea]) {
+foreach ($serverReads($sanitizeCorpus) as $i => [$asText, $asTextarea]) {
     $sanitizePairs[] = [$sanitizeCorpus[$i], $asText, $asTextarea];
+}
+
+// What an answer may hold: Utils\AnswerText's verdict on each string, as a one-line and as a multi-line answer, for
+// front.js's answerProblem(). A text input can't hold a line break, so those are checked as a textarea only.
+$answerCorpus = [
+    'Ada Lovelace', '  Ada  ', 'a<b and c>d', '20%AB', 'AT&T R&D', 'Tom & Jerry;', '&foo;', '&amp', 'x&nbsp',
+    'Smith &amp; Co', 'caf&#233;', '&#x41;', '&copy; 2026', '&AMP;', "Ada\u{200B}Lovelace", "Ada\u{00AD}", "\u{FEFF}x",
+    "\u{202E}abc", "a\u{2066}b", "a\u{061C}b", "a\u{200E}b", "tab\there", "a\u{0007}b", "a\u{007F}b", "a\u{0085}b",
+    "a\u{2028}b", "a\u{2029}b", "line1\nline2", "line1\r\nline2", "a\u{00A0}b", 'ünïcödé ΣΊΣΥΦΟΣ 漢字 🎀', "e\u{0301}",
+];
+$answerCases = [];
+foreach ($answerCorpus as $typed) {
+    $answerCases[] = [
+        $typed,
+        \FabricatorForms\Utils\AnswerText::problem(trim($typed), false) === null,
+        \FabricatorForms\Utils\AnswerText::problem(trim($typed), true) === null,
+    ];
 }
 
 $scalar = [];
@@ -349,11 +359,10 @@ $debitTyped = [
         'account' => ['1234', '12345678901234567', '12-34', '123', '123456789012345678', 'abcd', '1234 5678'],
     ],
 ];
-// What counts as "untouched" for an optional mandate: one detail holding only this, after WordPress's real
-// sanitize_text_field() as a submission would pass it. A hyphen or a non-breaking space is something typed; a space or
-// a tab is nothing.
+// What counts as "untouched" for an optional mandate: one detail holding only this, as the server reads it
+// (extractValue()). A hyphen or a non-breaking space is something typed; a space or a tab is nothing.
 $untouchedTyped     = ['', ' ', "\t", '-', ' - ', "\u{00A0}", 'x'];
-$untouchedSanitized = array_combine($untouchedTyped, array_column($wpSanitize($untouchedTyped), 0));
+$untouchedSanitized = array_combine($untouchedTyped, array_column($serverReads($untouchedTyped), 0));
 $debit = [];
 $debitField = \FabricatorForms\Fields\FieldRegistry::get('directdebit');
 foreach ($debitTyped as $scheme => $parts) {
@@ -646,6 +655,7 @@ $fixture = [
     'cascades'          => $cascades,
     'composites'        => $composites,
     'sanitize'          => $sanitizePairs,
+    'answerText'        => $answerCases,
     'debit'             => $debit,
     'debitExtras'       => $debitExtras,
     'signature'         => $signature,

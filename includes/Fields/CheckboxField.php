@@ -200,8 +200,8 @@ class CheckboxField extends BaseField
      */
     public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        // Cap value count BEFORE map_deep() walks them; map_deep itself has no limit.
-        $vals = isset($post[$field_id]) ? map_deep(self::capRawArray($post[$field_id], 200), 'sanitize_text_field') : [];
+        // Value count capped before they are walked.
+        $vals = isset($post[$field_id]) ? self::answers(self::capRawArray($post[$field_id], 200)) : [];
         // Strings only (a nested POST array stays an array), and each value once, so a repeated value can't meet
         // min_selections.
         $out  = is_array($vals) ? array_values(array_unique(array_filter($vals, 'is_string'))) : [];

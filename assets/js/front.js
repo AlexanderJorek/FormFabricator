@@ -14,6 +14,12 @@
         });
     }
 
+    /* PHP's trim(), as the server trims an answer (BaseField::answer()); String.prototype.trim() also removes
+       U+FEFF and the Unicode spaces, which the server keeps. */
+    function phpTrim(s) {
+        return s.replace(/^[ \t\n\r\0\x0B]+|[ \t\n\r\0\x0B]+$/g, '');
+    }
+
     /* ── Field-type init functions ───────────────────────────────────────── */
     /* Populated by Assets::frontFieldAssets() from each field's getClientInit(); front.js needs no field-type knowledge. */
 
@@ -22,6 +28,58 @@
     var VALIDATORS = window.FabricatorValidators || {};
 
     /* ── Client-side validation ──────────────────────────────────────────── */
+
+    /* What an answer may hold, as Utils\AnswerText checks it on the server: an answer is recorded as typed or refused,
+       never changed. Refused are control and invisible format characters, line breaks and tabs outside a textarea, and
+       HTML character references, which a page or email shows as the character they name. */
+    var REFUSED_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+    var CHAR_REFERENCE = /&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);/g;
+
+    function codePoint(ch) {
+        var hex = ch.codePointAt(0).toString(16).toUpperCase();
+        return 'U+' + ('0000' + hex).slice(-Math.max(4, hex.length));
+    }
+
+    /* Whether a character reference names a character (html_entity_decode() changes it), read by the browser's own
+       HTML parser in a textarea, where tags stay text. */
+    function namesCharacter(ref) {
+        var t = document.createElement('textarea');
+        t.innerHTML = ref;
+        return t.value !== ref;
+    }
+
+    function answerProblem(value, multiline, i18n) {
+        var text = phpTrim(value);
+        if (text === '') return '';
+        var checked = multiline ? text.replace(/[\r\n\t]/g, '') : text;
+        var m = REFUSED_CHAR.exec(checked);
+        if (m) {
+            if (!multiline && /[\r\n\t]/.test(m[0])) {
+                return i18n.answer_one_line || 'This answer can\'t hold line breaks or tabs. Please write it on one line.';
+            }
+            return (i18n.answer_invisible || 'This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it.')
+                .replace('%s', codePoint(m[0]));
+        }
+        var refs = text.match(CHAR_REFERENCE) || [];
+        for (var i = 0; i < refs.length; i++) {
+            if (namesCharacter(refs[i])) {
+                return i18n.answer_reference || 'This answer contains an HTML character reference (such as "&amp;"). Please write the character itself.';
+            }
+        }
+        return '';
+    }
+
+    /* The first problem among the field's typed inputs (text boxes and textareas; not a hidden input, a choice or a
+       file), or ''. Field types whose answers aren't typed (BaseField::typedAnswer()) are skipped by the caller. */
+    function fieldAnswerProblem(fieldEl, i18n) {
+        var inputs = fieldEl.querySelectorAll('textarea, input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="number"], input[type="search"]');
+        for (var i = 0; i < inputs.length; i++) {
+            if (inputs[i].disabled) continue;
+            var problem = answerProblem(inputs[i].value || '', inputs[i].tagName === 'TEXTAREA', i18n);
+            if (problem) return problem;
+        }
+        return '';
+    }
 
     function validatePage(scope) {
         var i18n        = (window.FabricatorForms && window.FabricatorForms.i18n) || {};
@@ -60,6 +118,7 @@
         }
 
         var skipTypes      = window.FabricatorSkipValidation || [];
+        var untypedTypes   = window.FabricatorUntypedAnswers || [];
         var ignoreRequired = !!window.FabricatorIgnoreRequired;
         scope.querySelectorAll('.fabricator-field').forEach(function (fieldEl) {
             var type = (fieldEl.className.match(/fabricator-field--(\S+)/) || [])[1] || '';
@@ -92,7 +151,17 @@
                 });
             }
 
-            /* 3 — Format/validity check (only when field has content) */
+            /* 3 — What the answer holds: the server refuses the same (Utils\AnswerText) */
+            if (untypedTypes.indexOf(type) === -1) {
+                var problem = fieldAnswerProblem(fieldEl, i18n);
+                if (problem) {
+                    hasInvalid = true;
+                    markError(fieldEl, problem);
+                    return;
+                }
+            }
+
+            /* 4 — Format/validity check (only when field has content) */
             if (!empty) {
                 var rules = [];
                 try { rules = JSON.parse(fieldEl.dataset.validate || '[]'); } catch (_) {}
@@ -278,40 +347,9 @@
             /* The conditional elements hidden by the pass being decided; see applyAll(). */
             var hiddenNow = new Set();
 
-            /* The server compares values after sanitize_text_field() (or the textarea variant), so this mirrors
-               WordPress's _sanitize_text_fields() step by step, checked in condition-parity.test.js. */
-            function phpTrim(s) {
-                return s.replace(/^[ \t\n\r\0\x0B]+|[ \t\n\r\0\x0B]+$/g, '');
-            }
-            function escLikeWp(s) {
-                return s.replace(/&(?![A-Za-z][A-Za-z0-9]*;|#[0-9]+;|#x[0-9A-Fa-f]+;)/g, '&amp;')
-                    .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-            }
-            function sanitizeLikeWp(value, keepNewlines) {
-                var s = String(value);
-                if (s.indexOf('<') !== -1) {
-                    s = s.replace(/<[^>]*?((?=<)|>|$)/g, function (m) { return m.indexOf('>') === -1 ? escLikeWp(m) : m; });
-                    s = s.replace(/<(script|style)[^>]*?>[\s\S]*?<\/\1>/gi, '');
-                    s = s.replace(/<!--[\s\S]*?-->/g, '').replace(/<(?![\s<])[^>]*>/g, '');
-                    s = s.split('<\n').join('&lt;\n');
-                }
-                if (!keepNewlines) {
-                    s = s.replace(/[\r\n\t ]+/g, ' ');
-                }
-                s = phpTrim(s);
-                var found = false;
-                var octet;
-                while ((octet = /%[a-f0-9]{2}/i.exec(s)) !== null) {
-                    s = s.split(octet[0]).join('');
-                    found = true;
-                }
-                if (found) {
-                    s = phpTrim(s.replace(/ +/g, ' '));
-                }
-                return s;
-            }
+            /* The server compares answers as typed, trimmed (phpTrim()). */
             function readValue(el) {
-                return sanitizeLikeWp(el.value || '', el.tagName === 'TEXTAREA');
+                return phpTrim(String(el.value || ''));
             }
 
             /* Inside a conditional element the current pass hides: read as absent (BaseField::hiddenConditionValue()). */

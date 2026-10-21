@@ -124,5 +124,16 @@ return [
             'code'   => 'esc_attr($fabricator_logo_path)',
             'reason' => 'The PDF template\'s logo, as the header image above.',
         ],
+        [
+            'file'   => 'includes/Form/FormProcessor.php',
+            'sniff'  => 'FormFabricatorReview.Security.RequestInput.NotSanitizedInPlace',
+            'code'   => 'wp_unslash($_POST)',
+            'reason' => 'FormProcessor::handle() reads a form submission\'s answers unsanitized, after its nonce check, so each is '
+                . 'recorded as the visitor typed it: a sanitizer would change it ("a<b and c>d" to "ad", "20%AB" to "20"), '
+                . 'and a changed answer is a different statement (a direct debit mandate\'s account holder, a signed '
+                . 'declaration). Each answer is validated at its field instead (Utils\\AnswerText refuses invalid UTF-8, '
+                . 'control and invisible characters; each field checks its own format), never stored, and escaped wherever '
+                . 'it is shown: in the email, the PDF and the verification page.',
+        ],
     ],
 ];

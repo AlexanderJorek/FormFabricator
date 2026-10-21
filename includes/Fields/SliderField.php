@@ -165,16 +165,16 @@ class SliderField extends BaseField
      */
     public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        $raw = isset($post[$field_id]) ? map_deep(self::capRawArray($post[$field_id]), 'sanitize_text_field') : null;
+        $raw = isset($post[$field_id]) ? self::answers(self::capRawArray($post[$field_id])) : null;
         if (is_array($raw)) {
             // scalarSubfieldMap() avoids stringifying a nested from[]/to[] array to "Array".
             $pair = self::scalarSubfieldMap($raw);
             return [
-                'from' => sanitize_text_field($pair['from'] ?? ''),
-                'to'   => sanitize_text_field($pair['to']   ?? ''),
+                'from' => $pair['from'] ?? '',
+                'to'   => $pair['to']   ?? '',
             ];
         }
-        return isset($post[$field_id]) ? sanitize_text_field((string) $raw) : '';
+        return isset($post[$field_id]) ? self::answer($raw) : '';
     }
 
     /**

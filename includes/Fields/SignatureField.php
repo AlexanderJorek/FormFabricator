@@ -264,10 +264,10 @@ class SignatureField extends BaseField
             return null;
         }
         return [
-            'sig'   => is_string($post[$field_id]) ? sanitize_text_field($post[$field_id]) : '',
+            'sig'   => self::answer($post[$field_id]),
             // The place of signing, under a key of its own as the mandate's signature is: the field's own input stays
             // the pad's, which conditions read.
-            'place' => is_string($post[$field_id . '-place'] ?? null) ? sanitize_text_field($post[$field_id . '-place']) : '',
+            'place' => self::answer($post[$field_id . '-place'] ?? null),
         ];
     }
 

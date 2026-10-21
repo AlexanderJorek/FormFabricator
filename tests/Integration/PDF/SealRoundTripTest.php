@@ -8,6 +8,7 @@ use FabricatorForms\Form\FormModel;
 use FabricatorForms\PDF\Generator;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\PDF\PdfUtils;
+use FabricatorForms\Utils\AnswerText;
 use FabricatorForms\Tests\Integration\TestCase;
 use FabricatorForms\Tests\Support\Reflect;
 use PHPUnit\Framework\Attributes\Group;
@@ -491,16 +492,26 @@ final class SealRoundTripTest extends TestCase
         self::assertSame('pass', self::verdict($html), self::failedRows($html));
     }
 
-    public function testAnAnswerWithBidiControlsRemovedCannotFormAMarker(): void
+    public function testAnAnswerWithBidiControlsIsRefusedSinceItCouldFormAMarker(): void
     {
         // After U+202E RLO, mPDF lays the rest out right to left: the typed text reversed, its brackets mirrored, which
-        // puts "[FABRICATOR_PDF_FIELD_END]" into the PDF's text. FormProcessor removes the controls before printing.
+        // puts "[FABRICATOR_PDF_FIELD_END]" into the PDF's text. FormProcessor refuses the answer (Utils\AnswerText).
         $typed = "\u{05D0}\u{202E}[DNE_DLEIF_FDP_ROTACIRBAF]";
         self::assertNull(PdfUtils::reservedMarker($typed), 'nothing to see in the typed text');
         $html = $this->verify($this->sealedPdf(true, null, $typed), 'rlo.pdf');
         self::assertNotSame('pass', self::verdict($html), 'as typed, the answer forges a marker');
-        $html = $this->verify($this->sealedPdf(true, null, PdfUtils::stripBidiControls($typed)), 'rlo-stripped.pdf');
+        self::assertStringContainsString('U+202E', (string) AnswerText::problem($typed, true));
+    }
+
+    public function testAnAnswerIsSealedAsTypedAndVerifies(): void
+    {
+        // "<" and ">", percent codes, runs of spaces and line breaks: the PDF shows the answer escaped, as typed, and the
+        // seal holds the same text, nothing stripped.
+        $note = "a<b and c>d, 20%AB off\n  two  spaces <em>x</em>";
+        $html = $this->verify($this->sealedPdf(true, null, $note), 'as-typed.pdf');
         self::assertSame('pass', self::verdict($html), self::failedRows($html));
+        self::assertStringContainsString(esc_html('a<b and c>d, 20%AB off'), $html);
+        self::assertStringContainsString(esc_html('<em>x</em>'), $html);
     }
 
     public function testAPdfSignedByTypingTheNameVerifiesAsAuthentic(): void

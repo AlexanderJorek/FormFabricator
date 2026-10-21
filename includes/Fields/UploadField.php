@@ -661,4 +661,14 @@ class UploadField extends BaseField
             ],
         ];
     }
+
+    /**
+     * A file entry, not typed text (BaseField::typedAnswer()).
+     *
+     * @return bool
+     */
+    public function typedAnswer(): bool
+    {
+        return false;
+    }
 }
