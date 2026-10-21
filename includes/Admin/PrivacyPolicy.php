@@ -30,41 +30,59 @@ defined('ABSPATH') || exit;
 class PrivacyPolicy
 {
     /**
-     * Locales available for the privacy-policy text: 'en', plus every locale with both a plugin translation in
-     * WordPress's language folder and the core locale installed (switch_to_locale() refuses others).
+     * The suggested text in each language there is one for: 'en', the source language, and every installed locale
+     * WordPress loads a translation of this plugin for (switch_to_locale() refuses a locale that isn't installed).
      *
-     * @return array<string,string> Locale code => human-readable language name.
+     * A locale is offered for what it reads like, not for having a file: one whose text reads exactly like a language
+     * already listed adds nothing to choose from and is left out, and one sharing its language's name with another
+     * entry is named with its region.
+     *
+     * @return array<string, array{name: string, text: string}> Locale code => display name and plain text.
      */
-    public static function availableLanguages(): array
+    public static function languages(): array
     {
-        $langs     = ['en' => 'English'];
-        $installed = get_available_languages();
-        // WP_LANG_DIR/plugins is where WP.org language packs install.
-        $dirs = [
-            rtrim((string) WP_LANG_DIR, '/\\') . '/plugins',
-        ];
-        foreach ($dirs as $dir) {
-            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- WordPress's own language folders.
-            foreach (glob($dir . '/formfabricator-*.mo') ?: [] as $path) {
-                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name, no file access.
-                $is_plugin_mo = preg_match('/^formfabricator-([A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?)\.mo$/', basename($path), $m) === 1;
-                if ($is_plugin_mo && in_array($m[1], $installed, true)) {
-                    $langs[$m[1]] = self::localeDisplayName($m[1]);
-                }
+        $langs = ['en' => ['name' => 'English', 'text' => self::plainText('en')]];
+        // Asked of WordPress's own registry, which is what loads the translation once the locale is switched: a
+        // language pack's .mo or .l10n.php, in WP_LANG_DIR/plugins or wherever a filter puts it.
+        global $wp_textdomain_registry;
+        if (!$wp_textdomain_registry instanceof \WP_Textdomain_Registry) {
+            return $langs;
+        }
+        $seen = [$langs['en']['text'] => true];
+        foreach (array_unique(get_available_languages()) as $locale) {
+            if (!is_string($locale) || isset($langs[$locale]) || $wp_textdomain_registry->get('formfabricator', $locale) === false) {
+                continue;
+            }
+            $text = self::plainText($locale);
+            if (isset($seen[$text])) {
+                continue;
+            }
+            $seen[$text]     = true;
+            $langs[$locale] = ['name' => self::localeDisplayName($locale, false), 'text' => $text];
+        }
+        $names = array_count_values(array_column($langs, 'name'));
+        foreach ($langs as $locale => $lang) {
+            if ($locale !== 'en' && $names[$lang['name']] > 1) {
+                $langs[$locale]['name'] = self::localeDisplayName($locale, true);
             }
         }
         return $langs;
     }
 
     /**
-     * The English name of a locale's language ("German" for de_DE), beside "English" in the list; the code itself
-     * without the intl extension. No WordPress admin file is loaded for it.
+     * The English name of a locale's language ("German" for de_DE), beside "English" in the list; with its region
+     * ("English (United Kingdom)") where the language alone would name two entries alike; the code itself without the
+     * intl extension. No WordPress admin file is loaded for it.
      *
-     * @param string $locale Locale code, e.g. 'de_DE'.
+     * @param string $locale      Locale code, e.g. 'de_DE'.
+     * @param bool   $with_region Whether to add the region.
      */
-    private static function localeDisplayName(string $locale): string
+    private static function localeDisplayName(string $locale, bool $with_region): string
     {
-        $name = class_exists('Locale') ? (string) \Locale::getDisplayLanguage($locale, 'en') : '';
+        if (!class_exists('Locale')) {
+            return $locale;
+        }
+        $name = (string) ($with_region ? \Locale::getDisplayName($locale, 'en') : \Locale::getDisplayLanguage($locale, 'en'));
         return $name !== '' && $name !== $locale ? $name : $locale;
     }
 
@@ -87,11 +105,21 @@ class PrivacyPolicy
                 'formfabricator'
             ),
         ];
-        // Only a site that uses reCAPTCHA sends anything to Google: without a site key, no CAPTCHA can load.
-        if (trim((string) get_option('fabricator_forms_recaptcha_site_key', '')) === '') {
+        if (!self::coversRecaptcha()) {
             array_pop($paragraphs);
         }
         return $paragraphs;
+    }
+
+    /**
+     * Whether the text covers Google reCAPTCHA: only a site with a reCAPTCHA site key sends anything to Google, since
+     * without one no reCAPTCHA can load.
+     *
+     * @return bool
+     */
+    public static function coversRecaptcha(): bool
+    {
+        return trim((string) get_option('fabricator_forms_recaptcha_site_key', '')) !== '';
     }
 
     /**
@@ -131,7 +159,7 @@ class PrivacyPolicy
     /**
      * Suggested privacy-policy text, rendered in $lang regardless of the site's current admin-UI locale.
      *
-     * @param string $lang Locale code from availableLanguages().
+     * @param string $lang Locale code, 'en' or one installed (languages() lists those with a translation).
      * @return string The disclosure paragraphs, blank-line separated.
      */
     public static function plainText(string $lang): string

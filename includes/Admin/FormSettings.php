@@ -345,7 +345,7 @@ class FormSettings
                         <p class="fabricator-settings-hint">
                             <?php
                             echo esc_html__(
-                                'If you use the CAPTCHA field (Google reCAPTCHA), your privacy policy needs to disclose that.',
+                                'Your privacy policy needs to say what happens to form submissions, and, if a CAPTCHA field uses Google reCAPTCHA, what Google receives.',
                                 'formfabricator'
                             );
                             ?>
@@ -493,11 +493,17 @@ class FormSettings
                     <i class="fa-solid fa-user-shield"></i> <?php echo esc_html__('Privacy Policy Text', 'formfabricator'); ?>
                 </h2>
                 <?php
+                // What the text below covers: the reCAPTCHA section only while a site key is set.
                 $privacy_disclaimer_sentences = [
-                    __(
-                        'Here is an example disclaimer you should add to your privacy policy if you use the CAPTCHA field (Google reCAPTCHA).',
-                        'formfabricator'
-                    ),
+                    \FabricatorForms\Admin\PrivacyPolicy::coversRecaptcha()
+                        ? __(
+                            'Here is example text for your privacy policy: what happens to a form submission, and what Google reCAPTCHA receives.',
+                            'formfabricator'
+                        )
+                        : __(
+                            'Here is example text for your privacy policy: what happens to a form submission. A section on Google reCAPTCHA is added once a reCAPTCHA site key is set.',
+                            'formfabricator'
+                        ),
                     __(
                         'This example is provided for convenience only — it is not legal advice, may be incomplete or out of date, and is not a substitute for your own review.',
                         'formfabricator'
@@ -520,10 +526,11 @@ class FormSettings
                 endforeach;
                 ?>
                 <?php
-                $privacy_langs = \FabricatorForms\Admin\PrivacyPolicy::availableLanguages();
+                $privacy_langs = [];
                 $privacy_texts = [];
-                foreach ($privacy_langs as $lang_code => $lang_name) {
-                    $privacy_texts[$lang_code] = \FabricatorForms\Admin\PrivacyPolicy::plainText($lang_code);
+                foreach (\FabricatorForms\Admin\PrivacyPolicy::languages() as $lang_code => $lang) {
+                    $privacy_langs[$lang_code] = $lang['name'];
+                    $privacy_texts[$lang_code] = $lang['text'];
                 }
                 $privacy_default_lang = isset($privacy_langs['en']) ? 'en' : array_key_first($privacy_langs);
                 ?>

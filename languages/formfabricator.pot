@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-21T22:54:26+00:00\n"
+"POT-Creation-Date: 2026-10-21T23:50:26+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: FormFabricator languages/make-pot.php\n"
 "X-Domain: formfabricator\n"
@@ -79,7 +79,7 @@ msgstr ""
 #: includes/Admin/AccessSettings.php:99
 #: includes/Admin/FormList.php:261
 #: includes/Admin/FormSelectList.php:235
-#: includes/Admin/FormSettings.php:611
+#: includes/Admin/FormSettings.php:618
 #: includes/Admin/PDFLayoutEditor.php:578
 #: includes/Admin/PDFLayoutEditor.php:600
 #: includes/Admin/SealKeySettings.php:431
@@ -170,13 +170,13 @@ msgid "Add"
 msgstr ""
 
 #: includes/Admin/AccessSettings.php:191
-#: includes/Admin/FormSettings.php:660
+#: includes/Admin/FormSettings.php:667
 #: includes/Admin/PDFLayoutEditor.php:603
 msgid "Error saving."
 msgstr ""
 
 #: includes/Admin/AccessSettings.php:317
-#: includes/Admin/FormSettings.php:727
+#: includes/Admin/FormSettings.php:734
 msgid "Settings were changed elsewhere since this page loaded. Please reload and try again."
 msgstr ""
 
@@ -1080,7 +1080,7 @@ msgid "conditional"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1037
-#: includes/Admin/FormSettings.php:661
+#: includes/Admin/FormSettings.php:668
 #: includes/Admin/PDFLayoutEditor.php:624
 msgid "Saving…"
 msgstr ""
@@ -1549,7 +1549,7 @@ msgid "no address"
 msgstr ""
 
 #: includes/Admin/FormList.php:141
-#: includes/Admin/FormSettings.php:559
+#: includes/Admin/FormSettings.php:566
 msgid "Copied!"
 msgstr ""
 
@@ -1626,7 +1626,7 @@ msgid "Copy this string. It contains all fields, notifications and settings."
 msgstr ""
 
 #: includes/Admin/FormList.php:250
-#: includes/Admin/FormSettings.php:562
+#: includes/Admin/FormSettings.php:569
 #: includes/Admin/PDFLayoutEditor.php:551
 #: includes/Admin/SealKeySettings.php:549
 #: includes/Admin/VerificationPage.php:711
@@ -1825,7 +1825,7 @@ msgid "FormFabricator Settings"
 msgstr ""
 
 #: includes/Admin/FormSettings.php:158
-#: includes/Admin/FormSettings.php:679
+#: includes/Admin/FormSettings.php:686
 msgid "Settings saved."
 msgstr ""
 
@@ -1925,7 +1925,7 @@ msgid "Privacy Policy Text"
 msgstr ""
 
 #: includes/Admin/FormSettings.php:347
-msgid "If you use the CAPTCHA field (Google reCAPTCHA), your privacy policy needs to disclose that."
+msgid "Your privacy policy needs to say what happens to form submissions, and, if a CAPTCHA field uses Google reCAPTCHA, what Google receives."
 msgstr ""
 
 #: includes/Admin/FormSettings.php:354
@@ -1990,104 +1990,108 @@ msgstr ""
 msgid "Reset to factory defaults"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:497
-msgid "Here is an example disclaimer you should add to your privacy policy if you use the CAPTCHA field (Google reCAPTCHA)."
+#: includes/Admin/FormSettings.php:499
+msgid "Here is example text for your privacy policy: what happens to a form submission, and what Google reCAPTCHA receives."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:501
+#: includes/Admin/FormSettings.php:503
+msgid "Here is example text for your privacy policy: what happens to a form submission. A section on Google reCAPTCHA is added once a reCAPTCHA site key is set."
+msgstr ""
+
+#: includes/Admin/FormSettings.php:507
 msgid "This example is provided for convenience only — it is not legal advice, may be incomplete or out of date, and is not a substitute for your own review."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:505
+#: includes/Admin/FormSettings.php:511
 msgid "You are solely responsible for the accuracy and completeness of your privacy policy."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:509
+#: includes/Admin/FormSettings.php:515
 msgid "Copy it in yourself wherever it belongs — nothing here is added automatically."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:531
+#: includes/Admin/FormSettings.php:538
 msgid "Language:"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:556
+#: includes/Admin/FormSettings.php:563
 msgid "Copy to clipboard"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:575
+#: includes/Admin/FormSettings.php:582
 msgid "Confirm reset"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:576
+#: includes/Admin/FormSettings.php:583
 msgid "This action cannot be undone."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:580
+#: includes/Admin/FormSettings.php:587
 msgid "The following settings will be permanently deleted:"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:582
+#: includes/Admin/FormSettings.php:589
 msgid "Email sender (address & name)"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:583
+#: includes/Admin/FormSettings.php:590
 msgid "reCAPTCHA Site- & Secret Key"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:584
+#: includes/Admin/FormSettings.php:591
 msgid "Display colors"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:585
+#: includes/Admin/FormSettings.php:592
 msgid "PDF layout settings"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:587
+#: includes/Admin/FormSettings.php:594
 msgid "User management & access rights"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:593
+#: includes/Admin/FormSettings.php:600
 msgid "not"
 msgstr ""
 
 #. translators: %s: the separately translated word "not" as a strong element.
-#: includes/Admin/FormSettings.php:596
+#: includes/Admin/FormSettings.php:603
 #, php-format
 msgid "PDF seal keys will %s be deleted."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:605
+#: includes/Admin/FormSettings.php:612
 msgid "Delete forms & selection groups"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:606
+#: includes/Admin/FormSettings.php:613
 msgid "All forms and form selection groups will be permanently removed."
 msgstr ""
 
-#: includes/Admin/FormSettings.php:613
-#: includes/Admin/FormSettings.php:658
+#: includes/Admin/FormSettings.php:620
+#: includes/Admin/FormSettings.php:665
 msgid "Reset"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:653
+#: includes/Admin/FormSettings.php:660
 msgid "Resetting…"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:654
+#: includes/Admin/FormSettings.php:661
 msgid "Error — try again"
 msgstr ""
 
 #. translators: %d is the countdown, in seconds, before the reset confirmation button becomes clickable.
-#: includes/Admin/FormSettings.php:656
+#: includes/Admin/FormSettings.php:663
 #, php-format
 msgid "Are you sure? (%d)"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:657
+#: includes/Admin/FormSettings.php:664
 msgid "Yes, reset"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:659
+#: includes/Admin/FormSettings.php:666
 #: includes/Admin/PDFLayoutEditor.php:623
 #: includes/Admin/SealKeySettings.php:738
 #: includes/Utils/Assets.php:624
@@ -2095,12 +2099,12 @@ msgid "Network error"
 msgstr ""
 
 #. translators: %s: comma-separated list of the rejected entries.
-#: includes/Admin/FormSettings.php:738
+#: includes/Admin/FormSettings.php:745
 #, php-format
 msgid "Not saved: these trusted proxy entries are not valid IP addresses or CIDR ranges: %s"
 msgstr ""
 
-#: includes/Admin/FormSettings.php:753
+#: includes/Admin/FormSettings.php:760
 msgid "Please enter a valid sender email address, or leave the field blank."
 msgstr ""
 
@@ -2668,19 +2672,19 @@ msgstr ""
 msgid "[Sample signature]"
 msgstr ""
 
-#: includes/Admin/PrivacyPolicy.php:79
+#: includes/Admin/PrivacyPolicy.php:97
 msgid "Contact forms"
 msgstr ""
 
-#: includes/Admin/PrivacyPolicy.php:79
+#: includes/Admin/PrivacyPolicy.php:97
 msgid "When you submit a form on this website, your entries are not stored in the website's database. They are processed only while your submission is being handled and are then sent by email, possibly together with a generated PDF document, to the recipients chosen by the website operator. While this happens, uploaded files and the PDF document are written to temporary files on the server, which are deleted once the emails have been sent. To limit spam and abuse, a one-way hash of your IP address is kept for a short time to count how often a form is submitted, and is then deleted automatically. If the website operator checks a PDF document with the plugin's verification tool, the uploaded copy is deleted from the server right after the check, or about 10 minutes after its last use if the check is not completed."
 msgstr ""
 
-#: includes/Admin/PrivacyPolicy.php:84
+#: includes/Admin/PrivacyPolicy.php:102
 msgid "Google reCAPTCHA"
 msgstr ""
 
-#: includes/Admin/PrivacyPolicy.php:84
+#: includes/Admin/PrivacyPolicy.php:102
 msgid "To prevent spam and fraudulent form submissions, we use Google reCAPTCHA. Among other things, the IP address, the CAPTCHA response, and other technical information are transmitted to Google and processed there to determine whether the input was made by a human. This may involve the transfer of personal data to the United States. For more information, please see Google's Privacy Policy."
 msgstr ""
 

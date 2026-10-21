@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FormFabricator 1.0.8\n"
 "Report-Msgid-Bugs-To: https://github.com/AlexanderJorek/FormFabricator/issues\n"
-"POT-Creation-Date: 2026-10-21T22:54:26+00:00\n"
+"POT-Creation-Date: 2026-10-21T23:50:26+00:00\n"
 "PO-Revision-Date: 2026-09-06 14:00+0000\n"
 "Last-Translator: Alexander Jorek <Alexander-Jorek@gmx.de>\n"
 "Language-Team: German\n"
@@ -78,7 +78,7 @@ msgstr "Benutzer hinzufügen…"
 #: includes/Admin/AccessSettings.php:99
 #: includes/Admin/FormList.php:261
 #: includes/Admin/FormSelectList.php:235
-#: includes/Admin/FormSettings.php:611
+#: includes/Admin/FormSettings.php:618
 #: includes/Admin/PDFLayoutEditor.php:578
 #: includes/Admin/PDFLayoutEditor.php:600
 #: includes/Admin/SealKeySettings.php:431
@@ -169,13 +169,13 @@ msgid "Add"
 msgstr "Hinzufügen"
 
 #: includes/Admin/AccessSettings.php:191
-#: includes/Admin/FormSettings.php:660
+#: includes/Admin/FormSettings.php:667
 #: includes/Admin/PDFLayoutEditor.php:603
 msgid "Error saving."
 msgstr "Fehler beim Speichern."
 
 #: includes/Admin/AccessSettings.php:317
-#: includes/Admin/FormSettings.php:727
+#: includes/Admin/FormSettings.php:734
 msgid "Settings were changed elsewhere since this page loaded. Please reload and try again."
 msgstr "Die Einstellungen wurden an anderer Stelle geändert, seit diese Seite geladen wurde. Bitte laden Sie die Seite neu und versuchen Sie es erneut."
 
@@ -1079,7 +1079,7 @@ msgid "conditional"
 msgstr "bedingt"
 
 #: includes/Admin/FormEditor.php:1037
-#: includes/Admin/FormSettings.php:661
+#: includes/Admin/FormSettings.php:668
 #: includes/Admin/PDFLayoutEditor.php:624
 msgid "Saving…"
 msgstr "Wird gespeichert…"
@@ -1548,7 +1548,7 @@ msgid "no address"
 msgstr "keine Adresse"
 
 #: includes/Admin/FormList.php:141
-#: includes/Admin/FormSettings.php:559
+#: includes/Admin/FormSettings.php:566
 msgid "Copied!"
 msgstr "Kopiert!"
 
@@ -1625,7 +1625,7 @@ msgid "Copy this string. It contains all fields, notifications and settings."
 msgstr "Kopieren Sie diesen String. Er enthält alle Felder, Benachrichtigungen und Einstellungen."
 
 #: includes/Admin/FormList.php:250
-#: includes/Admin/FormSettings.php:562
+#: includes/Admin/FormSettings.php:569
 #: includes/Admin/PDFLayoutEditor.php:551
 #: includes/Admin/SealKeySettings.php:549
 #: includes/Admin/VerificationPage.php:711
@@ -1824,7 +1824,7 @@ msgid "FormFabricator Settings"
 msgstr "FormFabricator Einstellungen"
 
 #: includes/Admin/FormSettings.php:158
-#: includes/Admin/FormSettings.php:679
+#: includes/Admin/FormSettings.php:686
 msgid "Settings saved."
 msgstr "Einstellungen gespeichert."
 
@@ -1924,8 +1924,8 @@ msgid "Privacy Policy Text"
 msgstr "Datenschutzerklärungs-Text"
 
 #: includes/Admin/FormSettings.php:347
-msgid "If you use the CAPTCHA field (Google reCAPTCHA), your privacy policy needs to disclose that."
-msgstr "Wenn Sie das CAPTCHA-Feld (Google reCAPTCHA) verwenden, muss Ihre Datenschutzerklärung dies offenlegen."
+msgid "Your privacy policy needs to say what happens to form submissions, and, if a CAPTCHA field uses Google reCAPTCHA, what Google receives."
+msgstr "Ihre Datenschutzerklärung muss angeben, was mit Formulareingaben geschieht und, falls ein CAPTCHA-Feld Google reCAPTCHA verwendet, welche Daten Google erhält."
 
 #: includes/Admin/FormSettings.php:354
 msgid "Show example text"
@@ -1989,104 +1989,108 @@ msgstr "Sonstige"
 msgid "Reset to factory defaults"
 msgstr "Auf Werkseinstellungen zurücksetzen"
 
-#: includes/Admin/FormSettings.php:497
-msgid "Here is an example disclaimer you should add to your privacy policy if you use the CAPTCHA field (Google reCAPTCHA)."
-msgstr "Hier ist ein Beispiel-Hinweis, den Sie Ihrer Datenschutzerklärung hinzufügen sollten, falls Sie das CAPTCHA-Feld (Google reCAPTCHA) verwenden."
+#: includes/Admin/FormSettings.php:499
+msgid "Here is example text for your privacy policy: what happens to a form submission, and what Google reCAPTCHA receives."
+msgstr "Hier ist ein Beispieltext für Ihre Datenschutzerklärung: was mit einer Formulareingabe geschieht und welche Daten Google reCAPTCHA erhält."
 
-#: includes/Admin/FormSettings.php:501
+#: includes/Admin/FormSettings.php:503
+msgid "Here is example text for your privacy policy: what happens to a form submission. A section on Google reCAPTCHA is added once a reCAPTCHA site key is set."
+msgstr "Hier ist ein Beispieltext für Ihre Datenschutzerklärung: was mit einer Formulareingabe geschieht. Ein Abschnitt zu Google reCAPTCHA kommt hinzu, sobald ein reCAPTCHA-Site-Key gesetzt ist."
+
+#: includes/Admin/FormSettings.php:507
 msgid "This example is provided for convenience only — it is not legal advice, may be incomplete or out of date, and is not a substitute for your own review."
 msgstr "Dieses Beispiel dient nur der Orientierung — es stellt keine Rechtsberatung dar, kann unvollständig oder veraltet sein und ersetzt nicht Ihre eigene Prüfung."
 
-#: includes/Admin/FormSettings.php:505
+#: includes/Admin/FormSettings.php:511
 msgid "You are solely responsible for the accuracy and completeness of your privacy policy."
 msgstr "Sie sind allein verantwortlich für die Richtigkeit und Vollständigkeit Ihrer Datenschutzerklärung."
 
-#: includes/Admin/FormSettings.php:509
+#: includes/Admin/FormSettings.php:515
 msgid "Copy it in yourself wherever it belongs — nothing here is added automatically."
 msgstr "Kopieren Sie den Text selbst an die passende Stelle — hier wird nichts automatisch hinzugefügt."
 
-#: includes/Admin/FormSettings.php:531
+#: includes/Admin/FormSettings.php:538
 msgid "Language:"
 msgstr "Sprache:"
 
-#: includes/Admin/FormSettings.php:556
+#: includes/Admin/FormSettings.php:563
 msgid "Copy to clipboard"
 msgstr "In die Zwischenablage kopieren"
 
-#: includes/Admin/FormSettings.php:575
+#: includes/Admin/FormSettings.php:582
 msgid "Confirm reset"
 msgstr "Zurücksetzen bestätigen"
 
-#: includes/Admin/FormSettings.php:576
+#: includes/Admin/FormSettings.php:583
 msgid "This action cannot be undone."
 msgstr "Diese Aktion kann nicht rückgängig gemacht werden."
 
-#: includes/Admin/FormSettings.php:580
+#: includes/Admin/FormSettings.php:587
 msgid "The following settings will be permanently deleted:"
 msgstr "Folgende Einstellungen werden unwiderruflich gelöscht:"
 
-#: includes/Admin/FormSettings.php:582
+#: includes/Admin/FormSettings.php:589
 msgid "Email sender (address & name)"
 msgstr "E-Mail-Absender (Adresse & Name)"
 
-#: includes/Admin/FormSettings.php:583
+#: includes/Admin/FormSettings.php:590
 msgid "reCAPTCHA Site- & Secret Key"
 msgstr "reCAPTCHA Site- & Secret-Key"
 
-#: includes/Admin/FormSettings.php:584
+#: includes/Admin/FormSettings.php:591
 msgid "Display colors"
 msgstr "Anzeigefarben"
 
-#: includes/Admin/FormSettings.php:585
+#: includes/Admin/FormSettings.php:592
 msgid "PDF layout settings"
 msgstr "PDF-Layout-Einstellungen"
 
-#: includes/Admin/FormSettings.php:587
+#: includes/Admin/FormSettings.php:594
 msgid "User management & access rights"
 msgstr "Benutzerverwaltung & Zugriffsrechte"
 
-#: includes/Admin/FormSettings.php:593
+#: includes/Admin/FormSettings.php:600
 msgid "not"
 msgstr "nicht"
 
 #. translators: %s: the separately translated word "not" as a strong element.
-#: includes/Admin/FormSettings.php:596
+#: includes/Admin/FormSettings.php:603
 #, php-format
 msgid "PDF seal keys will %s be deleted."
 msgstr "PDF-Siegelschlüssel werden %s gelöscht."
 
-#: includes/Admin/FormSettings.php:605
+#: includes/Admin/FormSettings.php:612
 msgid "Delete forms & selection groups"
 msgstr "Formulare & Auswahlgruppen löschen"
 
-#: includes/Admin/FormSettings.php:606
+#: includes/Admin/FormSettings.php:613
 msgid "All forms and form selection groups will be permanently removed."
 msgstr "Alle Formulare und Formular-Auswahlgruppen werden unwiderruflich entfernt."
 
-#: includes/Admin/FormSettings.php:613
-#: includes/Admin/FormSettings.php:658
+#: includes/Admin/FormSettings.php:620
+#: includes/Admin/FormSettings.php:665
 msgid "Reset"
 msgstr "Zurücksetzen"
 
-#: includes/Admin/FormSettings.php:653
+#: includes/Admin/FormSettings.php:660
 msgid "Resetting…"
 msgstr "Wird zurückgesetzt…"
 
-#: includes/Admin/FormSettings.php:654
+#: includes/Admin/FormSettings.php:661
 msgid "Error — try again"
 msgstr "Fehler — bitte erneut versuchen"
 
 #. translators: %d is the countdown, in seconds, before the reset confirmation button becomes clickable.
-#: includes/Admin/FormSettings.php:656
+#: includes/Admin/FormSettings.php:663
 #, php-format
 msgid "Are you sure? (%d)"
 msgstr "Sind Sie sicher? (%d)"
 
-#: includes/Admin/FormSettings.php:657
+#: includes/Admin/FormSettings.php:664
 msgid "Yes, reset"
 msgstr "Ja, zurücksetzen"
 
-#: includes/Admin/FormSettings.php:659
+#: includes/Admin/FormSettings.php:666
 #: includes/Admin/PDFLayoutEditor.php:623
 #: includes/Admin/SealKeySettings.php:738
 #: includes/Utils/Assets.php:624
@@ -2094,12 +2098,12 @@ msgid "Network error"
 msgstr "Netzwerkfehler"
 
 #. translators: %s: comma-separated list of the rejected entries.
-#: includes/Admin/FormSettings.php:738
+#: includes/Admin/FormSettings.php:745
 #, php-format
 msgid "Not saved: these trusted proxy entries are not valid IP addresses or CIDR ranges: %s"
 msgstr "Nicht gespeichert: Diese Einträge für vertrauenswürdige Proxys sind keine gültigen IP-Adressen oder CIDR-Bereiche: %s"
 
-#: includes/Admin/FormSettings.php:753
+#: includes/Admin/FormSettings.php:760
 msgid "Please enter a valid sender email address, or leave the field blank."
 msgstr "Bitte geben Sie eine gültige Absender-E-Mail-Adresse ein oder lassen Sie das Feld leer."
 
@@ -2667,19 +2671,19 @@ msgstr "Zusätzliche Anmerkungen"
 msgid "[Sample signature]"
 msgstr "[Beispielunterschrift]"
 
-#: includes/Admin/PrivacyPolicy.php:79
+#: includes/Admin/PrivacyPolicy.php:97
 msgid "Contact forms"
 msgstr "Kontaktformulare"
 
-#: includes/Admin/PrivacyPolicy.php:79
+#: includes/Admin/PrivacyPolicy.php:97
 msgid "When you submit a form on this website, your entries are not stored in the website's database. They are processed only while your submission is being handled and are then sent by email, possibly together with a generated PDF document, to the recipients chosen by the website operator. While this happens, uploaded files and the PDF document are written to temporary files on the server, which are deleted once the emails have been sent. To limit spam and abuse, a one-way hash of your IP address is kept for a short time to count how often a form is submitted, and is then deleted automatically. If the website operator checks a PDF document with the plugin's verification tool, the uploaded copy is deleted from the server right after the check, or about 10 minutes after its last use if the check is not completed."
 msgstr "Wenn Sie auf dieser Website ein Formular absenden, werden Ihre Eingaben nicht in der Datenbank der Website gespeichert. Sie werden nur während der Bearbeitung Ihrer Übermittlung verarbeitet und anschließend per E-Mail, gegebenenfalls zusammen mit einem erzeugten PDF-Dokument, an die vom Websitebetreiber festgelegten Empfänger gesendet. Dabei werden hochgeladene Dateien und das PDF-Dokument vorübergehend als Dateien auf dem Server gespeichert und gelöscht, sobald die E-Mails versendet wurden. Zur Begrenzung von Spam und Missbrauch wird ein Einweg-Hash Ihrer IP-Adresse für kurze Zeit gespeichert, um zu zählen, wie oft ein Formular abgesendet wird, und danach automatisch gelöscht. Prüft der Websitebetreiber ein PDF-Dokument mit dem Prüfwerkzeug des Plugins, wird die hochgeladene Kopie direkt nach der Prüfung vom Server gelöscht, oder etwa 10 Minuten nach ihrer letzten Verwendung, falls die Prüfung nicht abgeschlossen wird."
 
-#: includes/Admin/PrivacyPolicy.php:84
+#: includes/Admin/PrivacyPolicy.php:102
 msgid "Google reCAPTCHA"
 msgstr "Google reCAPTCHA"
 
-#: includes/Admin/PrivacyPolicy.php:84
+#: includes/Admin/PrivacyPolicy.php:102
 msgid "To prevent spam and fraudulent form submissions, we use Google reCAPTCHA. Among other things, the IP address, the CAPTCHA response, and other technical information are transmitted to Google and processed there to determine whether the input was made by a human. This may involve the transfer of personal data to the United States. For more information, please see Google's Privacy Policy."
 msgstr "Zur Vermeidung von Spam und missbräuchlichen Formularübermittlungen verwenden wir Google reCAPTCHA. Dabei werden unter anderem die IP-Adresse, die CAPTCHA-Antwort sowie weitere technische Informationen an Google übermittelt und dort verarbeitet, um zu beurteilen, ob die Eingabe durch einen Menschen erfolgt. Hierbei kann eine Übermittlung personenbezogener Daten in die USA stattfinden. Weitere Informationen finden Sie in der Datenschutzerklärung von Google."
 
