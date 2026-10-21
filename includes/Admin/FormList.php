@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -55,8 +55,9 @@ class FormList
      */
     public static function bodyClass(string $classes): string
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
-        if (isset($_GET['page']) && $_GET['page'] === 'fabricator-forms') {
+        // The admin page being shown, as WordPress resolved it from the request.
+        global $plugin_page;
+        if ($plugin_page === 'fabricator-forms') {
             $classes .= ' fabricator-list-page';
         }
         return $classes;
@@ -147,6 +148,7 @@ class FormList
             [
             'i18n'        => $list_i18n,
             'importNonce' => wp_create_nonce('fabricator_forms_import'),
+            'bulkNonce'   => wp_create_nonce('fabricator_forms_bulk'),
             ]
         );
         ?>
@@ -159,8 +161,7 @@ class FormList
 
             <div class="fabricator-list-toolbar" id="fabricator-list-toolbar">
                     <!-- Left: select-all + bulk actions -->
-                    <?php $noForms = empty($forms) ? ' hidden' : ''; ?>
-                    <div class="fabricator-toolbar-left" id="fabricator-toolbar-left"<?php echo esc_attr($noForms); ?>>
+                    <div class="fabricator-toolbar-left" id="fabricator-toolbar-left"<?php echo empty($forms) ? ' hidden' : ''; ?>>
                         <label class="fabricator-select-all-wrap">
                             <input type="checkbox" id="fabricator-select-all" title="<?php echo esc_attr__('Select all', 'formfabricator'); ?>">
                         </label>
@@ -184,7 +185,7 @@ class FormList
                         </div>
                     </div>
                     <!-- Center: search -->
-                    <div class="fabricator-toolbar-center" id="fabricator-toolbar-center"<?php echo esc_attr($noForms); ?>>
+                    <div class="fabricator-toolbar-center" id="fabricator-toolbar-center"<?php echo empty($forms) ? ' hidden' : ''; ?>>
                         <input type="search" id="fabricator-form-search"
                                placeholder="<?php echo esc_attr__('Search forms…', 'formfabricator'); ?>" autocomplete="off">
                     </div>
@@ -215,8 +216,7 @@ class FormList
             <?php // Always rendered, only hidden while empty: an imported or duplicated form is inserted here without a reload. ?>
             <div class="fabricator-form-list" id="fabricator-form-list"<?php echo empty($forms) ? ' hidden' : ''; ?>>
                 <?php foreach ($forms as $form) : ?>
-                    <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- renderRow() escapes every dynamic value itself; one template for the page and the AJAX-inserted rows. ?>
-                    <?php echo self::renderRow($form); ?>
+                    <?php echo wp_kses(self::renderRow($form), self::rowAllowedHtml()); ?>
                 <?php endforeach; ?>
                 <div class="fabricator-no-results" id="fabricator-no-results" hidden>
                     <?php esc_html_e('No forms found.', 'formfabricator'); ?>
@@ -278,15 +278,38 @@ class FormList
         // wp_send_json_error() terminates the request via wp_die(), so execution
         // never falls through past a failed check below (no explicit return needed).
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
-        if (!$form_id || !check_ajax_referer('fabricator_forms_delete_' . $form_id, 'nonce', false)) {
+        // Each form has a nonce of its own, so the id is read inside the check.
+        if (!isset($_POST['form_id']) || check_ajax_referer('fabricator_forms_delete_' . absint(wp_unslash($_POST['form_id'])), 'nonce', false) === false) {
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
+        }
+        $form_id = absint(wp_unslash($_POST['form_id']));
+        if (!$form_id) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
         // Reported as it happened: a form that is not ours, or a failed delete, is not "deleted".
-        if (!FormModel::delete($form_id, true)) {
+        if (!FormModel::delete($form_id)) {
             wp_send_json_error(['message' => __('The form could not be deleted.', 'formfabricator')], 400);
         }
         wp_send_json_success(['message' => __('Form deleted.', 'formfabricator')]);
+    }
+
+    /**
+     * The markup a form-list row holds (renderRow()), for wp_kses().
+     *
+     * @return array<string, array<string, bool>>
+     */
+    private static function rowAllowedHtml(): array
+    {
+        return [
+            'div'    => ['class' => true, 'data-*' => true, 'hidden' => true],
+            'label'  => ['class' => true],
+            'input'  => ['type' => true, 'class' => true, 'value' => true, 'data-*' => true],
+            'i'      => ['class' => true],
+            'a'      => ['href' => true, 'class' => true],
+            'span'   => ['class' => true],
+            'code'   => ['class' => true],
+            'button' => ['class' => true, 'title' => true, 'data-*' => true],
+        ];
     }
 
     /**
@@ -297,6 +320,7 @@ class FormList
      */
     private static function renderRow(\FabricatorForms\Form\FormModel $form): string
     {
+        // Printed through wp_kses() with rowAllowedHtml(): a tag or attribute added here is added there too.
         $edit_url  = admin_url('admin.php?page=fabricator-forms-editor&form_id=' . $form->id);
         $shortcode = '[fabricator_form id="' . $form->id . '"]';
         $count     = count($form->fields);
@@ -372,11 +396,15 @@ class FormList
     public static function ajaxDuplicate(): void
     {
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
-        if (!$form_id || !check_ajax_referer('fabricator_forms_duplicate_' . $form_id, 'nonce', false)) {
+        // Each form has a nonce of its own, so the id is read inside the check.
+        if (!isset($_POST['form_id']) || check_ajax_referer('fabricator_forms_duplicate_' . absint(wp_unslash($_POST['form_id'])), 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
-        $result = FormModel::duplicate($form_id, true);
+        $form_id = absint(wp_unslash($_POST['form_id']));
+        if (!$form_id) {
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
+        }
+        $result = FormModel::duplicate($form_id);
         if (is_wp_error($result)) {
             wp_send_json_error(['message' => $result->get_error_message()], 500);
         }
@@ -395,29 +423,32 @@ class FormList
     public static function ajaxBulkDelete(): void
     {
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
-        $ids    = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['ids'] ?? '[]'), '[]')), true);
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
-        $nonces = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['nonces'] ?? '[]'), '[]')), true);
+        // One nonce for the bulk action first; each form's own nonce still decides below whether that form is touched.
+        if (check_ajax_referer('fabricator_forms_bulk', 'bulk_nonce', false) === false) {
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
+        }
+        $ids    = isset($_POST['ids']) ? json_decode(sanitize_text_field(wp_unslash($_POST['ids'])), true) : [];
+        $nonces = isset($_POST['nonces']) ? json_decode(sanitize_text_field(wp_unslash($_POST['nonces'])), true) : [];
         if (!is_array($ids) || !is_array($nonces)) {
             wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')], 400);
         }
-        $ids     = array_slice((array)$ids, 0, 200, true);
-        $nonces  = array_slice((array)$nonces, 0, 200, true);
+        // Positionally paired (same index, same form), each value sanitized as what it is.
+        $form_ids    = [];
+        $form_nonces = [];
+        foreach (array_slice($ids, 0, 200, true) as $i => $id) {
+            $form_ids[$i]    = is_scalar($id) ? absint($id) : 0;
+            $form_nonces[$i] = is_string($nonces[$i] ?? null) ? sanitize_key($nonces[$i]) : '';
+        }
         $deleted = [];
-        // $ids and $nonces are positionally paired (same index = same form) rather
-        // than keyed by id, since each row has its own per-id delete nonce.
-        foreach ($ids as $i => $raw_id) {
-            if (!is_scalar($raw_id)) {
+        foreach ($form_ids as $i => $form_id) {
+            if (!$form_id) {
                 continue;
             }
-            $form_id = (int)$raw_id;
-            $nonce   = sanitize_key($nonces[$i] ?? '');
-            if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_delete_' . $form_id)) {
+            if (!wp_verify_nonce($form_nonces[$i], 'fabricator_forms_delete_' . $form_id)) {
                 continue;
             }
             // Only what was deleted: the page removes exactly these rows.
-            if (FormModel::delete($form_id, true)) {
+            if (FormModel::delete($form_id)) {
                 $deleted[] = $form_id;
             }
         }
@@ -432,26 +463,31 @@ class FormList
     public static function ajaxBulkDuplicate(): void
     {
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
-        $ids    = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['ids'] ?? '[]'), '[]')), true);
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
-        $nonces = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['nonces'] ?? '[]'), '[]')), true);
+        // One nonce for the bulk action first; each form's own nonce still decides below whether that form is touched.
+        if (check_ajax_referer('fabricator_forms_bulk', 'bulk_nonce', false) === false) {
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
+        }
+        $ids    = isset($_POST['ids']) ? json_decode(sanitize_text_field(wp_unslash($_POST['ids'])), true) : [];
+        $nonces = isset($_POST['nonces']) ? json_decode(sanitize_text_field(wp_unslash($_POST['nonces'])), true) : [];
         if (!is_array($ids) || !is_array($nonces)) {
             wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')], 400);
         }
-        $ids     = array_slice((array)$ids, 0, 200, true);
-        $nonces  = array_slice((array)$nonces, 0, 200, true);
+        // Positionally paired (same index, same form), each value sanitized as what it is.
+        $form_ids    = [];
+        $form_nonces = [];
+        foreach (array_slice($ids, 0, 200, true) as $i => $id) {
+            $form_ids[$i]    = is_scalar($id) ? absint($id) : 0;
+            $form_nonces[$i] = is_string($nonces[$i] ?? null) ? sanitize_key($nonces[$i]) : '';
+        }
         $created = [];
-        foreach ($ids as $i => $raw_id) {
-            if (!is_scalar($raw_id)) {
+        foreach ($form_ids as $i => $form_id) {
+            if (!$form_id) {
                 continue;
             }
-            $form_id = (int)$raw_id;
-            $nonce   = sanitize_key($nonces[$i] ?? '');
-            if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_duplicate_' . $form_id)) {
+            if (!wp_verify_nonce($form_nonces[$i], 'fabricator_forms_duplicate_' . $form_id)) {
                 continue;
             }
-            $result = FormModel::duplicate($form_id, true);
+            $result = FormModel::duplicate($form_id);
             if (!is_wp_error($result)) {
                 $created[] = $result;
             }
@@ -468,11 +504,11 @@ class FormList
     {
         // edit_forms: the export carries notification addresses view-only users never see.
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
-        $nonce   = sanitize_key($_POST['nonce'] ?? '');
-        if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_export_' . $form_id)) {
+        // Each form has a nonce of its own, so the id is read inside the check.
+        if (!isset($_POST['form_id']) || check_ajax_referer('fabricator_forms_export_' . absint(wp_unslash($_POST['form_id'])), 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
+        $form_id = absint(wp_unslash($_POST['form_id']));
         $form = FormModel::get($form_id);
         if (!$form) {
             wp_send_json_error(['message' => __('Form not found.', 'formfabricator')], 404);
@@ -500,11 +536,10 @@ class FormList
     public static function ajaxImport(): void
     {
         \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        $nonce = sanitize_key($_POST['nonce'] ?? '');
-        if (!wp_verify_nonce($nonce, 'fabricator_forms_import')) {
+        if (check_ajax_referer('fabricator_forms_import', 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
-        $raw = sanitize_text_field(wp_unslash($_POST['string'] ?? ''));
+        $raw = isset($_POST['string']) ? sanitize_text_field(wp_unslash($_POST['string'])) : '';
         if ($raw === '') {
             wp_send_json_error(['message' => __('No import string provided.', 'formfabricator')], 400);
         }
@@ -564,8 +599,7 @@ class FormList
                 is_array($payload['s'] ?? null) ? $payload['s'] : []
             ),
             ],
-            0,
-            true
+            0
         );
         if (is_wp_error($result)) {
             wp_send_json_error(['message' => $result->get_error_message()], 500);

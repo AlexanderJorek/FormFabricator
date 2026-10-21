@@ -62,6 +62,8 @@ final class SealRoundTripTest extends TestCase
         $pdf  = $this->sealedPdf();
         $html = $this->verify($pdf, 'fresh.pdf');
         self::assertSame('pass', self::verdict($html), self::failedRows($html));
+        // The signature's moment is part of the sealed record (Utils\SigningTime).
+        self::assertMatchesRegularExpression('/Signed on\s*.*\d{2}:\d{2}:\d{2} UTC/', (new \Smalot\PdfParser\Parser())->parseContent($pdf)->getText());
         self::assertDoesNotMatchRegularExpression('#/BaseFont\s*/(?:[A-Z]{6}\+)?FreeSerif#', $pdf, 'no fallback font where none is needed');
         self::assertStringContainsString('HMAC valid: the seal holds exactly what was signed', $html, 'the seal section opens with the HMAC verdict');
 
@@ -73,6 +75,129 @@ final class SealRoundTripTest extends TestCase
             self::assertStringContainsString('MATCH', $card);
             self::assertSame(1, substr_count($card, $hash), 'the hash appears once in its card');
         }
+    }
+
+    public function testAPdfWithHiddenLabelsVerifiesAsAuthentic(): void
+    {
+        // "Hide label" drops the label row, never an answer or its markers: a field, a mandate and a group's child.
+        $fields = [
+            ['id' => 'name', 'type' => 'text', 'label' => 'Your full name', 'hide_label' => true],
+            ['id' => 'mandate', 'type' => 'directdebit', 'label' => 'Direct debit', 'hide_label' => true, 'creditor_id' => 'DE98ZZZ09999999999', 'mandate_ref' => 'M-0042'],
+            ['id' => 'box', 'type' => 'group', 'label' => 'Box', 'children' => [
+                ['id' => 'note', 'type' => 'textarea', 'label' => 'Delivery wishes', 'hide_label' => true],
+            ]],
+            ['id' => 'sig', 'type' => 'signature', 'label' => 'Your signature', 'hide_label' => true],
+        ];
+        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
+        self::assertIsInt($form);
+        $values = [
+            'name'    => 'Ada Lovelace',
+            'mandate' => ['iban' => 'DE89370400440532013000', 'bic' => 'COBADEFFXXX', 'holder' => 'Ada Lovelace', 'sig' => self::signaturePng()],
+            'box'     => ['note' => 'Please deliver on Monday.'],
+            'note'    => 'Please deliver on Monday.',
+            'sig'     => self::signaturePng(),
+        ];
+        $path = Generator::generate(FieldRegistry::mapSubmission($fields, $values, [], []), $form, 'Order');
+        self::assertIsString($path, 'Generator produced a PDF');
+        $pdf = (string) file_get_contents($path);
+        wp_delete_file($path);
+
+        $text = (new \Smalot\PdfParser\Parser())->parseContent($pdf)->getText();
+        foreach (['Your full name', 'Delivery wishes', 'Your signature'] as $label) {
+            self::assertStringNotContainsString($label, $text, "the hidden label \"$label\"");
+        }
+        // Only the field's own label goes: the signature's moment keeps its "Signed on", the mandate its "Account holder".
+        self::assertStringContainsString('Signed on', $text);
+        self::assertStringContainsString('Account holder', $text);
+        self::assertStringContainsString('Ada Lovelace', $text);
+        self::assertStringContainsString('Please deliver on Monday.', $text);
+        $html = $this->verify($pdf, 'hidden-labels.pdf');
+        self::assertSame('pass', self::verdict($html), self::failedRows($html));
+    }
+
+    public function testAnExpandedNameAndAddressVerifyWithTheirMarkerPartsLeftOutOfTheSeal(): void
+    {
+        // The parts a marked mail lists one by one ride on the entry; the PDF draws, and the seal holds, the value alone.
+        $fields = [
+            ['id' => 'person', 'type' => 'name', 'label' => 'Member', 'expanded' => true, 'fname_enabled' => true, 'lname_enabled' => true],
+            ['id' => 'home', 'type' => 'address', 'label' => 'Address', 'expanded' => true, 'street_enabled' => true, 'zip_enabled' => true, 'city_enabled' => true],
+        ];
+        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
+        self::assertIsInt($form);
+        $values = ['person' => ['fname' => 'Ada', 'lname' => 'Lovelace'], 'home' => ['street' => 'Musterweg 1', 'zip' => '24103', 'city' => 'Kiel']];
+        $mapped = FieldRegistry::mapSubmission($fields, $values, [], []);
+        self::assertNotEmpty($mapped['person']['parts'] ?? [], 'the parts are there');
+        $path = Generator::generate($mapped, $form, 'Order');
+        self::assertIsString($path, 'Generator produced a PDF');
+        $pdf = (string) file_get_contents($path);
+        wp_delete_file($path);
+
+        $text = (new \Smalot\PdfParser\Parser())->parseContent($pdf)->getText();
+        self::assertStringContainsString('Ada Lovelace', $text);
+        self::assertStringContainsString('Musterweg 1, 24103 Kiel', $text);
+        $html = $this->verify($pdf, 'name-parts.pdf');
+        self::assertSame('pass', self::verdict($html), self::failedRows($html));
+    }
+
+    public function testABoxedGroupHoldingBoxesOfItsOwnVerifiesAsAuthentic(): void
+    {
+        // A group shown as a box nests the mandate's box and the signature's in its own, all outside the markers.
+        $fields = [
+            ['id' => 'member', 'type' => 'group', 'label' => 'Membership', 'boxed' => true, 'children' => [
+                ['id' => 'name', 'type' => 'text', 'label' => 'Name'],
+                ['id' => 'mandate', 'type' => 'directdebit', 'label' => 'Direct debit', 'creditor_id' => 'DE98ZZZ09999999999', 'mandate_ref' => 'M-0042'],
+                ['id' => 'sign', 'type' => 'signature', 'label' => 'Signature', 'signature_title' => 'Order confirmation', 'signature_text' => '<p>I confirm.</p>'],
+            ]],
+            ['id' => 'after', 'type' => 'text', 'label' => 'After the box'],
+        ];
+        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
+        self::assertIsInt($form);
+        $mandate = ['iban' => 'DE89370400440532013000', 'bic' => 'COBADEFFXXX', 'holder' => 'Ada Lovelace', 'sig' => self::signaturePng()];
+        $values  = [
+            'member' => ['name' => 'Ada Lovelace', 'mandate' => $mandate, 'sign' => ['sig' => self::signaturePng(), 'place' => '']],
+            'after'  => 'Outside',
+        ];
+        $mapped = FieldRegistry::mapSubmission($fields, $values, [], []);
+        $keys   = array_keys($mapped);
+        self::assertSame('member_begin', $keys[0]);
+        self::assertSame('member_end', $keys[count($keys) - 2], 'the group closes before the next field');
+        $path = Generator::generate($mapped, $form, 'Order');
+        self::assertIsString($path, 'Generator produced a PDF');
+        $pdf = (string) file_get_contents($path);
+        wp_delete_file($path);
+
+        $text = (new \Smalot\PdfParser\Parser())->parseContent($pdf)->getText();
+        foreach (['Membership', 'SEPA Direct Debit Mandate', 'Order confirmation', 'I confirm.', 'Outside'] as $shown) {
+            self::assertStringContainsString($shown, $text);
+        }
+        $html = $this->verify($pdf, 'boxed-group.pdf');
+        self::assertSame('pass', self::verdict($html), self::failedRows($html));
+    }
+
+    public function testASignatureWithATextAboveItAndItsPlaceVerifiesAsAuthentic(): void
+    {
+        // The text above the signature opens a titled box, as the mandate's does: it is sealed and compared like any answer.
+        $fields = [
+            ['id' => 'name', 'type' => 'text', 'label' => 'Name'],
+            [
+                'id' => 'sign', 'type' => 'signature', 'label' => 'Signature', 'signature_title' => 'Order confirmation',
+                'signature_text' => '<p>I confirm the details above.</p>', 'signing_place' => true, 'place_label' => 'Signed in:',
+            ],
+        ];
+        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
+        self::assertIsInt($form);
+        $values = ['name' => 'Ada Lovelace', 'sign' => ['sig' => self::signaturePng(), 'place' => 'Berlin']];
+        $path   = Generator::generate(FieldRegistry::mapSubmission($fields, $values, [], []), $form, 'Order');
+        self::assertIsString($path, 'Generator produced a PDF');
+        $pdf = (string) file_get_contents($path);
+        wp_delete_file($path);
+
+        $text = (new \Smalot\PdfParser\Parser())->parseContent($pdf)->getText();
+        foreach (['Order confirmation', 'I confirm the details above.', 'Signed in:', 'Berlin', 'Signed on'] as $shown) {
+            self::assertStringContainsString($shown, $text);
+        }
+        $html = $this->verify($pdf, 'signature-text.pdf');
+        self::assertSame('pass', self::verdict($html), self::failedRows($html));
     }
 
     public function testAPdfWithoutAnyImageVerifiesAsAuthentic(): void
@@ -268,7 +393,7 @@ final class SealRoundTripTest extends TestCase
     public function testARetiredKeyStillVerifiesItsPdfs(): void
     {
         $pdf = $this->sealedPdf();
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
 
         self::assertSame('pass', self::verdict($this->verify($pdf, 'rotated.pdf')));
     }
@@ -420,7 +545,8 @@ final class SealRoundTripTest extends TestCase
     public function testALongHtmlBlockIsSealedInShortLinesAndVerifies(): void
     {
         // mPDF breaks a word too long for its line in time growing with the square of the word's length, so the seal is
-        // written in lines it never has to break. 31 KB of HTML text seals into some 40 lines.
+        // written in lines it never has to break (PdfLayoutTest measures their width). 31 KB of HTML text seals into
+        // more than ten lines.
         $block = str_repeat('<p>' . str_repeat('Terms and conditions. ', 20) . '</p>', 70);
         $pdf   = $this->sealedPdf(true, null, 'Please deliver on Monday.', null, $block);
 
@@ -428,7 +554,7 @@ final class SealRoundTripTest extends TestCase
         self::assertSame('pass', self::verdict($html), self::failedRows($html));
         $lines = self::sealLines($pdf);
         self::assertGreaterThan(10, count($lines));
-        self::assertLessThanOrEqual(1000 + strlen('---BEGIN-SEAL---'), max(array_map('strlen', $lines)));
+        self::assertLessThanOrEqual(Generator::SEAL_LINE_CHARS + strlen('---BEGIN-SEAL---'), max(array_map('strlen', $lines)));
     }
 
     public function testGenericFontNamesNeedNoCondensedFont(): void
@@ -778,7 +904,7 @@ final class SealRoundTripTest extends TestCase
         } elseif ($mandateScheme === 'ach') {
             $fields[] = ['id' => 'mandate', 'type' => 'directdebit', 'scheme' => 'ach', 'label' => 'Direct debit', 'ach_text' => '<p>I authorize Acme Inc. to debit my account.</p>', 'ach_creditor_id' => '1234567890', 'mandate_ref' => 'A-7'];
         }
-        $form   = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0, true);
+        $form   = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
         self::assertIsInt($form);
         $values = ['name' => 'Ada Lovelace', 'amount' => '250.00', 'note' => $note];
         if ($withSignature) {
@@ -931,15 +1057,13 @@ final class SealRoundTripTest extends TestCase
     }
 
     /**
-     * Runs the verifier on $bytes as if they had just been uploaded, and returns what it printed.
+     * Runs the verifier on $bytes as if they had just been uploaded, and returns its report.
      */
     private function verify(string $bytes, string $name): string
     {
         $path = $this->dir . '/' . $name;
         file_put_contents($path, $bytes);
-        ob_start();
-        Verificationpage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
-        return (string) ob_get_clean();
+        return Verificationpage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
     }
 
     /**

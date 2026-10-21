@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -155,6 +155,21 @@ class HtmlSanitizer
     private static function logPcreFailure(string $step): void
     {
         \FabricatorForms\fabricator_log('FabricatorForms HtmlSanitizer: PCRE failed during ' . $step . ' (' . preg_last_error_msg() . '); used the stricter fallback.');
+    }
+
+    /**
+     * Sanitized HTML as plain text, keeping its paragraphs and line breaks as line breaks: how a text a visitor agreed
+     * to or signed is recorded in the mail, the PDF and the seal.
+     *
+     * @param string $html Sanitized HTML.
+     * @return string
+     */
+    public static function plainText(string $html): string
+    {
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- a fixed pattern; PHP 8 has no /e modifier.
+        $text = (string) preg_replace('#<br\s*/?>|</(?:p|div|li|h[1-6])>#i', "\n", $html);
+        $text = html_entity_decode(wp_strip_all_tags($text, false), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return trim((string) preg_replace("/\n{3,}/", "\n\n", preg_replace("/[ \t]*\n[ \t]*/", "\n", $text)));
     }
 
     /**

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -100,7 +100,7 @@ defined('ABSPATH') || exit;
  *   SignatureField   data URI capped in validate(), mapNormalized(), pdfData(), includeValueInSeal()
  *   DirectDebitField several output rows and a box in the PDF (PdfDescriptor::opensFrame())
  *   CaptchaField     defersValidation(), enqueueFrontScripts() left empty on purpose
- *   GroupField       isGroupContainer(), openTag(), closeTag()
+ *   GroupField       isGroupContainer(), openTagHtml(), closeTagHtml()
  *   PageBreakField   isPageBreak(), renderBreak(), skipValidation()
  *   HtmlField        skipValidation(), rawEmailHtml(), mapNormalized() gated by "Show in mail/PDF"
  *   PostDataField    values re-derived from a signed hidden {id}[_source_post_id] / [_source_sig] pair, since
@@ -108,9 +108,9 @@ defined('ABSPATH') || exit;
  *
  * READING THE REQUEST
  * ───────────────────
- *   Every extractValue() starts with self::assertRequestNonceVerified(). WPCS can't see that guard, so each line
- *   that reads $_POST/$_FILES still needs a "// phpcs:ignore WordPress.Security.NonceVerification.Missing --
- *   verified above via assertRequestNonceVerified()." directly above it.
+ *   A field never reads $_POST or $_FILES. FormProcessor verifies the nonce, reads the request once and hands every
+ *   extractValue() the answers ($post, unslashed and run through sanitize_textarea_field()) and the file entries
+ *   ($files, each part sanitized). Read your keys from those and sanitize them for their type; never unslash again.
  *
  *   Bound what the visitor controls: cap an array with self::capRawArray() before sanitizing it, keep only string
  *   leaves (self::scalarSubfieldMap()), and cap a data URI's length in validate(), required or not.
@@ -252,21 +252,20 @@ class ExampleField extends BaseField
     // ═══════════════════════════════════════════════════════
     //
     //  Called once per field (a group's children included) before validate(); what it returns is what validate(),
-    //  conditionValue(), map() and mapNormalized() receive. The default reads $_POST[$field_id] through
+    //  conditionValue(), map() and mapNormalized() receive. The default reads $post[$field_id] through
     //  sanitize_text_field(). Override for another shape: TextareaField (keeps line breaks), AddressField (id[key]),
-    //  UploadField ($_FILES). See READING THE REQUEST above.
+    //  UploadField ($files). See READING THE REQUEST above.
 
     /**
      * EXAMPLE (unused) — sub-inputs posted as "id[key]", as AddressField reads them.
      *
      * @param string $field_id Input name.
+     * @param array  $post     The posted answers.
      * @return mixed
      */
-    private function exampleExtractComposite(string $field_id): mixed
+    private function exampleExtractComposite(string $field_id, array $post): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
-        $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : [];
+        $raw = isset($post[$field_id]) ? map_deep(self::capRawArray($post[$field_id]), 'sanitize_text_field') : [];
         return self::scalarSubfieldMap($raw);
     }
 
@@ -274,30 +273,22 @@ class ExampleField extends BaseField
      * EXAMPLE (unused) — files with a caption each, posted as id[] files and id_desc[] texts.
      *
      * @param string $field_id Input name.
+     * @param array  $post     The posted answers.
+     * @param array  $files    The uploaded files' entries.
      * @return mixed
      */
-    private function exampleExtractParallelArrays(string $field_id): mixed
+    private function exampleExtractParallelArrays(string $field_id, array $post, array $files): mixed
     {
-        self::assertRequestNonceVerified();
-        // Not unslashed: $_FILES is never slashed, and wp_unslash() would break Windows tmp paths.
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- verified above via assertRequestNonceVerified(); 'name' is sanitized below, other keys (tmp_name/size/error) are PHP-generated, not attacker text.
-        $files = isset($_FILES[$field_id]) ? $_FILES[$field_id] : [];
+        $entry = $files[$field_id] ?? [];
         // A shape the form's own input never posts is no upload of this field.
-        if (!\FabricatorForms\Utils\Cast::isFlatFilesEntry($files)) {
-            $files = [];
+        if (!\FabricatorForms\Utils\Cast::isFlatFilesEntry($entry)) {
+            $entry = [];
         }
-        if (isset($files['name'])) {
-            $files['name'] = is_array($files['name'])
-                ? map_deep($files['name'], 'sanitize_file_name')
-                : sanitize_file_name($files['name']);
-        }
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        $desc = isset($_POST[$field_id . '_desc'])
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
-            ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id . '_desc']), 20), 'sanitize_text_field')
+        $desc = isset($post[$field_id . '_desc'])
+            ? map_deep(self::capRawArray($post[$field_id . '_desc'], 20), 'sanitize_text_field')
             : [];
         return [
-            'files' => $files,
+            'files' => $entry,
             'desc'  => is_array($desc) ? array_filter($desc, 'is_string') : [],
         ];
     }
@@ -521,7 +512,7 @@ class ExampleField extends BaseField
     //                                   or validated, on either side
     //  defersValidation() → true        validate() spends something single-use (CaptchaField): it runs only once
     //                                   every other field has passed
-    //  includeInEmailSummary() → false  left out of {all_fields} (GroupField, PageBreakField, PageHeaderField)
+    //  includeInEmailSummary() → false  left out of {all_fields} (PageBreakField, PageHeaderField)
     //  includeValueInSeal() → false     value sealed as '' (SignatureField; its image is sealed by hash)
     //  rawEmailHtml() → true            value goes into the email unescaped; only for HTML the field sanitizes itself
     //                                   (HtmlField)
@@ -533,7 +524,7 @@ class ExampleField extends BaseField
     //  enqueueFrontScripts()            runs once per type among a form's top-level fields; load a third-party script
     //                                   only after a click instead, as CaptchaField does for reCAPTCHA
     //  isPageBreak() + renderBreak()    page navigation (PageBreakField)
-    //  isGroupContainer() + openTag()/closeTag()
+    //  isGroupContainer() + openTagHtml()/closeTagHtml()
     //                                   renders $config['children'] inside (GroupField)
 
     /**

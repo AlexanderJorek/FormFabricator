@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -122,17 +122,16 @@ class PageBreakField extends BaseField
      */
     public function renderBreak(array $config, int $page): string
     {
-        $prev_label = esc_html($config['prev_btn'] ?? __('← Back', 'formfabricator'));
-        $next_label = esc_html($config['next_btn'] ?? __('Next →', 'formfabricator'));
-        $prev_btn   = $page > 1
-            ? '<button type="button" class="fabricator-btn fabricator-btn-prev">' . $prev_label . '</button>'
-            : '<span></span>';
-        $next_btn   = '<button type="button" class="fabricator-btn fabricator-btn-next">' . $next_label . '</button>';
-        return '<div class="fabricator-page-nav">' . $prev_btn . $next_btn . '</div>'
+        $prev_label = (string) ($config['prev_btn'] ?? __('← Back', 'formfabricator'));
+        $next_label = (string) ($config['next_btn'] ?? __('Next →', 'formfabricator'));
+        return '<div class="fabricator-page-nav">'
+            . ($page > 1 ? '<button type="button" class="fabricator-btn fabricator-btn-prev">' . esc_html($prev_label) . '</button>' : '<span></span>')
+            . '<button type="button" class="fabricator-btn fabricator-btn-next">' . esc_html($next_label) . '</button>'
             . '</div>'
-            . '<div class="fabricator-form-page" data-page="' . $page . '">'
+            . '</div>'
+            . '<div class="fabricator-form-page" data-page="' . esc_attr($page) . '">'
             . '<div class="fabricator-page-nav fabricator-page-nav--top">'
-            . '<button type="button" class="fabricator-btn fabricator-btn-prev">' . $prev_label . '</button>'
+            . '<button type="button" class="fabricator-btn fabricator-btn-prev">' . esc_html($prev_label) . '</button>'
             . '</div>';
     }
 

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -88,18 +88,16 @@ class FormRenderer
 
         /* "Show button when … conditions match": the same data-conditions contract the fields use, so front.js shows
            and hides the footer with them. FormProcessor re-checks the rules, since a hidden button stops nobody. */
-        $submit_cond      = (array) ($form->settings['submit_conditions'] ?? []);
-        $submit_cond_attr = '';
+        $submit_cond       = (array) ($form->settings['submit_conditions'] ?? []);
+        $submit_conditions = '';
         if (!empty($submit_cond['rules'])) {
-            $submit_cond_attr = ' data-conditions="' . esc_attr(
-                \FabricatorForms\Utils\Cast::jsonForAttribute(
-                    [
-                        'action' => 'show',
-                        'match'  => ($submit_cond['match'] ?? 'all') === 'any' ? 'any' : 'all',
-                        'rules'  => array_values((array) $submit_cond['rules']),
-                    ]
-                )
-            ) . '"';
+            $submit_conditions = \FabricatorForms\Utils\Cast::jsonForAttribute(
+                [
+                    'action' => 'show',
+                    'match'  => ($submit_cond['match'] ?? 'all') === 'any' ? 'any' : 'all',
+                    'rules'  => array_values((array) $submit_cond['rules']),
+                ]
+            );
         }
 
         // Backstop for Assets::enqueueFront(), which misses widgets/page-builders/FSE embeds; idempotent.
@@ -150,11 +148,13 @@ class FormRenderer
                 <input type="text" name="fabricator_hp_field"
                        style="display:none!important" tabindex="-1" autocomplete="off">
 
-                <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- renderFields() returns pre-escaped HTML; each field handler escapes its own output internally. ?>
-                <?php echo self::renderFields($form->fields); ?>
+                <?php
+                // The fields' markup joins the form here: each field escapes its own values as it renders them.
+                $html = (string) ob_get_clean() . self::renderFields($form->fields);
+                ob_start();
+                ?>
 
-                <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_attr()'d at assignment above. ?>
-                <div class="fabricator-form-footer"<?php echo $submit_cond_attr; ?>>
+                <div class="fabricator-form-footer"<?php echo $submit_conditions !== '' ? ' data-conditions="' . esc_attr($submit_conditions) . '"' : ''; ?>>
                     <?php // Disabled by default: prevents a JS-disabled visitor from POSTing with no nonce; front.js enables it once ready. ?>
                     <button type="submit" class="fabricator-submit-btn" disabled
                             data-working="<?php echo esc_attr($submit_working); ?>"
@@ -171,7 +171,7 @@ class FormRenderer
             </form>
         </div>
         <?php
-        $html = (string) ob_get_clean();
+        $html .= (string) ob_get_clean();
         return $id_suffix === '' ? $html : self::uniqueIds($html, $id_suffix);
     }
 
@@ -292,11 +292,10 @@ class FormRenderer
 
             if ($handler->isGroupContainer()) {
                 $children_html = self::renderChildFields($field_cfg['children'] ?? []);
-                $group_cond    = $handler->rowCondAttr($field_cfg);
-                $html .= '<div class="fabricator-row"' . $group_cond . '><div class="fabricator-col fabricator-col-12">'
-                    . $handler->openTag($field_cfg, $field_id)
+                $html .= '<div class="fabricator-row"' . $handler->rowCondAttr($field_cfg) . '><div class="fabricator-col fabricator-col-12">'
+                    . $handler->openTagHtml($field_cfg, $field_id)
                     . $children_html
-                    . $handler->closeTag()
+                    . $handler->closeTagHtml()
                     . '</div></div>';
                 $i++;
                 continue;
@@ -326,13 +325,12 @@ class FormRenderer
 
                 if ($next_handler) {
                     // Each field's condition goes on its own column, not the shared row, so the pair toggles independently.
-                    $col_a_cond = self::conditionAttr($field_cfg);
-                    $col_b_cond = self::conditionAttr($next);
-                    $col_a  = '<div class="fabricator-col fabricator-col-6"' . $col_a_cond . '>';
-                    $col_a .= $handler->render($field_cfg, $field_id) . '</div>';
-                    $col_b  = '<div class="fabricator-col fabricator-col-6"' . $col_b_cond . '>';
-                    $col_b .= $next_handler->render($next, $next_id) . '</div>';
-                    $html  .= '<div class="fabricator-row fabricator-row--pair">' . $col_a . $col_b . '</div>';
+                    $html .= '<div class="fabricator-row fabricator-row--pair">'
+                        . '<div class="fabricator-col fabricator-col-6"' . self::conditionAttr($field_cfg) . '>'
+                        . $handler->render($field_cfg, $field_id) . '</div>'
+                        . '<div class="fabricator-col fabricator-col-6"' . self::conditionAttr($next) . '>'
+                        . $next_handler->render($next, $next_id) . '</div>'
+                        . '</div>';
                     $i += 2;
                     continue;
                 }

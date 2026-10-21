@@ -52,6 +52,7 @@ test('search, "Select all", bulk delete: only the rows still visible are deleted
 
     const request = page.requests.find((r) => r.body && r.body.action === 'fabricator_forms_bulk_delete');
     assert.ok(request, 'the bulk delete was sent');
+    assert.ok(request.body.bulk_nonce, "with the list's bulk nonce, which the server checks first");
     const ids = JSON.parse(request.body.ids);
     const idsOfVisible = Array.from(doc.querySelectorAll('.fabricator-form-row'))
         .filter((r) => ['contact', 'contact (archive)'].includes(r.dataset.title))

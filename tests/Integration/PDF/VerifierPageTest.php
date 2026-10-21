@@ -215,7 +215,7 @@ final class VerifierPageTest extends AjaxTestCase
             ['id' => 'name', 'type' => 'text', 'label' => 'Name'],
             ['id' => 'sig', 'type' => 'signature', 'label' => 'Signature'],
         ];
-        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0, true);
+        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
         self::assertIsInt($form);
         $im = imagecreatetruecolor(40, 20);
         imagefill($im, 0, 0, (int) imagecolorallocate($im, 255, 255, 255));
@@ -261,20 +261,17 @@ final class VerifierPageTest extends AjaxTestCase
     }
 
     /**
-     * Runs the verifier's check on $bytes as the AJAX action does for a stored upload, and returns what it printed.
+     * Runs the verifier's check on $bytes as the AJAX action does for a stored upload, and returns its report.
      */
     private function check(string $bytes, string $name): string
     {
         $path = get_temp_dir() . wp_generate_password(8, false) . '-' . $name;
         file_put_contents($path, $bytes);
-        ob_start();
         try {
-            Verificationpage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
+            return Verificationpage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
         } finally {
-            $html = (string) ob_get_clean();
             unlink($path);
         }
-        return $html;
     }
 
     /**

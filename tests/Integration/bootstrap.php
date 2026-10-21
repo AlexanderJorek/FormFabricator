@@ -27,6 +27,16 @@ tests_add_filter('muplugins_loaded', static function () use ($fabricator_plugin_
     require $fabricator_plugin_file;
 });
 
+// WordPress's update checks (admin_init, cron) warn when wordpress.org can't be reached, so a run would depend on the
+// network. Every request to it gets an empty 503, which WordPress takes quietly.
+tests_add_filter('pre_http_request', static function ($pre, $args, $url) {
+    $host = (string) wp_parse_url((string) $url, PHP_URL_HOST);
+    if ($pre !== false || ($host !== 'wordpress.org' && !str_ends_with($host, '.wordpress.org'))) {
+        return $pre;
+    }
+    return ['headers' => [], 'body' => '', 'response' => ['code' => 503, 'message' => 'Service Unavailable'], 'cookies' => [], 'filename' => null];
+}, 10, 3);
+
 // Builtins the plugin calls unqualified that no real request can satisfy in a test (is_uploaded_file()); see the file.
 require dirname(__DIR__) . '/Support/namespace-overrides.php';
 

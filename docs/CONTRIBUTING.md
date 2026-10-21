@@ -36,6 +36,7 @@ suite; on macOS and Linux, point `WP_TESTS_DB_*` at a database (see [Integration
 | E2E tests (Chromium, Firefox, WebKit) | `npm run test:e2e` (`php tools/e2e.php`) |
 | Style linter (PSR-1/PSR-2) | `vendor/bin/phpcs` |
 | Security linter | `vendor/bin/phpcs --standard=.phpcs-security.xml` |
+| WordPress.org's review checks (escaping, nonces, sanitizing) | `vendor/bin/phpcs --standard=.phpcs-review.xml` |
 | WordPress.org's Plugin Check on the last build | `php tools/plugincheck.php` |
 | Regenerate the `.pot` | `php languages/make-pot.php` |
 | Check the `.pot` is up to date | `php languages/make-pot.php --check` |
@@ -63,6 +64,8 @@ The short version. Each point links to its full explanation.
    [Scanning untrusted PDF bytes](#scanning-untrusted-pdf-bytes)
 7. **Front-end and server condition logic must agree.** → [JS suite](#js-suite)
 8. **Comments explain what and why, never history.** → [Comments](#comments)
+9. **Inputs and output pass where they are read and printed, without `phpcs:ignore`.** WordPress.org's reviewers
+   honour no ignore comment and no custom helper. → [Request input and output](#request-input-and-output)
 
 ---
 
@@ -117,6 +120,21 @@ documents it.
 
 **Field classes don't call each other.** A helper that several fields need goes in `includes/Utils`.
 
+**"Hide label" hides it everywhere:** on the page, in the mail and in the PDF, for every field type and inside groups.
+Mapping keeps the label in the entry and marks it (`FieldRegistry::withHiddenLabel()`, `label_hidden`): mail and PDF
+then show the answer without it, while the seal still records it and the verification page still names the answer.
+Only the field's own entry (keyed by its id) is marked; entries a field adds under their own labels (a mandate's parts,
+a signature's "Signed on") keep them.
+
+**When something was signed or agreed to** is recorded one way (`Utils\SigningTime`): the date in the site's date
+format, then the time, both in UTC, from the server's clock when the form is sent. A site format that leaves out the
+year, the month or the day (a custom `F j`) gives way to `Y-m-d`, so the record always names its day; the format is
+judged by what it writes for a few test dates, not by its letters. A Signature field adds it as its own
+entry (`<id>_signed`, label `signed_label`), the direct debit mandate as its date of signing, Consent and GDPR inside
+their record. The PDF's metadata block shows its creation time the same way, and so does the layout editor's preview;
+the seal keeps that time as `Generator::METADATA_DATE_FORMAT`, which the verifier parses.
+A new HTML block starts with its label hidden.
+
 ### Direct Debit Mandate (`directdebit`)
 
 A composite field: account details, account holder, a static creditor info block and a signature canvas.
@@ -146,6 +164,33 @@ A composite field: account details, account holder, a static creditor info block
   checking, recording and the condition value follow.
 - **Mandate reference:** either the admin's own text (such as "Your membership number") or generated per mandate
   (`ref_mode`).
+
+### Signature (`signature`)
+
+A drawing pad, or the name typed instead (`BaseField::isTypedSignature()`), recorded with when it was signed
+(`<id>_signed`, see above). Like the direct debit mandate, it can carry a text above it and ask for its place:
+
+- **A box, as the mandate's.** Every signature sits in the mandate's box style on the page, and a given one is
+  recorded between a start and an end entry (`signature_part`), which the PDF and the mail draw as a titled box
+  (`BaseField::framePart()`). The box's title is `signature_title`, else the field's label (none when the label is
+  hidden); a label that heads the box is marked `label_hidden` on the signature's own entry, so it isn't named twice.
+- **Text above the signature** (`signature_title`, `signature_text`, `signature_note`): shown above the pad, each when
+  set. The start entry records the text and fine print, sealed and compared like any answer (`includeValueInSeal()`
+  takes the entry); without them it is empty.
+- **Place of signing** (`signing_place`, label `place_label`): once switched on, needed with a signature, as in the
+  mandate; recorded as `<id>_place`. It posts under `<id>-place`, beside the pad's own input, so a condition still
+  reads the signature alone; `extractValue()` returns `['sig' => …, 'place' => …]`. Its message has a slot of its own
+  (`fabricator-signature-place-error`): front.js writes a field's message into the field's first
+  `.fabricator-field-error`, which stays the pad's.
+- An optional signature left empty records `[No entry]` alone: no text, time or place around it.
+
+### Group (`group`)
+
+Its children render and record as top-level fields; the group itself records nothing, unless it is **shown as a box**
+(`boxed`, off by default). Then it takes the mandate's box style on the page, headed by its label (none when the label
+is hidden), and records a start and an end entry around its children (`group_part`, `BaseField::framePart()`), which
+the PDF and the mail draw as a titled box. A box inside it (a mandate, a signature) nests in it. A group whose children
+are all hidden records no box.
 
 ### CAPTCHA (`captcha`)
 
@@ -224,8 +269,9 @@ markers with the value stored in the seal.
 
 - **A cell holds exactly its sealed value, nothing else.** That is `pdfData()`'s `cell_html`. Labels, titles and boxes
   go outside it: in the label row, or, for a titled box around a group of fields (like the direct debit mandate), via
-  `PdfDescriptor::opensFrame()` / `closesFrame()`. `tests/Integration/PDF/SealRoundTripTest.php` verifies a real PDF
-  for each case.
+  `PdfDescriptor::opensFrame()` / `closesFrame()`. The entries that open and close such a box say so in
+  `BaseField::framePart()`, which the mail follows too: there the box is a bordered one-cell table.
+  `tests/Integration/PDF/SealRoundTripTest.php` verifies a real PDF for each case.
 - **Hiding is not redacting.** The seal carries every answer, including those the PDF Layout hides ("Signatures &
   Uploads", "Form fields"), each flagged `shown` true or false. The verifier pairs only the shown answers with the
   PDF's field markers, in order. A hidden field has no markers.
@@ -236,8 +282,9 @@ markers with the value stored in the seal.
     FreeSerif.ttf, then Quivira.otf, draw what the layout font lacks (`Generator::FALLBACK_FONTS`), but only below
     U+FFFF: beyond it, mPDF's text doesn't read back.
   - Ligatures and glyph composition are off for the whole document (`layout.php`): they read back as other characters.
-  - pdfparser unescapes string bytes twice, so a character ending in byte 0x5C before one from U+2000–U+29FF gets an
-    invisible U+034F between them (`separateEscapePairs()`).
+  - pdfparser unescapes string bytes twice, so a character ending in byte 0x5C before one from U+2000–U+20FF or
+    U+2800–U+29FF (starting with byte 0x20, 0x28 or 0x29: a space or a parenthesis) gets an invisible U+034F between
+    them (`separateEscapePairs()`).
   - The seal is written in lines of `SEAL_LINE_CHARS`, without ligatures.
   - The verifier compares a field's text without whitespace (`Verificationpage::comparableText()`): pdfparser loses
     a space at a line wrap and adds one at a font switch. With the intl extension, Unicode normalization also sorts
@@ -262,6 +309,17 @@ uploaded images. Neither may carry structure.
   U+2066–U+2069) can reverse Latin text into a marker, so FormProcessor removes them from answers before the marker
   check (`PdfUtils::stripBidiControls()`). Without them, in the left-to-right paragraphs the PDF uses, no reordering
   can assemble a marker. A right-to-left PDF layout would need this argument made again.
+- **Mail markers.** A notification can add automation markers: every answer its email lists stands between
+  `[FABRICATOR_FIELD_<id>]` and `[FABRICATOR_FIELD_END]` (`MailSender::FIELD_MARKER`), for a mail parser. While an
+  enabled notification of the form does, an answer containing `[FABRICATOR_FIELD_` is refused at its field
+  (`MailSender::marksAnswers()`, checked in FormProcessor). Upload file names can't carry one: `sanitize_file_name()`
+  removes the brackets. The check reads the answer as the mail shows it, entities decoded and case ignored:
+  `esc_html()` keeps references such as `&#91;`, which a mail program reads as `[`. The mail itself keeps `esc_html()`,
+  because WordPress stores a typed `<` as `&lt;`, which encoding twice would show literally.
+  An answer made of parts (an expanded Name or Address, a range slider, Post data) is marked part by part on its one
+  line: an empty `<id>_begin` pair, a pair per enabled part (`<id>_<sub-field key>`, empty when the part is), an empty
+  `<id>_end` pair, none nested. The parts ride on the entry (`BaseField::withMarkerParts()`, from the same
+  `shownParts()` that `map()` joins); the seal and the PDF read `value` only, and an unmarked mail is unchanged.
 - **Image data.** An image is the uploader's own file. Any count or scan of structure over raw bytes (`%%EOF`, seal
   blocks, `/Type`, `/BaseFont`, page objects, seal markers in streams), by the generator as by the verifier, skips
   image stream data (`PdfUtils::imageStreamSpans()`,
@@ -361,6 +419,41 @@ Instead:
   - Bonus: real syntax highlighting and linting instead of a PHP string.
 - **Only a short, genuinely one-line JS/CSS literal** may stay inline as a plain PHP string.
 - **Other multi-line text that must live in PHP** (such as `SecureDir::WEB_CONFIG`) is built from concatenated strings.
+
+### Request input and output
+
+WordPress.org's reviewers scan the plugin with checks that honour no `phpcs:ignore` and know no custom sanitizer or
+guard: a nonce check, a sanitizer or an escape counts only where the input is read or the output printed, in a form
+WPCS recognises. `.phpcs-review.xml` runs exactly that, and the release fails on any finding but the few named in
+`tools/build-config.php` (`reviewExceptions`, each with the reason the review gets).
+
+- **An AJAX handler** checks the capability (`AjaxGuard::capability()`), then the nonce with `check_ajax_referer()` or
+  `wp_verify_nonce()` written in the handler, before it reads any input. A nonce bound to an id reads the id inside the
+  check (`check_ajax_referer('…_' . absint(wp_unslash($_POST['form_id'])), …)`). Models and `HashSeal` read no request.
+- **An input** is read as `isset($_POST[k]) ? sanitize_*(wp_unslash($_POST[k])) : default`, the sanitizer directly
+  around `wp_unslash()`. A type guard goes in the condition (`is_string($_POST[k] ?? null)`), never between sanitizer
+  and input. An array is read with `map_deep(wp_unslash(…), 'sanitize_…')`; JSON that may hold markup is sent
+  base64-encoded and read as `base64_decode(sanitize_text_field(wp_unslash(…)))`, then sanitized value by value.
+- **A field never reads the request.** `FormProcessor::handle()` verifies the nonce, reads `$_POST` once through
+  `map_deep(wp_unslash(…), 'sanitize_textarea_field')` and the file entries part by part, and hands both to every
+  `extractValue($field_id, $post, $files)`, which sanitizes its own value for its type and never unslashes again.
+- **Output** is escaped as it is printed. Markup built elsewhere is printed through `wp_kses()` with an allowlist of its
+  own (`FormList::rowAllowedHtml()`, `fabricator_verifier_allowed_html()`), checked complete by `EscapedHtmlTest`. The
+  verifier's report is never printed: its stages append to a string, which the AJAX handler sanitizes once and sends as
+  JSON. A shortcode returns its markup; a template captured with `ob_start()` joins pre-built markup by concatenation.
+- **Markup built in a string is escaped where each value is concatenated**, never into a variable first
+  (`'placeholder="' . esc_attr($placeholder) . '"'`, not `$ph = esc_attr(…)` and `'placeholder="' . $ph . '"'`). A
+  shortcode returns it and nothing filters it again, so the concatenation is its print. Fixed pieces stand as literal
+  ternaries (`($required ? ' required' : '')`) or core's `checked()`/`selected()`. A piece of markup built the same way
+  is joined in by a name that says so: `$…_html`, `…Html()`, `render…()`, a closure under such a name or array key
+  (`$layout['field_html']()`) or a `…_HTML` constant where text goes; `$…_attrs`, `…Attrs()`/`…Attributes()` for a
+  tag's attributes, each escaped where it was built. Whatever is appended to such a variable (or to the verifier's
+  report) is checked as text in it, tag or no tag; a template's `ob_get_clean()` counts as markup, since everything it
+  printed passed the print rule. Rich text an admin set
+  (consent, mandate, signature texts) is printed through `wp_kses()` with `HtmlSanitizer::allowedTags()`. Markup is
+  concatenated, not built with `sprintf()`.
+- **Admin pages** read which page they are from `$plugin_page`, not `$_GET['page']`. The form editor reads which form
+  to open from its link (`?form_id=`, as WordPress's `post.php?post=`): a named review exception.
 
 ### Exception messages are constant strings
 
@@ -496,6 +589,9 @@ Configured in `tests/phpunit-integration.xml.dist`, tests in `tests/Integration/
   (`FABRICATOR_TESTS_WP_DEBUG=0`, read by `wp-tests-config.php`), runs with `#[RunInSeparateProcess]`, so no later test
   sees the constant. The bootstrap sets `WP_TESTS_SKIP_INSTALL=1` after installing, so the child process reuses the
   tables instead of dropping them.
+- **No request reaches wordpress.org.** The bootstrap answers every request to it with an empty 503, which WordPress
+  takes quietly: its update checks (on `admin_init`, from cron) otherwise warn when the network is down, and a warning
+  fails the run (`UpdateCheckTest`).
 - **Outgoing HTTP from mPDF.** mPDF fetches URLs with its own curl, which `pre_http_request` doesn't see.
   `Support\RequestRecorder` is a local HTTP server that logs what reaches it. It answers immediately; a silent listener
   would leave mPDF waiting forever. Given a document root, it serves the files there, as the site's own web server.
@@ -646,6 +742,35 @@ OWASP ASVS and GDPR are checklist/compliance frameworks with no linter. Evaluate
 
 **`.phpcs.xml`: style.** The day-to-day PSR-1/PSR-2 gate. Run `vendor/bin/phpcs`. **New code adds no warnings.**
 
+**`.phpcs-review.xml`: WordPress.org's review.** Escaping, nonce verification and input sanitizing over the shipped
+code, with `phpcs:ignore` switched off and no custom sanitizer: what the reviewers' scanner reports, which Plugin Check
+and the security ruleset don't (both honour the ignores). A release gate with zero findings, apart from the named
+`reviewExceptions` in `tools/build-config.php`; an exception that matches nothing any more fails it too. See
+[Request input and output](#request-input-and-output).
+
+The reviewers' own scanner asks more than WPCS's sniffs do, so the ruleset adds three of the plugin's own
+(`tools/phpcs/FormFabricatorReview`, dev-only):
+
+- **`LateEscape`.** Everything an `echo`, `print`, `<?=`, `printf()` or `wp_die()` prints is a literal or a direct
+  `esc_*()`/`wp_kses*()` call written at the print. A helper's return value, a variable escaped earlier, an `absint()`
+  or `(int)`, an interpolated string or an attribute fragment (`'<div' . $attrs . '>'`) fails. Where the literal before
+  a value shows its HTML context, the function must fit it: `esc_html()` in text, `esc_attr()` in an attribute,
+  `esc_url()` for a URL attribute's value, `esc_textarea()` in a textarea, `esc_js()` in an event handler. Inline CSS and
+  JS for `wp_add_inline_style()`/`wp_add_inline_script()` follow the same rule with `wp_strip_all_tags()`,
+  `sanitize_hex_color()`, `absint()`, `wp_json_encode()` and `esc_js()`. Markup built in a string (an assignment, a
+  return or an array value whose literals open a tag or set an attribute) follows it too: see
+  [Request input and output](#request-input-and-output).
+- **`RequestInput`.** A superglobal is read only as `sanitize_*(wp_unslash($_POST['k']))` (no `??` inside, nothing
+  between), its keys as `array_map('sanitize_…', array_keys(…))`, and `$_FILES` parts directly in their sanitizer;
+  beside that only in `isset()`/`empty()` and a type guard.
+- **`NonceShape`.** A nonce check no path can skip: `check_ajax_referer()` on its own, or an `if` at the top of the
+  handler that holds only the check (and `isset()`) and ends the request. A check stored in a variable, joined with
+  `&&`, or inside a branch fails; a loop may check a nonce per item once the handler's own check passed. Every
+  `wp_ajax_`/`admin_post_` handler registered with a callback in the same file checks one.
+
+`tests/Unit/Tools/ReviewSniffsTest.php` runs the three on the shapes they report and the ones they pass. A finding a
+sniff gets wrong is fixed in the sniff, with a case there; one the code can't avoid is a named `reviewExceptions` entry.
+
 **`.phpcs-security.xml`: security.** Covers the WordPress-Security and CWE-Top-25 rows of the table above, using
 `wp-coding-standards/wpcs`'s security sniffs (including `WordPress.PHP.IniSet`) and `pheromone/phpcs-security-audit`,
 both dev dependencies. Run `vendor/bin/phpcs --standard=.phpcs-security.xml`.
@@ -659,8 +784,8 @@ both dev dependencies. Run `vendor/bin/phpcs --standard=.phpcs-security.xml`.
   a new warning means new code to look at. The dev-only scripts (`tools/`, `languages/*.php`) switch off the
   warning-only sniffs their job trips (file and process access) with a `phpcs:disable` at their top; the error-level
   checks still cover them. phpcs can't exclude the security-audit sniffs by folder, only everywhere.
-- **A `phpcs:ignore` covers only the next line.** Plugin Check doesn't know this ruleset's `customSanitizingFunctions`,
-  so every line using `Cast::stringOrDefault()` still needs its own ignore.
+- **A `phpcs:ignore` covers only the next line.** No ignore is needed for escaping, nonces or sanitizing:
+  `.phpcs-review.xml` passes without any, and an ignore there would only hide a finding from Plugin Check.
 
 ### Plugin Check
 

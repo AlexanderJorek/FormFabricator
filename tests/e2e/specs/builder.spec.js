@@ -100,6 +100,40 @@ test('rows reordered by dragging keep their order after save and reload, in the 
     await expect(rows(page).locator('.fabricator-row-label')).toHaveText(['CHARLIE', 'ALPHA', 'BRAVO']);
 });
 
+test('a row dragged past the list\'s edge drops between the rows scrolled into view', async ({ page }) => {
+    // The drop line was placed from row positions taken when the drag started: once the list scrolled, a row that came
+    // into view was still where it had been, and the drop landed at the last gap of the first view.
+    const ids = Array.from({ length: 24 }, (_, i) => 'f' + String(i).padStart(2, '0'));
+    const id = newForm(ids.map((f) => TEXT(f)));
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await openEditor(page, id);
+
+    const start = await rows(page).nth(0).locator('.fabricator-row-handle').boundingBox();
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(start.x + start.width / 2, start.y + 60, { steps: 6 });
+    // As the browser scrolls the list while a drag rests at its edge.
+    await page.evaluate(() => {
+        const list = document.getElementById('fabricator-field-list');
+        list.scrollTop = list.scrollHeight;
+    });
+    const target = page.locator('#fabricator-field-list > .fabricator-field-row[data-idx="20"]');
+    const box = await target.boundingBox();
+    const x = box.x + box.width * 0.3;
+    const y = box.y + box.height * 0.2;
+    expect(y).toBeGreaterThan(0);
+    await page.mouse.move(x, y, { steps: 12 });
+    for (let i = 0; i < 6; i++) {
+        await page.mouse.move(x + (i % 2), y);
+        await page.waitForTimeout(60);
+    }
+    await page.mouse.up();
+
+    // "f00" lands right before "f20".
+    const labels = await rows(page).locator('.fabricator-row-label').allTextContents();
+    expect(labels.indexOf('F00'), labels.join(' ')).toBe(labels.indexOf('F20') - 1);
+});
+
 test('a row dropped on the right half of another pairs them side by side, on the page too', async ({ page }) => {
     const id = newForm([TEXT('left'), TEXT('right'), TEXT('below')]);
     await openEditor(page, id);

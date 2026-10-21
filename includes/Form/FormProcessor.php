@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -43,19 +43,6 @@ class FormProcessor
     // The submit button's place in the hidden set of resolveVisibility(); no field id can contain a NUL byte.
     private const SUBMIT_KEY = "\0submit";
 
-    // Set only by handle() once wp_verify_nonce() succeeds, so no field extracts input without a verified nonce.
-    private static bool $nonceVerified = false;
-
-    /**
-     * Whether handle() has verified the current request's nonce (BaseField::assertRequestNonceVerified()).
-     *
-     * @return bool
-     */
-    public static function nonceVerified(): bool
-    {
-        return self::$nonceVerified;
-    }
-
     /**
      * AJAX handler for the fabricator_forms_submit action.
      *
@@ -66,17 +53,40 @@ class FormProcessor
     public static function handle(): void
     {
         /* ---- Nonce ---- */
-        $nonce   = sanitize_key(wp_unslash($_POST['fabricator_nonce'] ?? ''));
-        $form_id = absint(wp_unslash($_POST['form_id'] ?? 0));
-
-        if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_submit_' . $form_id)) {
+        // Bound to the form it was issued for (Plugin::ajaxGetToken()); nothing else is read before it is verified.
+        if (!isset($_POST['fabricator_nonce'], $_POST['form_id'])
+            || !wp_verify_nonce(sanitize_key(wp_unslash($_POST['fabricator_nonce'])), 'fabricator_forms_submit_' . absint(wp_unslash($_POST['form_id'])))
+        ) {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
         }
-        self::$nonceVerified = true;
+        $form_id = absint(wp_unslash($_POST['form_id']));
+        if (!$form_id) {
+            wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
+        }
+
+        /* ---- The answers, read once ---- */
+        // Fields read these, never the request. The textarea sanitizer keeps line breaks; each field narrows further.
+        $post  = map_deep(wp_unslash($_POST), 'sanitize_textarea_field');
+        // Each part sanitized for what it is ($_FILES is never slashed). Field ids are saved through sanitize_text_field(),
+        // so a key it would change matches no field.
+        $files = [];
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a function name), never input.
+        foreach (array_map('sanitize_text_field', array_keys($_FILES)) as $input_name) {
+            if (!isset($_FILES[$input_name]['name'], $_FILES[$input_name]['tmp_name'])) {
+                continue;
+            }
+            $files[(string) $input_name] = [
+                'name'     => map_deep($_FILES[$input_name]['name'], 'sanitize_file_name'),
+                'type'     => isset($_FILES[$input_name]['type']) ? map_deep($_FILES[$input_name]['type'], 'sanitize_mime_type') : '',
+                'tmp_name' => map_deep($_FILES[$input_name]['tmp_name'], 'sanitize_text_field'),
+                'error'    => isset($_FILES[$input_name]['error']) ? map_deep($_FILES[$input_name]['error'], 'absint') : UPLOAD_ERR_NO_FILE,
+                'size'     => isset($_FILES[$input_name]['size']) ? map_deep($_FILES[$input_name]['size'], 'absint') : 0,
+            ];
+        }
 
         /* ---- Replay-protection token ---- */
         // Not the nonce, which visitors share. Issued and signed per submit by Plugin::ajaxGetToken().
-        $submission_token = sanitize_text_field(wp_unslash($_POST['fabricator_submission_token'] ?? ''));
+        $submission_token = is_string($post['fabricator_submission_token'] ?? null) ? $post['fabricator_submission_token'] : '';
         if ($submission_token === '' || !\FabricatorForms\Utils\SingleUseToken::verifyIssued($submission_token, $form_id)) {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
         }
@@ -100,7 +110,7 @@ class FormProcessor
 
         /* ---- Honeypot check (before any expensive work) ---- */
         // Logged because an autofilling browser/password manager can silently drop a real visitor's submission here.
-        if (!empty($_POST['fabricator_hp_field'])) {
+        if (!empty($post['fabricator_hp_field'])) {
             \FabricatorForms\fabricator_log(
                 'FabricatorForms FormProcessor: honeypot triggered for form ' . $form_id
                 . ' — submission discarded. If a real visitor reports a lost submission, an'
@@ -164,14 +174,14 @@ class FormProcessor
                     if (!$ch || $ch->skipValidation()) {
                         continue;
                     }
-                    $flat_copy[$child_id] = $ch->extractValue($child_id);
+                    $flat_copy[$child_id] = $ch->extractValue($child_id, $post, $files);
                     $flat[$child_id]      = $ch->conditionValue($flat_copy[$child_id], $child_cfg);
                 }
                 $raw[$field_id] = $flat_copy;
                 continue;
             }
 
-            $raw[$field_id]  = $handler->extractValue($field_id);
+            $raw[$field_id]  = $handler->extractValue($field_id, $post, $files);
             $flat[$field_id] = $handler->conditionValue($raw[$field_id], $field_cfg);
         }
 
@@ -196,6 +206,8 @@ class FormProcessor
 
         /* ---- Pass 2: validate visible fields only ---- */
         $errors = [];
+        // An answer may not forge the automation markers a notification of this form writes around each answer.
+        $mail_markers = MailSender::marksAnswers($form);
         // Checks that reach outside this request (the single-use CAPTCHA token) run only once every other field is valid.
         $deferred = [];
 
@@ -241,7 +253,7 @@ class FormProcessor
                         // Not escaped: front.js shows it via .textContent.
                         // translators: %s: field label.
                         $errors[$child_id] = sprintf(__('%s is a required field.', 'formfabricator'), $child_cfg['label'] ?? $child_id);
-                    } elseif (($reserved = self::reservedMarkerError($val)) !== null) {
+                    } elseif (($reserved = self::reservedMarkerError($val, $mail_markers)) !== null) {
                         $errors[$child_id] = $reserved;
                     } else {
                         $child_cfg['field_id'] = $child_id;
@@ -260,7 +272,7 @@ class FormProcessor
 
             $value             = $raw[$field_id] ?? '';
             $field_cfg['field_id'] = $field_id;
-            if (($reserved = self::reservedMarkerError($value)) !== null) {
+            if (($reserved = self::reservedMarkerError($value, $mail_markers)) !== null) {
                 $errors[$field_id] = $reserved;
                 continue;
             }
@@ -295,7 +307,7 @@ class FormProcessor
         unset($hidden_set[self::SUBMIT_KEY]);
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $hidden_ids   = array_map('strval', array_keys($hidden_set));
-        $uploads      = self::uploadEntries($form->fields, $hidden_ids);
+        $uploads      = self::uploadEntries($form->fields, $hidden_ids, $files);
         // Text counts too: mPDF lays out every answer (see MemoryBudget::TEXT_FACTOR); a signature's data URI is image data.
         [$text_bytes, $image_bytes] = self::answerPayloadBytes(array_diff_key($raw, array_flip($hidden_ids)));
         $attaches_pdf = MailSender::attachesPdf($form_id, $form->notifications);
@@ -382,7 +394,7 @@ class FormProcessor
 
         /* ---- Map to human-readable for PDF/email ---- */
         // $hidden_ids passed in, not unset after, so a hidden upload is never read, unvalidated.
-        $mapped     = FieldRegistry::mapSubmission($form->fields, $raw, $_FILES, $hidden_ids);
+        $mapped     = FieldRegistry::mapSubmission($form->fields, $raw, $files, $hidden_ids);
 
         /* ---- Claim the replay-protection token ---- */
         // Right before the side effects, so an earlier failure can retry.
@@ -411,13 +423,14 @@ class FormProcessor
     }
 
     /**
-     * The $_FILES entries of the upload fields this submission processes: declared by the form and not hidden.
+     * The file entries of the upload fields this submission processes: declared by the form and not hidden.
      *
      * @param array    $fields     The form's field configs.
      * @param string[] $hidden_ids Ids hidden by their conditions, from collectHiddenIds() (a hidden group's children included).
-     * @return array<string, array> $_FILES entries by field id.
+     * @param array    $files      The request's file entries, as handle() read them.
+     * @return array<string, array> File entries by field id.
      */
-    private static function uploadEntries(array $fields, array $hidden_ids): array
+    private static function uploadEntries(array $fields, array $hidden_ids, array $files): array
     {
         $configs = [];
         foreach ($fields as $cfg) {
@@ -441,10 +454,8 @@ class FormProcessor
                 continue;
             }
             // Flat entries only, as UploadField reads them: a nested one is never processed, so it claims no budget.
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- reached only after wp_verify_nonce() succeeded at the top of handle(); only PHP-generated size and tmp-path metadata is read from these entries, and isFlatFilesEntry() only inspects their shape.
-            if (isset($_FILES[$id]) && \FabricatorForms\Utils\Cast::isFlatFilesEntry($_FILES[$id])) {
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- see above; $_FILES is never slashed, and nothing here is output or stored.
-                $entries[$id] = $_FILES[$id];
+            if (isset($files[$id]) && \FabricatorForms\Utils\Cast::isFlatFilesEntry($files[$id])) {
+                $entries[$id] = $files[$id];
             }
         }
         return $entries;
@@ -681,7 +692,7 @@ class FormProcessor
             'wp_php_error_message',
             static function ($message, $error) use ($claim_key) {
                 $answer = self::memoryExhaustionAnswer($error, $claim_key);
-                return $answer ?? $message;
+                return $answer !== null ? (string) wp_json_encode(['success' => false, 'data' => $answer]) : $message;
             },
             10,
             2
@@ -704,25 +715,20 @@ class FormProcessor
                 if ($answer === null) {
                     return;
                 }
-                if (!headers_sent()) {
-                    status_header(413);
-                    header('Content-Type: application/json; charset=' . get_option('blog_charset'));
-                }
-                // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON from wp_json_encode(), read by front.js as data.
-                echo $answer;
+                wp_send_json_error($answer, 413);
             }
         );
     }
 
     /**
-     * The JSON answer for a memory-exhausted submission, or null for any other error. Releases the claim and raises the
-     * limit a little for the allocations still needed.
+     * The error data to answer a memory-exhausted submission with, or null for any other error. Releases the claim and
+     * raises the limit a little for the allocations still needed.
      *
      * @param mixed  $error     error_get_last() shape.
      * @param string $claim_key Replay-protection claim of this submission.
-     * @return string|null
+     * @return array{message: string}|null
      */
-    private static function memoryExhaustionAnswer(mixed $error, string $claim_key): ?string
+    private static function memoryExhaustionAnswer(mixed $error, string $claim_key): ?array
     {
         if (!self::isMemoryExhaustion($error)) {
             return null;
@@ -730,7 +736,7 @@ class FormProcessor
         \FabricatorForms\Utils\MemoryBudget::raiseTo(\FabricatorForms\Utils\MemoryBudget::phpMemoryLimitBytes() + 32 * 1024 * 1024);
         \FabricatorForms\Utils\SingleUseToken::release($claim_key);
         \FabricatorForms\fabricator_log('FabricatorForms FormProcessor: ran out of memory while handling uploads: ' . (string) ($error['message'] ?? ''));
-        return (string) wp_json_encode(['success' => false, 'data' => ['message' => self::uploadsTooLargeMessage()]]);
+        return ['message' => self::uploadsTooLargeMessage()];
     }
 
     /**
@@ -767,12 +773,14 @@ class FormProcessor
 
     /**
      * The error for an answer, sub-values included, that holds text the PDF verifier reads as structure
-     * (PdfUtils::reservedMarker()), or null.
+     * (PdfUtils::reservedMarker()) or, when the mail marks answers, a mail parser would (MailSender::FIELD_MARKER),
+     * or null.
      *
-     * @param mixed $value What the field's extractValue() returned.
+     * @param mixed $value        What the field's extractValue() returned.
+     * @param bool  $mail_markers Whether a notification of the form adds automation markers.
      * @return string|null
      */
-    private static function reservedMarkerError(mixed $value): ?string
+    private static function reservedMarkerError(mixed $value, bool $mail_markers): ?string
     {
         $strings = is_string($value) ? [$value] : [];
         if (is_array($value)) {
@@ -796,6 +804,18 @@ class FormProcessor
                     $marker
                 );
             }
+            // As the mail shows it: esc_html() keeps references such as "&#91;", which read as "[". Case-insensitive,
+            // as mail parsers often match.
+            $shown  = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $forged = stripos($text, MailSender::FIELD_MARKER) !== false || stripos($shown, MailSender::FIELD_MARKER) !== false;
+            if ($mail_markers && $forged) {
+                // Not escaped: front.js shows it via .textContent.
+                return sprintf(
+                    /* translators: %s: the character sequence that is not allowed, "[FABRICATOR_FIELD_". */
+                    __('This answer contains "%s", which the notification email uses to mark answers. Please remove it.', 'formfabricator'),
+                    MailSender::FIELD_MARKER
+                );
+            }
         }
         return null;
     }
@@ -815,7 +835,6 @@ class FormProcessor
             \FabricatorForms\fabricator_log(
                 'FabricatorForms rateLimitRetryAfter: fail-closed — ClientIp::resolve() '
                 . 'returned empty for form ' . $form_id . '. REMOTE_ADDR='
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- diagnostic log only (WP_DEBUG-gated), never echoed/stored.
                 . (isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '(unset)')
             );
             return 5 * MINUTE_IN_SECONDS;

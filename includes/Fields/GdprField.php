@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -130,18 +130,16 @@ class GdprField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         // GDPR acceptance is always required by law — 'required' config is ignored (see hasRequired())
-        $req     = ' required aria-required="true"';
-        $checked = !empty($value) ? ' checked' : '';
         // trim()+?: not ??: these keys are always set, so ?? never fires and the WP privacy-policy fallback would be unreachable.
         $configured_url = trim((string) ($config['privacy_policy_url'] ?? ''));
-        $policy_url     = esc_url($configured_url !== '' ? $configured_url : (string) get_privacy_policy_url());
+        $policy_url     = $configured_url !== '' ? $configured_url : (string) get_privacy_policy_url();
         $configured_txt = trim((string) ($config['privacy_policy_text'] ?? ''));
-        $policy_text    = esc_html($configured_txt !== '' ? $configured_txt : __('Privacy policy', 'formfabricator'));
+        $policy_text    = $configured_txt !== '' ? $configured_txt : __('Privacy policy', 'formfabricator');
 
         // <a> built here in PHP, not inside the translatable string — a supplied .mo could otherwise rewrite the anchor's attributes.
-        if ($policy_url !== '') {
+        if (esc_url($policy_url) !== '') {
             // This is a GDPR Art. 13 acknowledgment, not freely-given consent — use ConsentField for that.
-            $link = '<a href="' . $policy_url . '" target="_blank" rel="noopener">' . $policy_text . '</a>';
+            $link_html = '<a href="' . esc_url($policy_url) . '" target="_blank" rel="noopener">' . esc_html($policy_text) . '</a>';
         } else {
             // No URL configured — an href="" link would silently be non-functional; fall back to plain text.
             // Logged once a day, not on every page view that renders the form.
@@ -152,19 +150,19 @@ class GdprField extends BaseField
                     . ' WP privacy policy page is set — rendering acknowledgment text without a link.'
                 );
             }
-            $link = $policy_text;
+            $link_html = esc_html($policy_text);
         }
         // The translation is escaped before the link goes in: it comes from a .mo, which can be loaded from WP_LANG_DIR.
-        $text = sprintf(
+        $text_html = sprintf(
             // translators: %s: the privacy policy, linked when a URL is configured.
             esc_html__('I have read and acknowledge the %s.', 'formfabricator'),
-            $link
+            $link_html
         );
 
         $inner = '<label class="fabricator-consent-label fabricator-gdpr-label">'
             . '<input type="checkbox" id="' . esc_attr($field_id)
-            . '" name="' . esc_attr($field_id) . '" value="1"' . $checked . $req . '>'
-            . '<span class="fabricator-consent-text">' . $text . '</span>'
+            . '" name="' . esc_attr($field_id) . '" value="1"' . (!empty($value) ? ' checked' : '') . ' required aria-required="true">'
+            . '<span class="fabricator-consent-text">' . $text_html . '</span>'
             . '</label>';
 
         // Required class passed as an extra class, not via 'required' config: front.js enforces it without adding a label asterisk.
@@ -220,8 +218,8 @@ class GdprField extends BaseField
             __('Acknowledged "%1$s" (%2$s) on %3$s', 'formfabricator'),
             $policy_text,
             $policy_url,
-            // See ConsentField::map() — explicit UTC, not an unmarked local timestamp.
-            gmdate('Y-m-d H:i:s') . ' UTC'
+            // The moment, unambiguous, as every signature and agreement records it.
+            \FabricatorForms\Utils\SigningTime::format()
         );
     }
 

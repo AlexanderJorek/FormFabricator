@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -154,40 +154,38 @@ class AddressField extends BaseField
             return $this->wrap($field_id, $config, '<input' . $attrs . '>');
         }
 
-        $val   = is_array($value) ? $value : [];
-        $inner = '<div class="fabricator-address-group">';
+        $val        = is_array($value) ? $value : [];
+        $inner_html = '<div class="fabricator-address-group">';
 
         foreach (self::SUBFIELDS as $sf) {
             $k = $sf['key'];
             if (empty($config[$k . '_enabled'])) {
                 continue;
             }
-            $label = esc_html($config[$k . '_label'] ?? self::subfieldLabel($sf['label']));
-            $ph    = esc_attr($config[$k . '_placeholder'] ?? '');
-            $req   = !empty($config[$k . '_required']) ? ' required aria-required="true"' : '';
-            $ac    = esc_attr($this->autocompleteToken($k));
+            $label    = (string) ($config[$k . '_label'] ?? self::subfieldLabel($sf['label']));
+            $required = !empty($config[$k . '_required']);
 
-            $req_star = !empty($config[$k . '_required']) ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
             // Every sub-input carries its own id and its label a matching for="", or assistive technology announces
             // six unlabelled text boxes. FormRenderer::uniqueIds() rewrites both together on a repeated form.
-            $sub_id = esc_attr($field_id . '-' . $k);
-            $inner .= '<div class="fabricator-address-sub">';
-            $inner .= '<label class="fabricator-sub-label" for="' . $sub_id . '">' . $label . $req_star . '</label>';
-            $inner .= '<input type="text" id="' . $sub_id . '"'
+            $sub_id      = $field_id . '-' . $k;
+            $inner_html .= '<div class="fabricator-address-sub">';
+            $inner_html .= '<label class="fabricator-sub-label" for="' . esc_attr($sub_id) . '">' . esc_html($label)
+                . ($required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '') . '</label>';
+            $inner_html .= '<input type="text" id="' . esc_attr($sub_id) . '"'
                 . ' name="' . esc_attr($field_id) . '[' . esc_attr($k) . ']"'
-                . ' class="fabricator-input" placeholder="' . $ph . '"'
+                . ' class="fabricator-input" placeholder="' . esc_attr((string) ($config[$k . '_placeholder'] ?? '')) . '"'
                 . ' value="' . esc_attr((string)($val[$k] ?? '')) . '"'
-                . ' autocomplete="' . $ac . '"' . $req . '>';
-            $inner .= '<div class="fabricator-field-error fabricator-sub-error"></div>';
-            $inner .= '</div>';
+                . ' autocomplete="' . esc_attr($this->autocompleteToken($k)) . '"' . ($required ? ' required aria-required="true"' : '') . '>';
+            $inner_html .= '<div class="fabricator-field-error fabricator-sub-error"></div>';
+            $inner_html .= '</div>';
         }
 
-        $inner .= '</div>';
+        $inner_html .= '</div>';
         /* In expanded mode each sub-input carries its own required — the wrapper
          * should not show a global * or fabricator-required-field class. */
         $wrapper_config             = $config;
         $wrapper_config['required'] = false;
-        return $this->wrap($field_id, $wrapper_config, $inner);
+        return $this->wrap($field_id, $wrapper_config, $inner_html);
     }
 
     /**
@@ -213,12 +211,12 @@ class AddressField extends BaseField
      * Returns the sanitized composite subfield array submitted as $field_id[key].
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
-        $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : '';
+        $raw = isset($post[$field_id]) ? map_deep(self::capRawArray($post[$field_id]), 'sanitize_text_field') : '';
         if (is_array($raw)) {
             // Flatten nested leaves: a direct POST can send name[first][0]=x, which
             // map_deep() preserves and map() would stringify to the literal "Array".
@@ -297,23 +295,75 @@ class AddressField extends BaseField
             $scalar = trim((string) ($value ?? ''));
             return $scalar !== '' ? $scalar : __('[No entry]', 'formfabricator');
         }
+        // Lines as an address is written: street and supplement, postcode and city, state, country.
         $lines = [];
+        $line  = [];
+        foreach (self::shownParts($value, $config) as $i => $part) {
+            if ($i > 0 && $part['sep'] === ', ' && $line) {
+                $lines[] = implode(' ', $line);
+                $line    = [];
+            }
+            if ($part['value'] !== '') {
+                $line[] = $part['value'];
+            }
+        }
+        if ($line) {
+            $lines[] = implode(' ', $line);
+        }
+        return $lines ? implode(', ', $lines) : __('[No entry]', 'formfabricator');
+    }
+
+    /**
+     * The entry map() makes, with each sub-value as a part for a mail with automation markers
+     * (BaseField::withMarkerParts()).
+     *
+     * @param string $field_id Field identifier.
+     * @param string $label    Field label.
+     * @param mixed  $value    Submitted value.
+     * @param array  $config   Field configuration.
+     * @param array  $context  Submission context.
+     * @return array<string, array>
+     */
+    public function mapNormalized(
+        string $field_id,
+        string $label,
+        mixed $value,
+        array $config,
+        array $context
+    ): array {
+        return self::withMarkerParts(
+            parent::mapNormalized($field_id, $label, $value, $config, $context),
+            $field_id,
+            self::shownParts($value, $config)
+        );
+    }
+
+    /**
+     * The enabled sub-fields in map()'s order, each with its separator (", " where a new address line starts). What
+     * map() joins and a marked mail marks one by one; none for a single input.
+     *
+     * @param mixed $value  Submitted value.
+     * @param array $config Field configuration.
+     * @return array<int, array{key: string, value: string, sep: string}>
+     */
+    private static function shownParts(mixed $value, array $config): array
+    {
+        if (empty($config['expanded']) || !is_array($value)) {
+            return [];
+        }
+        $parts = [];
         foreach ([['street', 'street2'], ['zip', 'city'], ['state'], ['country']] as $group) {
-            $parts = [];
+            $first = true;
             foreach ($group as $k) {
                 if (empty($config[$k . '_enabled'])) {
                     continue;
                 }
-                $v = trim((string)($value[$k] ?? ''));
-                if ($v !== '') {
-                    $parts[] = $v;
-                }
-            }
-            if ($parts) {
-                $lines[] = implode(' ', $parts);
+                $v       = is_scalar($value[$k] ?? null) ? trim((string) $value[$k]) : '';
+                $parts[] = ['key' => $k, 'value' => $v, 'sep' => $first ? ', ' : ' '];
+                $first   = false;
             }
         }
-        return $lines ? implode(', ', $lines) : __('[No entry]', 'formfabricator');
+        return $parts;
     }
 
     /**

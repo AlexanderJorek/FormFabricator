@@ -404,7 +404,7 @@
             var fd = new FormData();
             fd.append('action', 'fabricator_forms_pdf_preview');
             fd.append('nonce',  DATA.nonce);
-            fd.append('settings', JSON.stringify(collectSettings()));
+            fd.append('settings', b64JsonEncode(collectSettings()));
             fetch(DATA.ajaxUrl, {method:'POST', body:fd})
                 .then(function(r){
                     return r.text().then(function(text){
@@ -1232,6 +1232,10 @@
         if (btn) { btn.disabled = true; fabIconThenText(btn, '<span class="fabricator-spinner"></span> ', I18N.saving); }
         var fd = new FormData(form);
         fd.set('action', 'fabricator_save_pdf_layout');
+        var hbInput = document.getElementById('fabricator-header-layout-input');
+        var hbValue = { rows: 8, elements: [] };
+        if (hbInput && hbInput.value) { try { hbValue = JSON.parse(hbInput.value); } catch (e) {} }
+        fd.set('header_layout', b64JsonEncode(hbValue));
         requestAnimationFrame(function(){ requestAnimationFrame(function(){
         fetch(DATA.ajaxUrl, {method:'POST', body:fd})
             .then(function(r){
@@ -1279,3 +1283,9 @@
 }());
 
 }());
+
+/* JSON sent base64-encoded, so the server's sanitize_text_field() reads an opaque text and no markup in the header's
+   texts is stripped. btoa() takes Latin1 only; encodeURIComponent+unescape turns UTF-8 into such bytes first. */
+function b64JsonEncode(value) {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(value))));
+}

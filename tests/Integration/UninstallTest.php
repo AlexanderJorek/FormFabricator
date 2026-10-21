@@ -80,7 +80,7 @@ final class UninstallTest extends TestCase
     private function plantData(): void
     {
         global $wpdb;
-        $form = FormModel::save(['title' => 'To be removed', 'fields' => [], 'notifications' => [], 'settings' => []], 0, true);
+        $form = FormModel::save(['title' => 'To be removed', 'fields' => [], 'notifications' => [], 'settings' => []], 0);
         self::assertIsInt($form);
         foreach (self::OPTIONS as $option) {
             update_option($option, 'x');

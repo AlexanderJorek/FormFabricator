@@ -54,12 +54,13 @@ test('the "Footer" switch takes the footer and its page numbers out of the previ
     assert.ok(papers(page)[0].textContent.includes('ACME Ltd'));
 });
 
-test('the preview dates the sample as the PDF does: the site\'s time in the metadata, its date format in the footer', async () => {
+test('the preview dates the sample as the PDF does: the signing-time format in the metadata, the site\'s date format in the footer', async () => {
     const page = await loadLayout();
     type(page, page.document.getElementById('footer_text'), 'Printed {date}');
     const text = papers(page).map((p) => p.textContent).join('\n');
 
-    assert.ok(text.includes(I18N.created + ' ' + DATA.createdDate), 'the metadata block names the site\'s time');
+    assert.equal(DATA.createdDate, '7 October 2026, 07:30:00 UTC', 'the date as the site writes it, then the UTC time (Utils\\SigningTime)');
+    assert.ok(text.includes(I18N.created + ' ' + DATA.createdDate), 'the metadata block names it');
     assert.ok(text.includes('Printed ' + DATA.footerDate), 'the footer\'s {date} is the site\'s date');
     // The PDF preview is made for no form, so it names no form ID (layout.php), and the live preview matches it.
     assert.ok(text.includes(I18N.formLabel + ' ' + I18N.sampleFormName));

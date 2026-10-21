@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -37,7 +37,7 @@ abstract class BaseField
     protected static function readFieldAsset(string $relativePath): string
     {
         if (!isset(self::$assetCache[$relativePath])) {
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site, never request input.
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site, never request input.
             $path = \FABRICATOR_FORMS_PATH . $relativePath;
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: the plugin's own asset file.
             $contents = is_readable($path) ? file_get_contents($path) : false;
@@ -83,7 +83,7 @@ abstract class BaseField
     // Shared cap so the limit can't drift between fields' implementations.
     protected static function capOtherText(mixed $raw): string
     {
-        return mb_substr(sanitize_text_field(wp_unslash($raw)), 0, self::OTHER_TEXT_HARD_CAP);
+        return mb_substr(is_string($raw) ? sanitize_text_field($raw) : '', 0, self::OTHER_TEXT_HARD_CAP);
     }
 
     // Client-side hint attribute for the configurable "Other" text limit;
@@ -95,7 +95,7 @@ abstract class BaseField
             return '';
         }
         $type = $config['other_max_type'] ?? 'chars';
-        return $type === 'words' ? ' data-word-limit="' . $max . '"' : ' maxlength="' . $max . '"';
+        return $type === 'words' ? ' data-word-limit="' . esc_attr($max) . '"' : ' maxlength="' . esc_attr($max) . '"';
     }
 
     // Validates the "Other" value against the configured other_max_type/
@@ -190,7 +190,7 @@ abstract class BaseField
      * @param string $draw_label Its text while the name is typed.
      * @return string
      */
-    protected static function signatureModeButton(string $type_label, string $draw_label): string
+    protected static function signatureModeButtonHtml(string $type_label, string $draw_label): string
     {
         return '<button type="button" class="fabricator-signature-mode" aria-pressed="false"'
             . ' data-type-label="' . esc_attr($type_label) . '" data-draw-label="' . esc_attr($draw_label) . '">'
@@ -205,7 +205,7 @@ abstract class BaseField
      * @param string $input_label Its label.
      * @return string
      */
-    protected static function typedSignatureInput(string $input_id, string $input_label): string
+    protected static function typedSignatureInputHtml(string $input_id, string $input_label): string
     {
         return '<div class="fabricator-signature-typed-row" hidden>'
             . '<label class="fabricator-label" for="' . esc_attr($input_id) . '">' . esc_html($input_label) . '</label>'
@@ -375,7 +375,7 @@ abstract class BaseField
      * @param array  $config   Field configuration.
      * @param string $field_id Resolved field identifier.
      */
-    public function openTag(array $config, string $field_id): string
+    public function openTagHtml(array $config, string $field_id): string
     {
         return '';
     }
@@ -386,7 +386,7 @@ abstract class BaseField
      *
      * @return string
      */
-    public function closeTag(): string
+    public function closeTagHtml(): string
     {
         return '';
     }
@@ -444,9 +444,21 @@ abstract class BaseField
         return false;
     }
 
-    // Whether this field's value is included in the HMAC integrity seal.
-    // Override to false for values that are a data URI or binary blob (e.g. SignatureField).
-    public function includeValueInSeal(): bool
+    /**
+     * Whether an entry opens ('open') or closes ('close') a titled box around the entries between, or neither ('').
+     * The opening entry's label is the box's title, its value the text under it; PDF and mail both draw it.
+     *
+     * @param array $entry The entry (mapNormalized()).
+     * @return string
+     */
+    public function framePart(array $entry): string
+    {
+        return '';
+    }
+
+    // Whether an entry's value is included in the HMAC integrity seal, given the entry (FieldRegistry::mapSubmission()).
+    // Override to false for values that are a data URI or binary blob (e.g. SignatureField's image).
+    public function includeValueInSeal(array $entry = []): bool
     {
         return true;
     }
@@ -477,21 +489,18 @@ abstract class BaseField
      */
     abstract public function render(array $config, string $field_id, mixed $value = null): string;
 
-    // Guards against extractValue() reading $_POST/$_FILES without a verified nonce; throws loudly
-    // instead of silently accepting unauthenticated input if a future override forgets to check.
-    final protected static function assertRequestNonceVerified(): void
+    /**
+     * The submitted value of this field, from the answers FormProcessor read once the request's nonce was verified.
+     * Override for a different value shape; a field never reads the request itself.
+     *
+     * @param string $field_id The field's id, its input's name.
+     * @param array  $post     The posted answers, unslashed and run through sanitize_textarea_field().
+     * @param array  $files    The uploaded files' entries, each part sanitized, shaped as $_FILES.
+     * @return mixed
+     */
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        if (!\FabricatorForms\Form\FormProcessor::nonceVerified()) {
-            throw new \RuntimeException('Field value extraction attempted without a verified request nonce.');
-        }
-    }
-
-    // Extracts the submitted value from $_POST/$_FILES; override for a different value shape.
-    public function extractValue(string $field_id): mixed
-    {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified(), which reads FormProcessor's own record of its wp_verify_nonce() result for this request.
-        return isset($_POST[$field_id]) ? sanitize_text_field(wp_unslash($_POST[$field_id])) : '';
+        return is_string($post[$field_id] ?? null) ? sanitize_text_field($post[$field_id]) : '';
     }
 
     /**
@@ -739,6 +748,29 @@ abstract class BaseField
     }
 
     /**
+     * $entries with the field's sub-values as `parts` on its own entry, which a marked mail marks one by one. PDF and
+     * seal read `value` only. None when every part is empty: the answer is then "[No entry]".
+     *
+     * @param array                                                 $entries  What mapNormalized() returns.
+     * @param string                                                $field_id The field's id, the key of its entry.
+     * @param array<int, array{key: string, value: string, sep: string}> $parts Key, shown value, separator before it.
+     * @return array
+     */
+    protected static function withMarkerParts(array $entries, string $field_id, array $parts): array
+    {
+        if (!isset($entries[$field_id])) {
+            return $entries;
+        }
+        foreach ($parts as $part) {
+            if ($part['value'] !== '') {
+                $entries[$field_id]['parts'] = array_values($parts);
+                break;
+            }
+        }
+        return $entries;
+    }
+
+    /**
      * Materializes a base64 data-URI signature into a file descriptor array.
      *
      * @param mixed  $value    Raw signature value (data: URI).
@@ -807,15 +839,14 @@ abstract class BaseField
      * @param string $inner       Inner HTML content.
      * @param string $extra_class Additional CSS class(es) for the wrapper.
      */
-    protected function wrap(string $field_id, array $config, string $inner, string $extra_class = ''): string
+    protected function wrap(string $field_id, array $config, string $inner_html, string $extra_class = ''): string
     {
-        $label       = esc_html($config['label'] ?? '');
+        $label       = (string) ($config['label'] ?? '');
         $required    = !empty($config['required']);
         $hide_label  = !empty($config['hide_label']);
-        $description = esc_html($config['description'] ?? '');
-        $req_attr    = $required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
-        $req_class   = $required ? ' fabricator-required-field' : '';
-        $desc_html   = $description !== '' ? '<p class="fabricator-field-description">' . $description . '</p>' : '';
+        $description = (string) ($config['description'] ?? '');
+        $req_html    = $required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
+        $desc_html   = $description !== '' ? '<p class="fabricator-field-description">' . esc_html($description) . '</p>' : '';
 
         // A set of controls has no element carrying $field_id for <label for>; it is named via aria-labelledby instead.
         $owns_control = $this->labelsOwnControl($config);
@@ -823,8 +854,8 @@ abstract class BaseField
         $group_attr   = '';
         if (!$hide_label && $label !== '') {
             $label_html = $owns_control
-                ? '<label class="fabricator-label" for="' . esc_attr($field_id) . '">' . $label . $req_attr . '</label>'
-                : '<div class="fabricator-label" id="' . esc_attr($label_id) . '">' . $label . $req_attr . '</div>';
+                ? '<label class="fabricator-label" for="' . esc_attr($field_id) . '">' . esc_html($label) . $req_html . '</label>'
+                : '<div class="fabricator-label" id="' . esc_attr($label_id) . '">' . esc_html($label) . $req_html . '</div>';
             if (!$owns_control) {
                 $group_attr = ' role="group" aria-labelledby="' . esc_attr($label_id) . '"';
             }
@@ -835,17 +866,17 @@ abstract class BaseField
         $client_rules  = $this->getClientValidation();
         $validate_attr = !empty($client_rules) ? ' data-validate="' . esc_attr(\FabricatorForms\Utils\Cast::jsonForAttribute(array_column($client_rules, 'rule'))) . '"' : '';
 
-        // Builder-configured "CSS class(es)" (Appearance section) — admin-supplied, sanitize_text_field()'d
-        // at save time; esc_attr() below is what actually makes embedding it here safe.
+        // Builder-configured "CSS class(es)" (Appearance section): admin-supplied, sanitize_text_field()'d at save time;
+        // esc_attr() is what makes embedding it here safe.
         $custom_class = trim((string)($config['custom_class'] ?? ''));
-        $custom_class_attr = $custom_class !== '' ? ' ' . esc_attr($custom_class) : '';
 
         return '<div class="fabricator-field fabricator-field--' . esc_attr($config['type'] ?? 'text')
-            . $req_class . ' ' . esc_attr($extra_class) . $custom_class_attr . '" data-field-id="' . esc_attr($field_id) . '"'
+            . ($required ? ' fabricator-required-field' : '') . ' ' . esc_attr($extra_class)
+            . ($custom_class !== '' ? ' ' . esc_attr($custom_class) : '') . '" data-field-id="' . esc_attr($field_id) . '"'
             . $validate_attr . $group_attr . '>'
             . $label_html
             . $desc_html
-            . $inner
+            . $inner_html
             . '<div class="fabricator-field-error" id="' . esc_attr($field_id)
             . '-error" role="alert" aria-live="polite"></div>'
             . '</div>';
@@ -887,16 +918,16 @@ abstract class BaseField
             }
         }
 
-        $html = '';
+        $attributes = '';
         foreach ($attrs as $k => $v) {
             // Only true is a bare attribute. "value equals name" was one too, so a placeholder of "placeholder" (or a
             // value of "value") rendered without its text.
             if ($v === true) {
-                $html .= ' ' . esc_attr($k);
+                $attributes .= ' ' . esc_attr($k);
             } elseif ($v !== '' && $v !== false) {
-                $html .= ' ' . esc_attr($k) . '="' . esc_attr($v) . '"';
+                $attributes .= ' ' . esc_attr($k) . '="' . esc_attr($v) . '"';
             }
         }
-        return $html;
+        return $attributes;
     }
 }

@@ -5440,3 +5440,44 @@ msgstr "Bitte warten Sie einige Minuten, bevor Sie eine weitere Test-E-Mail send
 
 msgid "The test email could not be sent. Ask the site's administrator to check its mail setup."
 msgstr "Die Test-E-Mail konnte nicht gesendet werden. Bitten Sie die Administration der Website, deren E-Mail-Einrichtung zu prüfen."
+
+#, php-format
+msgid "%1$s, %2$s UTC"
+msgstr "%1$s, %2$s UTC"
+
+msgid "Signed on"
+msgstr "Unterschrieben am"
+
+msgid "\"Signed on\" label"
+msgstr "Beschriftung „Unterschrieben am“"
+
+msgid "\"Place of signing\" label"
+msgstr "Beschriftung „Ort der Unterschrift“"
+
+msgid "Title above the signature"
+msgstr "Titel über der Unterschrift"
+
+msgid "Text above the signature (HTML allowed)"
+msgstr "Text über der Unterschrift (HTML erlaubt)"
+
+msgid "What the visitor signs: shown above the signature pad and recorded with the signature in the email and the PDF. Empty: none."
+msgstr "Was der Besucher unterschreibt: über dem Unterschriftsfeld angezeigt und mit der Unterschrift in E-Mail und PDF festgehalten. Leer: keiner."
+
+msgid "Automation"
+msgstr "Automatisierung"
+
+msgid "Add automation markers"
+msgstr "Automatisierungsmarker hinzufügen"
+
+msgid "Each answer in the email is written between [FABRICATOR_FIELD_<field id>] and [FABRICATOR_FIELD_END], so a mail parser can find it. Answers containing \"[FABRICATOR_FIELD_\" are then refused."
+msgstr "Jede Antwort steht in der E-Mail zwischen [FABRICATOR_FIELD_<Feld-ID>] und [FABRICATOR_FIELD_END], damit ein E-Mail-Parser sie findet. Antworten, die „[FABRICATOR_FIELD_“ enthalten, werden dann abgelehnt."
+
+#, php-format
+msgid "This answer contains \"%s\", which the notification email uses to mark answers. Please remove it."
+msgstr "Diese Antwort enthält „%s“, womit die Benachrichtigungs-E-Mail Antworten markiert. Bitte entfernen Sie es."
+
+msgid "Show as box"
+msgstr "Als Box anzeigen"
+
+msgid "A box around the group's fields, headed by its label, on the page, in the PDF and in the email, like the direct debit mandate."
+msgstr "Ein Rahmen um die Felder der Gruppe, mit ihrer Bezeichnung als Überschrift, auf der Seite, im PDF und in der E-Mail, wie beim Lastschriftmandat."

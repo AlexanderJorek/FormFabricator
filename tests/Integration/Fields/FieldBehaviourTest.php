@@ -106,7 +106,8 @@ final class FieldBehaviourTest extends TestCase
     }
 
     /**
-     * Asserts an explicit UTC consent timestamp (GDPR Art. 7(1)), by pattern and date, so second boundaries don't flake.
+     * Asserts the moment as Utils\SigningTime records it (GDPR Art. 7(1)): the UTC date in the site's date format, then
+     * the UTC time. By pattern and date, so second boundaries don't flake.
      *
      * @param mixed  $value  Submitted value.
      * @param array  $config Field configuration.
@@ -118,14 +119,14 @@ final class FieldBehaviourTest extends TestCase
         $r = $h->map($value, $config);
         self::$lastIn  = var_export($value, true);
         self::$lastOut = $r;
-        if (!preg_match('/(\d{4}-\d{2}-\d{2}) \d{2}:\d{2}:\d{2} UTC/', $r, $m)) {
-            return 'no explicit UTC timestamp in: ' . $r;
-        }
+        $utc  = new \DateTimeZone('UTC');
+        $days = [];
         // Tolerate a run that straddles UTC midnight.
-        if (!in_array($m[1], [gmdate('Y-m-d'), gmdate('Y-m-d', time() - 60)], true)) {
-            return 'timestamp date ' . $m[1] . ' is not today (UTC): ' . $r;
+        foreach ([time(), time() - 60] as $t) {
+            $days[] = preg_quote((string) wp_date((string) get_option('date_format'), $t, $utc), '/');
         }
-        return true;
+        return preg_match('/(?:' . implode('|', $days) . '), \d{2}:\d{2}:\d{2} UTC/', $r) === 1
+            ? true : 'no UTC date and time of today in: ' . $r;
     }
 
     private static function expectMapContains(mixed $value, array $config, \FabricatorForms\Fields\BaseField $h, string ...$needles): bool|string
@@ -1151,12 +1152,21 @@ final class FieldBehaviourTest extends TestCase
             self::$lastOut = var_export($r, true);
             return $r === [] ? true : 'expected [], got: ' . var_export($r, true);
         });
-        $this->check('mapNormalized non-empty html_content → labeled entry', function () use ($h) {
-            $c = array_merge($h->getDefaultConfig(), ['type'=>'html','label'=>'Block','html_content'=>'<p>Hi</p>']);
+        $this->check('mapNormalized non-empty html_content, label shown → labeled entry', function () use ($h) {
+            $c = array_merge($h->getDefaultConfig(), ['type'=>'html','label'=>'Block','hide_label'=>false,'html_content'=>'<p>Hi</p>']);
             $r = $h->mapNormalized('f1', 'Block', '', $c, []);
-            self::$lastIn  = 'html_content=<p>Hi</p>';
+            self::$lastIn  = 'html_content=<p>Hi</p>, hide_label=false';
             self::$lastOut = var_export($r, true);
             return (isset($r['f1']) && $r['f1']['label'] === 'Block' && str_contains($r['f1']['value'], 'Hi'))
+                ? true : 'unexpected result: ' . var_export($r, true);
+        });
+        // A new block starts with "Hide label" ticked: mail and PDF leave it out (FieldRegistry::withHiddenLabel()).
+        $this->check('mapSubmission with the default config → label hidden', function () use ($h) {
+            $c = array_merge($h->getDefaultConfig(), ['id'=>'f1','type'=>'html','label'=>'Block','html_content'=>'<p>Hi</p>']);
+            $r = \FabricatorForms\Fields\FieldRegistry::mapSubmission([$c], []);
+            self::$lastIn  = 'default config (hide_label=true)';
+            self::$lastOut = var_export($r, true);
+            return (isset($r['f1']) && !empty($r['f1']['label_hidden']) && str_contains($r['f1']['value'], 'Hi'))
                 ? true : 'unexpected result: ' . var_export($r, true);
         });
         $this->check('mapNormalized show_in_output=false → []', function () use ($h) {
@@ -1186,7 +1196,8 @@ final class FieldBehaviourTest extends TestCase
         $this->check('schema integrity', fn() => self::schemaIntegrity($h));
         $this->check('isGroupContainer=true', fn() => $h->isGroupContainer() ? true : 'expected true');
         $this->check('hasRequired=false', fn() => !$h->hasRequired() ? true : 'expected false');
-        $this->check('includeInEmailSummary=false', fn() => !$h->includeInEmailSummary() ? true : 'expected false');
+        // Its only own entries are a box's start and end, which the mail draws; its children list under their own types.
+        $this->check('includeInEmailSummary=true', fn() => $h->includeInEmailSummary() ? true : 'expected true');
         $this->check('render returns string', fn() => is_string($h->render($cfg, 'f1')) ? true : 'render failed');
         $this->check('render opens fabricator-field-group', fn() => self::contains($h->render($cfg, 'f1'), 'fabricator-field-group'));
         $this->check('mapNormalized empty → []', function () use ($h, $cfg) {

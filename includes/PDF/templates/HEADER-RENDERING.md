@@ -136,7 +136,7 @@ Saved to DB as JSON in fabricator_forms_pdf_layout.header_layout.elements
        │     position:absolute in px within a scaled position:relative container
        │     image: width:100%; height:auto
        │
-       └─► PDF renderer (PHP, layout.php, the 'header' closure)
+       └─► PDF renderer (PHP, layout.php, the 'header_html' closure)
              position:absolute in mm, page-relative (mPDF behaviour)
              left = margin_left + el.x × cell_mm
              top  = margin_top  + el.y × cell_mm

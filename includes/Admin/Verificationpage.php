@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -33,13 +33,12 @@ use FabricatorForms\PDF\PdfUtils;
 function fabricator_ajax_verify_push_lines(): void
 {
     /* ---- Capability + Nonce ---- */
-    \FabricatorForms\Utils\AjaxGuard::require(
+    \FabricatorForms\Utils\AjaxGuard::capability(
         'use_verifier',
-        'fabricator_verifier_nonce',
-        'nonce',
         __('Forbidden', 'formfabricator'),
         'FabricatorForms fabricator_verify_push_lines: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.'
     );
+    check_ajax_referer('fabricator_verifier_nonce', 'nonce');
 
     // The page is still working through its batch: keep this user's waiting copies.
     \FabricatorForms\Utils\VerifierCleanup::refreshPending();
@@ -65,8 +64,7 @@ function fabricator_ajax_verify_push_lines(): void
     /* Memory reservation happens below, once the PDF's size is known — it's sized from the file. */
 
     /* ---- Input ---- */
-    // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-    $pdf_token   = sanitize_key($_POST['pdf_token'] ?? '');
+    $pdf_token   = isset($_POST['pdf_token']) ? sanitize_key(wp_unslash($_POST['pdf_token'])) : '';
 
     if (!$pdf_token) {
         \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — missing pdf_token (user ' . get_current_user_id() . ').');
@@ -213,22 +211,19 @@ function fabricator_ajax_verify_push_lines(): void
     'size'     => $file_size,
     ];
 
-    /* ---- Capture output ---- */
-    ob_start();
+    /* ---- The report ---- */
     try {
-        Verificationpage::handleUpload($file, $pdf_token, $fabricator_allowance);
+        $raw_html = Verificationpage::handleUpload($file, $pdf_token, $fabricator_allowance);
     } catch (\Throwable $ajax_err) {
         $fabricator_failure = Verificationpage::reportInternalFailure(
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() of the plugin's own source file, for the log.
             'handleUpload threw ' . get_class($ajax_err) . ': ' . $ajax_err->getMessage() . ' at ' . basename($ajax_err->getFile()) . ':' . $ajax_err->getLine()
         );
-        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- problemCardHtml() escapes.
-        echo Verificationpage::problemCardHtml(sanitize_file_name((string) $file['name']), $fabricator_failure, true);
+        $raw_html = Verificationpage::problemCardHtml(sanitize_file_name((string) $file['name']), $fabricator_failure, true);
     }
-    $raw_html = ob_get_clean();
 
-    if ($raw_html === false || $raw_html === '') {
-        wp_send_json_error(['message' => Verificationpage::reportInternalFailure('handleUpload produced no output; ob level ' . ob_get_level())], 500);
+    if ($raw_html === '') {
+        wp_send_json_error(['message' => Verificationpage::reportInternalFailure('handleUpload produced no report')], 500);
         return;
     }
 
@@ -278,7 +273,7 @@ function fabricator_ajax_verify_progress(): void
     check_ajax_referer('fabricator_verifier_nonce', 'nonce');
     // Polled throughout a check, so a batch keeps its waiting copies for as long as the page is open.
     \FabricatorForms\Utils\VerifierCleanup::refreshPending();
-    $key  = sanitize_key($_POST['token'] ?? '');
+    $key  = isset($_POST['token']) ? sanitize_key(wp_unslash($_POST['token'])) : '';
     $data = $key ? get_transient('fabricator_vp_' . $key) : false;
     if ($data && (int)($data['uid'] ?? -1) !== get_current_user_id()) {
         \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_progress: rejected — progress token owned by a different user than ' . get_current_user_id() . '.');
@@ -291,15 +286,13 @@ function fabricator_ajax_verify_progress(): void
 }
 
 /**
- * Sanitizes HTML output from the PDF verifier using wp_kses, with data-URI preservation.
+ * The markup the verifier's report and its refused-file cards may hold, for wp_kses().
  *
- * @param string $html Raw HTML to sanitize.
- * @return string Sanitized HTML.
+ * @return array<string, array<string, bool>>
  */
-function fabricator_sanitize_verifier_html(string $html): string
+function fabricator_verifier_allowed_html(): array
 {
-
-    $allowed = [
+    return [
         // Layout & containers
         'div'    => ['class' => true, 'id' => true, 'style' => true, 'data-*' => true],
         'p'      => ['class' => true, 'style' => true, 'data-*' => true],
@@ -337,6 +330,18 @@ function fabricator_sanitize_verifier_html(string $html): string
         'svg' => ['class' => true, 'id' => true, 'style' => true, 'data-*' => true],
         'canvas' => ['class' => true, 'id' => true, 'style' => true, 'data-*' => true],
     ];
+}
+
+/**
+ * Sanitizes HTML output from the PDF verifier using wp_kses, with data-URI preservation.
+ *
+ * @param string $html Raw HTML to sanitize.
+ * @return string Sanitized HTML.
+ */
+function fabricator_sanitize_verifier_html(string $html): string
+{
+
+    $allowed = fabricator_verifier_allowed_html();
 
     /* wp_kses regex chokes on multi-MB base64 data URIs, so they're lifted out before kses runs and spliced back after. */
     $data_uris = [];
@@ -425,8 +430,9 @@ final class Verificationpage
      */
     public static function bodyClass(string $classes): string
     {
-        $page_slug = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        if ($page_slug === 'fabricator-pdf-verification') {
+        // The admin page being shown, as WordPress resolved it from the request.
+        global $plugin_page;
+        if ($plugin_page === 'fabricator-pdf-verification') {
             $classes .= ' fabricator-verification-page';
         }
         return $classes;
@@ -471,7 +477,7 @@ final class Verificationpage
      */
     public static function handleUploadPost(): void
     {
-        $is_request_post = strtoupper(sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD'] ?? 'GET'))) === 'POST';
+        $is_request_post = isset($_SERVER['REQUEST_METHOD']) && strtoupper(sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD']))) === 'POST';
         if (!$is_request_post) {
             return;
         }
@@ -507,12 +513,10 @@ final class Verificationpage
 
             $max_upload_bytes = self::MAX_PDF_BYTES;
 
-            // Not unslashed: $_FILES is never slashed, and wp_unslash() would break Windows tmp paths. Each path is gated
-            // by is_uploaded_file() before use.
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- see comment above.
+            // The temporary paths PHP made, as text; not unslashed, as $_FILES is never slashed and wp_unslash() would
+            // break Windows paths. Each path is gated by is_uploaded_file() before use.
             $uploaded_tmp_names = isset($_FILES['pdfs']['tmp_name']) && is_array($_FILES['pdfs']['tmp_name'])
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- see comment above.
-                ? array_filter($_FILES['pdfs']['tmp_name'], 'is_string')
+                ? array_filter(map_deep($_FILES['pdfs']['tmp_name'], 'sanitize_text_field'), 'is_string')
                 : [];
 
             // Mirror UploadField's client-hint logic (includes/Fields/UploadField.php) — cap
@@ -525,7 +529,7 @@ final class Verificationpage
                 );
                 $notices[] = [
                     // translators: %d: maximum number of files accepted per upload.
-                    sprintf(esc_html__('Too many files selected. Only the first %d will be processed.', 'formfabricator'), $max_files),
+                    sprintf(__('Too many files selected. Only the first %d will be processed.', 'formfabricator'), $max_files),
                     'warning',
                 ];
                 $uploaded_tmp_names = array_slice($uploaded_tmp_names, 0, $max_files, true);
@@ -533,7 +537,6 @@ final class Verificationpage
 
             foreach ($uploaded_tmp_names as $key => $tmpName) {
                 $original_name = isset($_FILES['pdfs']['name'][$key]) && is_string($_FILES['pdfs']['name'][$key])
-                    // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- $_FILES is never slashed; see the tmp_name comment above.
                     ? sanitize_file_name($_FILES['pdfs']['name'][$key])
                     : '(unknown)';
 
@@ -668,7 +671,6 @@ final class Verificationpage
         $has_batch          = is_array($batch);
         $verification_queue = $has_batch && is_array($batch['queue'] ?? null) ? $batch['queue'] : [];
         foreach ($has_batch && is_array($batch['notices'] ?? null) ? $batch['notices'] : [] as $notice) {
-            // Messages were escaped when they were built; noticeHtml() wp_kses_post()s them again.
             echo wp_kses_post(self::noticeHtml((string) ($notice[0] ?? ''), (string) ($notice[1] ?? 'warning')));
         }
 
@@ -686,11 +688,8 @@ final class Verificationpage
 
         echo '<form id="pdf-upload-form" method="post" enctype="multipart/form-data">';
         wp_nonce_field('fabricator_verifier_upload', 'fabricator_verifier_nonce');
-        $idle_style   = $has_batch ? ' style="' . esc_attr('display:none') . '"' : '';
-        $scanmore_cls = $has_batch ? ' class="' . esc_attr('fabricator-pdf-visible') . '"' : '';
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- already esc_attr()/esc_html()'d above and inline.
         echo '
-        <div id="fabricator-pdf-idle-state"' . $idle_style . '>
+        <div id="fabricator-pdf-idle-state"' . ($has_batch ? ' style="display:none"' : '') . '>
             <div class="fabricator-pdf-idle-card">
                 <h2>' . esc_html__('PDF Verification', 'formfabricator') . '</h2>
                 <p>' . esc_html__('Upload one or more generated PDFs to verify their embedded seal and check for tampering.', 'formfabricator') . '</p>
@@ -723,7 +722,7 @@ final class Verificationpage
             </div>
         </div>
 
-        <button id="fabricator-pdf-scan-more-btn" type="button"' . $scanmore_cls . '>+ ' . esc_html__('Scan more PDFs', 'formfabricator') . '</button>
+        <button id="fabricator-pdf-scan-more-btn" type="button"' . ($has_batch ? ' class="fabricator-pdf-visible"' : '') . '>+ ' . esc_html__('Scan more PDFs', 'formfabricator') . '</button>
 
         <div id="fabricator-pdf-upload-overlay">
             <div class="fabricator-pdf-idle-card">
@@ -733,9 +732,8 @@ final class Verificationpage
             </div>
         </div>
 
-        <div id="fabricator-pdf-verification-results">' . $rejected_cards . '</div>
+        <div id="fabricator-pdf-verification-results">' . wp_kses($rejected_cards, fabricator_verifier_allowed_html()) . '</div>
         ';
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
 
         // Drag & drop, file queue, and image-slot JS lives in assets/js/admin-verification.js.
     }
@@ -909,7 +907,58 @@ final class Verificationpage
     }
 
     /**
-     * Checks one uploaded PDF against its seal and prints the result: a card per document, headed by the verdict.
+     * The report: stages append to it instead of printing; the AJAX handler sanitizes it once before sending it.
+     *
+     * @var string
+     */
+    private static string $report = '';
+
+    /**
+     * Where the report ends now, to take what is written after it with takeReport().
+     *
+     * @return int
+     */
+    private static function reportMark(): int
+    {
+        return strlen(self::$report);
+    }
+
+    /**
+     * What was written to the report since $mark, taken out of it.
+     *
+     * @param int $mark From reportMark().
+     * @return string
+     */
+    private static function takeReport(int $mark): string
+    {
+        $part         = substr(self::$report, $mark);
+        self::$report = substr(self::$report, 0, $mark);
+        return $part;
+    }
+
+    /**
+     * Checks one uploaded PDF against its seal and returns the result: a card per document, headed by the verdict. Its
+     * markup is unsanitized; the caller runs it through fabricator_sanitize_verifier_html() before it is shown.
+     *
+     * @param array  $file             Uploaded file data from $_FILES.
+     * @param string $progressKey      Transient key for progress reporting.
+     * @param int    $decode_allowance Most bytes the PDF reader may unpack, as the caller reserved memory for.
+     * @return string
+     */
+    public static function handleUpload(array $file, string $progressKey = '', int $decode_allowance = PHP_INT_MAX): string
+    {
+        $mark = self::reportMark();
+        try {
+            self::checkUpload($file, $progressKey, $decode_allowance);
+        } finally {
+            // A check that throws leaves no half report behind.
+            $report = self::takeReport($mark);
+        }
+        return $report;
+    }
+
+    /**
+     * Writes one uploaded PDF's report (handleUpload()).
      *
      * The stages run in order, each a method of its own: preflightUpload() refuses what can't be a sealed PDF before
      * anything parses it, readSeal() reads and authenticates the seal, checkDocument() holds the file to it section by
@@ -919,9 +968,8 @@ final class Verificationpage
      * @param string $progressKey      Transient key for progress reporting.
      * @param int    $decode_allowance Most bytes the PDF reader may unpack, as the caller reserved memory for.
      */
-    public static function handleUpload(array $file, string $progressKey = '', int $decode_allowance = PHP_INT_MAX): void
+    private static function checkUpload(array $file, string $progressKey, int $decode_allowance): void
     {
-        /* The EscapeOutput suppressions in the stage methods are per block: their variables are escaped or regex-constrained at assignment, which WPCS can't follow. */
         self::$progressKey = $progressKey;
         // Soft time budget, scaled to file size, aborts well before the 900 s hard ceiling. readSeal() raises it for a
         // file whose text unpacks to far more than its size.
@@ -936,8 +984,7 @@ final class Verificationpage
         $refusal   = null;
         $structure = self::preflightUpload($file, $file_name, $refusal);
         if ($structure === null) {
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- problemCardHtml() escapes.
-            echo self::problemCardHtml($file_name, (string) ($refusal[0] ?? ''), (bool) ($refusal[1] ?? true));
+            self::$report .= self::problemCardHtml($file_name, (string) ($refusal[0] ?? ''), (bool) ($refusal[1] ?? true));
             return;
         }
 
@@ -948,26 +995,26 @@ final class Verificationpage
         $seal    = null;
         $verdict = null;
         $failure = null;
-        ob_start();
+        $report_mark = self::reportMark();
         $outer_ob_level = ob_get_level();
         try {
             $seal    = self::readSeal($file, $decode_allowance, $structure['raw_plain_seal_count'], $budget);
             $verdict = self::checkDocument($file, $file_name, $uid_prefix, $structure, $seal, $budget);
         } catch (\Throwable $e) {
+            // An output buffer a check left open (an image being encoded) is closed; its report part goes below.
             while (ob_get_level() > $outer_ob_level) {
                 ob_end_clean();
             }
             $failure = self::failureMessage($e, $file_name);
         } finally {
-            $pdf_content = (string) ob_get_clean();
+            $pdf_content = (string) self::takeReport($report_mark);
         }
 
         if ($failure === null && $verdict === null) {
             $failure = [self::reportInternalFailure('the checks ended without a verdict (' . \FabricatorForms\fabricator_log_file($file_name) . ')'), true];
         }
         if ($failure !== null) {
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- problemCardHtml() escapes.
-            echo self::problemCardHtml($file_name, $failure[0], $failure[1]);
+            self::$report .= self::problemCardHtml($file_name, $failure[0], $failure[1]);
         } else {
             self::renderDocumentCard($file_name, $uid_prefix, $pdf_content, $seal, $verdict);
         }
@@ -1215,7 +1262,7 @@ final class Verificationpage
         $escaped_name = PdfUtils::escapedName($pdf_raw);
 
         // All detail HTML goes here, so the summary panel can be printed ahead of it.
-        ob_start();
+        $report_mark = self::reportMark();
 
         if ($incremental_update_detected || $xref_conflicts !== [] || $escaped_name !== null) {
             self::renderStructureSection(
@@ -1268,7 +1315,7 @@ final class Verificationpage
             self::renderStreamFingerprintSection($unsealed_streams, $uid_prefix);
         }
 
-        $inner_html = (string) ob_get_clean();
+        $inner_html = (string) self::takeReport($report_mark);
 
         $meta          = self::metadataSection($pdf_raw, $object_index, $seal_data, $rebuilt_payload, $uid_prefix);
         $meta_mismatch = $meta['mismatch'];
@@ -1285,8 +1332,7 @@ final class Verificationpage
         $structural_tamper = $visual_modified || $any_pdf_issue;
         $document_modified = !$seal['matches'] || $structural_tamper;
 
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see note atop handleUpload().
-        echo self::renderSummaryPanel(
+        self::$report .= self::renderSummaryPanel(
             [
             'seal_matches'               => $seal['matches'],
             'seal_key_status'            => $seal['key_status'],
@@ -1315,9 +1361,7 @@ final class Verificationpage
             ]
         );
 
-        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- ob_get_clean() capture whose contents were already escaped at each echo() above.
-        echo $inner_html;
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+        self::$report .= $inner_html;
 
         return ['document_modified' => $document_modified, 'structural_tamper' => $structural_tamper];
     }
@@ -1368,30 +1412,28 @@ final class Verificationpage
         ?string $escaped_name
     ): void {
         $struct_section_id = 'fabricator-pdf-content-structure-' . $uid_prefix;
-        $struct_sec_attr = esc_attr($uid_prefix);
         $explain_style   = 'margin:10px 14px 8px;font-size:12px;color:#444;line-height:1.6';
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-        echo "<div class='fabricator-pdf-detail-section'"
-           . " id='fabricator-pdf-section-structure-{$struct_sec_attr}'>";
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-section'"
+           . " id='fabricator-pdf-section-structure-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($struct_section_id) . "'>" . esc_html__('PDF Structure', 'formfabricator') . "</button>";
-        echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
-        echo "</div>";
-        echo "<div id='" . esc_attr($struct_section_id) . "'"
+        self::$report .= "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+        self::$report .= "</div>";
+        self::$report .= "<div id='" . esc_attr($struct_section_id) . "'"
            . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-        echo "<div class='fabricator-pdf-hash-list'>";
+        self::$report .= "<div class='fabricator-pdf-hash-list'>";
         if ($incremental_update_detected) {
             $eof_n_disp = (int) $incremental_update_eof_count;
-            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
+            self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
             // translators: %s: the literal PDF end-of-file marker "%%EOF".
-            echo "<span class='fabricator-pdf-hash-label'>" . esc_html(sprintf(__('%s count', 'formfabricator'), '%%EOF')) . "</span>";
+            self::$report .= "<span class='fabricator-pdf-hash-label'>" . esc_html(sprintf(__('%s count', 'formfabricator'), '%%EOF')) . "</span>";
             // translators: %1$d: number of end-of-file markers found, %2$d: number expected.
-            echo "<span class='fabricator-pdf-hash-value'>" . esc_html(sprintf(__('%1$d (expected: %2$d)', 'formfabricator'), $eof_n_disp, 1)) . "</span>";
-            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
-            echo "</div>";
-            echo "<p style='{$explain_style}'>";
-            echo wp_kses_post(sprintf(
+            self::$report .= "<span class='fabricator-pdf-hash-value'>" . esc_html(sprintf(__('%1$d (expected: %2$d)', 'formfabricator'), $eof_n_disp, 1)) . "</span>";
+            self::$report .= "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+            self::$report .= "</div>";
+            self::$report .= "<p style='" . esc_attr($explain_style) . "'>";
+            self::$report .= wp_kses_post(sprintf(
                 /* translators: %s: the literal PDF "%%EOF" end-of-file marker, wrapped in <code> */
                 __(
                     // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
@@ -1400,7 +1442,7 @@ final class Verificationpage
                 ),
                 '<code>%%EOF</code>'
             ));
-            echo "</p>";
+            self::$report .= "</p>";
         }
         if ($xref_conflicts !== []) {
             $unreadable = in_array('unreadable', $xref_conflicts, true);
@@ -1409,48 +1451,47 @@ final class Verificationpage
                 // translators: %s: comma-separated PDF object numbers.
                 ? sprintf(__('points elsewhere for object %s', 'formfabricator'), implode(', ', $objects))
                 : __('not readable', 'formfabricator');
-            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
-            echo "<span class='fabricator-pdf-hash-label'>" . esc_html__('Cross-reference table', 'formfabricator') . "</span>";
-            echo "<span class='fabricator-pdf-hash-value'>" . esc_html($value) . "</span>";
-            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
-            echo "</div>";
-            echo "<p style='{$explain_style}'>";
-            echo esc_html(
+            self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
+            self::$report .= "<span class='fabricator-pdf-hash-label'>" . esc_html__('Cross-reference table', 'formfabricator') . "</span>";
+            self::$report .= "<span class='fabricator-pdf-hash-value'>" . esc_html($value) . "</span>";
+            self::$report .= "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+            self::$report .= "</div>";
+            self::$report .= "<p style='" . esc_attr($explain_style) . "'>";
+            self::$report .= esc_html(
                 $unreadable && $objects === []
                     // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
                     ? __('A PDF reader finds every part of the document through its cross-reference table. This file has none that can be read, so nothing shows that a reader displays the parts that were checked.', 'formfabricator')
                     // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
                     : __('A PDF reader finds every part of the document through its cross-reference table. Here the table points to another copy of these parts than the one that was checked: a second copy, placed for a reader to display instead of the sealed content.', 'formfabricator')
             );
-            echo "</p>";
+            self::$report .= "</p>";
         }
         if ($escaped_name !== null) {
             // The name as spelled and as a viewer reads it, printable ASCII only: it is the uploader's bytes, cut short.
             $printable = static fn(string $s): string => (string) preg_replace('/[^\x21-\x7E]/', '?', substr($s, 0, 64));
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
             $decoded   = (string) preg_replace_callback('/#([0-9A-Fa-f]{2})/', static fn(array $m): string => chr((int) hexdec($m[1])), $escaped_name);
-            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
-            echo "<span class='fabricator-pdf-hash-label'>" . esc_html__('Disguised name', 'formfabricator') . "</span>";
-            echo "<span class='fabricator-pdf-hash-value'>" . esc_html(sprintf(
+            self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>";
+            self::$report .= "<span class='fabricator-pdf-hash-label'>" . esc_html__('Disguised name', 'formfabricator') . "</span>";
+            self::$report .= "<span class='fabricator-pdf-hash-value'>" . esc_html(sprintf(
                 // translators: %1$s: the name as written in the file, e.g. "/Ann#6Fts"; %2$s: as a viewer reads it, e.g. "/Annots"; %3$s: what that part does.
                 __('%1$s, which a viewer reads as %2$s: %3$s', 'formfabricator'),
                 '/' . $printable($escaped_name),
                 '/' . $printable($decoded),
                 self::pdfNameMeaning($decoded)
             )) . "</span>";
-            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
-            echo "</div>";
-            echo "<p style='{$explain_style}'>";
-            echo esc_html(
+            self::$report .= "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+            self::$report .= "</div>";
+            self::$report .= "<p style='" . esc_attr($explain_style) . "'>";
+            self::$report .= esc_html(
                 // phpcs:ignore Generic.Files.LineLength -- WordPress.WP.I18n.NonSingularStringLiteralText requires __() to receive a single unbroken string literal, so it cannot be wrapped via concatenation.
                 __('Something was added to this file after it was sealed and written so that the checks above do not recognize it, while a PDF viewer does and shows it: for instance a box or text drawn over a page. Whatever you see in this file beyond the sealed answers is not part of the original. This plugin never writes names this way.', 'formfabricator')
             );
-            echo "</p>";
+            self::$report .= "</p>";
         }
-        echo "</div>";
-        echo "</div>";
-        echo "</div>";
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+        self::$report .= "</div>";
+        self::$report .= "</div>";
+        self::$report .= "</div>";
     }
 
     /**
@@ -1492,13 +1533,12 @@ final class Verificationpage
     private static function renderRawSealSection(array $seal_data, array $rebuilt_payload, array $diffs, string $uid_prefix, string $hmac): void
     {
         $seal_rebuilt_match = empty($diffs);
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-raw-" . esc_attr($uid_prefix) . "'>";
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-raw-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($uid_prefix) . "-raw-content'>" . esc_html__('Seal', 'formfabricator') . "</button>";
-        echo self::detailBadge('fabricator-pdf-badge-raw-' . $uid_prefix, $hmac !== 'pass');
-        echo "</div>";
+        self::$report .= self::detailBadgeHtml('fabricator-pdf-badge-raw-' . $uid_prefix, $hmac !== 'pass');
+        self::$report .= "</div>";
 
         // What the HMAC says comes first: the comparison below only shows the seal is complete, not that it is genuine.
         $hmac_text = match ($hmac) {
@@ -1506,11 +1546,11 @@ final class Verificationpage
             'nokey' => __('HMAC not checked: no key on this site matches the seal, so nothing shows it was signed here.', 'formfabricator'),
             default => __('HMAC mismatch: the seal was changed after it was signed, or signed with another key. Nothing it records can be trusted.', 'formfabricator'),
         };
-        echo "<p class='fabricator-pdf-seal-diff fabricator-pdf-seal-diff--" . ($hmac === 'pass' ? 'identical' : 'differs') . "'><strong>"
+        self::$report .= "<p class='fabricator-pdf-seal-diff fabricator-pdf-seal-diff--" . ($hmac === 'pass' ? 'identical' : 'differs') . "'><strong>"
            . esc_html($hmac_text) . '</strong></p>';
         $flags      = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE;
-        $json_seal  = esc_html((string) wp_json_encode($seal_data, $flags));
-        $json_built = esc_html((string) wp_json_encode($rebuilt_payload, $flags));
+        $json_seal  = (string) wp_json_encode($seal_data, $flags);
+        $json_built = (string) wp_json_encode($rebuilt_payload, $flags);
 
         /* Names the differing keys, which the HMAC can't. 'seal' itself is not in the rebuild. */
         $seal_diff_keys = [];
@@ -1534,42 +1574,40 @@ final class Verificationpage
 
         /* Classed for padding: the surrounding container gives this region none. */
         if ($seal_diff_keys !== []) {
-            echo "<p class='fabricator-pdf-seal-diff fabricator-pdf-seal-diff--differs'><strong>"
+            self::$report .= "<p class='fabricator-pdf-seal-diff fabricator-pdf-seal-diff--differs'><strong>"
                . esc_html__('Keys differing between seal and rebuild:', 'formfabricator')
                . "</strong> <code>" . esc_html(implode(', ', $seal_diff_keys)) . "</code></p>";
         } else {
-            echo "<p class='fabricator-pdf-seal-diff'>"
+            self::$report .= "<p class='fabricator-pdf-seal-diff'>"
                . esc_html__('The seal is complete: every entry the check reads is present and well-formed. Whether it is genuine is the HMAC\'s verdict above.', 'formfabricator')
                . "</p>";
         }
 
-        $raw_id = esc_attr($uid_prefix) . '-raw-content';
-        echo "<div id='{$raw_id}' class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
+        self::$report .= "<div id='" . esc_attr($uid_prefix . '-raw-content') . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content' style='padding:0;'>";
 
         // Column headers — outside the scroll container so they stay fixed
-        echo "<div class='fabricator-pdf-sbs-headers'>";
-        echo "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Seal', 'formfabricator') . "</div>";
-        echo "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Rebuilt', 'formfabricator') . "</div>";
-        echo "</div>";
+        self::$report .= "<div class='fabricator-pdf-sbs-headers'>";
+        self::$report .= "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Seal', 'formfabricator') . "</div>";
+        self::$report .= "<div class='fabricator-pdf-sbs-col-label'>" . esc_html__('Rebuilt', 'formfabricator') . "</div>";
+        self::$report .= "</div>";
 
         // Single scrollable container — one scroll event, both columns move together
-        echo "<div class='fabricator-pdf-sbs-scroll'>";
-        echo "<pre class='fabricator-pdf-sbs-pre'>{$json_seal}</pre>";
-        echo "<div class='fabricator-pdf-sbs-divider'></div>";
-        echo "<pre class='fabricator-pdf-sbs-pre'>{$json_built}</pre>";
-        echo "</div>";
+        self::$report .= "<div class='fabricator-pdf-sbs-scroll'>";
+        self::$report .= "<pre class='fabricator-pdf-sbs-pre'>" . esc_html($json_seal) . "</pre>";
+        self::$report .= "<div class='fabricator-pdf-sbs-divider'></div>";
+        self::$report .= "<pre class='fabricator-pdf-sbs-pre'>" . esc_html($json_built) . "</pre>";
+        self::$report .= "</div>";
 
         if (!$seal_rebuilt_match) {
-            $json_diff = esc_html((string) wp_json_encode($diffs, $flags));
-            echo "<div style='padding:12px 14px;border-top:1px solid #f5c6cb;'>";
-            echo "<div class='fabricator-pdf-seal-pane__label'"
+            $json_diff = (string) wp_json_encode($diffs, $flags);
+            self::$report .= "<div style='padding:12px 14px;border-top:1px solid #f5c6cb;'>";
+            self::$report .= "<div class='fabricator-pdf-seal-pane__label'"
                 . " style='color:#721c24;margin-bottom:4px;'>" . esc_html__('Differences', 'formfabricator') . "</div>";
-            echo "<pre class='fabricator-pdf-json-pre'"
-                . " style='border-color:#f5c6cb;color:#721c24;margin:0;'>{$json_diff}</pre>";
-            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-            echo "</div>";
+            self::$report .= "<pre class='fabricator-pdf-json-pre'"
+                . " style='border-color:#f5c6cb;color:#721c24;margin:0;'>" . esc_html($json_diff) . "</pre>";
+            self::$report .= "</div>";
         }
-        echo "</div></div>";
+        self::$report .= "</div></div>";
     }
 
     /**
@@ -1601,7 +1639,7 @@ final class Verificationpage
         self::setProgress(__('Checking fields…', 'formfabricator'), 45);
 
         // The rows first, so the header can carry the outcome.
-        ob_start();
+        $report_mark = self::reportMark();
 
         // A cursor over the payload fields and a set of seen markers keep this linear. Only shown fields have markers.
         $field_keys        = is_array($fields)
@@ -1630,7 +1668,7 @@ final class Verificationpage
                     $payload_index = $field_keys[$field_cursor] ?? null;
 
                     if ($payload_index === null) {
-                        echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
+                        self::$report .= "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
                            . "<div class='fabricator-pdf-cmp-header'>"
                            . "<span class='fabricator-pdf-cmp-label'>" . esc_html__('Unknown field', 'formfabricator') . "</span>"
                            . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($start_marker) . "</span>"
@@ -1661,37 +1699,33 @@ final class Verificationpage
 
                     // Display results as comparison card
                     $label      = $payload_field['label'] ?? '';
-                    $row_state  = $matches_visual ? 'pass' : 'fail';
-                    $pill_state = $matches_visual ? 'pass' : 'fail';
-                    $pill_text  = $matches_visual ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
+                    $state      = $matches_visual ? 'pass' : 'fail';
+                    $pill_text  = $matches_visual ? __('MATCH', 'formfabricator') : __('MISMATCH', 'formfabricator');
                     // translators: %d: the field's position in the seal.
-                    $display_label = $label !== '' ? esc_html($label) : esc_html(sprintf(__('Field #%d', 'formfabricator'), (int) $payload_index));
+                    $display_label = $label !== '' ? $label : sprintf(__('Field #%d', 'formfabricator'), (int) $payload_index);
 
-                    // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                    echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
-                    echo "<div class='fabricator-pdf-cmp-header'>"
-                       . "<span class='fabricator-pdf-cmp-label'>{$display_label}</span>"
+                    self::$report .= "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--" . esc_attr($state) . "'>";
+                    self::$report .= "<div class='fabricator-pdf-cmp-header'>"
+                       . "<span class='fabricator-pdf-cmp-label'>" . esc_html($display_label) . "</span>"
                        . "<span class='fabricator-pdf-cmp-marker'>" . esc_html($start_marker) . "</span>"
-                       . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>{$pill_text}</span>"
+                       . "<span class='fabricator-pdf-pill fabricator-pdf-pill--" . esc_attr($state) . "'>" . esc_html($pill_text) . "</span>"
                        . "</div>";
-                    echo "<div class='fabricator-pdf-cmp-body'>";
-                    $seal_val = esc_html((string) ($payload_field['value'] ?? ''));
-                    echo "<div class='fabricator-pdf-cmp-col'>"
+                    self::$report .= "<div class='fabricator-pdf-cmp-body'>";
+                    self::$report .= "<div class='fabricator-pdf-cmp-col'>"
                        . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
-                       . "<div class='fabricator-pdf-cmp-col__value'>{$seal_val}</div>"
+                       . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html((string) ($payload_field['value'] ?? '')) . "</div>"
                        . "</div>";
-                    echo "<div class='fabricator-pdf-cmp-col'>"
+                    self::$report .= "<div class='fabricator-pdf-cmp-col'>"
                        . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
                        . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html((string) $pdf_field_text) . "</div>"
                        . "</div>";
-                    echo "</div>"; // fabricator-pdf-cmp-body
+                    self::$report .= "</div>"; // fabricator-pdf-cmp-body
 
                     if (!$matches_visual) {
-                        echo self::differenceHtml((string) $expected_text, (string) $pdf_field_text);
-                    // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+                        self::$report .= self::differenceHtml((string) $expected_text, (string) $pdf_field_text);
                     }
 
-                    echo "</div>\n"; // fabricator-pdf-cmp-row
+                    self::$report .= "</div>\n"; // fabricator-pdf-cmp-row
 
                     // Mark both as processed
                     $field_cursor++;
@@ -1707,7 +1741,7 @@ final class Verificationpage
             $missing_field = $fields[$field_keys[$missing_at]];
             $missing_label = (string) ($missing_field['label'] ?? '');
             $field_mismatch_count++;
-            echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
+            self::$report .= "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
                . "<div class='fabricator-pdf-cmp-header'>"
                . "<span class='fabricator-pdf-cmp-label'>"
                // translators: %d: the field's position in the seal.
@@ -1719,22 +1753,20 @@ final class Verificationpage
 
         self::checkParseTimeBudget($budget['start'], $budget['max'], 'field extraction');
 
-        $rows          = (string) ob_get_clean();
+        $rows_html          = (string) self::takeReport($report_mark);
         $all_visual_id = 'fabricator-pdf-content-fields-' . $uid_prefix;
-        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-fields-" . esc_attr($uid_prefix) . "'>";
-        echo "<div class='fabricator-pdf-detail-hdr' id='fabricator-pdf-hdr-fields-" . esc_attr($uid_prefix) . "'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-fields-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-hdr' id='fabricator-pdf-hdr-fields-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($all_visual_id) . "'>" . esc_html__('Field Content', 'formfabricator') . "</button>";
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes; $rows was escaped at each echo() above.
-        echo self::detailBadge('fabricator-pdf-badge-fields-' . $uid_prefix, $field_mismatch_count > 0);
-        echo "</div>";
-        echo "<div id='" . esc_attr($all_visual_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-        echo "<div class='fabricator-pdf-cmp-list'>";
-        echo $rows;
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
-        echo "</div>"; // fabricator-pdf-cmp-list
-        echo "</div>"; // fabricator-pdf-detail-content
-        echo "</div>"; // fabricator-pdf-detail-section
+        self::$report .= self::detailBadgeHtml('fabricator-pdf-badge-fields-' . $uid_prefix, $field_mismatch_count > 0);
+        self::$report .= "</div>";
+        self::$report .= "<div id='" . esc_attr($all_visual_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        self::$report .= "<div class='fabricator-pdf-cmp-list'>";
+        self::$report .= $rows_html;
+        self::$report .= "</div>"; // fabricator-pdf-cmp-list
+        self::$report .= "</div>"; // fabricator-pdf-detail-content
+        self::$report .= "</div>"; // fabricator-pdf-detail-section
 
         return $field_mismatch_count;
     }
@@ -1803,27 +1835,32 @@ final class Verificationpage
         }
 
         $context = 6;
-        $excerpt = static function (array $words, int $from, int $to, string $tag) use ($context): string {
-            $cut    = static fn(array $w): string => esc_html(implode(' ', $w));
+        // The words around one change, the change marked as removed (<del>) or added (<ins>).
+        $excerpt_html = static function (array $words, int $from, int $to, bool $added) use ($context): string {
             $before = array_slice($words, max(0, $from - $context), $from - max(0, $from - $context));
             $change = array_slice($words, $from, $to - $from);
             $after  = array_slice($words, $to, $context);
             if (count($change) > 60) {
                 $change = array_merge(array_slice($change, 0, 30), ['…'], array_slice($change, -30));
             }
-            return ($from > $context ? '… ' : '') . $cut($before)
-                . ($change === [] ? " <{$tag} class='fabricator-pdf-diff__none'>" . esc_html__('(nothing)', 'formfabricator') . "</{$tag}> "
-                    : " <{$tag}>" . $cut($change) . "</{$tag}> ")
-                . $cut($after) . ($to + $context < count($words) ? ' …' : '');
+            if ($change === []) {
+                $change_html = ($added ? " <ins class='fabricator-pdf-diff__none'>" : " <del class='fabricator-pdf-diff__none'>")
+                    . esc_html__('(nothing)', 'formfabricator') . ($added ? '</ins> ' : '</del> ');
+            } else {
+                $change_html = ($added ? ' <ins>' : ' <del>') . esc_html(implode(' ', $change)) . ($added ? '</ins> ' : '</del> ');
+            }
+            return ($from > $context ? '… ' : '') . esc_html(implode(' ', $before))
+                . $change_html
+                . esc_html(implode(' ', $after)) . ($to + $context < count($words) ? ' …' : '');
         };
 
         $html = "<div class='fabricator-pdf-diff'>";
         foreach ($hunks as [$a_from, $a_to, $b_from, $b_to]) {
             $html .= "<div class='fabricator-pdf-diff__hunk'>"
                 . "<div class='fabricator-pdf-diff__line'><span class='fabricator-pdf-diff__label'>" . esc_html__('Seal', 'formfabricator') . '</span> '
-                . $excerpt($a, $a_from, $a_to, 'del') . '</div>'
+                . $excerpt_html($a, $a_from, $a_to, false) . '</div>'
                 . "<div class='fabricator-pdf-diff__line'><span class='fabricator-pdf-diff__label'>" . esc_html__('PDF', 'formfabricator') . '</span> '
-                . $excerpt($b, $b_from, $b_to, 'ins') . '</div>'
+                . $excerpt_html($b, $b_from, $b_to, true) . '</div>'
                 . '</div>';
         }
         if ($more) {
@@ -1932,38 +1969,38 @@ final class Verificationpage
         }
 
         $seals_section_id = 'fabricator-pdf-content-seals-' . $uid_prefix;
-        echo "<div class='fabricator-pdf-detail-section'"
+        self::$report .= "<div class='fabricator-pdf-detail-section'"
            . " id='fabricator-pdf-section-seals-" . esc_attr($uid_prefix) . "'>";
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($seals_section_id) . "'>" . esc_html__('Seal Blocks', 'formfabricator') . "</button>";
-        echo "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
-        echo "</div>";
-        echo "<div id='" . esc_attr($seals_section_id) . "'"
+        self::$report .= "<span class='fabricator-pdf-detail-badge fabricator-pdf-badge-fail'>" . esc_html__('FAIL', 'formfabricator') . "</span>";
+        self::$report .= "</div>";
+        self::$report .= "<div id='" . esc_attr($seals_section_id) . "'"
            . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-        echo "<div class='fabricator-pdf-hash-list'>";
+        self::$report .= "<div class='fabricator-pdf-hash-list'>";
 
         $total_seals = count($all_seals_b64);
-        echo "<p style='margin:8px 14px 4px;font-size:12px;color:#d63638;font-weight:600'>";
-        echo esc_html(
+        self::$report .= "<p style='margin:8px 14px 4px;font-size:12px;color:#d63638;font-weight:600'>";
+        self::$report .= esc_html(
             sprintf(
                 /* translators: %d: number of seal blocks found in the PDF (should be exactly 1). */
                 _n('%d seal block found — exactly 1 is expected.', '%d seal blocks found — exactly 1 is expected.', $total_seals, 'formfabricator'),
                 $total_seals
             )
         ) . ' ';
-        echo esc_html__('Any extra seal block is proof of tampering regardless of its HMAC status.', 'formfabricator') . ' ';
+        self::$report .= esc_html__('Any extra seal block is proof of tampering regardless of its HMAC status.', 'formfabricator') . ' ';
         // The checks read the last seal of the document's text; blocks appended after the end of the file come later in
         // this list but are not in that text.
         $read_seal = $text_seal_b64_list === [] ? false : array_search(end($text_seal_b64_list), $all_seals_b64, true);
         if ($read_seal !== false) {
-            echo esc_html(sprintf(
+            self::$report .= esc_html(sprintf(
                 // translators: %d: number of the seal block the checks read.
                 __('The checks above read seal #%d, the last one in the document\'s text.', 'formfabricator'),
                 $read_seal + 1
             ));
         }
-        echo "</p>";
+        self::$report .= "</p>";
 
         foreach ($all_seals_b64 as $idx => $sb64) {
             $sb64      = trim((string) $sb64);
@@ -1997,61 +2034,54 @@ final class Verificationpage
                 }
             }
 
-            $row_cls  = $is_ok ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail';
-            $pill_cls = $is_ok ? 'fabricator-pdf-pill--pass'     : 'fabricator-pdf-pill--fail';
-            $pill_txt = $is_ok ? esc_html__('AUTHENTIC', 'formfabricator') : esc_html__('FORGED / INVALID', 'formfabricator');
-
-            $seal_row_style = 'flex-direction:column;align-items:flex-start;gap:6px;padding:10px 14px';
-            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-            echo "<div class='fabricator-pdf-hash-row {$row_cls}' style='{$seal_row_style}'>";
-            echo "<div style='display:flex;align-items:center;gap:8px;width:100%'>";
+            self::$report .= "<div class='fabricator-pdf-hash-row " . ($is_ok ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail') . "'"
+                . " style='flex-direction:column;align-items:flex-start;gap:6px;padding:10px 14px'>";
+            self::$report .= "<div style='display:flex;align-items:center;gap:8px;width:100%'>";
             // translators: %d: position of this seal among the seals found in the document.
-            echo "<strong style='flex:1'>" . esc_html(sprintf(__('Seal #%d', 'formfabricator'), (int) $seal_num)) . "</strong>";
-            echo "<span class='fabricator-pdf-pill {$pill_cls}'>{$pill_txt}</span>";
-            echo "</div>";
+            self::$report .= "<strong style='flex:1'>" . esc_html(sprintf(__('Seal #%d', 'formfabricator'), (int) $seal_num)) . "</strong>";
+            self::$report .= "<span class='fabricator-pdf-pill " . ($is_ok ? 'fabricator-pdf-pill--pass' : 'fabricator-pdf-pill--fail') . "'>"
+                . ($is_ok ? esc_html__('AUTHENTIC', 'formfabricator') : esc_html__('FORGED / INVALID', 'formfabricator')) . "</span>";
+            self::$report .= "</div>";
 
             // Always show a truncated preview of the raw base64 between the markers.
-            $b64_preview = strlen($sb64) > 120
-                ? esc_html(substr($sb64, 0, 60)) . '…' . esc_html(substr($sb64, -30))
-                : esc_html($sb64);
-            echo "<div style='font-size:10px;color:#787c82;font-family:monospace;word-break:break-all'>";
-            echo esc_html__('Base64:', 'formfabricator') . ' ' . $b64_preview;
-            echo "</div>";
+            $b64_preview = strlen($sb64) > 120 ? substr($sb64, 0, 60) . '…' . substr($sb64, -30) : $sb64;
+            self::$report .= "<div style='font-size:10px;color:#787c82;font-family:monospace;word-break:break-all'>";
+            self::$report .= esc_html__('Base64:', 'formfabricator') . ' ' . esc_html($b64_preview);
+            self::$report .= "</div>";
 
             if ($parse_err !== '') {
-                echo "<div style='font-size:11px;color:#d63638'>" . esc_html($parse_err) . "</div>";
+                self::$report .= "<div style='font-size:11px;color:#d63638'>" . esc_html($parse_err) . "</div>";
             } elseif (is_array($sd)) {
                 // Show key fields from the seal so the admin can identify which is real
-                $s_form    = esc_html((string) ($sd['form_name'] ?? '—'));
-                $s_id      = esc_html((string) ($sd['form_id']   ?? '—'));
-                $s_gen     = esc_html((string) ($sd['generated'] ?? '—'));
-                $s_fields  = is_array($sd['fields'] ?? null) ? count($sd['fields']) : '—';
-                $s_pages   = esc_html((string) ($sd['expected_pages'] ?? '—'));
-                echo "<table style='font-size:11px;border-collapse:collapse;width:100%'>";
-                echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0;white-space:nowrap'>" . esc_html__('Form', 'formfabricator') . "</td>"
+                $s_form    = (string) ($sd['form_name'] ?? '—');
+                $s_id      = (string) ($sd['form_id']   ?? '—');
+                $s_gen     = (string) ($sd['generated'] ?? '—');
+                $s_fields  = is_array($sd['fields'] ?? null) ? (string) count($sd['fields']) : '—';
+                $s_pages   = (string) ($sd['expected_pages'] ?? '—');
+                self::$report .= "<table style='font-size:11px;border-collapse:collapse;width:100%'>";
+                self::$report .= "<tr><td style='color:#787c82;padding:1px 8px 1px 0;white-space:nowrap'>" . esc_html__('Form', 'formfabricator') . "</td>"
                    // translators: %1$s: form name, %2$s: form ID, both as recorded in the seal.
-                   . "<td>" . sprintf(esc_html__('%1$s (ID: %2$s)', 'formfabricator'), $s_form, $s_id) . "</td></tr>";
-                echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Generated', 'formfabricator') . "</td>"
-                   . "<td>" . $s_gen . "</td></tr>";
-                echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Fields', 'formfabricator') . "</td>"
-                   . "<td>" . $s_fields . "</td></tr>";
-                echo "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Pages', 'formfabricator') . "</td>"
-                   . "<td>" . $s_pages . "</td></tr>";
-                echo "</table>";
+                   . "<td>" . esc_html(sprintf(__('%1$s (ID: %2$s)', 'formfabricator'), $s_form, $s_id)) . "</td></tr>";
+                self::$report .= "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Generated', 'formfabricator') . "</td>"
+                   . "<td>" . esc_html($s_gen) . "</td></tr>";
+                self::$report .= "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Fields', 'formfabricator') . "</td>"
+                   . "<td>" . esc_html($s_fields) . "</td></tr>";
+                self::$report .= "<tr><td style='color:#787c82;padding:1px 8px 1px 0'>" . esc_html__('Pages', 'formfabricator') . "</td>"
+                   . "<td>" . esc_html($s_pages) . "</td></tr>";
+                self::$report .= "</table>";
                 // Everything the seal records, folded: two seals are told apart by comparing these.
                 $sd_json = (string) wp_json_encode($sd, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                 if (strlen($sd_json) > 200000) {
                     $sd_json = mb_strcut($sd_json, 0, 200000, 'UTF-8') . "\n…";
                 }
-                echo "<details class='fabricator-pdf-seal-block'><summary>" . esc_html__('Seal content', 'formfabricator') . '</summary>'
+                self::$report .= "<details class='fabricator-pdf-seal-block'><summary>" . esc_html__('Seal content', 'formfabricator') . '</summary>'
                    . "<pre class='fabricator-pdf-json-pre'>" . esc_html($sd_json) . '</pre></details>';
             }
 
-            echo "</div>";
+            self::$report .= "</div>";
         }
 
-        echo "</div></div></div>";
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+        self::$report .= "</div></div></div>";
     }
 
     /**
@@ -2074,26 +2104,24 @@ final class Verificationpage
         self::setProgress(__('Checking annotations…', 'formfabricator'), 58);
 
         // The list first, so the header can carry the outcome.
-        ob_start();
+        $report_mark = self::reportMark();
         $annotation_fail_count = self::renderAnnotationList(self::collectAnnotations($pdf_raw, $object_index, $budget), $rebuilt_payload);
-        $list                  = (string) ob_get_clean();
+        $list_html                  = (string) self::takeReport($report_mark);
 
-        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-annots-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-annots-" . esc_attr($uid_prefix) . "'>";
         $fold_id = 'fabricator-pdf-content-annots-' . $uid_prefix;
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($fold_id) . "'>"
            . esc_html__('Annotations', 'formfabricator') . "</button>";
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes; $list was escaped at each echo() that built it.
-        echo self::detailBadge('fabricator-pdf-badge-annots-' . $uid_prefix, $annotation_fail_count > 0);
-        echo "</div>";
-        echo "<div id='" . esc_attr($fold_id) . "'"
+        self::$report .= self::detailBadgeHtml('fabricator-pdf-badge-annots-' . $uid_prefix, $annotation_fail_count > 0);
+        self::$report .= "</div>";
+        self::$report .= "<div id='" . esc_attr($fold_id) . "'"
            . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-        echo $list;
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
+        self::$report .= $list_html;
 
-        echo "</div>"; // close annotation section foldable content
-        echo "</div>"; // close annotation section wrapper
+        self::$report .= "</div>"; // close annotation section foldable content
+        self::$report .= "</div>"; // close annotation section wrapper
 
         return $annotation_fail_count;
     }
@@ -2330,7 +2358,7 @@ final class Verificationpage
     private static function renderAnnotationList(array $annotations, array $rebuilt_payload): int
     {
         $annotation_fail_count = 0;
-        echo "<div class='fabricator-pdf-cmp-list'>";
+        self::$report .= "<div class='fabricator-pdf-cmp-list'>";
 
         // Each sealed link target accepts as many annotations as the seal counts it.
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
@@ -2377,39 +2405,36 @@ final class Verificationpage
                 // The second column: the sealed link it matches, or in words why it is none of them.
                 $seal_column = $matched ? (string) $target : self::annotationProblem($ann, $target, $sealed_links);
 
-                $row_state  = $matched ? 'pass' : 'fail';
-                $pill_state = $row_state;
-                $pill_text  = $matched ? esc_html__('MATCH', 'formfabricator') : esc_html__('UNMATCHED', 'formfabricator');
+                $state     = $matched ? 'pass' : 'fail';
+                $pill_text = $matched ? __('MATCH', 'formfabricator') : __('UNMATCHED', 'formfabricator');
 
                 $type = (string) ($ann['type'] ?? '');
                 if (!empty($ann['unreadable'])) {
                     // translators: %d: the annotation's position in the list.
-                    $ann_label = esc_html(sprintf(__('Annotation #%d — a list of annotations that cannot be read', 'formfabricator'), $i + 1));
+                    $ann_label = sprintf(__('Annotation #%d — a list of annotations that cannot be read', 'formfabricator'), $i + 1);
                 } elseif ($type === '') {
                     // translators: %d: the annotation's position in the list.
-                    $ann_label = esc_html(sprintf(__('Annotation #%d — no type given', 'formfabricator'), $i + 1));
+                    $ann_label = sprintf(__('Annotation #%d — no type given', 'formfabricator'), $i + 1);
                 } else {
                     // translators: %1$d: the annotation's position, %2$s: its PDF type, e.g. "Link" or "FreeText".
-                    $ann_label = esc_html(sprintf(__('Annotation #%1$d — %2$s', 'formfabricator'), $i + 1, $type));
+                    $ann_label = sprintf(__('Annotation #%1$d — %2$s', 'formfabricator'), $i + 1, $type);
                 }
-                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$row_state}'>";
-                echo "<div class='fabricator-pdf-cmp-header'>"
-                   . "<span class='fabricator-pdf-cmp-label'>{$ann_label}</span>"
-                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$pill_state}'>{$pill_text}</span>"
+                self::$report .= "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--" . esc_attr($state) . "'>";
+                self::$report .= "<div class='fabricator-pdf-cmp-header'>"
+                   . "<span class='fabricator-pdf-cmp-label'>" . esc_html($ann_label) . "</span>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--" . esc_attr($state) . "'>" . esc_html($pill_text) . "</span>"
                    . "</div>";
-                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-                echo "<div class='fabricator-pdf-cmp-body'>";
-                echo "<div class='fabricator-pdf-cmp-col'>"
+                self::$report .= "<div class='fabricator-pdf-cmp-body'>";
+                self::$report .= "<div class='fabricator-pdf-cmp-col'>"
                    . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('PDF content', 'formfabricator') . "</div>"
                    . "<div class='fabricator-pdf-cmp-col__value'>" . esc_html($content_to_match) . "</div>"
                    . "</div>";
-                echo "<div class='fabricator-pdf-cmp-col'>"
+                self::$report .= "<div class='fabricator-pdf-cmp-col'>"
                    . "<div class='fabricator-pdf-cmp-col__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
                    . "<div class='fabricator-pdf-cmp-col__value" . ($matched ? '' : ' fabricator-pdf-cmp-col__value--reason') . "'>"
                    . esc_html($seal_column) . "</div>"
                    . "</div>";
-                echo "</div></div>\n";
+                self::$report .= "</div></div>\n";
             }
         }
 
@@ -2419,7 +2444,7 @@ final class Verificationpage
             for ($k = 0; $k < $left; $k++) {
                 $missing++;
                 $annotation_fail_count++;
-                echo "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
+                self::$report .= "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--fail'>"
                    . "<div class='fabricator-pdf-cmp-header'>"
                    . "<span class='fabricator-pdf-cmp-label'>" . esc_html__('Sealed link', 'formfabricator') . '</span>'
                    . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISSING FROM PDF', 'formfabricator') . '</span>'
@@ -2434,10 +2459,10 @@ final class Verificationpage
             }
         }
         if (empty($annotations) && $missing === 0) {
-            echo "<p class='fabricator-pdf-empty-state'>" . esc_html__('No annotations found in PDF.', 'formfabricator') . "</p>";
+            self::$report .= "<p class='fabricator-pdf-empty-state'>" . esc_html__('No annotations found in PDF.', 'formfabricator') . "</p>";
         }
 
-        echo "</div>"; // fabricator-pdf-cmp-list
+        self::$report .= "</div>"; // fabricator-pdf-cmp-list
 
         return $annotation_fail_count;
     }
@@ -2464,33 +2489,28 @@ final class Verificationpage
         self::setProgress(__('Checking page count…', 'formfabricator'), 68);
 
         $page_box_id    = 'fabricator-pdf-content-pgcount-' . $uid_prefix;
-        $pgcount_sec_id = 'fabricator-pdf-section-pgcount-' . esc_attr($uid_prefix);
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-        echo "<div class='fabricator-pdf-detail-section' id='{$pgcount_sec_id}'>";
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-section' id='" . esc_attr('fabricator-pdf-section-pgcount-' . $uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($page_box_id) . "'>" . esc_html__('Page Count', 'formfabricator') . "</button>";
-        $pgcount_badge = $pagecount_mismatch ? 'fabricator-pdf-badge-fail' : 'fabricator-pdf-badge-pass';
-        $pgcount_label = $pagecount_mismatch ? __('FAIL', 'formfabricator') : __('PASS', 'formfabricator');
-        echo "<span class='fabricator-pdf-detail-badge {$pgcount_badge}'>" . esc_html($pgcount_label) . "</span>";
-        echo "</div>";
-        $pgcount_hidden = $pagecount_mismatch ? '' : ' fabricator-pdf-hidden';
-        echo "<div id='" . esc_attr($page_box_id) . "' class='fabricator-pdf-detail-content{$pgcount_hidden}'>";
-        echo "<div class='fabricator-pdf-stat-row'>";
-        echo "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
-           . "<div class='fabricator-pdf-stat__value'>{$expected_pages}</div></div>";
-        echo "<div class='fabricator-pdf-stat-sep'>→</div>";
-        echo "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
-           . "<div class='fabricator-pdf-stat__value'>{$object_page_count}</div></div>";
-        echo "</div>";
+        self::$report .= "<span class='fabricator-pdf-detail-badge " . ($pagecount_mismatch ? 'fabricator-pdf-badge-fail' : 'fabricator-pdf-badge-pass') . "'>"
+            . ($pagecount_mismatch ? esc_html__('FAIL', 'formfabricator') : esc_html__('PASS', 'formfabricator')) . "</span>";
+        self::$report .= "</div>";
+        self::$report .= "<div id='" . esc_attr($page_box_id) . "' class='fabricator-pdf-detail-content" . ($pagecount_mismatch ? '' : ' fabricator-pdf-hidden') . "'>";
+        self::$report .= "<div class='fabricator-pdf-stat-row'>";
+        self::$report .= "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('Seal', 'formfabricator') . "</div>"
+           . "<div class='fabricator-pdf-stat__value'>" . esc_html($expected_pages) . "</div></div>";
+        self::$report .= "<div class='fabricator-pdf-stat-sep'>→</div>";
+        self::$report .= "<div class='fabricator-pdf-stat'><div class='fabricator-pdf-stat__label'>" . esc_html__('PDF', 'formfabricator') . "</div>"
+           . "<div class='fabricator-pdf-stat__value'>" . esc_html($object_page_count) . "</div></div>";
+        self::$report .= "</div>";
         if ($pagecount_mismatch) {
-            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISMATCH', 'formfabricator') . "</span>";
+            self::$report .= "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISMATCH', 'formfabricator') . "</span>";
         } else {
-            echo "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('OK', 'formfabricator') . "</span>";
+            self::$report .= "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('OK', 'formfabricator') . "</span>";
         }
-        echo "</div>";
-        echo "</div>";
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+        self::$report .= "</div>";
+        self::$report .= "</div>";
 
         return $pagecount_mismatch;
     }
@@ -2513,7 +2533,7 @@ final class Verificationpage
         self::setProgress(__('Checking images…', 'formfabricator'), 75);
 
         // The images first, so the header can carry the outcome.
-        ob_start();
+        $report_mark = self::reportMark();
         if (str_contains($pdf_raw, '/XObject')) {
             // SMask object numbers (alpha channels, skipped as images), collected as Generator::hashImageXObjects()
             // does and held to PdfUtils::MAX_OBJECTS.
@@ -2585,7 +2605,7 @@ final class Verificationpage
 
             if ($missing_images > 0 || $duplicate_images > 0) {
                 $image_missmatch = true;
-                echo "<p style='margin-top:8px;'>"
+                self::$report .= "<p style='margin-top:8px;'>"
                    . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
                    . esc_html(
                        sprintf(
@@ -2598,23 +2618,21 @@ final class Verificationpage
                    . "</span></p>";
             }
         }
-        $images = (string) ob_get_clean();
+        $images_html = (string) self::takeReport($report_mark);
 
         $image_section_id = 'fabricator-pdf-content-images-' . $uid_prefix;
-        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-images-" . esc_attr($uid_prefix) . "'>";
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-images-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($image_section_id) . "'>" . esc_html__('Image Hashes', 'formfabricator') . "</button>";
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes; $images was escaped at each echo() that built it.
-        echo self::detailBadge('fabricator-pdf-badge-images-' . $uid_prefix, $image_missmatch);
-        echo "</div>";
-        echo "<div id='" . esc_attr($image_section_id) . "'"
+        self::$report .= self::detailBadgeHtml('fabricator-pdf-badge-images-' . $uid_prefix, $image_missmatch);
+        self::$report .= "</div>";
+        self::$report .= "<div id='" . esc_attr($image_section_id) . "'"
            . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'"
            . " style='background:#f4f4f4; padding:10px; border:1px solid #ddd;'>";
-        echo $images;
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
-        echo "</div>"; // close image section foldable content
-        echo "</div>"; // close image section wrapper
+        self::$report .= $images_html;
+        self::$report .= "</div>"; // close image section foldable content
+        self::$report .= "</div>"; // close image section wrapper
 
         return $image_missmatch;
     }
@@ -2816,7 +2834,7 @@ final class Verificationpage
         }
 
         if (!$found && !$parentName) {
-            echo esc_html__('[XObject Scan] No XObjects found.', 'formfabricator') . "\n";
+            self::$report .= esc_html__('[XObject Scan] No XObjects found.', 'formfabricator') . "\n";
         }
     }
 
@@ -3000,31 +3018,29 @@ final class Verificationpage
             'height'       => $height,
         ];
 
-        echo "<div style='margin:10px; padding:8px;"
+        self::$report .= "<div style='margin:10px; padding:8px;"
            . " border:2px dashed #c00; background:#fff6f6;'>";
-        echo '<b>' . esc_html__('The image could not be recreated from its stream and counts as a mismatch.', 'formfabricator') . '</b><br>';
-        echo "<ul style='margin:5px 0; padding-left:18px;'>";
+        self::$report .= '<b>' . esc_html__('The image could not be recreated from its stream and counts as a mismatch.', 'formfabricator') . '</b><br>';
+        self::$report .= "<ul style='margin:5px 0; padding-left:18px;'>";
         foreach ($failureReasons as $r) {
-            echo "<li>" . esc_html($r) . "</li>";
+            self::$report .= "<li>" . esc_html($r) . "</li>";
         }
-        echo "</ul>";
+        self::$report .= "</ul>";
 
-        echo "<div style='font-size:11px; color:#333;'>";
-        echo '<b>' . esc_html__('Image metadata:', 'formfabricator') . '</b><br>';
-        echo '• ' . esc_html__('Filters:', 'formfabricator') . ' ' . esc_html(implode(', ', $filters)) . "<br>";
-        echo '• ' . esc_html__('Width x Height:', 'formfabricator') . ' ' . (int)$width . " × " . (int)$height . "<br>";
-        echo '• ' . esc_html__('BitsPerComponent:', 'formfabricator') . ' ' . (int)$bpc . "<br>";
-        echo '• ' . esc_html__('ColorSpace:', 'formfabricator') . ' ' . esc_html($colorspace) . "<br>";
-        echo '• ' . esc_html__('Channels:', 'formfabricator') . ' ' . (int)$channels . "<br>";
-        echo '• ' . esc_html__('ImageMask:', 'formfabricator') . ' ' . ($isImageMask ? 'true' : 'false') . "<br>";
+        self::$report .= "<div style='font-size:11px; color:#333;'>";
+        self::$report .= '<b>' . esc_html__('Image metadata:', 'formfabricator') . '</b><br>';
+        self::$report .= '• ' . esc_html__('Filters:', 'formfabricator') . ' ' . esc_html(implode(', ', $filters)) . "<br>";
+        self::$report .= '• ' . esc_html__('Width x Height:', 'formfabricator') . ' ' . esc_html((int) $width) . " × " . esc_html((int) $height) . "<br>";
+        self::$report .= '• ' . esc_html__('BitsPerComponent:', 'formfabricator') . ' ' . esc_html((int) $bpc) . "<br>";
+        self::$report .= '• ' . esc_html__('ColorSpace:', 'formfabricator') . ' ' . esc_html($colorspace) . "<br>";
+        self::$report .= '• ' . esc_html__('Channels:', 'formfabricator') . ' ' . esc_html((int) $channels) . "<br>";
+        self::$report .= '• ' . esc_html__('ImageMask:', 'formfabricator') . ' ' . ($isImageMask ? 'true' : 'false') . "<br>";
         $dec_size = $decoded !== null
             // translators: %d: decoded image size in bytes.
             ? sprintf(_n('%d byte', '%d bytes', strlen($decoded), 'formfabricator'), strlen($decoded))
             : __('n/a', 'formfabricator');
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see handleUpload() note.
-        echo '• ' . esc_html__('Decoded size:', 'formfabricator') . ' ' . esc_html($dec_size) . '<br>';
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-        echo "</div></div>";
+        self::$report .= '• ' . esc_html__('Decoded size:', 'formfabricator') . ' ' . esc_html($dec_size) . '<br>';
+        self::$report .= "</div></div>";
     }
 
     /**
@@ -3550,17 +3566,17 @@ final class Verificationpage
         int $decoded_len
     ): string {
         $state = $is_allowed ? 'pass' : 'fail';
-        $html  = "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--{$state} fabricator-pdf-img-card'>";
+        $html  = "<div class='fabricator-pdf-cmp-row fabricator-pdf-cmp-row--" . esc_attr($state) . " fabricator-pdf-img-card'>";
         $html .= "<div class='fabricator-pdf-cmp-header'>"
             . "<span class='fabricator-pdf-cmp-label fabricator-pdf-img-card__hash'>SHA-256 <code>" . esc_html($check_hash) . '</code></span>'
-            . "<span class='fabricator-pdf-pill fabricator-pdf-pill--{$state}'>"
+            . "<span class='fabricator-pdf-pill fabricator-pdf-pill--" . esc_attr($state) . "'>"
             . ($is_allowed ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator'))
             . '</span></div>';
 
         $html .= "<div class='fabricator-pdf-img-card__body'>";
         // A data URI: verimages/ is HTTP-blocked.
         $html .= $data_uri !== ''
-            ? "<img class='fabricator-pdf-img-card__image' src='" . esc_attr($data_uri) . "' alt=''>"
+            ? "<img class='fabricator-pdf-img-card__image' src='" . esc_url($data_uri, ['data']) . "' alt=''>"
             : "<p class='fabricator-pdf-img-card__note'>" . esc_html__('[Image could not be rendered]', 'formfabricator') . '</p>';
 
         $html .= "<div class='fabricator-pdf-img-card__meta'>" . esc_html(sprintf(
@@ -3610,10 +3626,10 @@ final class Verificationpage
         self::setProgress(__('Checking content streams…', 'formfabricator'), 87);
 
         // The rows first, so the header can carry the outcome.
-        ob_start();
+        $report_mark = self::reportMark();
         if (empty($allowed_content_hashes)) {
             // Generator refuses to seal without content streams, so a seal listing none was not made here.
-            echo "<p><span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
+            self::$report .= "<p><span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
                . esc_html__('The seal lists no content streams, so the page content cannot be checked.', 'formfabricator')
                . "</span></p>";
             $content_stream_mismatch = true;
@@ -3634,8 +3650,7 @@ final class Verificationpage
 
             $n_seal = count($allowed_content_hashes);
             $n_pdf  = count($cs_result['rows']);
-            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see handleUpload() note.
-            echo "<p class='fabricator-pdf-hash-summary'>"
+            self::$report .= "<p class='fabricator-pdf-hash-summary'>"
                . esc_html(
                    sprintf(
                        /* translators: %1$d: content streams recorded in the seal, %2$d: content streams found in the PDF */
@@ -3644,20 +3659,20 @@ final class Verificationpage
                        $n_pdf
                    )
                ) . "</p>";
-            echo "<div class='fabricator-pdf-hash-list'>";
+            self::$report .= "<div class='fabricator-pdf-hash-list'>";
             foreach ($cs_result['rows'] as $cs_row) {
-                $short = esc_html(substr((string) $cs_row['hash'], 0, 20));
+                $short = substr((string) $cs_row['hash'], 0, 20);
                 if ($cs_row['status'] === 'unrecognised') {
-                    echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+                    self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
                        . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('UNRECOGNISED', 'formfabricator') . "</span>"
-                       . "<code>{$short}…</code>"
+                       . "<code>" . esc_html($short) . "…</code>"
                        . "<span style='font-size:11px;color:#721c24;'>" . esc_html__('not in seal', 'formfabricator') . "</span></div>";
                     continue;
                 }
-                $cs_pill = $cs_row['status'] === 'seal-page' ? esc_html__('SEAL PAGE', 'formfabricator') : esc_html__('MATCH', 'formfabricator');
-                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--pass'>"
-                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>{$cs_pill}</span>"
-                   . "<code>{$short}…</code></div>";
+                self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--pass'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>"
+                   . ($cs_row['status'] === 'seal-page' ? esc_html__('SEAL PAGE', 'formfabricator') : esc_html__('MATCH', 'formfabricator')) . "</span>"
+                   . "<code>" . esc_html($short) . "…</code></div>";
             }
             foreach ($cs_result['problems'] as $cs_problem) {
                 $cs_obj   = (int) ($cs_problem['obj'] ?? 0);
@@ -3673,52 +3688,50 @@ final class Verificationpage
                     'sealed_missing' => sprintf(_n('%d sealed content stream is missing from the PDF.', '%d sealed content streams are missing from the PDF.', $cs_count, 'formfabricator'), $cs_count),
                     default => __('Content streams do not match the seal.', 'formfabricator'),
                 };
-                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+                self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
                    . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html($cs_msg) . "</span></div>";
             }
-            echo "</div>";
+            self::$report .= "</div>";
 
             /* Seal-page text check. */
             $seal_page_text_sealed = (string) ($rebuilt_payload['seal_page_text'] ?? '');
             if ($seal_page_text_live === null) {
-                echo "<p style='margin-top:8px;'>"
+                self::$report .= "<p style='margin-top:8px;'>"
                    . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
                    . esc_html__('Seal-page content stream not found', 'formfabricator')
                    . "</span></p>";
                 $content_stream_mismatch = true;
             } elseif (!hash_equals($seal_page_text_sealed, $seal_page_text_live)) {
-                echo "<p style='margin-top:8px;'>"
+                self::$report .= "<p style='margin-top:8px;'>"
                    . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>"
                    . esc_html__('Text on the seal page does not match the seal', 'formfabricator')
                    . "</span></p>";
                 $content_stream_mismatch = true;
             } else {
-                echo "<p style='margin-top:8px;'>"
+                self::$report .= "<p style='margin-top:8px;'>"
                    . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>"
                    . esc_html__('Seal-page text matches the seal', 'formfabricator')
                    . "</span></p>";
             }
 
             if (!$content_stream_mismatch) {
-                echo "<p style='margin-top:8px;'>"
+                self::$report .= "<p style='margin-top:8px;'>"
                    . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('All streams accounted for', 'formfabricator') . "</span></p>";
             }
         }
-        $rows = (string) ob_get_clean();
+        $rows_html = (string) self::takeReport($report_mark);
 
         $cs_section_id = 'fabricator-pdf-content-streams-' . $uid_prefix;
-        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-streams-" . esc_attr($uid_prefix) . "'>";
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-streams-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($cs_section_id) . "'>" . esc_html__('Content Streams', 'formfabricator') . "</button>";
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- detailBadge() escapes; $rows was escaped at each echo() that built it.
-        echo self::detailBadge('fabricator-pdf-badge-streams-' . $uid_prefix, $content_stream_mismatch);
-        echo "</div>";
-        echo "<div id='" . esc_attr($cs_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-        echo $rows;
-        echo "</div>"; // close content streams foldable content
-        echo "</div>"; // close content streams section wrapper
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+        self::$report .= self::detailBadgeHtml('fabricator-pdf-badge-streams-' . $uid_prefix, $content_stream_mismatch);
+        self::$report .= "</div>";
+        self::$report .= "<div id='" . esc_attr($cs_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        self::$report .= $rows_html;
+        self::$report .= "</div>"; // close content streams foldable content
+        self::$report .= "</div>"; // close content streams section wrapper
 
         return $content_stream_mismatch;
     }
@@ -3746,7 +3759,7 @@ final class Verificationpage
         self::setProgress(__('Checking fonts…', 'formfabricator'), 94);
 
         // The rows first, so the header can carry the outcome.
-        ob_start();
+        $report_mark = self::reportMark();
         if ($matches !== []) {
             $verified_fonts = null;
 
@@ -3820,27 +3833,26 @@ final class Verificationpage
 
                     $all_font_names = array_unique(array_merge($allowed_fonts, $used_fonts));
                     sort($all_font_names);
-                    echo "<div class='fabricator-pdf-hash-list'>";
+                    self::$report .= "<div class='fabricator-pdf-hash-list'>";
                     foreach ($all_font_names as $font) {
                         $in_seal = in_array($font, $allowed_fonts, true);
                         $in_pdf  = in_array($font, $used_fonts, true);
                         if ($in_seal && $in_pdf) {
-                            $row_cls = 'fabricator-pdf-hash-row--pass';
-                            $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>" . esc_html__('OK', 'formfabricator') . "</span>";
+                            $state     = 'pass';
+                            $pill_html = esc_html__('OK', 'formfabricator');
                         } elseif (!$in_seal && $in_pdf) {
-                            $row_cls = 'fabricator-pdf-hash-row--fail';
-                            $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('UNDECLARED', 'formfabricator') . "</span>";
+                            $state     = 'fail';
+                            $pill_html = esc_html__('UNDECLARED', 'formfabricator');
                         } else {
-                            $row_cls = 'fabricator-pdf-hash-row--warn';
-                            $pill    = "<span class='fabricator-pdf-pill fabricator-pdf-pill--warn'>" . esc_html__('UNUSED', 'formfabricator') . "</span>";
+                            $state     = 'warn';
+                            $pill_html = esc_html__('UNUSED', 'formfabricator');
                         }
-                        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                        echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
-                           . $pill
+                        self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--" . esc_attr($state) . "'>"
+                           . "<span class='fabricator-pdf-pill fabricator-pdf-pill--" . esc_attr($state) . "'>" . $pill_html . "</span>"
                            . "<code>" . esc_html($font) . "</code>"
                            . "</div>";
                     }
-                    echo "</div>";
+                    self::$report .= "</div>";
 
                     if ($verified_fonts['unexpected'] || $verified_fonts['missing']) {
                         $font_missmatch = true;
@@ -3852,48 +3864,46 @@ final class Verificationpage
         if ($font_prog_diff['added'] !== [] || $font_prog_diff['removed'] !== []) {
             // The all-stream check counts only added streams, so a stripped font program shows only here.
             $font_missmatch = true;
-            echo "<p class='fabricator-pdf-section-note'>" . esc_html__(
+            self::$report .= "<p class='fabricator-pdf-section-note'>" . esc_html__(
                 'The font names match the seal, but an embedded font file does not. A changed font file can draw other shapes for the same letters, so the page may show something other than the text it holds.',
                 'formfabricator'
             ) . '</p>';
-            echo "<div class='fabricator-pdf-hash-list'>";
+            self::$report .= "<div class='fabricator-pdf-hash-list'>";
             foreach ($font_prog_diff['added'] as $hash) {
-                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+                self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
                    . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . '</span>'
                    . '<span>' . esc_html__('Embedded font file the seal does not list', 'formfabricator') . '</span>'
                    . '<code>' . esc_html($hash) . '</code></div>';
             }
             foreach ($font_prog_diff['removed'] as $hash) {
-                echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+                self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
                    . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('MISSING FROM PDF', 'formfabricator') . '</span>'
                    . '<span>' . esc_html__('Sealed font file no longer in the PDF', 'formfabricator') . '</span>'
                    . '<code>' . esc_html($hash) . '</code></div>';
             }
-            echo '</div>';
+            self::$report .= '</div>';
         }
 
         if (!$font_missmatch) {
-            echo "<p style='margin-top:8px;'>"
+            self::$report .= "<p style='margin-top:8px;'>"
                . "<span class='fabricator-pdf-pill fabricator-pdf-pill--pass'>"
                . esc_html__('All fonts match the seal', 'formfabricator')
                . "</span></p>";
         }
-        $rows = (string) ob_get_clean();
+        $rows_html = (string) self::takeReport($report_mark);
 
         $fonts_section_id = 'fabricator-pdf-content-fonts-' . $uid_prefix;
-        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-fonts-" . esc_attr($uid_prefix) . "'>";
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-fonts-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($fonts_section_id) . "'>" . esc_html__('Fonts', 'formfabricator') . "</button>";
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- detailBadge() escapes; $rows was escaped at each echo() that built it.
-        echo self::detailBadge('fabricator-pdf-badge-fonts-' . $uid_prefix, $font_missmatch);
-        echo "</div>";
-        echo "<div id='" . esc_attr($fonts_section_id) . "'"
+        self::$report .= self::detailBadgeHtml('fabricator-pdf-badge-fonts-' . $uid_prefix, $font_missmatch);
+        self::$report .= "</div>";
+        self::$report .= "<div id='" . esc_attr($fonts_section_id) . "'"
            . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-        echo $rows;
-        echo "</div>"; // close fonts foldable content
-        echo "</div>"; // close fonts section wrapper
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
+        self::$report .= $rows_html;
+        self::$report .= "</div>"; // close fonts foldable content
+        self::$report .= "</div>"; // close fonts section wrapper
 
         return $font_missmatch;
     }
@@ -3972,29 +3982,28 @@ final class Verificationpage
         }
 
         $objects_section_id = 'fabricator-pdf-content-objects-' . $uid_prefix;
-        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-objects-" . esc_attr($uid_prefix) . "'>";
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+        self::$report .= "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-objects-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
            . " data-target='" . esc_attr($objects_section_id) . "'>" . esc_html__('PDF Objects', 'formfabricator') . "</button>";
-        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes.
-        echo self::detailBadge('fabricator-pdf-badge-objects-' . $uid_prefix, $unexpected_detected);
-        echo "</div>";
-        echo "<div id='" . esc_attr($objects_section_id) . "'"
+        self::$report .= self::detailBadgeHtml('fabricator-pdf-badge-objects-' . $uid_prefix, $unexpected_detected);
+        self::$report .= "</div>";
+        self::$report .= "<div id='" . esc_attr($objects_section_id) . "'"
            . " class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
 
         if ($unexpected_detected) {
-            echo "<div class='fabricator-pdf-tag-list'>";
+            self::$report .= "<div class='fabricator-pdf-tag-list'>";
             foreach (array_unique($unexpected_types) as $utype) {
-                echo "<span class='fabricator-pdf-tag'>" . esc_html($utype) . "</span>";
+                self::$report .= "<span class='fabricator-pdf-tag'>" . esc_html($utype) . "</span>";
             }
-            echo "</div>";
+            self::$report .= "</div>";
             self::renderRefusedStreams($refused_streams, $refused_unlisted);
         } else {
-            echo "<p class='fabricator-pdf-empty-state'>" . esc_html__('No unexpected PDF objects detected.', 'formfabricator') . "</p>";
+            self::$report .= "<p class='fabricator-pdf-empty-state'>" . esc_html__('No unexpected PDF objects detected.', 'formfabricator') . "</p>";
         }
 
-        echo "</div>"; // close objects foldable content
-        echo "</div>"; // close objects section wrapper
+        self::$report .= "</div>"; // close objects foldable content
+        self::$report .= "</div>"; // close objects section wrapper
 
         return $unexpected_detected;
     }
@@ -4080,36 +4089,32 @@ final class Verificationpage
             }
             $meta_mismatch = in_array(false, array_column($meta_rows, 3), true);
 
-            ob_start();
-            echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-meta-" . esc_attr($uid_prefix) . "'>";
-            echo "<div class='fabricator-pdf-detail-hdr'>";
-            echo "<button type='button' class='button button-small fabricator-pdf-toggle'"
+            $report_mark = self::reportMark();
+            self::$report .= "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-meta-" . esc_attr($uid_prefix) . "'>";
+            self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+            self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle'"
                . " data-target='" . esc_attr($meta_section_id) . "'>" . esc_html__('PDF Metadata', 'formfabricator') . "</button>";
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes.
-            echo self::detailBadge('fabricator-pdf-badge-meta-' . $uid_prefix, $meta_mismatch);
-            echo "</div>";
-            echo "<div id='" . esc_attr($meta_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-            echo "<div class='fabricator-pdf-hash-list'>";
+            self::$report .= self::detailBadgeHtml('fabricator-pdf-badge-meta-' . $uid_prefix, $meta_mismatch);
+            self::$report .= "</div>";
+            self::$report .= "<div id='" . esc_attr($meta_section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+            self::$report .= "<div class='fabricator-pdf-hash-list'>";
             foreach ($meta_rows as [$label, $actual, $expected, $match]) {
-                $row_cls   = $match ? 'fabricator-pdf-hash-row--pass' : 'fabricator-pdf-hash-row--fail';
-                $pill_cls   = $match ? 'fabricator-pdf-pill--pass' : 'fabricator-pdf-pill--fail';
-                $pill_text  = $match ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator');
-                // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-                echo "<div class='fabricator-pdf-hash-row {$row_cls}'>"
-                   . "<span class='fabricator-pdf-pill {$pill_cls}'>{$pill_text}</span>"
+                $state = $match ? 'pass' : 'fail';
+                self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--" . esc_attr($state) . "'>"
+                   . "<span class='fabricator-pdf-pill fabricator-pdf-pill--" . esc_attr($state) . "'>"
+                   . ($match ? esc_html__('MATCH', 'formfabricator') : esc_html__('MISMATCH', 'formfabricator')) . "</span>"
                    . "<code>" . esc_html($label) . "</code>"
                    . "<span style='color:#50575e;font-size:11px;margin-left:4px;'>"
                    . esc_html($actual !== '' ? $actual : __('(empty)', 'formfabricator'))
                    . ($match ? '' : ' <em style="color:#d63638;">' . esc_html__('expected:', 'formfabricator') . ' ' . esc_html($expected) . '</em>')
                    . "</span>"
                    . "</div>";
-                // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
             }
 
-            echo "</div>"; // fabricator-pdf-hash-list
-            echo "</div>"; // meta section content
-            echo "</div>"; // meta section wrapper
-            $meta_html = (string) ob_get_clean();
+            self::$report .= "</div>"; // fabricator-pdf-hash-list
+            self::$report .= "</div>"; // meta section content
+            self::$report .= "</div>"; // meta section wrapper
+            $meta_html = (string) self::takeReport($report_mark);
         }
 
         return ['html' => $meta_html, 'mismatch' => $meta_mismatch];
@@ -4148,15 +4153,14 @@ final class Verificationpage
     private static function renderStreamFingerprintSection(array $unsealed, string $uid_prefix): void
     {
         $section_id = 'fabricator-pdf-content-allstreams-' . $uid_prefix;
-        echo "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-allstreams-" . esc_attr($uid_prefix) . "'>";
-        echo "<div class='fabricator-pdf-detail-hdr'>";
-        echo "<button type='button' class='button button-small fabricator-pdf-toggle' data-target='" . esc_attr($section_id) . "'>"
+        self::$report .= "<div class='fabricator-pdf-detail-section' id='fabricator-pdf-section-allstreams-" . esc_attr($uid_prefix) . "'>";
+        self::$report .= "<div class='fabricator-pdf-detail-hdr'>";
+        self::$report .= "<button type='button' class='button button-small fabricator-pdf-toggle' data-target='" . esc_attr($section_id) . "'>"
            . esc_html__('Stream Fingerprint', 'formfabricator') . '</button>';
-        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- detailBadge() escapes.
-        echo self::detailBadge('fabricator-pdf-badge-allstreams-' . $uid_prefix, true);
-        echo '</div>';
-        echo "<div id='" . esc_attr($section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
-        echo "<p class='fabricator-pdf-section-note'>" . esc_html(sprintf(
+        self::$report .= self::detailBadgeHtml('fabricator-pdf-badge-allstreams-' . $uid_prefix, true);
+        self::$report .= '</div>';
+        self::$report .= "<div id='" . esc_attr($section_id) . "' class='fabricator-pdf-hidden fabricator-pdf-detail-content'>";
+        self::$report .= "<p class='fabricator-pdf-section-note'>" . esc_html(sprintf(
             // translators: %d: how many compressed parts of the file the seal has no fingerprint for.
             _n(
                 '%d compressed part of this file (a font, an image or other embedded data) has no fingerprint in the seal: it was added or changed after the PDF was made. The rows above name what kind of part it is where they can.',
@@ -4166,13 +4170,13 @@ final class Verificationpage
             ),
             count($unsealed)
         )) . '</p>';
-        echo "<div class='fabricator-pdf-hash-list'>";
+        self::$report .= "<div class='fabricator-pdf-hash-list'>";
         foreach (array_slice($unsealed, 0, 20) as $hash) {
-            echo "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
+            self::$report .= "<div class='fabricator-pdf-hash-row fabricator-pdf-hash-row--fail'>"
                . "<span class='fabricator-pdf-pill fabricator-pdf-pill--fail'>" . esc_html__('NOT IN SEAL', 'formfabricator') . '</span>'
                . '<code>' . esc_html($hash) . '</code></div>';
         }
-        echo '</div></div></div>';
+        self::$report .= '</div></div></div>';
     }
 
     /**
@@ -4242,12 +4246,12 @@ final class Verificationpage
      *
      * @param string     $file_name   The file's sanitized name.
      * @param string     $uid_prefix  Element id prefix of this document's card.
-     * @param string     $pdf_content The report: summary panel and sections.
+     * @param string     $pdf_content_html The report: summary panel and sections.
      * @param array|null $seal        What readSeal() found.
      * @param array      $verdict     What checkDocument() returned.
      * @return void
      */
-    private static function renderDocumentCard(string $file_name, string $uid_prefix, string $pdf_content, ?array $seal, array $verdict): void
+    private static function renderDocumentCard(string $file_name, string $uid_prefix, string $pdf_content_html, ?array $seal, array $verdict): void
     {
         $seal_key_status   = $seal['key_status'] ?? null;
         $seal_compromised  = $seal['compromised'] ?? null;
@@ -4306,10 +4310,10 @@ final class Verificationpage
             $hdr_bg        = '#fff';
         }
 
-        $hdr_wrap_style = 'border:2px solid ' . esc_attr($border_color)
+        $hdr_wrap_style = 'border:2px solid ' . $border_color
             . ';border-left-width:5px;margin:15px 0;border-radius:4px;overflow:hidden;';
         $hdr_btn_style  = 'display:grid;grid-template-columns:1fr auto 1fr;align-items:center;'
-            . 'width:100%;padding:10px 14px;background:' . esc_attr($hdr_bg)
+            . 'width:100%;padding:10px 14px;background:' . $hdr_bg
             . ';border:none;border-bottom:1px solid #dcdcde;cursor:pointer;font-size:13px;'
             . 'gap:12px;box-sizing:border-box;';
         $hdr_name_style = 'grid-column:2;font-weight:600;color:#1d2327;overflow:hidden;'
@@ -4320,35 +4324,33 @@ final class Verificationpage
         $verdict_icon_html = $verdict_icon
             ? '<i class="' . esc_attr($verdict_icon) . '" aria-hidden="true"></i> '
             : '';
-        $verdict_badge = '<span class="fabricator-pdf-pdf-hdr-verdict" style="background:'
-            . esc_attr($badge_bg) . ';color:' . esc_attr($badge_text) . ';' . $badge_base_style . '">'
+        $verdict_badge_html = '<span class="fabricator-pdf-pdf-hdr-verdict" style="'
+            . esc_attr('background:' . $badge_bg . ';color:' . $badge_text . ';' . $badge_base_style) . '">'
             . $verdict_icon_html . esc_html($verdict_label) . '</span>';
 
         if ($is_legacy) {
-            $legacy_badge = '<span class="fabricator-pdf-verdict-legacy" style="background:#1a56db;color:#fff;'
-                . $badge_base_style . '">' . esc_html__('Legacy', 'formfabricator') . '</span>';
-            $hdr_right = '<span style="grid-column:3;justify-self:end;display:flex;gap:6px;'
-                . 'align-items:center;">' . $verdict_badge . $legacy_badge . '</span>';
+            $legacy_badge_html = '<span class="fabricator-pdf-verdict-legacy" style="background:#1a56db;color:#fff;'
+                . esc_attr($badge_base_style) . '">' . esc_html__('Legacy', 'formfabricator') . '</span>';
+            $hdr_right_html = '<span style="grid-column:3;justify-self:end;display:flex;gap:6px;'
+                . 'align-items:center;">' . $verdict_badge_html . $legacy_badge_html . '</span>';
         } else {
-            $hdr_right = '<span style="grid-column:3;justify-self:end;flex-shrink:0;">'
-                . $verdict_badge . '</span>';
+            $hdr_right_html = '<span style="grid-column:3;justify-self:end;flex-shrink:0;">'
+                . $verdict_badge_html . '</span>';
         }
 
-        // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped -- pre-escaped at assignment; see the note at the top of handleUpload().
-        echo "<div style='" . $hdr_wrap_style . "'>";
-        echo "<button type='button' class='fabricator-pdf-toggle fabricator-pdf-pdf-hdr'"
+        self::$report .= "<div style='" . esc_attr($hdr_wrap_style) . "'>";
+        self::$report .= "<button type='button' class='fabricator-pdf-toggle fabricator-pdf-pdf-hdr'"
             . " data-target='" . esc_attr($segment_id) . "'"
-            . " style='" . $hdr_btn_style . "'>";
-        echo "<span></span>";
-        echo "<span class='fabricator-pdf-pdf-hdr-name' style='" . $hdr_name_style . "'>"
+            . " style='" . esc_attr($hdr_btn_style) . "'>";
+        self::$report .= "<span></span>";
+        self::$report .= "<span class='fabricator-pdf-pdf-hdr-name' style='" . esc_attr($hdr_name_style) . "'>"
             . esc_html($file_name) . "</span>";
-        echo $hdr_right;
-        echo "</button>";
-        echo "<div id='" . esc_attr($segment_id) . "' class='fabricator-pdf-hidden' style='padding:10px;'>";
-        echo $pdf_content;
-        // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped,WordPress.Security.EscapeOutput.ExceptionNotEscaped
-        echo "</div>";
-        echo "</div>";
+        self::$report .= $hdr_right_html;
+        self::$report .= "</button>";
+        self::$report .= "<div id='" . esc_attr($segment_id) . "' class='fabricator-pdf-hidden' style='padding:10px;'>";
+        self::$report .= $pdf_content_html;
+        self::$report .= "</div>";
+        self::$report .= "</div>";
     }
 
 
@@ -4440,32 +4442,32 @@ final class Verificationpage
      */
     private static function renderSummaryPanel(array $d): string
     {
-        $pass     = '<span class="fabricator-pdf-chk-pass">&#10003;</span>';
-        $fail     = '<span class="fabricator-pdf-chk-fail">&#10007;</span>';
-        $warn     = '<span class="fabricator-pdf-chk-warn">&#9888;</span>';
-        $rotated  = '<span class="fabricator-pdf-chk-rotated">&#8634;</span>';
-        $caret    = '<span class="fabricator-pdf-row-caret">&#8250;</span>';
+        $pass_html     = '<span class="fabricator-pdf-chk-pass">&#10003;</span>';
+        $fail_html     = '<span class="fabricator-pdf-chk-fail">&#10007;</span>';
+        $warn_html     = '<span class="fabricator-pdf-chk-warn">&#9888;</span>';
+        $rotated_html  = '<span class="fabricator-pdf-chk-rotated">&#8634;</span>';
+        $caret_html    = '<span class="fabricator-pdf-row-caret">&#8250;</span>';
 
-        $row = function (bool $ok, string $label, string $detail, string $target_id)
- use ($pass, $fail, $caret): string {
-            $icon   = $ok ? $pass : $fail;
-            $status = $ok
+        $row_html = function (bool $ok, string $label, string $detail, string $target_id)
+ use ($pass_html, $fail_html, $caret_html): string {
+            $icon_html   = $ok ? $pass_html : $fail_html;
+            $status_html = $ok
                 ? '<span class="fabricator-pdf-row-ok">' . esc_html__('OK', 'formfabricator') . '</span>'
                 : '<span class="fabricator-pdf-row-fail">' . esc_html($detail) . '</span>';
             return "<tr class='fabricator-pdf-toggle fabricator-pdf-summary-row' data-target='"
                 . esc_attr($target_id) . "' title='" . esc_attr__('Show details', 'formfabricator') . "'>"
-                . "<td>{$icon}</td>"
+                . '<td>' . $icon_html . '</td>'
                 . '<td>' . esc_html($label) . '</td>'
-                . "<td class='fabricator-pdf-row-detail'>{$status}</td>"
-                . "<td class='fabricator-pdf-row-caret-cell'>{$caret}</td>"
+                . "<td class='fabricator-pdf-row-detail'>" . $status_html . '</td>'
+                . "<td class='fabricator-pdf-row-caret-cell'>" . $caret_html . '</td>'
                 . "</tr>\n";
         };
 
         $uid  = $d['uid_prefix'];
-        $rows = '';
+        $rows_html = '';
 
         if (!empty($d['incremental_update_detected'])) {
-            $rows .= $row(
+            $rows_html .= $row_html(
                 false,
                 __('PDF structure', 'formfabricator'),
                 __('Incremental update detected', 'formfabricator'),
@@ -4474,7 +4476,7 @@ final class Verificationpage
         }
 
         if (!empty($d['xref_conflicts'])) {
-            $rows .= $row(
+            $rows_html .= $row_html(
                 false,
                 __('PDF structure', 'formfabricator'),
                 __('Objects defined twice — a viewer may show other content than was checked', 'formfabricator'),
@@ -4483,7 +4485,7 @@ final class Verificationpage
         }
 
         if (($d['escaped_name'] ?? null) !== null) {
-            $rows .= $row(
+            $rows_html .= $row_html(
                 false,
                 __('PDF structure', 'formfabricator'),
                 __('Disguised additions — a viewer may show content the checks cannot see', 'formfabricator'),
@@ -4492,7 +4494,7 @@ final class Verificationpage
         }
 
         if (!empty($d['multiple_seals_detected'])) {
-            $rows .= $row(
+            $rows_html .= $row_html(
                 false,
                 __('Seal integrity', 'formfabricator'),
                 __('More than one seal block — the document has been tampered with', 'formfabricator'),
@@ -4513,35 +4515,34 @@ final class Verificationpage
             $key_msg     = $unknown_key
                 ? __('NOT VERIFIABLE — no key on this site matches this seal; do not treat the document as authentic', 'formfabricator')
                 : __('NOT CHECKED — the signing key exists but could not be decrypted', 'formfabricator');
-            $key_icon    = $unknown_key ? $fail : $warn;
+            $key_icon_html    = $unknown_key ? $fail_html : $warn_html;
             $key_class   = $unknown_key ? 'fabricator-pdf-row-fail' : 'fabricator-pdf-row-warn';
-            $rows .= "<tr class='fabricator-pdf-toggle fabricator-pdf-summary-row' data-target='"
+            $rows_html .= "<tr class='fabricator-pdf-toggle fabricator-pdf-summary-row' data-target='"
                 . esc_attr($uid . '-raw-content') . "' title='" . esc_attr__('Show details', 'formfabricator') . "'>"
-                . "<td>{$key_icon}</td>"
+                . '<td>' . $key_icon_html . '</td>'
                 . '<td>' . esc_html__('Cryptographic seal (HMAC)', 'formfabricator') . '</td>'
-                . "<td class='fabricator-pdf-row-detail'><span class='{$key_class}'>"
+                . "<td class='fabricator-pdf-row-detail'><span class='" . esc_attr($key_class) . "'>"
                 . esc_html($key_msg) . "</span></td>"
-                . "<td class='fabricator-pdf-row-caret-cell'>{$caret}</td>"
-                . "</tr>
-";
+                . "<td class='fabricator-pdf-row-caret-cell'>" . $caret_html . '</td>'
+                . "</tr>\n";
         } else {
             $seal_detail = __('MISMATCH — document may have been tampered with', 'formfabricator');
-            $rows .= $row($d['seal_matches'], __('Cryptographic seal (HMAC)', 'formfabricator'), $seal_detail, $uid . '-raw-content');
+            $rows_html .= $row_html($d['seal_matches'], __('Cryptographic seal (HMAC)', 'formfabricator'), $seal_detail, $uid . '-raw-content');
         }
 
         if ($d['seal_matches']) {
             $key_status       = (string)($d['seal_key_status'] ?? 'active');
             $key_compromised  = !empty($d['seal_compromised']);
             if ($key_compromised) {
-                $rows .= "<tr class='fabricator-pdf-summary-row'>"
-                    . "<td>{$warn}</td>"
+                $rows_html .= "<tr class='fabricator-pdf-summary-row'>"
+                    . '<td>' . $warn_html . '</td>'
                     . "<td>" . esc_html__('Seal key', 'formfabricator') . "</td>"
                     . "<td class='fabricator-pdf-row-detail' colspan='2'>"
                     . "<span class='fabricator-pdf-row-warn'>"
                     . esc_html__('COMPROMISED — manual verification strongly recommended', 'formfabricator')
                     . "</span></td></tr>\n";
             } elseif (in_array($key_status, ['rotated-legacy', 'compromised-legacy'], true)) {
-                $rows .= "<tr class='fabricator-pdf-summary-row'>"
+                $rows_html .= "<tr class='fabricator-pdf-summary-row'>"
                     . "<td>&#10003;</td>"
                     . "<td>" . esc_html__('Seal key', 'formfabricator') . "</td>"
                     . "<td class='fabricator-pdf-row-detail' colspan='2'>"
@@ -4550,8 +4551,8 @@ final class Verificationpage
                     . "&nbsp;" . esc_html__('Manually imported key', 'formfabricator')
                     . "</td></tr>\n";
             } elseif ($key_status !== 'active') {
-                $rows .= "<tr class='fabricator-pdf-summary-row'>"
-                    . "<td>{$rotated}</td>"
+                $rows_html .= "<tr class='fabricator-pdf-summary-row'>"
+                    . '<td>' . $rotated_html . '</td>'
                     . "<td>" . esc_html__('Seal key', 'formfabricator') . "</td>"
                     . "<td class='fabricator-pdf-row-detail' colspan='2'>"
                     . "<span class='fabricator-pdf-row-rotated'>"
@@ -4561,7 +4562,7 @@ final class Verificationpage
         }
 
         $fields_ok = $d['field_mismatch_count'] === 0;
-        $rows .= $row(
+        $rows_html .= $row_html(
             $fields_ok,
             __('Visual field content', 'formfabricator'),
             // translators: %d: number of visible form fields whose content no longer matches the seal.
@@ -4570,7 +4571,7 @@ final class Verificationpage
         );
 
         $annots_ok = $d['annotation_fail_count'] === 0;
-        $rows .= $row(
+        $rows_html .= $row_html(
             $annots_ok,
             __('Annotations', 'formfabricator'),
             // translators: %d: number of annotations, or sealed links, that don't match between PDF and seal.
@@ -4578,9 +4579,9 @@ final class Verificationpage
             'fabricator-pdf-content-annots-' . $uid
         );
 
-        $rows .= $row(!$d['pagecount_mismatch'], __('Page count', 'formfabricator'), __('MISMATCH', 'formfabricator'), 'fabricator-pdf-content-pgcount-' . $uid);
+        $rows_html .= $row_html(!$d['pagecount_mismatch'], __('Page count', 'formfabricator'), __('MISMATCH', 'formfabricator'), 'fabricator-pdf-content-pgcount-' . $uid);
 
-        $rows .= $row(
+        $rows_html .= $row_html(
             !$d['image_missmatch'],
             __('Image hashes', 'formfabricator'),
             __('MISMATCH — image content changed', 'formfabricator'),
@@ -4588,14 +4589,14 @@ final class Verificationpage
         );
 
         $cs_ok = !($d['content_stream_mismatch'] ?? false);
-        $rows .= $row(
+        $rows_html .= $row_html(
             $cs_ok,
             __('Page content integrity', 'formfabricator'),
             __('Page content was modified or added', 'formfabricator'),
             'fabricator-pdf-content-streams-' . $uid
         );
 
-        $rows .= $row(
+        $rows_html .= $row_html(
             !$d['font_missmatch'],
             __('Fonts', 'formfabricator'),
             !empty($d['font_programs_changed'])
@@ -4604,7 +4605,7 @@ final class Verificationpage
             'fabricator-pdf-content-fonts-' . $uid
         );
 
-        $rows .= $row(
+        $rows_html .= $row_html(
             !$d['unexpected_detected'],
             __('PDF Objects', 'formfabricator'),
             __('Unexpected object types detected', 'formfabricator'),
@@ -4612,7 +4613,7 @@ final class Verificationpage
         );
 
         if (isset($d['meta_mismatch'])) {
-            $rows .= $row(
+            $rows_html .= $row_html(
                 !$d['meta_mismatch'],
                 __('PDF Metadata', 'formfabricator'),
                 __('Document information differs from the seal, or its dates from the time it was made', 'formfabricator'),
@@ -4621,7 +4622,7 @@ final class Verificationpage
         }
 
         if (!empty($d['all_stream_mismatch'])) {
-            $rows .= $row(
+            $rows_html .= $row_html(
                 false,
                 __('Stream fingerprint', 'formfabricator'),
                 __('A compressed stream was added or modified', 'formfabricator'),
@@ -4633,33 +4634,33 @@ final class Verificationpage
             if ((string) ($d['seal_key_status'] ?? '') === 'undecryptable-key') {
                 // Undetermined, not failed: the key is this site's own but unreadable, a local configuration problem.
                 $verdict_class = 'fabricator-pdf-verdict-warn';
-                $verdict_text  = '&#9888; ' . esc_html($d['file_name']) . ' — '
+                $verdict_html  = '&#9888; ' . esc_html($d['file_name']) . ' — '
                     . esc_html__('NOT VERIFIABLE — signing key could not be decrypted', 'formfabricator');
             } else {
                 // A key id this site never had is what a forged seal looks like; never present it as merely undetermined.
                 $verdict_class = 'fabricator-pdf-verdict-fail';
-                $verdict_text  = '&#10007; ' . esc_html($d['file_name']) . ' — '
+                $verdict_html  = '&#10007; ' . esc_html($d['file_name']) . ' — '
                     . esc_html__('NOT VERIFIABLE — unknown signing key, do not treat as authentic', 'formfabricator');
             }
         } else {
             $verdict_class = $d['document_modified'] ? 'fabricator-pdf-verdict-fail' : 'fabricator-pdf-verdict-pass';
-            $verdict_text  = $d['document_modified']
+            $verdict_html  = $d['document_modified']
                 ? '&#10007; ' . esc_html($d['file_name']) . ' — ' . esc_html__('MODIFIED or INVALID', 'formfabricator')
                 : '&#10003; ' . esc_html($d['file_name']) . ' — ' . esc_html__('Authentic', 'formfabricator');
         }
 
         $nonce_html = '';
         if (!empty($d['doc_nonce'])) {
-            $nonce_disp = esc_html((string) $d['doc_nonce']);
-            $nonce_html = "<div class='fabricator-pdf-doc-id'>" . esc_html__('Document ID:', 'formfabricator') . " <code>{$nonce_disp}</code></div>";
+            $nonce_html = "<div class='fabricator-pdf-doc-id'>" . esc_html__('Document ID:', 'formfabricator')
+                . ' <code>' . esc_html((string) $d['doc_nonce']) . '</code></div>';
         }
 
         return "<div class='fabricator-pdf-summary-panel'>"
-            . "<div class='fabricator-pdf-summary-verdict {$verdict_class}'>{$verdict_text}</div>"
+            . "<div class='fabricator-pdf-summary-verdict " . esc_attr($verdict_class) . "'>" . $verdict_html . '</div>'
             . $nonce_html
             . "<table class='fabricator-pdf-summary-table'>"
             . "<thead><tr><th></th><th>" . esc_html__('Check', 'formfabricator') . "</th><th></th><th></th></tr></thead>"
-            . "<tbody>{$rows}</tbody>"
+            . '<tbody>' . $rows_html . '</tbody>'
             . "</table>"
             . "</div>";
     }
@@ -4822,7 +4823,7 @@ final class Verificationpage
      * @param bool   $failed Whether the section's check failed.
      * @return string
      */
-    private static function detailBadge(string $id, bool $failed): string
+    private static function detailBadgeHtml(string $id, bool $failed): string
     {
         return "<span id='" . esc_attr($id) . "' class='fabricator-pdf-detail-badge fabricator-pdf-badge-" . ($failed ? 'fail' : 'pass') . "'>"
             . ($failed ? esc_html__('FAIL', 'formfabricator') : esc_html__('PASS', 'formfabricator')) . '</span>';
@@ -4854,22 +4855,19 @@ final class Verificationpage
     /**
      * Builds a styled notice card HTML string for pre-flight rejections.
      *
-     * @param string $message Notice text (may contain safe HTML).
+     * @param string $message Notice text.
      * @param string $type    Card type: 'error', 'warning', 'success', or 'info'.
      * @return string HTML notice card markup.
      */
     private static function noticeHtml(string $message, string $type = 'error'): string
     {
         if ($type === 'error') {
-            return sprintf(
-                '<div class="fabricator-vpc fabricator-vpc--error">'
+            return '<div class="fabricator-vpc fabricator-vpc--error">'
                 . '<div class="fabricator-vpc__header">'
                 . '<span class="fabricator-vpc__icon"><span class="dashicons dashicons-warning"></span></span>'
                 . '</div>'
-                . '<div class="fabricator-vpc__step">%s</div>'
-                . '</div>',
-                wp_kses_post($message)
-            );
+                . '<div class="fabricator-vpc__step">' . esc_html($message) . '</div>'
+                . '</div>';
         }
 
         $class = match ($type) {
@@ -4878,11 +4876,7 @@ final class Verificationpage
             'info'    => 'notice notice-info',
             default   => 'notice notice-error',
         };
-        return sprintf(
-            '<div class="%s is-dismissible"><p><strong>%s</strong></p></div>',
-            esc_attr($class),
-            wp_kses_post($message)
-        );
+        return '<div class="' . esc_attr($class) . ' is-dismissible"><p><strong>' . esc_html($message) . '</strong></p></div>';
     }
 
     /**
@@ -4975,13 +4969,13 @@ final class Verificationpage
             }
         }
 
-        echo "<div id='" . esc_attr($uid) . "' class='img-slot'
+        self::$report .= "<div id='" . esc_attr($uid) . "' class='img-slot'
             data-colorspace='" . esc_attr((string) ($meta['colorspace'] ?? '')) . "'
-            data-width='" . (int) ($meta['width'] ?? 0) . "'
-            data-height='" . (int) ($meta['height'] ?? 0) . "'
+            data-width='" . esc_attr((int) ($meta['width'] ?? 0)) . "'
+            data-height='" . esc_attr((int) ($meta['height'] ?? 0)) . "'
             data-imgid='" . esc_attr((string) ($meta['img_id'] ?? '')) . "'
-            data-decodedlen='" . (int) ($meta['decoded_len'] ?? 0) . "'
-            data-allowed='" . (int) ($meta['allowed'] ?? 0) . "'
+            data-decodedlen='" . esc_attr((int) ($meta['decoded_len'] ?? 0)) . "'
+            data-allowed='" . esc_attr((int) ($meta['allowed'] ?? 0)) . "'
         ></div>";
     }
 
@@ -5010,17 +5004,17 @@ final class Verificationpage
             'height'       => $height,
         ];
 
-        echo "<div style='margin:10px; padding:8px; border:2px dashed #c00; background:#fff6f6;'>";
-        echo '<b>' . esc_html__('The image could not be recreated from its stream and counts as a mismatch.', 'formfabricator') . '</b><br>';
-        echo "<ul style='margin:5px 0; padding-left:18px;'>";
+        self::$report .= "<div style='margin:10px; padding:8px; border:2px dashed #c00; background:#fff6f6;'>";
+        self::$report .= '<b>' . esc_html__('The image could not be recreated from its stream and counts as a mismatch.', 'formfabricator') . '</b><br>';
+        self::$report .= "<ul style='margin:5px 0; padding-left:18px;'>";
         foreach ($reasons as $reason) {
-            echo '<li>' . esc_html((string) $reason) . '</li>';
+            self::$report .= '<li>' . esc_html((string) $reason) . '</li>';
         }
-        echo '</ul>';
-        echo "<div style='font-size:11px; color:#333;'>";
-        echo '• ' . esc_html__('ColorSpace:', 'formfabricator') . ' ' . esc_html($colorspace) . '<br>';
-        echo '• ' . esc_html__('Width x Height:', 'formfabricator') . ' ' . (int) $width . ' × ' . (int) $height;
-        echo '</div></div>';
+        self::$report .= '</ul>';
+        self::$report .= "<div style='font-size:11px; color:#333;'>";
+        self::$report .= '• ' . esc_html__('ColorSpace:', 'formfabricator') . ' ' . esc_html($colorspace) . '<br>';
+        self::$report .= '• ' . esc_html__('Width x Height:', 'formfabricator') . ' ' . esc_html((int) $width) . ' × ' . esc_html((int) $height);
+        self::$report .= '</div></div>';
     }
 
     /**
@@ -5042,15 +5036,15 @@ final class Verificationpage
             if ($items === []) {
                 continue;
             }
-            echo '<p>' . esc_html($note) . '</p><ul>';
+            self::$report .= '<p>' . esc_html($note) . '</p><ul>';
             foreach ($items as $item) {
-                echo '<li>' . esc_html(self::refusedStreamLabel($item)) . '</li>';
+                self::$report .= '<li>' . esc_html(self::refusedStreamLabel($item)) . '</li>';
             }
-            echo '</ul>';
+            self::$report .= '</ul>';
         }
         if ($unlisted > 0) {
             // translators: %d: number of further parts that were not unpacked.
-            echo '<p>' . esc_html(sprintf(_n('… and %d more part.', '… and %d more parts.', $unlisted, 'formfabricator'), $unlisted)) . '</p>';
+            self::$report .= '<p>' . esc_html(sprintf(_n('… and %d more part.', '… and %d more parts.', $unlisted, 'formfabricator'), $unlisted)) . '</p>';
         }
     }
 
@@ -5222,6 +5216,7 @@ final class Verificationpage
         imagecopyresampled($dst, $src, 0, 0, 0, 0, $dst_w, $dst_h, $width, $height);
         unset($src); // not imagedestroy(): a no-op since PHP 8.0 and deprecated in 8.5
 
+        // GD prints the encoded image; this buffer catches it, so none of it reaches the response.
         ob_start();
         if ($mime === 'image/png') {
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- null filename: writes to the output buffer opened above, no file is touched.
@@ -5247,16 +5242,11 @@ final class Verificationpage
     {
         // Defensive: never emit empty content
         if ($html === '') {
-            echo '<!-- FF: empty image slot content for ' . esc_html($uid) . ' -->';
+            self::$report .= '<!-- FF: empty image slot content -->';
             return;
         }
 
         // Wrap content so JS can relocate it safely
-        echo sprintf(
-            '<div class="img-slot-content" data-slot="%s">%s</div>',
-            esc_attr($uid),
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $html is pre-built, already-escaped HTML from handleUpload() (see the phpcs:disable block there for details).
-            $html
-        );
+        self::$report .= '<div class="img-slot-content" data-slot="' . esc_attr($uid) . '">' . $html . '</div>';
     }
 }

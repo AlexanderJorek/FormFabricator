@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -98,9 +98,14 @@ class HtmlField extends BaseField
 
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $html = \FabricatorForms\Utils\HtmlSanitizer::sanitize($config['html_content'] ?? '');
+        $html  = \FabricatorForms\Utils\HtmlSanitizer::sanitize($config['html_content'] ?? '');
+        $label = (string) ($config['label'] ?? '');
+        $label_html = empty($config['hide_label']) && $label !== ''
+            ? '<div class="fabricator-label">' . esc_html($label) . '</div>'
+            : '';
         return '<div class="fabricator-field fabricator-field--html" data-field-id="'
             . esc_attr($field_id) . '">'
+            . $label_html
             . $html
             . '</div>';
     }
@@ -177,6 +182,7 @@ class HtmlField extends BaseField
     {
         return [
             'label'          => __('HTML Block', 'formfabricator'),
+            'hide_label'     => true,
             'html_content'   => '<p>' . esc_html__('Text here', 'formfabricator') . '</p>',
             'required'       => false,
             'description'    => '',

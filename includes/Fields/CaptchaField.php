@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -160,20 +160,16 @@ class CaptchaField extends BaseField
      * which its widget always posts as 'g-recaptcha-response'. No reCAPTCHA field posts anything under its own id.
      *
      * @param string $field_id The field's id.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      * @return string
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        if (isset($_POST[$field_id])) {
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-            return sanitize_text_field(wp_unslash($_POST[$field_id]));
+        if (isset($post[$field_id])) {
+            return is_string($post[$field_id]) ? sanitize_text_field($post[$field_id]) : '';
         }
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        $has_response = isset($_POST['g-recaptcha-response']);
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
-        return $has_response ? sanitize_text_field(wp_unslash($_POST['g-recaptcha-response'])) : '';
+        return is_string($post['g-recaptcha-response'] ?? null) ? sanitize_text_field($post['g-recaptcha-response']) : '';
     }
 
     /**

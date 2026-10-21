@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -116,40 +116,40 @@ class SliderField extends BaseField
             $val_from = (float)(is_array($value) ? ($value['from'] ?? $min) : $min);
             $val_to   = (float)(is_array($value) ? ($value['to']   ?? $max) : $max);
             $inner = '<div class="fabricator-slider-wrap fabricator-slider-wrap--range"'
-                . ' data-min="' . $min . '" data-max="' . $max . '" data-step="' . $step . '"'
-                . ' data-from="' . $val_from . '" data-to="' . $val_to . '">'
+                . ' data-min="' . esc_attr($min) . '" data-max="' . esc_attr($max) . '" data-step="' . esc_attr($step) . '"'
+                . ' data-from="' . esc_attr($val_from) . '" data-to="' . esc_attr($val_to) . '">'
                 . '<div class="fabricator-slider-custom fabricator-slider-custom--range" role="group">'
                 . '<div class="fabricator-slider-track">'
                 . '<div class="fabricator-slider-fill"></div>'
                 . '<div class="fabricator-slider-thumb fabricator-slider-thumb--from" tabindex="0" role="slider"'
-                . ' aria-valuemin="' . $min . '" aria-valuemax="' . $max . '" aria-valuenow="' . $val_from . '"></div>'
+                . ' aria-valuemin="' . esc_attr($min) . '" aria-valuemax="' . esc_attr($max) . '" aria-valuenow="' . esc_attr($val_from) . '"></div>'
                 . '<div class="fabricator-slider-thumb fabricator-slider-thumb--to" tabindex="0" role="slider"'
-                . ' aria-valuemin="' . $min . '" aria-valuemax="' . $max . '" aria-valuenow="' . $val_to . '"></div>'
+                . ' aria-valuemin="' . esc_attr($min) . '" aria-valuemax="' . esc_attr($max) . '" aria-valuenow="' . esc_attr($val_to) . '"></div>'
                 . '</div></div>'
                 . '<input type="hidden" name="' . esc_attr($field_id)
                 . '[from]" class="fabricator-slider-input-from" value="">'
                 . '<input type="hidden" name="' . esc_attr($field_id)
                 . '[to]"   class="fabricator-slider-input-to"   value="">'
                 . '<span class="fabricator-slider-value">'
-                . '<span class="fabricator-slider-from-display">' . $val_from . '</span>'
+                . '<span class="fabricator-slider-from-display">' . esc_html($val_from) . '</span>'
                 . ' – '
-                . '<span class="fabricator-slider-to-display">' . $val_to . '</span>'
+                . '<span class="fabricator-slider-to-display">' . esc_html($val_to) . '</span>'
                 . '</span>'
                 . '</div>';
         } else {
             $val   = (float)($value ?? $min);
             $inner = '<div class="fabricator-slider-wrap"'
-                . ' data-min="' . $min . '" data-max="' . $max . '" data-step="' . $step . '"'
-                . ' data-value="' . $val . '">'
+                . ' data-min="' . esc_attr($min) . '" data-max="' . esc_attr($max) . '" data-step="' . esc_attr($step) . '"'
+                . ' data-value="' . esc_attr($val) . '">'
                 . '<div class="fabricator-slider-custom" role="slider" tabindex="0"'
-                . ' aria-valuemin="' . $min . '" aria-valuemax="' . $max . '" aria-valuenow="' . $val . '">'
+                . ' aria-valuemin="' . esc_attr($min) . '" aria-valuemax="' . esc_attr($max) . '" aria-valuenow="' . esc_attr($val) . '">'
                 . '<div class="fabricator-slider-track">'
                 . '<div class="fabricator-slider-fill"></div>'
                 . '<div class="fabricator-slider-thumb"></div>'
                 . '</div></div>'
                 . '<input type="hidden" name="' . esc_attr($field_id)
                 . '" id="' . esc_attr($field_id) . '" value="">'
-                . '<span class="fabricator-slider-value">' . $val . '</span>'
+                . '<span class="fabricator-slider-value">' . esc_html($val) . '</span>'
                 . '</div>';
         }
 
@@ -160,12 +160,12 @@ class SliderField extends BaseField
      * Returns the sanitized slider value. Ranged mode submits `$field_id[from]` and `$field_id[to]` as an array; single mode submits a scalar.
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
-        $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : null;
+        $raw = isset($post[$field_id]) ? map_deep(self::capRawArray($post[$field_id]), 'sanitize_text_field') : null;
         if (is_array($raw)) {
             // scalarSubfieldMap() avoids stringifying a nested from[]/to[] array to "Array".
             $pair = self::scalarSubfieldMap($raw);
@@ -174,8 +174,7 @@ class SliderField extends BaseField
                 'to'   => sanitize_text_field($pair['to']   ?? ''),
             ];
         }
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
-        return isset($_POST[$field_id]) ? sanitize_text_field((string)$raw) : '';
+        return isset($post[$field_id]) ? sanitize_text_field((string) $raw) : '';
     }
 
     /**
@@ -311,8 +310,7 @@ class SliderField extends BaseField
     public function map(mixed $value, array $config): string
     {
         if (!empty($config['ranged']) && is_array($value)) {
-            $from = is_scalar($value['from'] ?? null) ? trim((string) $value['from']) : '';
-            $to   = is_scalar($value['to'] ?? null) ? trim((string) $value['to']) : '';
+            [$from, $to] = array_column(self::shownParts($value, $config), 'value');
             // An optional range left untouched posts neither end: "[No entry]", not a bare " – ".
             if ($from === '' && $to === '') {
                 return __('[No entry]', 'formfabricator');
@@ -323,6 +321,50 @@ class SliderField extends BaseField
             return __('[No entry]', 'formfabricator');
         }
         return $value !== null && $value !== '' ? (string)$value : __('[No entry]', 'formfabricator');
+    }
+
+    /**
+     * The entry map() makes, with each sub-value as a part for a mail with automation markers
+     * (BaseField::withMarkerParts()).
+     *
+     * @param string $field_id Field identifier.
+     * @param string $label    Field label.
+     * @param mixed  $value    Submitted value.
+     * @param array  $config   Field configuration.
+     * @param array  $context  Submission context.
+     * @return array<string, array>
+     */
+    public function mapNormalized(
+        string $field_id,
+        string $label,
+        mixed $value,
+        array $config,
+        array $context
+    ): array {
+        return self::withMarkerParts(
+            parent::mapNormalized($field_id, $label, $value, $config, $context),
+            $field_id,
+            self::shownParts($value, $config)
+        );
+    }
+
+    /**
+     * A range's two ends, as map() writes them ("from – to") and a marked mail marks them one by one. None for a
+     * single value.
+     *
+     * @param mixed $value  Submitted value.
+     * @param array $config Field configuration.
+     * @return array<int, array{key: string, value: string, sep: string}>
+     */
+    private static function shownParts(mixed $value, array $config): array
+    {
+        if (empty($config['ranged']) || !is_array($value)) {
+            return [];
+        }
+        return [
+            ['key' => 'from', 'value' => is_scalar($value['from'] ?? null) ? trim((string) $value['from']) : '', 'sep' => ''],
+            ['key' => 'to', 'value' => is_scalar($value['to'] ?? null) ? trim((string) $value['to']) : '', 'sep' => ' – '],
+        ];
     }
 
     /**

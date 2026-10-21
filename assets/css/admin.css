@@ -4398,7 +4398,7 @@
 .fabricator-hb-body               { display:flex; flex:1; min-height:0; overflow:hidden; }
 .fabricator-hb-canvas-wrap        { overflow:auto; flex:1; padding:24px; background:color-mix(in srgb, var(--fabricator-admin-accent) 8%, #e8e9ea); display:flex; justify-content:center; align-items:flex-start; min-height:0; }
 .fabricator-hb-canvas {
-    position:relative; background:#fff; flex-shrink:0;
+    position:relative; background-color:#fff; flex-shrink:0;
     background-image:linear-gradient(to right,rgba(0,0,0,.07) 1px,transparent 1px),
                      linear-gradient(to bottom,rgba(0,0,0,.07) 1px,transparent 1px);
     background-size:15px 15px;

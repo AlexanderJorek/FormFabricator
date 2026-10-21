@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -83,7 +83,7 @@ class Assets
             $vars[] = '--fabricator-border-input: ' . $border;
         }
         if (!empty($vars)) {
-            \wp_add_inline_style('fabricator-forms-front', ':root { ' . implode('; ', $vars) . '; }');
+            \wp_add_inline_style('fabricator-forms-front', ':root { ' . wp_strip_all_tags(implode('; ', $vars)) . '; }');
         }
 
         \wp_enqueue_script(
@@ -99,10 +99,10 @@ class Assets
         $assets = self::frontFieldAssets();
         // Built entirely from this plugin's own field-class string literals (never request input).
         if ($assets['css'] !== '') {
-            \wp_add_inline_style('fabricator-forms-front', $assets['css']);
+            \wp_add_inline_style('fabricator-forms-front', wp_strip_all_tags($assets['css']));
         }
         foreach ($assets['globals'] as $name => $literal) {
-            \wp_add_inline_script('fabricator-forms-front', 'window.' . $name . '=' . $literal . ';', 'before');
+            \wp_add_inline_script('fabricator-forms-front', 'window.' . esc_js($name) . '=' . $literal . ';', 'before');
         }
 
         /* Form-select shortcode assets — enqueued here when detectable so they reach <head>;
@@ -474,14 +474,14 @@ class Assets
                     FABRICATOR_FORMS_VERSION,
                     true
                 );
-                $fn = 'window.fabricatorPdfUpdatePreview';
-                $cb = 'if(' . $fn . ')setTimeout(' . $fn . ',0);';
-                $picker_js = 'jQuery(function($){'
-                    . '$(".fabricator-iris-input").wpColorPicker({'
-                    . 'change:function(){' . $cb . '},'
-                    . 'clear:function(){' . $cb . '}'
-                    . '});});';
-                \wp_add_inline_script('wp-color-picker', $picker_js);
+                \wp_add_inline_script(
+                    'wp-color-picker',
+                    'jQuery(function($){'
+                        . '$(".fabricator-iris-input").wpColorPicker({'
+                        . 'change:function(){if(window.fabricatorPdfUpdatePreview)setTimeout(window.fabricatorPdfUpdatePreview,0);},'
+                        . 'clear:function(){if(window.fabricatorPdfUpdatePreview)setTimeout(window.fabricatorPdfUpdatePreview,0);}'
+                        . '});});'
+                );
             }
         }
 
@@ -589,18 +589,17 @@ class Assets
         $hb = hexdec(substr($hover, 5, 2));
         $hover_lum = (0.299 * $hr + 0.587 * $hg + 0.114 * $hb) / 255;
         $hover_fg  = $hover_lum > 0.55 ? '#1d2327' : $hover;
-        // Read by admin-editor-canvas.js, as the accent is: 'static' draws the particle background as a still picture.
-        $particles = \get_option('fabricator_forms_particles', 'animated') === 'static' ? 'static' : 'animated';
 
         \wp_add_inline_style(
             'fabricator-forms-admin',
-            ':root { --fabricator-admin-accent: ' . $admin_accent
-                . '; --fabricator-admin-accent--rgb: ' . $r . ',' . $g . ',' . $b
-                . '; --fabricator-hover-color: ' . $hover
-                . '; --fabricator-hover-color-fg: ' . $hover_fg
-                . '; --fabricator-accent-text: ' . $accent_text
-                . '; --fabricator-admin-accent-fg: ' . $accent_fg
-                . '; --fabricator-particles: ' . $particles . '; }'
+            ':root { --fabricator-admin-accent: ' . sanitize_hex_color($admin_accent)
+                . '; --fabricator-admin-accent--rgb: ' . absint($r) . ',' . absint($g) . ',' . absint($b)
+                . '; --fabricator-hover-color: ' . sanitize_hex_color($hover)
+                . '; --fabricator-hover-color-fg: ' . sanitize_hex_color($hover_fg)
+                . '; --fabricator-accent-text: ' . sanitize_hex_color($accent_text)
+                . '; --fabricator-admin-accent-fg: ' . sanitize_hex_color($accent_fg)
+                // Read by admin-editor-canvas.js, as the accent is: 'static' draws the particle background as a still picture.
+                . '; --fabricator-particles: ' . (\get_option('fabricator_forms_particles', 'animated') === 'static' ? 'static' : 'animated') . '; }'
         );
     }
 

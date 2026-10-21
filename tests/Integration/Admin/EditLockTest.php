@@ -104,7 +104,6 @@ final class EditLockTest extends AjaxTestCase
         $save   = static fn(string $title) => FormModel::save(
             ['title' => $title, 'fields' => $model->fields, 'notifications' => $model->notifications, 'settings' => $model->settings],
             $form,
-            true,
             $loaded
         );
 
@@ -135,7 +134,6 @@ final class EditLockTest extends AjaxTestCase
         $save   = static fn(string $title, string $snapshot) => FormModel::save(
             ['title' => $title, 'fields' => $model->fields, 'notifications' => $model->notifications, 'settings' => $model->settings],
             $form,
-            true,
             $snapshot
         );
 

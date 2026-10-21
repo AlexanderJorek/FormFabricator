@@ -328,6 +328,12 @@ function renderFieldListAfterDrag() {
     renderFieldList();
 }
 
+/* The "has conditions" icon after a row's label: top-level rows, a group's header and the rows inside a group. */
+function condBadgeHtml(field) {
+    return (field.conditions && field.conditions.rules && field.conditions.rules.length)
+        ? ' <i class="fa-solid fa-code-branch fabricator-cond-badge" title="' + escHtml(_i18n.conditionsActive || 'Conditions active') + '"></i>' : '';
+}
+
 function buildFieldRow(field, idx) {
     if (field.type === 'group') { return buildGroupRow(field, idx); }
     var row      = document.createElement('div');
@@ -340,8 +346,7 @@ function buildFieldRow(field, idx) {
     var pal       = findPaletteItem(field.type);
     var icon      = pal ? pal.icon  : 'fa-solid fa-square';
     var typeLabel = pal ? pal.label : field.type;
-    var condBadge = (field.conditions && field.conditions.rules && field.conditions.rules.length)
-        ? ' <i class="fa-solid fa-code-branch fabricator-cond-badge" title="' + escHtml(_i18n.conditionsActive || 'Conditions active') + '"></i>' : '';
+    var condBadge = condBadgeHtml(field);
     row.innerHTML =
         '<div class="fabricator-row-handle"><i class="fa-solid fa-grip-vertical"></i></div>' +
         '<div class="fabricator-row-icon"><i class="' + escHtml(icon) + '"></i></div>' +
@@ -588,7 +593,7 @@ function buildGroupRow(field, idx) {
         '<div class="fabricator-row-handle"><i class="fa-solid fa-grip-vertical"></i></div>' +
         '<div class="fabricator-row-icon"><i class="fa-solid fa-layer-group"></i></div>' +
         '<div class="fabricator-row-info">' +
-            '<div class="fabricator-row-label">' + escHtml(field.label || (_i18n.noLabel || '(no label)')) + '</div>' +
+            '<div class="fabricator-row-label">' + escHtml(field.label || (_i18n.noLabel || '(no label)')) + condBadgeHtml(field) + '</div>' +
             '<div class="fabricator-row-type">' + escHtml(_i18n.fieldGroupType || 'Field group') + '</div>' +
         '</div>' +
         '<div class="fabricator-row-actions">' +
@@ -954,7 +959,7 @@ function buildChildRow(child, childIdx, groupIdx, onRerender) {
     row.innerHTML =
         '<div class="fabricator-child-row-icon"><i class="' + escHtml(icon) + '"></i></div>' +
         '<div class="fabricator-child-row-info">' +
-            '<div class="fabricator-child-row-label">' + escHtml(child.label || (_i18n.noLabel || '(no label)')) + '</div>' +
+            '<div class="fabricator-child-row-label">' + escHtml(child.label || (_i18n.noLabel || '(no label)')) + condBadgeHtml(child) + '</div>' +
             '<div class="fabricator-child-row-type">'  + escHtml(typeLabel) + '</div>' +
         '</div>' +
         '<div class="fabricator-row-actions">' +
@@ -1128,11 +1133,13 @@ function applyDropLine() {
     if ((dragSrcIdx === null && dragChildSrc === null) || dropSideMode !== null) return;
     var list = document.getElementById('fabricator-field-list');
     if (!list) return;
-    var beforeEl = getAfterFromCache(pendingY);
+    /* The cache is relative to the list's content, which scrolls (the list's own or the page's) during the drag. */
+    var beforeEl = getAfterFromCache(pendingY - list.getBoundingClientRect().top + list.scrollTop);
     dropLineTarget = beforeEl ? { beforeEl: beforeEl } : { atEnd: true };
     showDropLine(list, beforeEl);
 }
 
+/* y: relative to the top of the field list's content, as cacheMidpoints() stores the midpoints. */
 function getAfterFromCache(y) {
     var closest = null, closestDist = Infinity;
     for (var i = 0; i < cachedMidpoints.length; i++) {
@@ -1212,13 +1219,17 @@ function cacheMidpoints() {
     var list = document.getElementById('fabricator-field-list');
     if (!list) return;
     cachedMidpoints = [];
+    /* Relative to the list's content, not the viewport: a drag near the list's edge scrolls it (or the page), and
+       positions taken in the viewport at drag start would then put every row that scrolled into view where it no
+       longer is. */
+    var listTop = list.getBoundingClientRect().top - list.scrollTop;
     var rows = list.querySelectorAll('.fabricator-field-row:not(.fabricator-row-dragging)');
     for (var i = 0; i < rows.length; i++) {
         var r   = rows[i];
         var idx = parseInt(r.dataset.idx, 10);
         if (isSecondInPair(idx)) continue;
         var box = r.getBoundingClientRect();
-        cachedMidpoints.push({ el: r, midY: box.top + box.height / 2 });
+        cachedMidpoints.push({ el: r, midY: box.top + box.height / 2 - listTop });
     }
 }
 
@@ -4314,6 +4325,17 @@ function buildNotifContentTab(notif) {
         _i18n.attachUploadsHint || 'All file uploads from the form are forwarded as attachments.',
         !!notif.attach_uploads,
         function (v) { state.notifications[notifModalIdx].attach_uploads = v; });
+
+    /* Automation section */
+    var autoSep = document.createElement('div');
+    autoSep.className   = 'fabricator-sp-section-sep';
+    autoSep.textContent = _i18n.automation || 'Automation';
+    panel.appendChild(autoSep);
+
+    spCheckboxHint(panel, 'notif-markers', _i18n.automationMarkers || 'Add automation markers',
+        _i18n.automationMarkersHint || 'Each answer in the email is written between [FABRICATOR_FIELD_<field id>] and [FABRICATOR_FIELD_END], so a mail parser can find it. Answers containing "[FABRICATOR_FIELD_" are then refused.',
+        !!notif.automation_markers,
+        function (v) { state.notifications[notifModalIdx].automation_markers = v; });
 }
 
 function buildNotifSenderTab(notif) {

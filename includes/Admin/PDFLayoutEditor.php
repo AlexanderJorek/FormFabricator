@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -121,7 +121,8 @@ class PDFLayoutEditor
      */
     public static function ajaxUnlock(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('edit_pdf_layout', 'fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_pdf_layout');
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
         \FabricatorForms\Utils\AdminLock::release('pdf_layout', get_current_user_id());
         wp_send_json_success();
     }
@@ -133,7 +134,8 @@ class PDFLayoutEditor
      */
     public static function ajaxPreview(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('edit_pdf_layout', 'fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_pdf_layout');
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
         /* ---- Rate limit: PDF generation is expensive; throttle per-user preview requests. ---- */
         $rl_key = 'pdf_layout_preview_' . get_current_user_id();
@@ -142,12 +144,11 @@ class PDFLayoutEditor
         }
 
         /* Use live settings from the request so the user doesn't have to save first */
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-        if (!empty($_POST['settings'])) {
-            /* wp_unslash is required — WordPress's wp_magic_quotes() slashes all $_POST values */
-            // Decoded first, as in save(); every key read from $raw is sanitized individually below.
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require() above; every key read from $raw is sanitized individually below.
-            $raw = json_decode(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['settings'] ?? '')), true);
+        if (!empty($_POST['settings']) && is_string($_POST['settings'])) {
+            // JSON sent base64-encoded, an opaque text sanitize_text_field() leaves as it is: the header's texts may hold
+            // markup, which sanitizing the JSON itself would strip. Every key read from $raw is sanitized below.
+            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the editor's own base64-wrapped JSON (strict mode); not obfuscation.
+            $raw = json_decode((string) base64_decode(sanitize_text_field(wp_unslash($_POST['settings'])), true), true);
             if (!is_array($raw)) {
                 \FabricatorForms\fabricator_log('ajaxPreview: settings JSON decode failed — ' . json_last_error_msg());
             }
@@ -220,9 +221,9 @@ class PDFLayoutEditor
      */
     public static function bodyClass(string $classes): string
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
-        $current_page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : '';
-        if ($current_page === 'fabricator-forms-pdf-layout') {
+        // The admin page being shown, as WordPress resolved it from the request.
+        global $plugin_page;
+        if ($plugin_page === 'fabricator-forms-pdf-layout') {
             $classes .= ' fabricator-list-page';
         }
         return $classes;
@@ -265,7 +266,7 @@ class PDFLayoutEditor
         if (!isset($_POST['fabricator_pdf_layout_nonce']) || !\FabricatorForms\Plugin::userCan('edit_pdf_layout')) {
             return;
         }
-        if (!wp_verify_nonce(sanitize_key($_POST['fabricator_pdf_layout_nonce']), 'fabricator_pdf_layout')) {
+        if (!wp_verify_nonce(sanitize_key(wp_unslash($_POST['fabricator_pdf_layout_nonce'])), 'fabricator_pdf_layout')) {
             return;
         }
         $save_error = self::save();
@@ -363,10 +364,9 @@ class PDFLayoutEditor
                 'dummyText'       => $dummy_text,
                 'dummyUpload'     => $dummy_upload,
                 'fieldLayoutMode' => $field_layout_mode,
-                // Dates as the PDF writes them, in the site's time zone, so the live preview matches the PDF: the
-                // metadata's creation time (Generator::METADATA_DATE_FORMAT) and the footer's {date} (the site's
-                // date format, as layout.php fills it in).
-                'createdDate'     => wp_date(\FabricatorForms\PDF\Generator::METADATA_DATE_FORMAT),
+                // Dates as the PDF writes them, so the live preview matches the PDF: the metadata's creation time
+                // (Utils\SigningTime) and the footer's {date} (the site's date format, as layout.php fills it in).
+                'createdDate'     => \FabricatorForms\Utils\SigningTime::format(),
                 'footerDate'      => (string) wp_date((string) (get_option('date_format') ?: 'Y-m-d')),
             ],
             ]
@@ -414,7 +414,7 @@ class PDFLayoutEditor
         <input type="hidden" name="fabricator_pdf_layout_snapshot" value="<?php echo esc_attr(self::snapshot()); ?>">
         <input type="hidden" name="section_hidden" id="fabricator-section-hidden-input"
             value="<?php echo esc_attr(implode(',', $opts['section_hidden'])); ?>">
-        <input type="hidden" name="header_layout_json" id="fabricator-header-layout-input"
+        <input type="hidden" id="fabricator-header-layout-input"
             value="<?php echo esc_attr(\FabricatorForms\Utils\Cast::jsonForAttribute($opts['header_layout'] ?? ['rows' => 8, 'elements' => []])); ?>">
 
         <div class="fabricator-pdf-editor-wrap">
@@ -475,19 +475,19 @@ class PDFLayoutEditor
 
                     <div class="fabricator-settings-field">
                         <label for="font_size_body"><?php echo esc_html__('Base font size:', 'formfabricator'); ?>
-                            <span id="font-size-body-val"><?php echo (int) $opts['font_size_body']; ?></span> <?php echo esc_html__('pt', 'formfabricator'); ?>
+                            <span id="font-size-body-val"><?php echo esc_html((int) $opts['font_size_body']); ?></span> <?php echo esc_html__('pt', 'formfabricator'); ?>
                         </label>
                         <?php // Slider range = what the save clamps to, or a stored value outside it was silently changed on the next save. ?>
                         <input type="range" id="font_size_body" name="font_size_body"
-                            min="6" max="20" step="1" value="<?php echo (int) $opts['font_size_body']; ?>">
+                            min="6" max="20" step="1" value="<?php echo esc_attr((int) $opts['font_size_body']); ?>">
                     </div>
 
                     <div class="fabricator-settings-field">
                         <label for="title_size"><?php echo esc_html__('Title size:', 'formfabricator'); ?>
-                            <span id="title-size-val"><?php echo (int) $opts['title_size']; ?></span> <?php echo esc_html__('pt', 'formfabricator'); ?>
+                            <span id="title-size-val"><?php echo esc_html((int) $opts['title_size']); ?></span> <?php echo esc_html__('pt', 'formfabricator'); ?>
                         </label>
                         <input type="range" id="title_size" name="title_size"
-                            min="10" max="36" step="1" value="<?php echo (int) $opts['title_size']; ?>">
+                            min="10" max="36" step="1" value="<?php echo esc_attr((int) $opts['title_size']); ?>">
                     </div>
                 </div>
 
@@ -504,18 +504,17 @@ class PDFLayoutEditor
                             'left'   => __('Left', 'formfabricator'),
                         ];
                         foreach ($margin_sides as $side => $lbl) :
+                            $margin = (int) $opts['margin_' . $side];
                             ?>
                         <div class="fabricator-settings-field">
                             <label for="margin_<?php echo esc_attr($side); ?>"><?php echo esc_html($lbl); ?>:
                                 <span id="margin-<?php echo esc_attr($side); ?>-val">
-                                    <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $side only ever takes the literal values from $margin_sides above; output is (int)-cast regardless. ?>
-                                    <?php echo (int) $opts['margin_' . $side]; ?>
+                                    <?php echo esc_html((int) $margin); ?>
                                 </span> mm
                             </label>
                             <input type="range" id="margin_<?php echo esc_attr($side); ?>"
                                 name="margin_<?php echo esc_attr($side); ?>" min="0" max="50" step="1"
-                                <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $side only ever takes the literal values from $margin_sides above; output is (int)-cast regardless. ?>
-                                value="<?php echo (int) $opts['margin_' . $side]; ?>">
+                                value="<?php echo esc_attr((int) $margin); ?>">
                         </div>
                         <?php endforeach; ?>
                     </div>
@@ -732,7 +731,8 @@ class PDFLayoutEditor
      */
     public static function handleSave(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('edit_pdf_layout', 'fabricator_pdf_layout', 'fabricator_pdf_layout_nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_pdf_layout');
+        check_ajax_referer('fabricator_pdf_layout', 'fabricator_pdf_layout_nonce');
         $error = self::save();
         if ($error !== '') {
             wp_send_json_error(['message' => $error], 409);
@@ -818,14 +818,17 @@ class PDFLayoutEditor
         $hidden = array_values(
             // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- callback is an inline closure, not attacker-controlled dispatch.
             array_filter(
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- sanitize_key(), hardcoded.
-                array_map('sanitize_key', explode(',', \FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['section_hidden'] ?? '')))),
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- sanitize_key(), hardcoded.
+                array_map('sanitize_key', explode(',', is_string($_POST['section_hidden'] ?? null) ? sanitize_text_field(wp_unslash($_POST['section_hidden'])) : '')),
                 fn($s) => isset($labels[$s])
             )
         );
 
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- decoded JSON is fully validated/sanitized below by self::sanitizeHeaderLayout() before use.
-        $header_layout_decoded = json_decode(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['header_layout_json'] ?? ''), '{}'), true);
+        // JSON sent base64-encoded, as the preview's settings are; sanitizeHeaderLayout() checks every value below.
+        $header_layout_decoded = is_string($_POST['header_layout'] ?? null)
+            // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the editor's own base64-wrapped JSON (strict mode); not obfuscation.
+            ? json_decode((string) base64_decode(sanitize_text_field(wp_unslash($_POST['header_layout'])), true), true)
+            : [];
 
         self::$sideload_denied = false;
         self::$image_too_large = false;
@@ -837,8 +840,7 @@ class PDFLayoutEditor
             // Refused before anything is written, so the page's snapshot stays valid for the corrected save.
             return __('Images from external URLs can only be imported by users who are allowed to upload files. Choose the image from the Media Library instead.', 'formfabricator');
         }
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified at the top of this handler; Cast::stringOrDefault() sits before esc_url_raw(), which the sniff can't see past.
-        $posted_logo = isset($_POST['logo_url']) ? esc_url_raw(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['logo_url']))) : '';
+        $posted_logo = isset($_POST['logo_url']) ? (is_string($_POST['logo_url'] ?? null) ? esc_url_raw(wp_unslash($_POST['logo_url'])) : '') : '';
         if (self::$image_too_large || ($posted_logo !== '' && !self::fitsPdf($posted_logo))) {
             return sprintf(
                 // translators: %s: largest image the PDF takes, in megapixels.
@@ -855,27 +857,22 @@ class PDFLayoutEditor
         update_option(
             'fabricator_forms_pdf_layout',
             [
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the caller verified the nonce before reaching this write.
             'logo_url'        => isset($_POST['logo_url'])
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via esc_url_raw(); Cast::stringOrDefault() breaks the sniff's taint trace.
-                ? esc_url_raw(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['logo_url'])))
+                ? (is_string($_POST['logo_url'] ?? null) ? esc_url_raw(wp_unslash($_POST['logo_url'])) : '')
                 : esc_url_raw((string) ($stored_layout['logo_url'] ?? '')),
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- see above.
             'logo_width'      => isset($_POST['logo_width'])
                 ? min(400, max(40, absint(wp_unslash($_POST['logo_width']))))
                 : min(400, max(40, (int) ($stored_layout['logo_width'] ?? $defs['logo_width']))),
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_hex_color(); Cast::stringOrDefault() breaks the sniff's taint trace.
-            'accent_color'    => sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['accent_color'] ?? ''))) ?: $defs['accent_color'],
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_hex_color(); Cast::stringOrDefault() breaks the sniff's taint trace.
-            'separator_color' => sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['separator_color'] ?? ''))) ?: $defs['separator_color'],
-            'font_family'     => sanitize_key(wp_unslash($_POST['font_family'] ?? 'dejavusans')),
-            'font_size_body'  => min(20, max(6, absint(wp_unslash($_POST['font_size_body'] ?? 11)))),
-            'title_size'      => min(36, max(10, absint(wp_unslash($_POST['title_size']     ?? 14)))),
-            'footer_text'     => sanitize_textarea_field(wp_unslash($_POST['footer_text'] ?? '')),
-            'margin_top'      => min(50, max(0, absint(wp_unslash($_POST['margin_top']    ?? 15)))),
-            'margin_bottom'   => min(50, max(0, absint(wp_unslash($_POST['margin_bottom'] ?? 15)))),
-            'margin_left'     => min(50, max(0, absint(wp_unslash($_POST['margin_left']   ?? 15)))),
-            'margin_right'    => min(50, max(0, absint(wp_unslash($_POST['margin_right']  ?? 15)))),
+            'accent_color'    => (is_string($_POST['accent_color'] ?? null) ? sanitize_hex_color(wp_unslash($_POST['accent_color'])) : '') ?: $defs['accent_color'],
+            'separator_color' => (is_string($_POST['separator_color'] ?? null) ? sanitize_hex_color(wp_unslash($_POST['separator_color'])) : '') ?: $defs['separator_color'],
+            'font_family'     => isset($_POST['font_family']) ? sanitize_key(wp_unslash($_POST['font_family'])) : 'dejavusans',
+            'font_size_body'  => min(20, max(6, isset($_POST['font_size_body']) ? absint(wp_unslash($_POST['font_size_body'])) : 11)),
+            'title_size'      => min(36, max(10, isset($_POST['title_size']) ? absint(wp_unslash($_POST['title_size'])) : 14)),
+            'footer_text'     => isset($_POST['footer_text']) ? sanitize_textarea_field(wp_unslash($_POST['footer_text'])) : '',
+            'margin_top'      => min(50, max(0, isset($_POST['margin_top']) ? absint(wp_unslash($_POST['margin_top'])) : 15)),
+            'margin_bottom'   => min(50, max(0, isset($_POST['margin_bottom']) ? absint(wp_unslash($_POST['margin_bottom'])) : 15)),
+            'margin_left'     => min(50, max(0, isset($_POST['margin_left']) ? absint(wp_unslash($_POST['margin_left'])) : 15)),
+            'margin_right'    => min(50, max(0, isset($_POST['margin_right']) ? absint(wp_unslash($_POST['margin_right'])) : 15)),
             'section_hidden'  => $hidden,
             'header_layout'   => $header_layout,
             ],

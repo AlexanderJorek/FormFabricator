@@ -252,12 +252,15 @@
                     });
                 });
 
-                post('fabricator_fsel_save', {
-                    nonce: saveNonce,
-                    id:    currentId,
-                    title: title,
-                    items: JSON.stringify(items),
-                }, function (data) {
+                var body = { nonce: saveNonce, id: currentId, title: title };
+                /* As a posted array (items[n][key]), which the server sanitizes value by value. */
+                items.forEach(function (item, n) {
+                    body['items[' + n + '][form_id]']     = item.form_id;
+                    body['items[' + n + '][label]']       = item.label;
+                    body['items[' + n + '][description]'] = item.description;
+                    body['items[' + n + '][favorite]']    = item.favorite ? '1' : '0';
+                });
+                post('fabricator_fsel_save', body, function (data) {
                     saveBtn.disabled = false;
                     if (!data.success) {
                         window.alert((data.data && data.data.message) || fseli18n.saveFailed);

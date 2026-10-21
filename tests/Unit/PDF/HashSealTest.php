@@ -90,7 +90,7 @@ final class HashSealTest extends TestCase
         self::assertFalse(HashSeal::createInitialKey());
         self::assertSame('{broken', unserialize($this->wp->options[self::KEY_OPTION]), 'createInitialKey leaves it alone');
 
-        $new = HashSeal::rotateKey(false, true);
+        $new = HashSeal::rotateKey(false);
         self::assertSame('{broken', unserialize($this->wp->options['fabricator_forms_seal_key_damaged'])[0]['value']);
         self::assertSame([], get_option(self::HISTORY, []), 'a damaged record is not a key to retire');
         self::assertSame('', HashSeal::activeKeyProblem());
@@ -102,7 +102,7 @@ final class HashSealTest extends TestCase
         HashSeal::createInitialKey();
         $p1 = self::payload();
         $h1 = HashSeal::generate($p1);
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
 
         $v = HashSeal::verify($p1, $h1);
         self::assertTrue($v['valid']);
@@ -110,7 +110,7 @@ final class HashSealTest extends TestCase
 
         $p2 = self::payload();
         $h2 = HashSeal::generate($p2);
-        HashSeal::rotateKey(true, true);
+        HashSeal::rotateKey(true);
 
         $v = HashSeal::verify($p2, $h2);
         self::assertTrue($v['valid']);
@@ -121,26 +121,23 @@ final class HashSealTest extends TestCase
     public function testRotatingAMissingRecordAddsNoHistoryEntry(): void
     {
         HashSeal::createInitialKey();
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
         $before = count(get_option(self::HISTORY));
 
         unset($this->wp->options[self::KEY_OPTION]);
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
 
         self::assertCount($before, get_option(self::HISTORY));
         self::assertSame('', HashSeal::activeKeyProblem());
     }
 
-    public function testRotationRequiresManageOptionsAndANonce(): void
+    public function testRotationRequiresManageOptions(): void
     {
+        // The request's nonce is checked by the AJAX handler before it reads any input (EndpointAccessTest).
         HashSeal::createInitialKey();
         $key = $this->wp->options[self::KEY_OPTION];
 
         $this->wp->capabilities = [];
-        self::assertThrows(static fn() => HashSeal::rotateKey(false, true));
-
-        $this->wp->capabilities = ['manage_options' => true];
-        $this->wp->nonceValid   = false;
         self::assertThrows(static fn() => HashSeal::rotateKey(false));
 
         self::assertSame($key, $this->wp->options[self::KEY_OPTION]);
@@ -153,7 +150,7 @@ final class HashSealTest extends TestCase
         // A live lock row, as a rotation running in another request leaves it (OptionMutex).
         $this->wp->options['fabricator_lock_opt_' . self::HISTORY] = serialize((string) (time() + 60));
 
-        self::assertThrows(static fn() => HashSeal::rotateKey(false, true));
+        self::assertThrows(static fn() => HashSeal::rotateKey(false));
         self::assertSame($key, $this->wp->options[self::KEY_OPTION], 'the key is unchanged');
         self::assertSame([], get_option(self::HISTORY, []), 'nothing retired');
     }
@@ -164,11 +161,11 @@ final class HashSealTest extends TestCase
         $this->wp->capabilities = ['manage_options' => true];
         $this->wp->options['fabricator_lock_opt_' . self::HISTORY] = serialize((string) (time() + 60));
 
-        self::assertThrows(static fn() => HashSeal::addLegacyKey('12345678-1234-1234-1234-123456789abc', str_repeat('a', 64), '', 'rotated-legacy', true));
+        self::assertThrows(static fn() => HashSeal::addLegacyKey('12345678-1234-1234-1234-123456789abc', str_repeat('a', 64), '', 'rotated-legacy'));
         self::assertSame([], get_option(self::HISTORY, []), 'nothing written while the rotation runs');
 
         unset($this->wp->options['fabricator_lock_opt_' . self::HISTORY]);
-        HashSeal::addLegacyKey('12345678-1234-1234-1234-123456789abc', str_repeat('a', 64), '', 'rotated-legacy', true);
+        HashSeal::addLegacyKey('12345678-1234-1234-1234-123456789abc', str_repeat('a', 64), '', 'rotated-legacy');
         self::assertCount(1, get_option(self::HISTORY, []), 'imported once the lock is free');
     }
 
@@ -178,7 +175,7 @@ final class HashSealTest extends TestCase
         $this->wp->options['fabricator_forms_seal_encryption'] = serialize('enabled');
         $key = $this->wp->options[self::KEY_OPTION];
 
-        self::assertThrows(static fn() => HashSeal::rotateKey(false, true));
+        self::assertThrows(static fn() => HashSeal::rotateKey(false));
         self::assertSame($key, $this->wp->options[self::KEY_OPTION]);
 
         unset($this->wp->options[self::KEY_OPTION]);

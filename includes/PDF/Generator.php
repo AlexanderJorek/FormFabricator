@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -32,8 +32,8 @@ defined('ABSPATH') || exit;
 class Generator
 {
     /**
-     * How the metadata block dates a PDF (wp_date()): site-local time plus UTC offset, readable and unambiguous at the
-     * daylight-saving changeover. The layout editor's preview shows its sample date the same way.
+     * How the seal records when a PDF was made (wp_date()): site-local time plus UTC offset, which the verifier parses
+     * to check the PDF's own dates. The metadata block shows the same moment as Utils\SigningTime writes it.
      *
      * @var string
      */
@@ -47,12 +47,13 @@ class Generator
     private const MAX_SEALED_FONTS = 256;
 
     /**
-     * Characters per line of the seal text. At the seal's 0.1 px a line this long is about 13 mm wide, so mPDF never
-     * has to break one, and a line costs mPDF time in proportion to its length.
+     * Characters per line of the seal text. mPDF breaks an over-wide word in quadratic time, so a line of only the
+     * widest character must fit the narrowest text area (110 mm): about 82 mm at 0.1 px in DejaVu Serif, as
+     * PdfLayoutTest measures.
      *
      * @var int
      */
-    private const SEAL_LINE_CHARS = 1000;
+    public const SEAL_LINE_CHARS = 3000;
 
     /**
      * mPDF font families that draw what the chosen font lacks, tried in this order, each by the one file shipped
@@ -111,8 +112,12 @@ class Generator
             self::drawableText($title, $glyphs, $needs_fallback);
         }
 
+        $now      = time();
         $metadata = [
-            'generated' => wp_date(self::METADATA_DATE_FORMAT),
+            // Sealed, and read back by the verifier to check the PDF's own dates (METADATA_DATE_FORMAT).
+            'generated'       => wp_date(self::METADATA_DATE_FORMAT, $now),
+            // The same moment for the reader of the metadata block, as every signature and agreement records it.
+            'generated_shown' => \FabricatorForms\Utils\SigningTime::format($now),
             'nonce'     => bin2hex(random_bytes(16)),
             'form_id'   => $form_id,
             'form_name' => $title,
@@ -122,7 +127,8 @@ class Generator
         $section_hidden = $layout['section_hidden'] ?? [];
 
         $fields_html = '';
-        $frame_open  = false;
+        // Boxes open and not yet closed: a box inside a boxed group nests in it.
+        $frame_open  = 0;
         // Every answer is sealed, hidden ones too (hiding is not redacting), each marked as shown or not.
         $sealable    = [];
         $shown       = [];
@@ -164,7 +170,7 @@ class Generator
                 : FABRICATOR_PDF_ALLOWED_VALUE_TAGS;
             $cell_html = wp_kses((string)($pdf['cell_html'] ?? ''), $allowed_tags);
             foreach (array_keys($pdf_image_vars) as $var) {
-                $cell_html .= $layout['image']($var);
+                $cell_html .= $layout['image_html']($var);
             }
 
             $image_vars     = array_merge($image_vars, $pdf_image_vars);
@@ -178,47 +184,48 @@ class Generator
             $shows_nothing = trim($cell_html) === '';
             $cell_html     = $start . $cell_html . $end;
 
-            // A box opens outside the field's markers; one still open is closed first, so boxes never nest.
+            // A box opens outside the field's markers, inside any box still open (a mandate in a boxed group).
             $frame = is_array($pdf['frame'] ?? null) ? $pdf['frame'] : null;
             if (($frame[0] ?? '') === 'open') {
-                if ($frame_open) {
-                    $fields_html .= $layout['frame_close']();
-                }
-                $fields_html .= $layout['frame_open'](is_string($frame[1] ?? null) ? $frame[1] : '');
-                $frame_open   = true;
+                $fields_html .= $layout['frame_open_html'](is_string($frame[1] ?? null) ? $frame[1] : '');
+                $frame_open++;
             }
 
-            $fields_html .= ($pdf['labeled'] ?? true)
+            // "Hide label" (FieldRegistry::withHiddenLabel()) drops the label row; the answer, its markers and the line
+            // that ends the field stay.
+            if ($pdf['labeled'] ?? true) {
                 // A string only: the closure is typed, and this runs outside the try below.
-                ? $layout['field'](is_string($field['label'] ?? null) ? $field['label'] : '', $cell_html)
-                : ($shows_nothing
+                $fields_html .= $layout['field_html'](is_string($field['label'] ?? null) ? $field['label'] : '', $cell_html, empty($field['label_hidden']));
+            } else {
+                $fields_html .= $shows_nothing
                     // Takes no visible space, while the markers still reach the PDF's text.
                     ? '<div style="font-size:0.1px;line-height:0.1px;margin:0;padding:0;height:0;">' . $cell_html . '</div>'
-                    : '<div class="field-block">' . $cell_html . '</div>');
+                    : '<div class="field-block">' . $cell_html . '</div>';
+            }
 
-            if (($frame[0] ?? '') === 'close' && $frame_open) {
-                $fields_html .= $layout['frame_close']();
-                $frame_open   = false;
+            if (($frame[0] ?? '') === 'close' && $frame_open > 0) {
+                $fields_html .= $layout['frame_close_html']();
+                $frame_open--;
             }
             $shown[$key] = true;
         }
-        if ($frame_open) {
-            $fields_html .= $layout['frame_close']();
+        for (; $frame_open > 0; $frame_open--) {
+            $fields_html .= $layout['frame_close_html']();
         }
 
         /* ---- Assemble HTML in fixed section order ---- */
         $html = '<base href="">';
-        $html .= $layout['base_css']();
+        $html .= $layout['base_css_html']();
 
         if (!in_array('header', $section_hidden, true)) {
-            $html .= $layout['header']($title);
+            $html .= $layout['header_html']($title);
         }
         $html .= $fields_html;
         if (!in_array('metadata', $section_hidden, true)) {
-            $html .= $layout['document_metadata']($full_data);
+            $html .= $layout['document_metadata_html']($full_data);
         }
-        if (!in_array('legal', $section_hidden, true) && isset($layout['legal_notice'])) {
-            $html .= $layout['legal_notice']();
+        if (!in_array('legal', $section_hidden, true) && isset($layout['legal_notice_html'])) {
+            $html .= $layout['legal_notice_html']();
         }
         /* footer rendered per-page via SetHTMLFooter — not inline */
 
@@ -250,8 +257,8 @@ class Generator
             $margin_bottom = (int) ($layout['margin_bottom_mm'] ?? 15);
 
             /* The layout's footer callback returns plain text. */
-            $user_footer_text = isset($layout['footer'])
-                ? trim((string) $layout['footer']())
+            $user_footer_text = isset($layout['footer_html'])
+                ? trim((string) $layout['footer_html']())
                 : '';
 
             // Random per-document page aliases (PageAliasMpdf), which submitted text can't contain. The admin's footer
@@ -395,11 +402,13 @@ class Generator
 
                 // Lines of SEAL_LINE_CHARS, since mPDF breaks an over-long word in quadratic time; the verifier joins them
                 // without whitespace. No ligatures, which would read back "fi" as U+FB01.
-                $seal_div = '<div style="font-size:0.1px;line-height:0.1px;color:#000;font-variant-ligatures:none;">'
-                    . '---BEGIN-SEAL---' . implode('<br>', str_split($seal_base64, self::SEAL_LINE_CHARS)) . '---END-SEAL---'
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a function name), never input.
+                $seal_lines_html = implode('<br>', array_map('esc_html', str_split($seal_base64, self::SEAL_LINE_CHARS)));
+                $seal_div_html = '<div style="font-size:0.1px;line-height:0.1px;color:#000;font-variant-ligatures:none;">'
+                    . '---BEGIN-SEAL---' . $seal_lines_html . '---END-SEAL---'
                     . '</div>';
 
-                $html .= $seal_div;
+                $html .= $seal_div_html;
             }
 
             /* ---- PASS 2: final PDF with seal ---- */
@@ -502,29 +511,27 @@ class Generator
      */
     private static function footerHtml(string $user_text, string $pageno_alias, string $nbpg_alias): string
     {
-        $pageno = '<span style="font-size:0.1px;line-height:0.1px;color:#fff;">'
+        $pageno_html = '<span style="font-size:0.1px;line-height:0.1px;color:#fff;">'
             . '[FABRICATOR_PDF_PAGENO_START]</span>'
-            // Translations are escaped too; the aliases are letters, digits and braces.
+            // The aliases are letters, digits and braces, which escaping leaves as they are for mPDF to replace.
             // translators: %1$s: current page number placeholder, %2$s: total page count placeholder (both substituted by mPDF at render time).
-            . sprintf(esc_html__('Page %1$s of %2$s', 'formfabricator'), $pageno_alias, $nbpg_alias)
+            . esc_html(sprintf(__('Page %1$s of %2$s', 'formfabricator'), $pageno_alias, $nbpg_alias))
             . '<span style="font-size:0.1px;line-height:0.1px;color:#fff;">'
             . '[FABRICATOR_PDF_PAGENO_END]</span>';
 
-        $border = '';
-
         if ($user_text === '') {
-            return '<div style="text-align:right;font-size:10pt;' . $border . '">'
-                . $pageno . '</div>';
+            return '<div style="text-align:right;font-size:10pt;">'
+                . $pageno_html . '</div>';
         }
 
         // $user_text is already kses()'d safe HTML from layout.php's footer(); re-escaping would defeat that allowlist.
-        $safe_text = str_replace(["\r\n", "\r"], "\n", $user_text);
-        $safe_text = str_replace("\n", '<br>', $safe_text);
-        return '<table style="width:100%;border-collapse:collapse;' . $border . 'font-size:8pt;">'
+        $text_html = str_replace(["\r\n", "\r"], "\n", $user_text);
+        $text_html = str_replace("\n", '<br>', $text_html);
+        return '<table style="width:100%;border-collapse:collapse;font-size:8pt;">'
             . '<tr>'
-            . '<td style="text-align:left;color:#888;vertical-align:bottom;">' . $safe_text . '</td>'
+            . '<td style="text-align:left;color:#888;vertical-align:bottom;">' . $text_html . '</td>'
             . '<td style="text-align:right;white-space:nowrap;font-size:10pt;'
-            . 'vertical-align:bottom;">' . $pageno . '</td>'
+            . 'vertical-align:bottom;">' . $pageno_html . '</td>'
             . '</tr>'
             . '</table>';
     }
@@ -888,7 +895,7 @@ class Generator
             $fields[] = [
                 'label' => (string)($field['label'] ?? ''),
                 'value' => (
-                    ($seal_handler === null || $seal_handler->includeValueInSeal())
+                    ($seal_handler === null || $seal_handler->includeValueInSeal($field))
                     && isset($field['value'])
                     && is_string($field['value'])
                 ) ? self::normalizeFieldValue($field['value']) : '',

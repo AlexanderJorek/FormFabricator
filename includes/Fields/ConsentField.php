@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -96,14 +96,12 @@ class ConsentField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $req     = !empty($config['required']) ? ' required aria-required="true"' : '';
-        $checked = !empty($value) ? ' checked' : '';
-        $text    = self::shownText($config);
-
         $inner = '<label class="fabricator-consent-label">'
             . '<input type="checkbox" id="' . esc_attr($field_id)
-            . '" name="' . esc_attr($field_id) . '" value="1"' . $checked . $req . '>'
-            . '<span class="fabricator-consent-text">' . $text . '</span>'
+            . '" name="' . esc_attr($field_id) . '" value="1"' . (!empty($value) ? ' checked' : '')
+            . (!empty($config['required']) ? ' required aria-required="true"' : '') . '>'
+            . '<span class="fabricator-consent-text">'
+            . wp_kses(self::shownText($config), \FabricatorForms\Utils\HtmlSanitizer::allowedTags()) . '</span>'
             . '</label>';
 
         return $this->wrap($field_id, $config, $inner);
@@ -154,8 +152,8 @@ class ConsentField extends BaseField
             // translators: %1$s: consent text shown to the user, %2$s: agreement timestamp.
             __('Agreed to "%1$s" on %2$s', 'formfabricator'),
             $consent_text,
-            // UTC with explicit marker so the consent timestamp is unambiguous (GDPR Art. 7(1)).
-            gmdate('Y-m-d H:i:s') . ' UTC'
+            // The moment, unambiguous (GDPR Art. 7(1)), as every signature and agreement records it.
+            \FabricatorForms\Utils\SigningTime::format()
         );
     }
 

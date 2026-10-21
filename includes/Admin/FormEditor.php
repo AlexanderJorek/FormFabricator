@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -93,10 +93,10 @@ class FormEditor
      */
     public static function ajaxUnlock(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('edit_forms', 'fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-        $form_id = absint(\wp_unslash($_POST['form_id'] ?? 0));
+        $form_id = isset($_POST['form_id']) ? absint(\wp_unslash($_POST['form_id'])) : 0;
         $post    = $form_id ? \get_post($form_id) : null;
         if (!$post || $post->post_type !== 'fabricator_form') {
             \wp_send_json_error(['message' => __('Invalid form_id', 'formfabricator')], 400);
@@ -123,8 +123,9 @@ class FormEditor
      */
     public static function bodyClass(string $classes): string
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
-        if (isset($_GET['page']) && $_GET['page'] === 'fabricator-forms-editor') {
+        // The admin page being shown, as WordPress resolved it from the request.
+        global $plugin_page;
+        if ($plugin_page === 'fabricator-forms-editor') {
             $classes .= ' fabricator-editor-page';
         }
         return $classes;
@@ -166,7 +167,9 @@ class FormEditor
             && file_exists(FABRICATOR_FORMS_PATH . 'assets/js/fabricator-perf-debug.js');
         $perf_start  = $perf_mode ? microtime(true) : 0.0;
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page load (which form to display), gated by edit_forms capability above, no data written.
+        // Which form to open, from the link (as WordPress's own post.php?post=): a page load that only displays, gated
+        // by edit_forms above; every save carries its own nonce.
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page load, see above.
         $form_id = isset($_GET['form_id']) ? absint(wp_unslash($_GET['form_id'])) : 0;
         $form    = $form_id ? FormModel::get($form_id) : null;
         $palette = FieldRegistry::paletteGroups();
@@ -318,9 +321,9 @@ class FormEditor
      */
     public static function ajaxPreview(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('edit_forms', 'fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
 
         // Catches so a field-handler exception (e.g. malformed HTML block) returns a JSON error
@@ -328,10 +331,9 @@ class FormEditor
         try {
             // base64-wrapped like ajaxSave()'s 'form_data', so sanitize_*_field() doesn't strip tags out of embedded HTML.
             $settings_override = [];
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
             if (!empty($_POST['settings'])) {
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-                $decoded_s = base64_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['settings']))), true);
+                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the builder's own base64-wrapped JSON (strict mode); not obfuscation.
+                $decoded_s = base64_decode((is_string($_POST['settings'] ?? null) ? sanitize_text_field(wp_unslash($_POST['settings'])) : ''), true);
                 $raw_s = ($decoded_s !== false) ? json_decode($decoded_s, true) : null;
                 if (is_array($raw_s)) {
                     $settings_override = self::sanitizeSettings($raw_s);
@@ -340,10 +342,9 @@ class FormEditor
 
             /* Use live editor fields when posted; fall back to saved DB state. */
             $fields_override = null;
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
             if (!empty($_POST['fields'])) {
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- verified via AjaxGuard::require(); sniff can't see through the static call.
-                $decoded_f = base64_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['fields']))), true);
+                // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the builder's own base64-wrapped JSON (strict mode); not obfuscation.
+                $decoded_f = base64_decode((is_string($_POST['fields'] ?? null) ? sanitize_text_field(wp_unslash($_POST['fields'])) : ''), true);
                 $raw_f = ($decoded_f !== false) ? json_decode($decoded_f, true) : null;
                 if (is_array($raw_f)) {
                     $fields_override = self::sanitizeFields($raw_f);
@@ -419,7 +420,7 @@ class FormEditor
         );
         ob_start();
         $preview_styles->do_items(['fabricator-preview-fontawesome', 'fabricator-preview-front', 'fabricator-preview-toolbar']);
-        $styles_markup = ob_get_clean();
+        $styles_html = (string) ob_get_clean();
 
         $preview_scripts = new \WP_Scripts();
         $preview_scripts->add(
@@ -437,16 +438,16 @@ class FormEditor
         $preview_scripts->add_inline_script('fabricator-preview-front', $globals, 'before');
         ob_start();
         $preview_scripts->do_items(['fabricator-preview-front', 'fabricator-preview-toolbar']);
-        $scripts_markup = ob_get_clean();
+        $scripts_html = (string) ob_get_clean();
 
         $page = '<!DOCTYPE html><html lang="' . esc_attr(str_replace('_', '-', get_locale())) . '"><head>'
             . '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             . '<title>' . esc_html__('Preview', 'formfabricator') . '</title>'
-            . $styles_markup
+            . $styles_html
             . '</head><body>'
             . '<div id="fabricator-preview-content">' . $html . '</div>'
             . $toolbar_html
-            . $scripts_markup
+            . $scripts_html
             . '</body></html>';
 
         \wp_send_json_success(['html' => $page]);
@@ -459,7 +460,8 @@ class FormEditor
      */
     public static function ajaxSendTestMail(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('edit_forms', 'fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
         // Each test is a real email: unthrottled, a loop could use up the site's sending quota, and the notifications
         // that then fail would lose submissions.
@@ -472,16 +474,11 @@ class FormEditor
         if (!is_email($to)) {
             \wp_send_json_error(['message' => __('Your user account has no valid email address to send the test to.', 'formfabricator')], 400);
         }
-        // The nonce is verified by AjaxGuard::require() above, and Cast::stringOrDefault() sits before each sanitizer;
-        // the sniffs see through neither, so each line carries its own ignore (Plugin Check reads no ruleset).
         $notif = [
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- see the comment above.
-            'from_name'  => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['from_name'] ?? ''))),
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- see the comment above.
-            'from_email' => self::sanitizeFromEmail(\sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['from_email'] ?? '')))),
+            'from_name'  => (is_string($_POST['from_name'] ?? null) ? \sanitize_text_field(wp_unslash($_POST['from_name'])) : ''),
+            'from_email' => self::sanitizeFromEmail((is_string($_POST['from_email'] ?? null) ? \sanitize_text_field(wp_unslash($_POST['from_email'])) : '')),
         ];
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- see the comment above.
-        $title = \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['form_title'] ?? '')));
+        $title = (is_string($_POST['form_title'] ?? null) ? \sanitize_text_field(wp_unslash($_POST['form_title'])) : '');
 
         $error = \FabricatorForms\Form\MailSender::sendTest($notif, $to, $title);
         if ($error !== '') {
@@ -510,11 +507,11 @@ class FormEditor
      */
     public static function ajaxSave(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('edit_forms', 'fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
 
         // base64-wrapped so WP's magic-quotes slashing can't corrupt embedded quotes in the raw JSON.
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require(); sniff can't see through the static call.
-        $encoded = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(\wp_unslash($_POST['form_data'] ?? '')));
+        $encoded = (is_string($_POST['form_data'] ?? null) ? sanitize_text_field(wp_unslash($_POST['form_data'])) : '');
         // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes the export string produced above (strict mode); re-sanitized before use, not obfuscation.
         $json    = base64_decode($encoded, true);
         $raw     = ($json !== false) ? json_decode($json, true) : null;
@@ -562,7 +559,6 @@ class FormEditor
                 'settings'      => self::sanitizeSettings(is_array($raw['settings'] ?? null) ? $raw['settings'] : []),
                 ],
                 $form_id,
-                true,
                 $expected_snapshot
             );
 
@@ -1072,6 +1068,7 @@ class FormEditor
                 'bcc'              => \sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($n['bcc']        ?? '')),
                 'attach_pdf'       => !empty($n['attach_pdf']),
                 'attach_uploads'   => !empty($n['attach_uploads']),
+                'automation_markers' => !empty($n['automation_markers']),
                 'enabled'          => !isset($n['enabled']) || !empty($n['enabled']),
             ];
             if ($body_removed) {
@@ -1437,16 +1434,19 @@ class FormEditor
         $html = preg_replace_callback(
             '/<a\b([^>]*\btarget=["\']_blank["\'][^>]*)>/i',
             static function (array $m): string {
-                if (preg_match('/\brel=["\']([^"\']*)["\']/i', $m[1], $rel_match)) {
+                // The tag's attributes, as the sanitizer above left them.
+                $attrs = $m[1];
+                if (preg_match('/\brel=["\']([^"\']*)["\']/i', $attrs, $rel_match)) {
                     $rel     = $rel_match[1];
                     $needed  = array_diff(['noopener', 'noreferrer'], explode(' ', $rel));
                     if (empty($needed)) {
                         return $m[0];
                     }
                     $new_rel = trim($rel . ' ' . implode(' ', $needed));
-                    return '<a' . preg_replace('/\brel=["\'][^"\']*["\']/i', 'rel="' . esc_attr($new_rel) . '"', $m[1]) . '>';
+                    $attrs   = (string) preg_replace('/\brel=["\'][^"\']*["\']/i', 'rel="' . esc_attr($new_rel) . '"', $attrs);
+                    return '<a' . $attrs . '>';
                 }
-                return '<a' . $m[1] . ' rel="noopener noreferrer">';
+                return '<a' . $attrs . ' rel="noopener noreferrer">';
             },
             $html
         ) ?? $html;
@@ -1809,6 +1809,10 @@ class FormEditor
                 'attachPdfHint'       => __('The completed form is attached as a PDF document.', 'formfabricator'),
                 'attachUploads'       => __('Attach uploaded files', 'formfabricator'),
                 'attachUploadsHint'   => __('All file uploads from the form are forwarded as attachments.', 'formfabricator'),
+                'automation'          => __('Automation', 'formfabricator'),
+                'automationMarkers'   => __('Add automation markers', 'formfabricator'),
+                'automationMarkersHint' =>
+                    __('Each answer in the email is written between [FABRICATOR_FIELD_<field id>] and [FABRICATOR_FIELD_END], so a mail parser can find it. Answers containing "[FABRICATOR_FIELD_" are then refused.', 'formfabricator'),
                 'sendTestMail'        => __('Send test email', 'formfabricator'),
                 'sendTestMailHint'    => __('Sends a short email with this sender to your own address.', 'formfabricator'),
                 'notifBodyHint'       => __(

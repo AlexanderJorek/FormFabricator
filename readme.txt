@@ -4,7 +4,7 @@ Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -122,6 +122,20 @@ Replaced keys stay on your site, so older PDFs remain checkable. After a server 
 Deactivating keeps everything. Deleting removes all forms, settings, seal keys and stored files for good, so keep your key backup files.
 
 == Changelog ==
+
+= 1.1.1 =
+* New: a Signature field records when it was signed ("Signed on", the label is a setting).
+* New: like the direct debit mandate, a Signature field can show a text above the signature (title, text and fine print, recorded with the signature in the email and as a box in the PDF) and can ask for the place of signing.
+* New: a field group can be shown as a box, like the direct debit mandate, headed by its label, on the page, in the PDF and in the email (off by default).
+* New: a notification can add automation markers: each answer in the email stands between `[FABRICATOR_FIELD_<field id>]` and `[FABRICATOR_FIELD_END]`, so a mail parser can find it; names, addresses, ranges and post details are marked part by part. While it is on, answers containing such a marker are refused.
+* Changed: a Signature field now sits in a box like the direct debit mandate's, on the page, in the PDF and in the email, headed by its title or its label.
+* Changed: in the notification email, the direct debit mandate and the signature now sit in a bordered box headed by their title, as in the PDF, instead of ending with an "End of …" line.
+* Changed: "Hide label" now also hides a field's label in the notification email and the PDF, for every field type and inside groups.
+* Fixed: Every signing and agreement time (signature, direct debit mandate, Consent, GDPR), and the creation time in the PDF's metadata block, is now written the same way: the date as the site writes dates, then the time, both in UTC. If the site's date format leaves out the year, the month or the day, the date is written as year-month-day instead, so every record names its day.
+* Fixed: in the form builder, a field group, and a field inside a group, did not show the icon for conditions after its label.
+* Fixed: in the form builder, a field dragged past the edge of the field list could only be dropped where the list had ended before it scrolled.
+* Fixed: an HTML block left a larger gap below it in the notification email than other fields.
+* Fixed: with a dark mode (a theme's, a plugin's or a browser extension's), the checkmark of the Consent and GDPR fields could disappear.
 
 = 1.1.0 =
 * New: a notification's Sender tab can send a test email to your own address, and an admin notice reports submissions that could not be delivered until one gets through.

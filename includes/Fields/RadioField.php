@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -107,7 +107,7 @@ class RadioField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         $options = $config['options'] ?? [];
-        $req     = !empty($config['required']) ? ' required' : '';
+        $required = !empty($config['required']);
 
         /* extractValue() returns ['value' => ..., '__other_text__' => ...] when
            "Other" was selected with typed text — unwrap for every comparison below. */
@@ -125,33 +125,32 @@ class RadioField extends BaseField
             }
         }
 
-        $layout = !empty($config['layout']) ? ' fabricator-radio-group--horizontal' : '';
         // No role="group" here: see CheckboxField — the field wrapper is the named group.
-        $inner  = '<div class="fabricator-radio-group' . $layout . '">';
+        $inner  = '<div class="fabricator-radio-group' . (!empty($config['layout']) ? ' fabricator-radio-group--horizontal' : '') . '">';
         foreach ($options as $i => $opt) {
             $opt_val   = $opt['value'] ?? '';
             $opt_label = $opt['label'] ?? $opt_val;
             $id_i      = $field_id . '-' . $i;
-            $checked   = checked((string)($value ?? ''), (string)$opt_val, false);
             $inner .= '<label class="fabricator-radio-label">'
                 . '<input type="radio" id="' . esc_attr($id_i)
                 . '" name="' . esc_attr($field_id)
                 . '" value="' . esc_attr((string)$opt_val) . '" autocomplete="off"'
-                . $checked . $req . '> ' . esc_html((string)$opt_label) . '</label>';
+                . checked((string)($value ?? ''), (string)$opt_val, false) . ($required ? ' required' : '') . '> '
+                . esc_html((string)$opt_label) . '</label>';
         }
         if (!empty($config['other_option'])) {
             $other_id  = $field_id . '-other';
-            $other_chk = checked((string)($value ?? ''), '__other__', false);
             $inner .= '<label class="fabricator-radio-label">'
                 . '<input type="radio" id="' . esc_attr($other_id) . '" name="' . esc_attr($field_id) . '"'
-                . ' value="__other__" autocomplete="off"' . $other_chk . $req . '> '
+                . ' value="__other__" autocomplete="off"' . checked((string)($value ?? ''), '__other__', false)
+                . ($required ? ' required' : '') . '> '
                 . esc_html__('Other…', 'formfabricator') . '</label>';
         }
         if (!empty($config['other_option'])) {
-            $show = (string)($value ?? '') === '__other__' ? '' : ' style="display:none"';
             $inner .= '<input type="text" name="' . esc_attr($field_id) . '_other"'
                 . ' class="fabricator-input fabricator-other-input" value="' . esc_attr($other_text) . '"'
-                . ' placeholder="' . esc_attr__('Please specify', 'formfabricator') . '"' . $show
+                . ' placeholder="' . esc_attr__('Please specify', 'formfabricator') . '"'
+                . ((string)($value ?? '') === '__other__' ? '' : ' style="display:none"')
                 . self::otherInputAttrs($config) . '>';
         }
         $inner .= '</div>';
@@ -163,20 +162,18 @@ class RadioField extends BaseField
      * Returns the selected option, plus the typed "Other" text when present.
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      * @return mixed String selection, or ['value' => ..., '__other_text__' => ...] when "Other" was
      *               selected and a companion text field was submitted.
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        $selected = isset($_POST[$field_id]) ? sanitize_text_field(wp_unslash($_POST[$field_id])) : '';
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
-        if ($selected === '__other__' && isset($_POST[$field_id . '_other'])) {
+        $selected = is_string($post[$field_id] ?? null) ? sanitize_text_field($post[$field_id]) : '';
+        if ($selected === '__other__' && isset($post[$field_id . '_other'])) {
             return [
                 'value'          => $selected,
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce verified in FormProcessor::handle(); capOtherText() sanitizes/unslashes, WPCS misses the helper form.
-                '__other_text__' => self::capOtherText($_POST[$field_id . '_other']),
+                '__other_text__' => self::capOtherText($post[$field_id . '_other']),
             ];
         }
         return $selected;

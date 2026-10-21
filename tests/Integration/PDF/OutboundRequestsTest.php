@@ -58,7 +58,7 @@ final class OutboundRequestsTest extends TestCase
             . '<p><img src="' . $h . '/x?a=\'"></p>'
             . '<p><img src="//' . $this->server->host . '/protocol-relative.png"></p>';
         $fields = [['id' => 'block', 'type' => 'html', 'label' => '', 'html_content' => $html, 'show_in_output' => true]];
-        $form   = FormModel::save(['title' => 'SSRF', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0, true);
+        $form   = FormModel::save(['title' => 'SSRF', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
         self::assertIsInt($form);
 
         $path = Generator::generate(FieldRegistry::mapSubmission($fields, [], [], []), $form, 'SSRF');
@@ -88,7 +88,7 @@ final class OutboundRequestsTest extends TestCase
             $_SERVER['SCRIPT_NAME'] = '/wp-admin/admin-ajax.php';
             $images = static function (string $html): int {
                 $fields = [['id' => 'block', 'type' => 'html', 'label' => '', 'html_content' => $html, 'show_in_output' => true]];
-                $form   = FormModel::save(['title' => 'Images', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0, true);
+                $form   = FormModel::save(['title' => 'Images', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
                 $path   = Generator::generate(FieldRegistry::mapSubmission($fields, [], [], []), (int) $form, 'Images');
                 self::assertIsString($path, 'the PDF is built');
                 $count = preg_match_all('#/Subtype\s*/Image\b#', (string) file_get_contents($path));

@@ -73,7 +73,8 @@ final class SignatureSizeTest extends TestCase
         $field = new SignatureField();
         self::assertTrue($field->validate('Ada Lovelace', ['required' => true]));
         $entry = $field->mapNormalized('sg', 'Signature', 'Ada Lovelace', [], [])['sg'];
-        self::assertSame(['label' => 'Signature', 'type' => 'text', 'value' => 'Ada Lovelace (signed by typing the name)'], $entry);
+        // label_hidden: the label heads the signature's box, so the entry inside doesn't repeat it.
+        self::assertSame(['label' => 'Signature', 'type' => 'text', 'value' => 'Ada Lovelace (signed by typing the name)', 'label_hidden' => true], $entry);
 
         $mandate = (new DirectDebitField())->mapNormalized(
             'dd',

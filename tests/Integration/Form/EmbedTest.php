@@ -27,7 +27,7 @@ final class EmbedTest extends TestCase
             'fields'        => [['id' => 'name', 'type' => 'text', 'label' => 'Name'], ['id' => 'when', 'type' => 'date', 'label' => 'When']],
             'notifications' => [],
             'settings'      => [],
-        ], 0, true);
+        ], 0);
         self::assertIsInt($form);
         $this->form = $form;
         wp_set_current_user(0);
@@ -123,11 +123,11 @@ final class EmbedTest extends TestCase
             'fields'        => [['id' => 'name', 'type' => 'text', 'label' => 'Your name'], ['id' => 'when', 'type' => 'date', 'label' => 'Call me on']],
             'notifications' => [],
             'settings'      => [],
-        ], 0, true);
+        ], 0);
         $selection = \FabricatorForms\Form\FormSelectModel::save(['title' => 'Pick one', 'items' => [
             ['form_id' => $this->form, 'label' => 'Contact', 'favorite' => true],
             ['form_id' => $other, 'label' => 'Callback'],
-        ]], 0, true);
+        ]], 0);
         wp_set_current_user(0);
 
         $html = do_shortcode('[fabricator_form_select id="' . $selection . '"]');

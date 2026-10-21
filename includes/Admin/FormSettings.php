@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -90,7 +90,8 @@ class FormSettings
      */
     public static function ajaxUnlock(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('settings', 'fabricator_forms_admin_nonce', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('settings');
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
         \FabricatorForms\Utils\AdminLock::release('settings', get_current_user_id());
         wp_send_json_success();
     }
@@ -103,8 +104,9 @@ class FormSettings
      */
     public static function bodyClass(string $classes): string
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
-        if (isset($_GET['page']) && $_GET['page'] === 'fabricator-forms-settings') {
+        // The admin page being shown, as WordPress resolved it from the request.
+        global $plugin_page;
+        if ($plugin_page === 'fabricator-forms-settings') {
             $classes .= ' fabricator-list-page';
         }
         return $classes;
@@ -144,7 +146,7 @@ class FormSettings
         if (!isset($_POST['fabricator_settings_nonce']) || !\FabricatorForms\Plugin::userCan('settings')) {
             return;
         }
-        if (!wp_verify_nonce(sanitize_key($_POST['fabricator_settings_nonce']), 'fabricator_forms_settings')) {
+        if (!wp_verify_nonce(sanitize_key(wp_unslash($_POST['fabricator_settings_nonce'])), 'fabricator_forms_settings')) {
             return;
         }
         self::$last_save_error = '';
@@ -921,15 +923,15 @@ class FormSettings
                         $at        = (string)($entry['retired_at'] ?? '—');
                         $by        = (string)($entry['retired_by_login'] ?? '—');
 
-                        $extra_badge = '';
+                        $legacy = false;
                         if ($sta === 'rotated-legacy') {
-                            $badge_cls   = 'fabricator-key-badge fabricator-key-badge--rotated';
-                            $badge_lbl   = __('ROTATED', 'formfabricator');
-                            $extra_badge = '<span class="fabricator-key-badge fabricator-key-badge--legacy">' . esc_html__('LEGACY', 'formfabricator') . '</span>';
+                            $badge_cls = 'fabricator-key-badge fabricator-key-badge--rotated';
+                            $badge_lbl = __('ROTATED', 'formfabricator');
+                            $legacy    = true;
                         } elseif ($sta === 'compromised-legacy') {
-                            $badge_cls   = 'fabricator-key-badge fabricator-key-badge--compromised';
-                            $badge_lbl   = __('COMPROMISED', 'formfabricator');
-                            $extra_badge = '<span class="fabricator-key-badge fabricator-key-badge--legacy">' . esc_html__('LEGACY', 'formfabricator') . '</span>';
+                            $badge_cls = 'fabricator-key-badge fabricator-key-badge--compromised';
+                            $badge_lbl = __('COMPROMISED', 'formfabricator');
+                            $legacy    = true;
                         } elseif ($cmp) {
                             $badge_cls = 'fabricator-key-badge fabricator-key-badge--compromised';
                             $badge_lbl = __('COMPROMISED', 'formfabricator');
@@ -949,11 +951,10 @@ class FormSettings
                             <td><code class="fabricator-key-fp-cell"><?php echo esc_html($fp_mid); ?></code></td>
                             <td>
                                 <span class="fabricator-key-card-badges">
-                                    <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $badge_cls is one of the hardcoded literals assigned above, no user input. ?>
-                                    <span class="<?php echo $badge_cls; ?>"><?php echo esc_html($badge_lbl); ?></span>
-                                    <?php
-                                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $extra_badge is hardcoded HTML built from esc_html__() literals above, no user input.
-                                    echo $extra_badge; ?>
+                                    <span class="<?php echo esc_attr($badge_cls); ?>"><?php echo esc_html($badge_lbl); ?></span>
+                                    <?php if ($legacy) : ?>
+                                        <span class="fabricator-key-badge fabricator-key-badge--legacy"><?php esc_html_e('LEGACY', 'formfabricator'); ?></span>
+                                    <?php endif; ?>
                                 </span>
                             </td>
                             <td><?php echo esc_html($at); ?></td>
@@ -1412,7 +1413,8 @@ class FormSettings
      */
     public static function handleSaveGeneralSettings(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('settings', 'fabricator_forms_settings', 'fabricator_settings_nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('settings');
+        check_ajax_referer('fabricator_forms_settings', 'fabricator_settings_nonce');
         self::$last_save_error = '';
         self::saveGeneralSettings();
         if (self::$last_save_error !== '') {
@@ -1474,8 +1476,7 @@ class FormSettings
         // list decides whose address a forwarded header may claim.
         $proxy_list = null;
         if (current_user_can('manage_options') && isset($_POST['trusted_proxies'])) {
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- every entry is validated as an IP address or CIDR range in ClientIp::normalizeProxyList(); Cast::stringOrDefault() breaks the sniff's taint trace.
-            [$proxy_list, $proxy_invalid] = \FabricatorForms\Utils\ClientIp::normalizeProxyList(sanitize_textarea_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['trusted_proxies']))));
+            [$proxy_list, $proxy_invalid] = \FabricatorForms\Utils\ClientIp::normalizeProxyList((is_string($_POST['trusted_proxies'] ?? null) ? sanitize_textarea_field(wp_unslash($_POST['trusted_proxies'])) : ''));
             if ($proxy_invalid !== []) {
                 // translators: %s: comma-separated list of the rejected entries.
                 self::$last_save_error = sprintf(__('Not saved: these trusted proxy entries are not valid IP addresses or CIDR ranges: %s', 'formfabricator'), implode(', ', $proxy_invalid));
@@ -1486,8 +1487,7 @@ class FormSettings
         // An emptied field clears the option, as its hint promises. Only fields in the POST are touched, and an invalid
         // address is refused rather than clearing the saved one.
         if (isset($_POST['fabricator_cfg_a'])) {
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_email() below; Cast::stringOrDefault() breaks the sniff's taint trace.
-            $from_email_raw   = trim(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['fabricator_cfg_a'])));
+            $from_email_raw   = is_string($_POST['fabricator_cfg_a']) ? sanitize_text_field(wp_unslash($_POST['fabricator_cfg_a'])) : '';
             $from_email_input = sanitize_email($from_email_raw);
             if ($from_email_raw === '') {
                 delete_option('fabricator_forms_from_email');
@@ -1499,8 +1499,7 @@ class FormSettings
             }
         }
         if (isset($_POST['fabricator_cfg_b'])) {
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_text_field() below; Cast::stringOrDefault() breaks the sniff's taint trace.
-            $from_name_input = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['fabricator_cfg_b'])));
+            $from_name_input = (is_string($_POST['fabricator_cfg_b'] ?? null) ? sanitize_text_field(wp_unslash($_POST['fabricator_cfg_b'])) : '');
             if ($from_name_input !== '') {
                 update_option('fabricator_forms_from_name', $from_name_input, false);
             } else {
@@ -1511,13 +1510,11 @@ class FormSettings
         if (current_user_can('manage_options')) {
             // Only when the request carries the field, like the sender fields above: a save without it would clear the key.
             if (isset($_POST['recaptcha_site'])) {
-                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_text_field() below; Cast::stringOrDefault() breaks the sniff's taint trace.
-                $site_key = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['recaptcha_site'])));
+                $site_key = (is_string($_POST['recaptcha_site'] ?? null) ? sanitize_text_field(wp_unslash($_POST['recaptcha_site'])) : '');
                 update_option('fabricator_forms_recaptcha_site_key', $site_key, false);
             }
             // Write-only field: empty means "keep the saved secret"; removing it takes the explicit checkbox.
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_text_field() below; Cast::stringOrDefault() breaks the sniff's taint trace.
-            $secret_key = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['recaptcha_secret'] ?? '')));
+            $secret_key = (is_string($_POST['recaptcha_secret'] ?? null) ? sanitize_text_field(wp_unslash($_POST['recaptcha_secret'])) : '');
             if (!empty($_POST['recaptcha_secret_clear'])) {
                 update_option('fabricator_forms_recaptcha_secret_key', '', false);
             } elseif ($secret_key !== '') {
@@ -1539,8 +1536,7 @@ class FormSettings
             if (!isset($_POST[$field])) {
                 continue;
             }
-            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized via sanitize_hex_color() on the same line; Cast::stringOrDefault() breaks the sniff's taint trace.
-            $colour = sanitize_hex_color(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST[$field]))) ?: $default;
+            $colour = (is_string($_POST[$field] ?? null) ? sanitize_hex_color(wp_unslash($_POST[$field])) : '') ?: $default;
             update_option($option, $colour, false);
         }
 
@@ -1567,11 +1563,8 @@ class FormSettings
      */
     public static function handleFactoryReset(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_factory_reset',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_factory_reset', 'nonce');
 
         $options = [
             'fabricator_forms_from_email',
@@ -1593,8 +1586,7 @@ class FormSettings
             delete_option($opt);
         }
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-        if (!empty($_POST['del_forms']) && $_POST['del_forms'] === '1') {
+        if (isset($_POST['del_forms']) && sanitize_text_field(wp_unslash($_POST['del_forms'])) === '1') {
             // A page at a time, not posts_per_page => -1: each round deletes what it read, so the next query returns
             // the ones still left. The counter only stops a runaway loop if a delete is ever refused.
             for ($round = 0; $round < 1000; $round++) {
@@ -1639,19 +1631,14 @@ class FormSettings
      */
     public static function handleRotateKey(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_rotate_key',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_rotate_key', 'nonce');
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-        $compromised = !empty($_POST['key_compromised']) && $_POST['key_compromised'] === '1';
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require().
-        $master_key_lost = !empty($_POST['master_key_lost']) && $_POST['master_key_lost'] === '1';
+        $compromised = isset($_POST['key_compromised']) && sanitize_text_field(wp_unslash($_POST['key_compromised'])) === '1';
+        $master_key_lost = isset($_POST['master_key_lost']) && sanitize_text_field(wp_unslash($_POST['master_key_lost'])) === '1';
 
         try {
-            $new_key = \FabricatorForms\PDF\HashSeal::rotateKey($compromised, true, $master_key_lost);
+            $new_key = \FabricatorForms\PDF\HashSeal::rotateKey($compromised, $master_key_lost);
         } catch (\Exception $e) {
             // Caught, so a failed rotation answers as JSON, not a bare 500 (with a stack trace under WP_DEBUG_DISPLAY).
             \FabricatorForms\fabricator_log('FabricatorForms FormSettings: seal key rotation failed — ' . $e->getMessage());
@@ -1685,11 +1672,8 @@ class FormSettings
      */
     public static function handleSetupKeepDefault(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_seal_setup',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_seal_setup', 'nonce');
         // Setup-only. The setup nonce is issued on every Settings load, so without this a stale or replayed request after
         // setup would silently switch key encryption off, and every later rotation would store its key in plaintext.
         if (get_option('fabricator_forms_seal_setup_done', false)) {
@@ -1730,11 +1714,8 @@ class FormSettings
 
     public static function handleSetupGetMasterKey(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_seal_setup',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_seal_setup', 'nonce');
         self::refuseWithoutOpenssl();
         // Setup-only, like handleSetupKeepDefault(): the setup nonce is issued on every Settings load, so without this a
         // stale or replayed request after setup would flip encryption on and hand out a master key nothing uses.
@@ -1776,11 +1757,8 @@ class FormSettings
      */
     public static function handleUpgradeGetMasterKey(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_seal_setup',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_seal_setup', 'nonce');
         self::refuseWithoutOpenssl();
         if (!get_option('fabricator_forms_seal_setup_done', false)) {
             wp_send_json_error(['message' => __('Please complete the seal key setup first.', 'formfabricator')], 409);
@@ -1858,11 +1836,8 @@ class FormSettings
      */
     public static function handlePeekKeyDownload(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_forms_admin_nonce',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
         $pending = \FabricatorForms\PDF\HashSeal::peekPendingDownload();
         if ($pending === null) {
             wp_send_json_error(['message' => __('No pending key download found.', 'formfabricator')], 404);
@@ -1877,11 +1852,8 @@ class FormSettings
      */
     public static function handleConfirmKeyDownload(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_forms_admin_nonce',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_forms_admin_nonce', 'nonce');
         \FabricatorForms\PDF\HashSeal::confirmDownload();
         wp_send_json_success();
     }
@@ -1893,11 +1865,8 @@ class FormSettings
      */
     public static function handleSetupResetChoice(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_seal_setup',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_seal_setup', 'nonce');
         // Setup-only. The setup nonce is issued on every Settings load, so without this a stale or replayed request after
         // setup would silently switch key encryption off, and every later rotation would store its key in plaintext.
         if (get_option('fabricator_forms_seal_setup_done', false)) {
@@ -1916,11 +1885,8 @@ class FormSettings
      */
     public static function handleSetupConfirmSecure(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_seal_setup',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_seal_setup', 'nonce');
         self::refuseWithoutOpenssl();
 
         if (!defined('FABRICATOR_SEAL_MASTER_KEY') || (string) FABRICATOR_SEAL_MASTER_KEY === '') {
@@ -1971,9 +1937,7 @@ class FormSettings
         $offered = get_transient(self::OFFERED_KEYS_TRANSIENT . get_current_user_id());
         $only    = null;
         if (is_array($offered)) {
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
             $posted = isset($_POST['keys']) && is_array($_POST['keys'])
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep() sanitizes, WPCS misses the callback form.
                 ? map_deep(wp_unslash($_POST['keys']), 'sanitize_text_field')
                 : [];
             $only = array_values(array_intersect($offered, array_filter($posted, 'is_string')));
@@ -2026,14 +1990,10 @@ class FormSettings
      */
     public static function handleAddLegacyKey(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'),
-            'fabricator_add_legacy_key',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => \FabricatorForms\Plugin::userCan('settings') && current_user_can('manage_options'));
+        check_ajax_referer('fabricator_add_legacy_key', 'nonce');
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-        $raw = sanitize_textarea_field(wp_unslash($_POST['key_json'] ?? ''));
+        $raw = isset($_POST['key_json']) ? sanitize_textarea_field(wp_unslash($_POST['key_json'])) : '';
         if ($raw === '') {
             wp_send_json_error(['message' => __('No content pasted.', 'formfabricator')]);
             return;
@@ -2103,15 +2063,13 @@ class FormSettings
         // Warn if the JSON plugin field doesn't match this plugin.
         $plugin_field    = isset($parsed['plugin']) ? (string) $parsed['plugin'] : '';
         $expected_plugin = 'FormFabricator PDF Seal Key';
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-        $confirm_mismatch = (bool) (sanitize_text_field(wp_unslash($_POST['confirm_mismatch'] ?? '')) === '1');
+        $confirm_mismatch = isset($_POST['confirm_mismatch']) && sanitize_text_field(wp_unslash($_POST['confirm_mismatch'])) === '1';
         if ($plugin_field !== $expected_plugin && !$confirm_mismatch) {
             wp_send_json_error(
                 [
                 'code'    => 'plugin_mismatch',
                 'message' => __('Plugin name does not match.', 'formfabricator'),
                 'text'    => sprintf(
-                    // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- rendered client-side via textContent, not innerHTML; esc_html() here would double-encode instead of protecting.
                     /* translators: %s: the plugin field value from the uploaded JSON */
                     __('The "plugin" field reads "%s" — this does not appear to be a key from this plugin.', 'formfabricator'), // phpcs:ignore Generic.Files.LineLength
                     $plugin_field
@@ -2122,8 +2080,7 @@ class FormSettings
             return;
         }
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
-        $raw_status = sanitize_text_field(wp_unslash($_POST['key_status'] ?? ''));
+        $raw_status = isset($_POST['key_status']) ? sanitize_text_field(wp_unslash($_POST['key_status'])) : '';
         $allowed    = ['rotated-legacy', 'compromised-legacy'];
         $key_status = in_array($raw_status, $allowed, true) ? $raw_status : 'rotated-legacy';
 
@@ -2132,8 +2089,7 @@ class FormSettings
                 $uuid,
                 $key,
                 $incoming_created,
-                $key_status,
-                true
+                $key_status
             );
         } catch (\RuntimeException $e) {
             \FabricatorForms\fabricator_log('FabricatorForms FormSettings: legacy key import failed — ' . $e->getMessage());
@@ -2160,13 +2116,9 @@ class FormSettings
     public static function handleAccessUserSearch(): void
     {
         // Same gate as handleSaveAccessSettings(): only real WP admins see or edit per-user grants.
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => current_user_can('manage_options'),
-            'fabricator_access_settings',
-            'nonce'
-        );
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above via AjaxGuard::require(); sanitize_text_field() wraps Cast::stringOrDefault(), which hides it from the sniff.
-        $term = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['term'] ?? '')));
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => current_user_can('manage_options'));
+        check_ajax_referer('fabricator_access_settings', 'nonce');
+        $term = (is_string($_POST['term'] ?? null) ? sanitize_text_field(wp_unslash($_POST['term'])) : '');
         $args = [
             'fields'  => ['ID', 'display_name', 'user_login'],
             'number'  => 20,
@@ -2226,16 +2178,13 @@ class FormSettings
     {
         /* Grants/revokes capabilities for other users — must stay reserved
            for real WP admins, never just the broader "settings" cap. */
-        \FabricatorForms\Utils\AjaxGuard::require(
-            static fn() => current_user_can('manage_options'),
-            'fabricator_access_settings',
-            'nonce'
-        );
+        \FabricatorForms\Utils\AjaxGuard::capability(static fn() => current_user_can('manage_options'));
+        check_ajax_referer('fabricator_access_settings', 'nonce');
 
         // wp_roles() guarantees the global is initialized; a bare `global $wp_roles` doesn't.
         $wp_roles = wp_roles();
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Missing -- sanitized below; nonce verified via AjaxGuard::require().
-        $raw_roles = wp_unslash($_POST['roles'] ?? []);
+        // Role => [capability => '1'], every value a key; the roles and capabilities are checked against their lists below.
+        $raw_roles = isset($_POST['roles']) && is_array($_POST['roles']) ? map_deep(wp_unslash($_POST['roles']), 'sanitize_key') : [];
         $roles = [];
         if (is_array($raw_roles)) {
             foreach ($raw_roles as $slug => $raw_perms) {
@@ -2249,8 +2198,8 @@ class FormSettings
             }
         }
 
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.NonceVerification.Missing -- validated/sanitized below; nonce via AjaxGuard::require().
-        $raw_users = wp_unslash($_POST['users'] ?? []);
+        // User id => [capability => '1'], every value a key; the users and capabilities are checked below.
+        $raw_users = isset($_POST['users']) && is_array($_POST['users']) ? map_deep(wp_unslash($_POST['users']), 'sanitize_key') : [];
         $users = [];
         if (is_array($raw_users)) {
             foreach ($raw_users as $uid => $raw_perms) {
@@ -2267,7 +2216,6 @@ class FormSettings
 
         // The whole matrix is replaced, so the page's snapshot is compared with what is stored, under one lock with the
         // write, or concurrent saves would silently lose grants.
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified via AjaxGuard::require().
         $expected = isset($_POST['snapshot']) ? sanitize_text_field(wp_unslash($_POST['snapshot'])) : '';
         $saved    = \FabricatorForms\Utils\OptionMutex::run(
             'fabricator_forms_access',

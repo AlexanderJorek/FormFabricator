@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -189,24 +189,21 @@ class NameField extends BaseField
             if (empty($config[$k . '_enabled'])) {
                 continue;
             }
-            $label_raw = $config[$k . '_label'] ?? self::subfieldLabel($sf['label']);
-            $label = esc_html($label_raw);
-            $ph    = esc_attr($config[$k . '_placeholder'] ?? '');
-            $req   = !empty($config[$k . '_required']) ? ' required aria-required="true"' : '';
-            $ac    = esc_attr($this->autocompleteToken($k));
+            $label    = (string) ($config[$k . '_label'] ?? self::subfieldLabel($sf['label']));
+            $required = !empty($config[$k . '_required']);
+            $req_attr = $required ? ' required aria-required="true"' : '';
 
-            $req_star = !empty($config[$k . '_required']) ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
-            $sub_class = !empty($sf['is_select']) ? ' fabricator-name-sub--prefix' : '';
             // Every sub-input carries its own id and its label a matching for="", or assistive technology announces
             // unlabelled boxes. FormRenderer::uniqueIds() rewrites both together on a repeated form.
-            $sub_id    = esc_attr($field_id . '-' . $k);
-            $inner .= '<div class="fabricator-name-sub' . $sub_class . '">'
-                . '<label class="fabricator-sub-label" for="' . $sub_id . '">' . $label . $req_star . '</label>';
+            $sub_id = $field_id . '-' . $k;
+            $inner .= '<div class="fabricator-name-sub' . (!empty($sf['is_select']) ? ' fabricator-name-sub--prefix' : '') . '">'
+                . '<label class="fabricator-sub-label" for="' . esc_attr($sub_id) . '">' . esc_html($label)
+                . ($required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '') . '</label>';
             if (!empty($sf['is_select'])) {
-                $cur    = esc_attr((string)($val[$k] ?? ''));
-                $inner .= '<select id="' . $sub_id . '" name="' . esc_attr($field_id) . '[' . $k . ']"'
-                    . ' class="fabricator-input fabricator-name-prefix" aria-label="' . esc_attr($label_raw) . '"'
-                    . ' autocomplete="' . $ac . '"' . $req . '>';
+                $cur    = (string)($val[$k] ?? '');
+                $inner .= '<select id="' . esc_attr($sub_id) . '" name="' . esc_attr($field_id) . '[' . esc_attr($k) . ']"'
+                    . ' class="fabricator-input fabricator-name-prefix" aria-label="' . esc_attr($label) . '"'
+                    . ' autocomplete="' . esc_attr($this->autocompleteToken($k)) . '"' . $req_attr . '>';
                 foreach (self::prefixOptions() as $opt => $opt_label) {
                     $opt    = (string) $opt;
                     $inner .= '<option value="' . esc_attr($opt) . '"' . selected($cur, $opt, false) . '>'
@@ -214,10 +211,10 @@ class NameField extends BaseField
                 }
                 $inner .= '</select>';
             } else {
-                $inner .= '<input type="text" id="' . $sub_id . '" name="' . esc_attr($field_id) . '[' . $k . ']"'
-                    . ' class="fabricator-input" placeholder="' . $ph . '"'
+                $inner .= '<input type="text" id="' . esc_attr($sub_id) . '" name="' . esc_attr($field_id) . '[' . esc_attr($k) . ']"'
+                    . ' class="fabricator-input" placeholder="' . esc_attr((string) ($config[$k . '_placeholder'] ?? '')) . '"'
                     . ' value="' . esc_attr((string)($val[$k] ?? '')) . '"'
-                    . ' autocomplete="' . $ac . '"' . $req . '>';
+                    . ' autocomplete="' . esc_attr($this->autocompleteToken($k)) . '"' . $req_attr . '>';
             }
             $inner .= '<div class="fabricator-field-error fabricator-sub-error"></div>';
             $inner .= '</div>';
@@ -250,12 +247,12 @@ class NameField extends BaseField
      * Returns the sanitized composite subfield array submitted as $field_id[key].
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
-        $raw = isset($_POST[$field_id]) ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field') : '';
+        $raw = isset($post[$field_id]) ? map_deep(self::capRawArray($post[$field_id]), 'sanitize_text_field') : '';
         if (is_array($raw)) {
             // Flatten nested leaves: a direct POST can send name[first][0]=x, which
             // map_deep() preserves and map() would stringify to the literal "Array".
@@ -338,8 +335,52 @@ class NameField extends BaseField
             $scalar = is_array($value) ? '' : trim((string)($value ?? ''));
             return $scalar !== '' ? $scalar : __('[No entry]', 'formfabricator');
         }
-        if (!is_array($value)) {
-            return __('[No entry]', 'formfabricator');
+        $shown = [];
+        foreach (self::shownParts($value, $config) as $part) {
+            if ($part['value'] !== '') {
+                $shown[] = $part['value'];
+            }
+        }
+        return $shown ? implode(' ', $shown) : __('[No entry]', 'formfabricator');
+    }
+
+    /**
+     * The entry map() makes, with each sub-value as a part for a mail with automation markers
+     * (BaseField::withMarkerParts()).
+     *
+     * @param string $field_id Field identifier.
+     * @param string $label    Field label.
+     * @param mixed  $value    Submitted value.
+     * @param array  $config   Field configuration.
+     * @param array  $context  Submission context.
+     * @return array<string, array>
+     */
+    public function mapNormalized(
+        string $field_id,
+        string $label,
+        mixed $value,
+        array $config,
+        array $context
+    ): array {
+        return self::withMarkerParts(
+            parent::mapNormalized($field_id, $label, $value, $config, $context),
+            $field_id,
+            self::shownParts($value, $config)
+        );
+    }
+
+    /**
+     * The enabled sub-fields of an expanded name, in order, as shown: what map() joins and a marked mail marks one by
+     * one. None for a single input.
+     *
+     * @param mixed $value  Submitted value.
+     * @param array $config Field configuration.
+     * @return array<int, array{key: string, value: string, sep: string}>
+     */
+    private static function shownParts(mixed $value, array $config): array
+    {
+        if (empty($config['expanded']) || !is_array($value)) {
+            return [];
         }
         $parts = [];
         foreach (self::SUBFIELDS as $sf) {
@@ -347,16 +388,14 @@ class NameField extends BaseField
             if (empty($config[$k . '_enabled'])) {
                 continue;
             }
-            $v = trim((string)($value[$k] ?? ''));
+            $v = is_scalar($value[$k] ?? null) ? trim((string) $value[$k]) : '';
             if ($k === 'prefix') {
                 // The submitted salutation is a stable key ("mr"); mail and PDF show its label.
                 $v = self::prefixOptions()[$v] ?? $v;
             }
-            if ($v !== '') {
-                $parts[] = $v;
-            }
+            $parts[] = ['key' => $k, 'value' => $v, 'sep' => ' '];
         }
-        return $parts ? implode(' ', $parts) : __('[No entry]', 'formfabricator');
+        return $parts;
     }
 
     /**

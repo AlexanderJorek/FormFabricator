@@ -179,7 +179,7 @@ final class AccessControlTest extends TestCase
     public function testASubscriberCannotSaveAForm(): void
     {
         wp_set_current_user(self::factory()->user->create(['role' => 'subscriber']));
-        $result = \FabricatorForms\Form\FormModel::save(['title' => 'x', 'fields' => [], 'notifications' => [], 'settings' => []], 0, true);
+        $result = \FabricatorForms\Form\FormModel::save(['title' => 'x', 'fields' => [], 'notifications' => [], 'settings' => []], 0);
 
         self::assertWPError($result);
         self::assertSame('forbidden', $result->get_error_code());

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -296,8 +296,7 @@ class Plugin
      */
     private static function serverIgnoresDenyFiles(): bool
     {
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- $_SERVER is never slashed by wp_magic_quotes(); the value is only str_contains()-matched against literal allow-lists and never echoed.
-        $software = strtolower((string) ($_SERVER['SERVER_SOFTWARE'] ?? ''));
+        $software = isset($_SERVER['SERVER_SOFTWARE']) ? strtolower(sanitize_text_field(wp_unslash($_SERVER['SERVER_SOFTWARE']))) : '';
 
         foreach (self::HTACCESS_BLIND_SERVERS as $name) {
             if (str_contains($software, $name)) {
@@ -646,17 +645,15 @@ class Plugin
     }
 
     /**
-     * Human-readable name for a locale code, using WP core's offline lookup table.
+     * The English name of a locale's language ("German" for de_DE), beside "English" in the list; the code itself
+     * without the intl extension. No WordPress admin file is loaded for it.
      *
      * @param string $locale Locale code, e.g. 'de_DE'.
      */
     private static function localeDisplayName(string $locale): string
     {
-        if (!function_exists('format_code_lang')) {
-            require_once ABSPATH . 'wp-admin/includes/misc.php';
-        }
-        $name = function_exists('format_code_lang') ? format_code_lang($locale) : '';
-        return $name !== '' ? $name : $locale;
+        $name = class_exists('Locale') ? (string) \Locale::getDisplayLanguage($locale, 'en') : '';
+        return $name !== '' && $name !== $locale ? $name : $locale;
     }
 
     /**
@@ -905,17 +902,19 @@ class Plugin
      */
     public static function maybeSealSetupRedirect(): void
     {
+        // The admin page being opened, as WordPress resolved it from the request before admin_init.
+        global $plugin_page;
+
         if (!current_user_can('manage_options')) {
             return;
         }
         if (get_option('fabricator_forms_seal_setup_done', false)) {
             return;
         }
-        if (wp_doing_ajax() || !isset($_SERVER['REQUEST_METHOD']) || $_SERVER['REQUEST_METHOD'] !== 'GET') {
+        if (wp_doing_ajax() || !isset($_SERVER['REQUEST_METHOD']) || sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD'])) !== 'GET') {
             return;
         }
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing decision (which admin page to redirect to); gated by manage_options above, no data written.
-        $current_page = sanitize_text_field(wp_unslash($_GET['page'] ?? ''));
+        $current_page = is_string($plugin_page) ? $plugin_page : '';
         // Only redirect within FormFabricator pages, not the whole WP admin. The verifier's slug has another prefix; before
         // setup it has no key to check a PDF against, so every PDF would come back unknown.
         if (strncmp($current_page, 'fabricator-forms', 16) !== 0 && $current_page !== 'fabricator-pdf-verification') {

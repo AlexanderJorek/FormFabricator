@@ -97,7 +97,7 @@ final class SealKeyCardTest extends AjaxTestCase
     {
         // A Standard site whose wp-config.php already holds a master key (an upgrade never confirmed, or a kept line).
         $backups = [$this->setUpStandard()];
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
         $backups[] = HashSeal::peekPendingDownload();
         define('FABRICATOR_SEAL_MASTER_KEY', str_repeat('ab', 32));
 

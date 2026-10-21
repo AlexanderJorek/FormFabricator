@@ -400,9 +400,15 @@ final class ServerChecksTest extends AjaxTestCase
 
         // What error_get_last() holds after the fatal (only its message counts), for the shutdown function to read.
         @trigger_error('Allowed memory size of 134217728 bytes exhausted (tried to allocate 20480 bytes)', E_USER_WARNING);
+        // The answer ends the request through wp_die(); the test's AJAX die handler keeps what was printed and throws.
+        $this->_last_response = '';
         ob_start();
-        Overrides::runShutdownFunctions();
-        $printed = (string) ob_get_clean();
+        try {
+            Overrides::runShutdownFunctions();
+        } catch (\WPAjaxDieContinueException $end) {
+            unset($end);
+        }
+        $printed = $this->_last_response;
 
         self::assertStringContainsString('"The attached files are too large in total. Please attach fewer or smaller files."', $printed);
         $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];

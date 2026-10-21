@@ -4,6 +4,8 @@ namespace FabricatorForms\Tests\Unit\Fields;
 
 use FabricatorForms\Fields\ConsentField;
 use FabricatorForms\Fields\DirectDebitField;
+use FabricatorForms\Fields\GdprField;
+use FabricatorForms\Fields\SignatureField;
 use FabricatorForms\Tests\Support\FieldStubs;
 use FabricatorForms\Tests\Support\TestCase;
 
@@ -36,7 +38,8 @@ final class RecordedTermsTest extends TestCase
             ['sepa_begin', 'sepa_creditor', 'sepa_ref', 'sepa_iban', 'sepa_bic', 'sepa_holder', 'sepa_date', 'sepa_sig', 'sepa_end'],
             array_keys($entries)
         );
-        self::assertSame(['Date of signing', date('Y-m-d')], [$entries['sepa_date']['label'], $entries['sepa_date']['value']], 'always recorded');
+        self::assertSame('Date of signing', $entries['sepa_date']['label'], 'always recorded');
+        self::assertMatchesRegularExpression(self::signedAt(), $entries['sepa_date']['value']);
         self::assertSame('Lastschriftmandat', $entries['sepa_begin']['label']);
         self::assertSame("I authorise Club e.V.\nMy bank shall pay.\n\nRefunds within 8 weeks.", $entries['sepa_begin']['value']);
         self::assertSame('DE98ZZZ09999999999', $entries['sepa_creditor']['value']);
@@ -71,7 +74,7 @@ final class RecordedTermsTest extends TestCase
         self::assertSame(['Creditor', 'Club e.V.'], [$entries['dd_creditor_name']['label'], $entries['dd_creditor_name']['value']]);
         self::assertSame('Recurrent payment', $entries['dd_payment_type']['value']);
         self::assertSame('Street and number:', $entries['dd_street']['label']);
-        self::assertSame(date('Y-m-d'), $entries['dd_date']['value'], "the site's date format (stubbed)");
+        self::assertMatchesRegularExpression(self::signedAt(), $entries['dd_date']['value'], "the site's date format (stubbed), then the UTC time");
 
         // The page shows the same creditor lines.
         $html = (new DirectDebitField())->render($config, 'dd');
@@ -221,17 +224,8 @@ final class RecordedTermsTest extends TestCase
         self::assertStringContainsString('data-min-message="Please select at least 2 options."', $field->render($opts + ['min_selections' => 2], 'c'));
 
         // x[]=a&x[]=a: one choice, however often it is posted.
-        $verified = new \ReflectionProperty(\FabricatorForms\Form\FormProcessor::class, 'nonceVerified');
-        $verified->setValue(null, true);
-        \Brain\Monkey\Functions\when('wp_unslash')->returnArg(1);
         \Brain\Monkey\Functions\when('map_deep')->alias(static fn($v, $cb) => array_map($cb, $v));
-        $_POST = ['c' => ['a', 'a', 'a']];
-        try {
-            $value = $field->extractValue('c');
-        } finally {
-            $verified->setValue(null, false);
-            $_POST = [];
-        }
+        $value = $field->extractValue('c', ['c' => ['a', 'a', 'a']]);
         self::assertSame(['a'], $value);
         self::assertIsString($field->validate($value, $opts + ['min_selections' => 2]));
     }
@@ -244,5 +238,37 @@ final class RecordedTermsTest extends TestCase
         $shown = strip_tags($field->render($config, 'c'));
         preg_match('/"(.*)"/', $field->map('1', $config), $recorded);
         self::assertStringContainsString($recorded[1], $shown);
+    }
+
+    public function testASignatureRecordsWhenItWasSignedAndAnEmptyOneDoesNot(): void
+    {
+        $field = new SignatureField();
+
+        $typed = $field->mapNormalized('sig', 'Signature', 'typed:Ada Lovelace', $field->getDefaultConfig(), []);
+        self::assertSame(['sig_begin', 'sig', 'sig_signed', 'sig_end'], array_keys($typed), 'in its box, as the mandate');
+        self::assertSame('Signed on', $typed['sig_signed']['label']);
+        self::assertMatchesRegularExpression(self::signedAt(), $typed['sig_signed']['value']);
+
+        $own = $field->mapNormalized('sig', 'Signature', 'typed:Ada Lovelace', ['signed_label' => 'Unterschrieben am'] + $field->getDefaultConfig(), []);
+        self::assertSame('Unterschrieben am', $own['sig_signed']['label'], 'the label is a setting');
+
+        self::assertSame(['sig'], array_keys($field->mapNormalized('sig', 'Signature', '', $field->getDefaultConfig(), [])), 'nothing signed, no time');
+    }
+
+    public function testConsentAndGdprRecordTheMomentAsSignaturesDo(): void
+    {
+        self::assertMatchesRegularExpression(self::signedAt(false), (new ConsentField())->map('1', ['consent_text' => 'Newsletter']));
+        self::assertMatchesRegularExpression(self::signedAt(false), (new GdprField())->map('1', []));
+    }
+
+    /**
+     * The moment as Utils\SigningTime writes it with the stubbed date format ('Y-m-d'): the UTC date, then the UTC time.
+     * A run that straddles UTC midnight is tolerated.
+     */
+    private static function signedAt(bool $whole = true): string
+    {
+        $days = preg_quote(gmdate('Y-m-d'), '/') . '|' . preg_quote(gmdate('Y-m-d', time() - 60), '/');
+        $at   = '(?:' . $days . '), \d{2}:\d{2}:\d{2} UTC';
+        return $whole ? '/^' . $at . '$/' : '/' . $at . '/';
     }
 }

@@ -48,7 +48,7 @@ abstract class AjaxTestCase extends \WP_Ajax_UnitTestCase
     {
         $previous = get_current_user_id();
         wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
-        $id = FormModel::save(['title' => 'Test form', 'fields' => $fields, 'notifications' => $notifications, 'settings' => $settings], 0, true);
+        $id = FormModel::save(['title' => 'Test form', 'fields' => $fields, 'notifications' => $notifications, 'settings' => $settings], 0);
         wp_set_current_user($previous);
         self::assertIsInt($id, is_wp_error($id) ? $id->get_error_message() : 'form saved');
         return $id;

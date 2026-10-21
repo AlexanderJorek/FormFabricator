@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -705,27 +705,19 @@ class HashSeal
     }
 
     /**
-     * Rotates the active seal key. The new key is random.
+     * Rotates the active seal key. The new key is random. The request's nonce is its caller's to check (the AJAX
+     * handler, before it reads any input); this reads no request.
      *
      * @param bool $compromised     True to flag the retiring key as compromised.
-     * @param bool $nonce_verified  True when the caller already checked a CSRF nonce; otherwise this checks its own.
      * @param bool $master_key_lost True when the admin confirms the old master key is lost: rotation then goes ahead
      *                              under the configured one (see masterKeyMatches()).
      * @return array{uuid: string, key: string, created_at: string}
      */
-    public static function rotateKey(bool $compromised, bool $nonce_verified = false, bool $master_key_lost = false): array
+    public static function rotateKey(bool $compromised, bool $master_key_lost = false): array
     {
         // Defense-in-depth: don't rely solely on the caller to gate access to seal-key rotation.
         if (!current_user_can('manage_options')) {
             throw new \RuntimeException('Insufficient permissions to rotate the seal key.');
-        }
-
-        // Two separate fail-early statements (not one compound condition) so this check can't be bypassed.
-        if (!$nonce_verified) {
-            $nonce_verified = check_ajax_referer('fabricator_rotate_key', 'nonce', false) !== false;
-        }
-        if (!$nonce_verified) {
-            throw new \RuntimeException('Invalid or missing security token.');
         }
 
         $user       = wp_get_current_user();
@@ -1037,27 +1029,18 @@ class HashSeal
      * @param string $key_value      Raw key value (hex string).
      * @param string $created_at     ISO 8601 creation timestamp, or empty for now.
      * @param string $status         One of 'rotated-legacy' or 'compromised-legacy'.
-     * @param bool   $nonce_verified True when the caller already checked a CSRF nonce; otherwise this checks its own.
      * @return void
      */
     public static function addLegacyKey(
         string $uuid,
         string $key_value,
         string $created_at = '',
-        string $status = 'rotated-legacy',
-        bool $nonce_verified = false
+        string $status = 'rotated-legacy'
     ): void {
-        // Defense-in-depth: mirror rotateKey()'s own guard rather than relying solely on the caller.
+        // Defense-in-depth: mirror rotateKey()'s own guard rather than relying solely on the caller. The request's
+        // nonce is the caller's to check, as for rotateKey().
         if (!current_user_can('manage_options')) {
             throw new \RuntimeException('Insufficient permissions to import a legacy seal key.');
-        }
-
-        // Two separate fail-early statements (not one compound condition) so this check can't be bypassed.
-        if (!$nonce_verified) {
-            $nonce_verified = check_ajax_referer('fabricator_add_legacy_key', 'nonce', false) !== false;
-        }
-        if (!$nonce_verified) {
-            throw new \RuntimeException('Invalid or missing security token.');
         }
 
         // Validate at the boundary, not later as an unexplained unknown-key failure indistinguishable from real tampering.

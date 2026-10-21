@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -70,22 +70,14 @@ class FormSelectModel
     /**
      * Creates or updates a form-select record, returns its ID.
      *
-     * @param array $data           Form-select data array.
-     * @param int   $id             Existing record ID, or 0 to create new.
-     * @param bool  $nonce_verified Whether the caller already verified its own
-     *                              (action-specific) nonce before calling this
-     *                              method. When false (the default), a generic
-     *                              internal nonce check is performed as a
-     *                              backstop — see {@see self::nonceVerifiedOrCheck()}.
+     * @param array $data Form-select data array.
+     * @param int   $id   Existing record ID, or 0 to create new.
      * @return int The saved record ID.
      */
-    public static function save(array $data, int $id = 0, bool $nonce_verified = false): int
+    public static function save(array $data, int $id = 0): int
     {
         // Defense-in-depth: don't rely solely on callers remembering to gate on edit_forms.
         if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            return 0;
-        }
-        if (!self::nonceVerifiedOrCheck($nonce_verified)) {
             return 0;
         }
         $title = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($data['title'] ?? null));
@@ -173,20 +165,13 @@ class FormSelectModel
     /**
      * Deletes a form-select record by ID.
      *
-     * @param int  $id             The record ID to delete.
-     * @param bool $nonce_verified Whether the caller already verified its own
-     *                             (action-specific) nonce before calling this
-     *                             method. Forwarded the same way as save() —
-     *                             see its docblock.
+     * @param int $id The record ID to delete.
      * @return bool Whether the selection existed and is now deleted.
      */
     // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a method named delete(), not the filesystem function.
-    public static function delete(int $id, bool $nonce_verified = false): bool
+    public static function delete(int $id): bool
     {
         if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
-            return false;
-        }
-        if (!self::nonceVerifiedOrCheck($nonce_verified)) {
             return false;
         }
         // Whether a selection with this ID was there and is now gone, for the caller to report.
@@ -240,19 +225,6 @@ class FormSelectModel
         return $obj;
     }
 
-    /**
-     * CSRF backstop for save()/delete(), as FormModel::nonceVerifiedOrCheck().
-     *
-     * @param bool $nonce_verified Whether the caller already verified its own nonce.
-     * @return bool True if the request may proceed.
-     */
-    private static function nonceVerifiedOrCheck(bool $nonce_verified): bool
-    {
-        if ($nonce_verified) {
-            return true;
-        }
-        return (bool) check_ajax_referer('fabricator_forms_admin_nonce', 'nonce', false);
-    }
 
     /**
      * The highest selection ID ever handed out, so none is handed out twice.

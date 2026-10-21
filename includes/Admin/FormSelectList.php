@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -48,8 +48,9 @@ class FormSelectList
      */
     public static function bodyClass(string $classes): string
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
-        if (isset($_GET['page']) && $_GET['page'] === 'fabricator-forms-select') {
+        // The admin page being shown, as WordPress resolved it from the request.
+        global $plugin_page;
+        if ($plugin_page === 'fabricator-forms-select') {
             $classes .= ' fabricator-list-page';
         }
         return $classes;
@@ -99,10 +100,9 @@ class FormSelectList
             <div class="fabricator-title-pill"><?php esc_html_e('Form Selection', 'formfabricator'); ?></div>
             <?php \FabricatorForms\Utils\Assets::renderNoticeDock(); ?>
 
-            <?php $noSelects = empty($selects) ? ' hidden' : ''; ?>
             <div class="fabricator-list-toolbar" id="fabricator-fsel-toolbar">
                 <!-- Left: select-all + bulk actions -->
-                <div class="fabricator-toolbar-left" id="fabricator-fsel-toolbar-left"<?php echo esc_attr($noSelects); ?>>
+                <div class="fabricator-toolbar-left" id="fabricator-fsel-toolbar-left"<?php echo empty($selects) ? ' hidden' : ''; ?>>
                     <label class="fabricator-select-all-wrap">
                         <input type="checkbox" id="fabricator-fsel-select-all" title="<?php echo esc_attr__('Select all', 'formfabricator'); ?>">
                     </label>
@@ -124,7 +124,7 @@ class FormSelectList
                     </div>
                 </div>
                 <!-- Center: search -->
-                <div class="fabricator-toolbar-center" id="fabricator-fsel-toolbar-center"<?php echo esc_attr($noSelects); ?>>
+                <div class="fabricator-toolbar-center" id="fabricator-fsel-toolbar-center"<?php echo empty($selects) ? ' hidden' : ''; ?>>
                     <input type="search" id="fabricator-fsel-form-search"
                            placeholder="<?php echo esc_attr__('Search selections…', 'formfabricator'); ?>" autocomplete="off">
                 </div>
@@ -314,25 +314,20 @@ class FormSelectList
      */
     public static function ajaxSave(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::require('edit_forms', 'fabricator_fsel_save', 'nonce');
+        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
+        check_ajax_referer('fabricator_fsel_save', 'nonce');
 
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via AjaxGuard::require(); the sniff can't see through the static-method call.
         $id        = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require(); sniff can't see through the static call.
-        $title     = sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['title'] ?? '')));
-        // Decoded raw: sanitizing the JSON text would strip %xx sequences and "<…" from labels inside it.
-        // FormSelectModel::save() sanitizes every decoded label/description/form_id individually.
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via AjaxGuard::require(); sanitized per item in FormSelectModel::save().
-        $items_raw = json_decode(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['items'] ?? '[]')), true);
-        if (!is_array($items_raw)) {
-            wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')]);
-        }
+        $title     = isset($_POST['title']) ? sanitize_text_field(wp_unslash($_POST['title'])) : '';
+        // Posted as items[n][form_id|label|description|favorite], every value text; FormSelectModel::save() then reads
+        // each as what it is.
+        $items_raw = isset($_POST['items']) && is_array($_POST['items']) ? map_deep(wp_unslash($_POST['items']), 'sanitize_text_field') : [];
         if (count($items_raw) > 200) {
             wp_send_json_error(['message' => __('Too many items.', 'formfabricator')]);
             return;
         }
 
-        $new_id = FormSelectModel::save(['title' => $title, 'items' => $items_raw], $id, true);
+        $new_id = FormSelectModel::save(['title' => $title, 'items' => $items_raw], $id);
         $fsel   = FormSelectModel::get($new_id);
         if (!$fsel) {
             wp_send_json_error(['message' => __('Save failed.', 'formfabricator')], 500);
@@ -365,7 +360,7 @@ class FormSelectList
         check_ajax_referer('fabricator_fsel_delete_' . $id, 'nonce');
 
         // Reported as it happened, like FormList::ajaxDelete(): a refused or missing selection is not "deleted".
-        if (!FormSelectModel::delete($id, true)) {
+        if (!FormSelectModel::delete($id)) {
             wp_send_json_error(['message' => __('The selection could not be deleted. Please try again.', 'formfabricator')], 400);
         }
         wp_send_json_success();
@@ -418,6 +413,7 @@ class FormSelectList
         }
         $fav_idx ??= 0;
 
+        $html = '';
         ob_start();
         $uid = 'fsel-' . $id;
         ?>
@@ -472,14 +468,17 @@ class FormSelectList
                     ?>
                     <div class="fsel-form<?php echo $i !== $fav_idx ? ' fsel-form--hidden' : ''; ?>"
                          data-idx="<?php echo esc_attr($i); ?>">
-                        <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- FormRenderer::render() returns pre-escaped HTML; each field handler escapes its own output internally. ?>
-                        <?php echo FormRenderer::render($item['form_id']); ?>
+                        <?php
+                        // Each form's markup joins here: its fields escape their own values as they render them.
+                        $html .= (string) ob_get_clean() . FormRenderer::render($item['form_id']);
+                        ob_start();
+                        ?>
                     </div>
                 <?php endforeach; ?>
             </div>
         </div>
         <?php
-        return (string) ob_get_clean();
+        return $html . (string) ob_get_clean();
     }
 
     /* ------------------------------------------------------------------ */

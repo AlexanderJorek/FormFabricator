@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -63,12 +63,13 @@ class TextareaField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $req        = !empty($config['required']) ? ' required aria-required="true"' : '';
-        $ph         = esc_attr($config['placeholder'] ?? '');
-        $rows       = (int)($config['rows'] ?? 5);
         $configured = (int)($config['limit_max'] ?? 0);
-        $wlim       = ($config['limit_type'] ?? 'chars') === 'words' && $configured > 0 ? ' data-word-limit="' . $configured . '"' : '';
-        $clim       = ($config['limit_type'] ?? 'chars') === 'chars' ? ' maxlength="' . self::clampTextMax($configured) . '"' : '';
+        $limit_attr = '';
+        if (($config['limit_type'] ?? 'chars') === 'chars') {
+            $limit_attr = ' maxlength="' . esc_attr(self::clampTextMax($configured)) . '"';
+        } elseif (($config['limit_type'] ?? 'chars') === 'words' && $configured > 0) {
+            $limit_attr = ' data-word-limit="' . esc_attr($configured) . '"';
+        }
         // Builder-configured "Browser autocomplete" section — <textarea> doesn't go through
         // inputAttrs(), so it needs the same handling that gives that section an effect.
         $autocomplete_attr = '';
@@ -81,8 +82,9 @@ class TextareaField extends BaseField
             }
         }
         $inner = '<textarea id="' . esc_attr($field_id) . '" name="' . esc_attr($field_id) . '" '
-            . 'class="fabricator-input fabricator-textarea" rows="' . $rows . '" placeholder="' . $ph . '"'
-            . $clim . $wlim . $req . $autocomplete_attr . '>'
+            . 'class="fabricator-input fabricator-textarea" rows="' . esc_attr((int)($config['rows'] ?? 5)) . '"'
+            . ' placeholder="' . esc_attr((string) ($config['placeholder'] ?? '')) . '"'
+            . $limit_attr . (!empty($config['required']) ? ' required aria-required="true"' : '') . $autocomplete_attr . '>'
             . esc_textarea((string)($value ?? ''))
             . '</textarea>';
         return $this->wrap($field_id, $config, $inner);
@@ -92,12 +94,12 @@ class TextareaField extends BaseField
      * Returns the submitted textarea content sanitized with sanitize_textarea_field() to preserve intentional newlines.
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        return isset($_POST[$field_id]) ? sanitize_textarea_field(wp_unslash($_POST[$field_id])) : '';
+        return is_string($post[$field_id] ?? null) ? sanitize_textarea_field($post[$field_id]) : '';
     }
 
     /**

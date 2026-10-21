@@ -469,6 +469,10 @@ $formCases  = [
         ['id' => 'cap', 'type' => 'captcha', 'label' => 'CAPTCHA', 'provider' => 'altcha', 'required' => true],
     ], []],
     'rating' => [[['id' => 'stars', 'type' => 'rating', 'label' => 'Stars', 'required' => true]], []],
+    'signature with place' => [[[
+        'id' => 'sign', 'type' => 'signature', 'label' => 'Signature', 'signing_place' => true, 'place_label' => 'Signed in:',
+        'signature_title' => 'Order confirmation', 'signature_text' => '<p>I confirm the details above.</p>',
+    ]], []],
     'name with salutation' => [[[
         'id' => 'who', 'type' => 'name', 'label' => 'Name', 'expanded' => true,
         'prefix_enabled' => true, 'prefix_required' => true, 'fname_enabled' => true, 'lname_enabled' => true,
@@ -589,8 +593,8 @@ foreach (['wp_enqueue_media', 'wp_enqueue_script'] as $noop) {
     Brain\Monkey\Functions\when($noop)->justReturn(null);
 }
 Brain\Monkey\Functions\when('wp_date')->alias(static fn(string $format): string => match ($format) {
-    \FabricatorForms\PDF\Generator::METADATA_DATE_FORMAT => '2026-10-07 09:30:00 +02:00',
-    default                                               => '7 October 2026',
+    'H:i:s' => '07:30:00',
+    default => '7 October 2026',
 });
 ob_start();
 \FabricatorForms\Admin\PDFLayoutEditor::render();

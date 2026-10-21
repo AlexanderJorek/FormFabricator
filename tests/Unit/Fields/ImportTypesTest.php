@@ -4,7 +4,6 @@ namespace FabricatorForms\Tests\Unit\Fields;
 
 use Brain\Monkey\Functions;
 use FabricatorForms\Admin\FormEditor;
-use FabricatorForms\Form\FormProcessor;
 use FabricatorForms\Tests\Support\FieldStubs;
 use FabricatorForms\Tests\Support\TestCase;
 
@@ -85,8 +84,6 @@ final class ImportTypesTest extends TestCase
         Functions\when('wp_unslash')->returnArg(1);
         Functions\when('map_deep')->alias($mapDeep);
         Functions\when('is_email')->alias(static fn($e) => filter_var($e, FILTER_VALIDATE_EMAIL) ?: false);
-        $verified = new \ReflectionProperty(FormProcessor::class, 'nonceVerified');
-        $verified->setValue(null, true);
         $calls    = 0;
         try {
             foreach (FieldStubs::registry() as $type => $class) {
@@ -102,10 +99,9 @@ final class ImportTypesTest extends TestCase
                 $cfg['expanded'] = false;
 
                 foreach ($posted as $post) {
-                    $_POST = ['f-' . $type => $post];
                     $label = "$type posted " . json_encode($post);
                     try {
-                        $value = $handler->extractValue('f-' . $type);
+                        $value = $handler->extractValue('f-' . $type, ['f-' . $type => $post]);
                         $handler->validate($value, $cfg);
                         foreach ($handler->mapNormalized('f-' . $type, 'Question', $value, $cfg, ['files' => [], 'raw_values' => [], 'skip_ids' => []]) as $entry) {
                             if (is_string($entry['value'] ?? null)) {
@@ -121,8 +117,6 @@ final class ImportTypesTest extends TestCase
             }
         } finally {
             restore_error_handler();
-            $verified->setValue(null, false);
-            $_POST = [];
         }
 
         self::assertGreaterThan(100, $calls);

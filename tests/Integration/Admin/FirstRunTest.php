@@ -128,7 +128,8 @@ final class FirstRunTest extends AjaxTestCase
     private function setupRedirectFor(string $page): ?string
     {
         $_SERVER['REQUEST_METHOD'] = 'GET';
-        $_GET = ['page' => $page];
+        // As wp-admin/admin.php resolves ?page= before admin_init.
+        $GLOBALS['plugin_page'] = $page;
         $trap = static function (string $location): string {
             throw new \RuntimeException($location);
         };
@@ -141,6 +142,7 @@ final class FirstRunTest extends AjaxTestCase
         } catch (\RuntimeException $e) {
             return $e->getMessage();
         } finally {
+            unset($GLOBALS['plugin_page']);
             remove_filter('wp_redirect', $trap);
             remove_filter('wp_doing_ajax', '__return_false', 99);
         }
