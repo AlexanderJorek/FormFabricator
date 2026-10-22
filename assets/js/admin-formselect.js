@@ -260,7 +260,7 @@
                     body['items[' + n + '][description]'] = item.description;
                     body['items[' + n + '][favorite]']    = item.favorite ? '1' : '0';
                 });
-                post('fabricator_fsel_save', body, function (data) {
+                post('fabricator_forms_fsel_save', body, function (data) {
                     saveBtn.disabled = false;
                     if (!data.success) {
                         window.alert((data.data && data.data.message) || fseli18n.saveFailed);
@@ -314,7 +314,7 @@
             });
             delConfirm.addEventListener('click', function () {
                 delConfirm.disabled = true;
-                post('fabricator_fsel_delete', { nonce: pendingDelNonce, id: pendingDelId },
+                post('fabricator_forms_fsel_delete', { nonce: pendingDelNonce, id: pendingDelId },
                 function (data) {
                     delConfirm.disabled = false;
                     if (!data.success) {
@@ -562,7 +562,7 @@
                             return;
                         }
                         var cb = checked[i];
-                        post('fabricator_fsel_delete', { nonce: cb.dataset.delNonce, id: cb.value },
+                        post('fabricator_forms_fsel_delete', { nonce: cb.dataset.delNonce, id: cb.value },
                         function (data) {
                             if (data.success) {
                                 var row = list.querySelector('.fabricator-form-row[data-id="' + cb.value + '"]');

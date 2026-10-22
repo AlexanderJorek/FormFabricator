@@ -167,7 +167,7 @@ final class EditLockTest extends AjaxTestCase
     {
         wp_set_current_user($this->first);
         $snapshot = md5((string) wp_json_encode(get_option('fabricator_forms_pdf_layout', [])));
-        $save = fn(string $color): array => $this->ajax('fabricator_save_pdf_layout', [
+        $save = fn(string $color): array => $this->ajax('fabricator_forms_save_pdf_layout', [
             'fabricator_pdf_layout_nonce'    => wp_create_nonce('fabricator_pdf_layout'),
             'fabricator_pdf_layout_snapshot' => $snapshot,
             'accent_color'                   => $color,

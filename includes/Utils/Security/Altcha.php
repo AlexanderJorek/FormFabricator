@@ -43,7 +43,7 @@ final class Altcha
 
     /**
      * Highest counter a challenge's solution may need, by default: about 2,500 key derivations on average, a second or
-     * two in a browser. The fabricator_altcha_difficulty filter changes it.
+     * two in a browser. The fabricator_forms_altcha_difficulty filter changes it.
      *
      * @var int
      */
@@ -61,7 +61,7 @@ final class Altcha
      */
     public static function createChallenge(): array
     {
-        $difficulty = (int) apply_filters('fabricator_altcha_difficulty', self::DEFAULT_DIFFICULTY);
+        $difficulty = (int) apply_filters('fabricator_forms_altcha_difficulty', self::DEFAULT_DIFFICULTY);
         return self::challengeFor(random_int(0, max(1, min(1000000, $difficulty))));
     }
 

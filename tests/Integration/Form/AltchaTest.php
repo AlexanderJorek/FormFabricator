@@ -25,19 +25,19 @@ final class AltchaTest extends AjaxTestCase
     {
         parent::set_up();
         // A few counters to try instead of thousands: the test solves each challenge in PHP.
-        add_filter('fabricator_altcha_difficulty', static fn(): int => 20);
+        add_filter('fabricator_forms_altcha_difficulty', static fn(): int => 20);
     }
 
     // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- overrides WP_UnitTestCase's snake_case fixture method.
     public function tear_down(): void
     {
-        remove_all_filters('fabricator_altcha_difficulty');
+        remove_all_filters('fabricator_forms_altcha_difficulty');
         parent::tear_down();
     }
 
     public function testTheEndpointHandsAnyVisitorASignedChallenge(): void
     {
-        self::assertNotFalse(has_action('wp_ajax_nopriv_fabricator_altcha_challenge'), 'visitors who are not logged in');
+        self::assertNotFalse(has_action('wp_ajax_nopriv_fabricator_forms_altcha_challenge'), 'visitors who are not logged in');
 
         $challenge = $this->fetchChallenge();
 
@@ -149,7 +149,7 @@ final class AltchaTest extends AjaxTestCase
         $html = \FabricatorForms\Form\FormRenderer::render(0, [], [self::FIELDS[1]]);
 
         self::assertStringContainsString('<altcha-widget', $html);
-        self::assertStringContainsString('action=fabricator_altcha_challenge', $html);
+        self::assertStringContainsString('action=fabricator_forms_altcha_challenge', $html);
         self::assertStringNotContainsString('fabricator-captcha-gate', $html, 'no reCAPTCHA');
         ob_start();
         wp_script_modules()->print_enqueued_script_modules();
@@ -164,7 +164,7 @@ final class AltchaTest extends AjaxTestCase
      */
     private function fetchChallenge(): array
     {
-        $response  = $this->ajax('fabricator_altcha_challenge');
+        $response  = $this->ajax('fabricator_forms_altcha_challenge');
         $challenge = json_decode(trim($response['raw']), true);
         self::assertIsArray($challenge, $response['raw']);
         return $challenge;

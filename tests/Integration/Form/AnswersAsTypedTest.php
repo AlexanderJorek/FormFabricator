@@ -83,6 +83,24 @@ final class AnswersAsTypedTest extends AjaxTestCase
         self::assertStringContainsString('U+1F380', (string) ($r['data']['errors']['name'] ?? ''));
 
         self::assertTrue($this->submit($pdf, ['name' => 'Grüße, Ελλάδα, ℊ'])['success'], 'the shipped fonts draw these');
+
+        // The zero-width non-joiner and joiner are typed: a Persian keyboard writes the one, a family emoji holds the other.
+        self::assertTrue($this->submit($no_pdf, ['name' => "می\u{200C}خواهم 👨\u{200D}👩\u{200D}👧"])['success'], 'the joiners are typed');
+    }
+
+    public function testThePdfFontsAreReadOnlyOnceTheCaptchaPassed(): void
+    {
+        // Reading the fonts loads mPDF: a visitor without a solved CAPTCHA never gets that far.
+        $form = $this->createForm(
+            [['id' => 'name', 'type' => 'text', 'label' => 'Name'], ['id' => 'cap', 'type' => 'captcha', 'label' => 'CAPTCHA', 'required' => true, 'provider' => 'altcha']],
+            [self::notification(['attach_pdf' => true])]
+        );
+
+        $r = $this->submit($form, ['name' => 'Ada 🎀', 'cap' => 'not-a-solution']);
+
+        self::assertFalse($r['success']);
+        self::assertArrayHasKey('cap', (array) ($r['data']['errors'] ?? []), (string) wp_json_encode($r));
+        self::assertArrayNotHasKey('name', (array) ($r['data']['errors'] ?? []), 'the fonts were not read');
     }
 
     public function testAnOptionSavedInTheBuilderMatchesWhatTheFormPosts(): void

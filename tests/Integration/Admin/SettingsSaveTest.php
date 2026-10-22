@@ -127,7 +127,7 @@ final class SettingsSaveTest extends AjaxTestCase
     public function testTheAccessMatrixSavedInOneTabRefusesTheOtherTabsStaleCopy(): void
     {
         $loaded = hash('sha256', (string) wp_json_encode(get_option('fabricator_forms_access', ['roles' => [], 'users' => []])));
-        $save   = fn(array $roles, string $snapshot): array => $this->ajax('fabricator_save_access_settings', [
+        $save   = fn(array $roles, string $snapshot): array => $this->ajax('fabricator_forms_save_access_settings', [
             'nonce'    => wp_create_nonce('fabricator_access_settings'),
             'roles'    => $roles,
             'snapshot' => $snapshot,
@@ -154,7 +154,7 @@ final class SettingsSaveTest extends AjaxTestCase
         $outsider = self::factory()->user->create(['role' => 'editor', 'display_name' => 'Outsider Otto']);
         remove_user_from_blog($outsider, get_current_blog_id());
 
-        $r = $this->ajax('fabricator_save_access_settings', [
+        $r = $this->ajax('fabricator_forms_save_access_settings', [
             'nonce'    => wp_create_nonce('fabricator_access_settings'),
             'users'    => [$member => ['edit_forms' => '1'], $outsider => ['edit_forms' => '1']],
             'snapshot' => hash('sha256', (string) wp_json_encode(get_option('fabricator_forms_access', ['roles' => [], 'users' => []]))),
@@ -201,7 +201,7 @@ final class SettingsSaveTest extends AjaxTestCase
      */
     private function saveSettings(array $fields, string $snapshot): array
     {
-        return $this->ajax('fabricator_save_general_settings', $fields + [
+        return $this->ajax('fabricator_forms_save_general_settings', $fields + [
             'fabricator_settings_nonce'    => wp_create_nonce('fabricator_forms_settings'),
             'fabricator_settings_snapshot' => $snapshot,
         ]);

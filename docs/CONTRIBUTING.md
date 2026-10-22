@@ -131,10 +131,20 @@ documents it.
 **Field classes don't call each other.** A helper that several fields need goes in `includes/Utils`.
 
 **"Hide label" hides it everywhere:** on the page, in the mail and in the PDF, for every field type and inside groups.
-Mapping keeps the label in the entry and marks it (`FieldRegistry::withHiddenLabel()`, `label_hidden`): mail and PDF
+On the page only its look is hidden (`fabricator-visually-hidden`): a field needs a name for screen readers. An HTML
+block, which has no control to name, leaves its hidden label out. Mapping keeps the label in the entry and marks it (`FieldRegistry::withHiddenLabel()`, `label_hidden`): mail and PDF
 then show the answer without it, while the seal still records it and the verification page still names the answer.
 Only the field's own entry (keyed by its id) is marked; entries a field adds under their own labels (a mandate's parts,
 a signature's "Signed on") keep them.
+
+**Errors reach screen readers and the keyboard** (front.js, the European Accessibility Act's concern). A field's error
+slots are no live regions: after a failed submission, in the browser or from the server, the form's message area (its
+one `role="alert"`) names the fields with an error, each a link to it, and the cursor goes to the first
+(`reportErrors()`); a failed "Next" puts it in the page's first field with an error, and a page the visitor goes to
+takes it to its top. Every control names the field's description and the error slots that concern it in
+`aria-describedby`, and is `aria-invalid` while one holds a message (`syncFieldAria()`). The slots are watched, so a
+field script that writes its own message (a mandate checks its IBAN on leaving the field) needs nothing more. A new
+error slot uses one of the classes front.js watches (`ERROR_SLOTS`) and no `role`.
 
 ### Answers are recorded as typed
 
@@ -146,13 +156,16 @@ refused at its field, in the browser first (front.js `answerProblem()`) and agai
 
 - invalid UTF-8;
 - control and invisible format characters (`\p{Cc}`, `\p{Cf}`, line and paragraph separators): direction controls,
-  zero-width characters, the soft hyphen. They change how text reads without showing, and a direction control can
-  reorder text into a PDF marker (see [Text direction](#submitters-must-not-be-able-to-forge-structure));
+  zero-width spaces, the soft hyphen. They change how text reads without showing, and a direction control can
+  reorder text into a PDF marker (see [Text direction](#submitters-must-not-be-able-to-forge-structure)). The
+  zero-width non-joiner and joiner (U+200C, U+200D) pass: they are typed and reorder nothing. A Persian keyboard
+  writes the non-joiner; an emoji such as the family is man, U+200D, woman, U+200D, girl;
 - line breaks and tabs outside a multi-line answer (`multilineAnswer()`, a textarea);
 - HTML character references (`&amp;`, `&#65;`): `esc_html()` leaves a reference as it is, so a page or an email would
   show the character it names instead of what was typed;
 - while the form makes a PDF, a character no shipped font draws (`Generator::undrawableCharacter()`): the PDF would
-  show a stand-in. The browser can't know the fonts, so only the server checks this.
+  show a stand-in. The browser can't know the fonts, so only the server checks this, and only once the CAPTCHA
+  passed: reading the fonts loads mPDF and its metrics (about 1 s and 26 MB the first time in a request).
 
 Everything else, `<` and `%` included, is kept, and escaped wherever it is shown. WordPress's sanitizers would change
 it, so `FormProcessor::handle()` reads the answers unsanitized: a named review exception. Values a visitor's answer is

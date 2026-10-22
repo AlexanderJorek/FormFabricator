@@ -73,7 +73,7 @@ test('a save shows the server\'s warning about signatures without a reload, and 
         '',
     ];
     let saves = 0;
-    const page = await loadLayout((url, body) => (body.action === 'fabricator_save_pdf_layout'
+    const page = await loadLayout((url, body) => (body.action === 'fabricator_forms_save_pdf_layout'
         ? { success: true, data: { message: 'Saved.', warning: warnings[saves++], snapshot: 'snap-' + saves } }
         : { success: true, data: {} }));
     const doc = page.document;
@@ -84,7 +84,7 @@ test('a save shows the server\'s warning about signatures without a reload, and 
     toggleSection(page, 'signatures');
     form.requestSubmit();
     await until(page, () => saves === 1 && !warn.hidden);
-    const sent = page.requests.find((r) => r.body && r.body.action === 'fabricator_save_pdf_layout');
+    const sent = page.requests.find((r) => r.body && r.body.action === 'fabricator_forms_save_pdf_layout');
     assert.equal(sent.body.section_hidden, 'signatures', 'the hidden section is sent');
     assert.equal(warn.textContent.trim(), warnings[0]);
     assert.equal(form.querySelector('[name="fabricator_pdf_layout_snapshot"]').value, 'snap-1');
@@ -94,4 +94,21 @@ test('a save shows the server\'s warning about signatures without a reload, and 
     await until(page, () => saves === 2 && warn.hidden);
     assert.equal(warn.textContent.trim(), '');
     assert.deepEqual(page.errors, []);
+});
+
+test('a save the server answers with no JSON names the status with its title', async () => {
+    const page = await loadLayout();
+    const doc = page.document;
+    // A proxy's error page: no JSON, and over HTTP/2 no statusText either.
+    page.window.fetch = () => Promise.resolve({ ok: false, status: 502, statusText: '', text: () => Promise.resolve('<html>Bad gateway</html>') });
+    page.window.console.error = () => {};
+
+    // The page's edit-lock notice shares the class; the save's own is the other one, and the lock's stays.
+    const saveNotice = () => doc.querySelector('.fabricator-settings-notice--error:not(#fabricator-lock-notice)');
+    doc.getElementById('fabricator-pdf-layout-form').requestSubmit();
+    await until(page, () => saveNotice());
+
+    const expected = I18N.unexpectedResponse.replace('%s', 'HTTP 502 "Bad Gateway"');
+    assert.equal(saveNotice().textContent.trim(), expected);
+    assert.notEqual(doc.getElementById('fabricator-lock-notice'), null, "the edit lock's notice stays");
 });

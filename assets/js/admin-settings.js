@@ -277,7 +277,8 @@ try {
             var form = document.getElementById('fabricator-settings-form');
             if (!form) return;
             function showNotice(msg, isError) {
-                var existing = document.querySelector('.fabricator-settings-notice');
+                /* The previous save's notice goes; the edit lock's stays. */
+                var existing = document.querySelector('.fabricator-settings-notice:not(#fabricator-lock-notice)');
                 if (existing) existing.remove();
                 var n = document.createElement('div');
                 n.className = 'fabricator-settings-notice fabricator-settings-notice--'
@@ -304,7 +305,7 @@ try {
                 var origHtml = btn ? btn.innerHTML : '';
                 if (btn) { btn.disabled = true; fabIconThenText(btn, '<span class="fabricator-spinner"></span> ', I18N.saving); }
                 var fd = new FormData(form);
-                fd.set('action', 'fabricator_save_general_settings');
+                fd.set('action', 'fabricator_forms_save_general_settings');
                 requestAnimationFrame(function(){ requestAnimationFrame(function(){
                 fetch(ajaxurl, {method:'POST', body:fd})
                     .then(function(r){ return r.json(); })

@@ -139,7 +139,7 @@
                 dlOverlay.hidden = true;
                 // Only this click deletes the one-shot transient server-side; a failed request just reshows the modal next load.
                 var fd = new FormData();
-                fd.append('action', 'fabricator_confirm_key_download');
+                fd.append('action', 'fabricator_forms_confirm_key_download');
                 fd.append('nonce', NONCES.confirmDownload || '');
                 fetch(ajaxurl, { method: 'POST', body: fd })
                     .catch(function () {})
@@ -154,7 +154,7 @@
             if (!DATA.hasPendingDownload) { return; }
 
             var fd = new FormData();
-            fd.append('action', 'fabricator_peek_key_download');
+            fd.append('action', 'fabricator_forms_peek_key_download');
             fd.append('nonce', NONCES.confirmDownload || '');
             fetch(ajaxurl, { method: 'POST', body: fd })
                 .then(function (r) { return r.json(); })
@@ -209,7 +209,7 @@
                 mismatchMsg.style.display = 'none';
                 var statusRadio = overlay.querySelector('input[name="fabricator_legacy_status"]:checked');
                 var fd = new FormData();
-                fd.append('action',      'fabricator_add_legacy_key');
+                fd.append('action',      'fabricator_forms_add_legacy_key');
                 fd.append('nonce',       DATA.legacyKeyNonce);
                 fd.append('key_json',    textarea.value);
                 fd.append('key_status',  statusRadio ? statusRadio.value : 'rotated-legacy');
@@ -340,7 +340,7 @@
             if (setupState === 'masterkey') {
                 // Encryption chosen but master key not in wp-config.php yet.
                 showMkStep(''); // immediate — define line filled in on response
-                postBlocker('fabricator_setup_get_master_key', null, function (data) {
+                postBlocker('fabricator_forms_setup_get_master_key', null, function (data) {
                     if (data.success) {
                         mkLine.textContent = data.data.define_line;
                         mkConfirm.disabled = false;
@@ -351,7 +351,7 @@
             } else if (setupState === 'ready') {
                 /* Encryption chosen and a master key already present: the server confirms the session's issued key, or
                    else the one in wp-config.php, and the setup finalises. */
-                postBlocker('fabricator_setup_get_master_key', null, function (data) {
+                postBlocker('fabricator_forms_setup_get_master_key', null, function (data) {
                     if (data.success) {
                         showReadyStep();
                     } else {
@@ -366,7 +366,7 @@
                     btnDefault.disabled = true;
                     btnSecure.disabled  = true;
                     blockerErr.style.display = 'none';
-                    postBlocker('fabricator_setup_keep_default', null, function (data) {
+                    postBlocker('fabricator_forms_setup_keep_default', null, function (data) {
                         if (data.success) {
                             finishSetup(data);
                         } else {
@@ -382,7 +382,7 @@
                 btnSecure.addEventListener('click', function () {
                     blockerErr.style.display = 'none';
                     showMkStep(''); // immediate transition; define line filled in on response
-                    postBlocker('fabricator_setup_get_master_key', null, function (data) {
+                    postBlocker('fabricator_forms_setup_get_master_key', null, function (data) {
                         if (!data.success) {
                             // Roll back to step 1 on error.
                             mkStep.style.display = 'none';
@@ -406,7 +406,7 @@
             if (mkBack) {
                 mkBack.addEventListener('click', function () {
                     mkBack.disabled = true;
-                    postBlocker('fabricator_setup_reset_choice', null, function () {
+                    postBlocker('fabricator_forms_setup_reset_choice', null, function () {
                         mkBack.disabled = false;
                         mkStep.style.display = 'none';
                         showStep1();
@@ -422,7 +422,7 @@
                 mkConfirm.addEventListener('click', function () {
                     mkConfirm.disabled    = true;
                     mkError.style.display = 'none';
-                    postBlocker('fabricator_setup_confirm_secure', null, function (data) {
+                    postBlocker('fabricator_forms_setup_confirm_secure', null, function (data) {
                         if (!data.success) {
                             mkConfirm.disabled    = false;
                             mkError.textContent   = (data.data && data.data.message) || I18N.error;
@@ -439,7 +439,7 @@
                 readyConfirm.addEventListener('click', function () {
                     readyConfirm.disabled    = true;
                     readyError.style.display = 'none';
-                    postBlocker('fabricator_setup_confirm_secure', null, function (data) {
+                    postBlocker('fabricator_forms_setup_confirm_secure', null, function (data) {
                         if (!data.success) {
                             readyConfirm.disabled    = false;
                             readyError.textContent   = (data.data && data.data.message) || I18N.error;
@@ -519,7 +519,7 @@
                 openMkModal('');
                 var fd = new FormData();
                 /* Its own action: the setup one refuses once setup is done, and this dialog then closed without a word. */
-                fd.append('action', 'fabricator_upgrade_get_master_key');
+                fd.append('action', 'fabricator_forms_upgrade_get_master_key');
                 fd.append('nonce',  DATA.setupNonce);
                 fetch(ajaxurl, { method: 'POST', body: fd })
                     .then(function (r) { return r.json(); })
@@ -554,7 +554,7 @@
                 mkConfirm.disabled    = true;
                 mkError.style.display = 'none';
                 var fd = new FormData();
-                fd.append('action', 'fabricator_setup_confirm_secure');
+                fd.append('action', 'fabricator_forms_setup_confirm_secure');
                 fd.append('nonce',  DATA.setupNonce);
                 /* Existing master key: only the keys the admin ticked are encrypted (and so trusted again). */
                 if (mkKeys) {

@@ -98,23 +98,23 @@ final class AccessControlTest extends TestCase
         add_action('admin_menu', [Admin\PDFLayoutEditor::class, 'addPage']);
         add_action('admin_menu', [Admin\VerificationPage::class, 'menu']);
 
-        // Opening the verifier's own address, admin.php?page=fabricator-pdf-verification.
+        // Opening the verifier's own address, admin.php?page=fabricator-forms-pdf-verification.
         $pagenow       = 'admin.php';
-        $plugin_page   = 'fabricator-pdf-verification';
+        $plugin_page   = 'fabricator-forms-pdf-verification';
         $_GET['page']  = $plugin_page;
         $typenow       = '';
         require ABSPATH . 'wp-admin/includes/menu.php';
 
         $entry = array_values(array_filter($menu, static fn(array $item): bool => str_contains((string) ($item[0] ?? ''), 'FormFabricator')));
         self::assertCount(1, $entry, 'the page was not refused, and the menu has one FormFabricator entry');
-        self::assertSame(['fabricator-pdf-verification'], array_column($submenu[$entry[0][2]] ?? [], 2), 'holding only the verifier');
+        self::assertSame(['fabricator-forms-pdf-verification'], array_column($submenu[$entry[0][2]] ?? [], 2), 'holding only the verifier');
 
         // The menu as WordPress prints it: an entry whose own page the user may not open links to its first page below.
-        $self = 'fabricator-pdf-verification';
+        $self = 'fabricator-forms-pdf-verification';
         ob_start();
         require ABSPATH . 'wp-admin/menu-header.php';
         $html = (string) ob_get_clean();
-        self::assertMatchesRegularExpression('#<li[^>]*toplevel_page_fabricator-forms[^>]*><a href=["\']admin\.php\?page=fabricator-pdf-verification["\']#', $html);
+        self::assertMatchesRegularExpression('#<li[^>]*toplevel_page_fabricator-forms[^>]*><a href=["\']admin\.php\?page=fabricator-forms-pdf-verification["\']#', $html);
         self::assertStringNotContainsString('href=\'admin.php?page=fabricator-forms\'', $html, 'never to the form list this user may not open');
     }
 

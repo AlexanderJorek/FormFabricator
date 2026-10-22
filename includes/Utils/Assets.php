@@ -137,6 +137,8 @@ class Assets
                 'validation_both'         => __('Please fill in all required fields and correct the invalid entries.', 'formfabricator'),
                 'validation_required'     => __('Please fill in all required fields.', 'formfabricator'),
                 'validation_invalid'      => __('Please enter valid data.', 'formfabricator'),
+                // The name of a field without a label, in the list of fields with an error
+                'unnamed_field'           => __('Unnamed field', 'formfabricator'),
                 // What an answer may hold (the same wording as Utils\Text\AnswerText)
                 'answer_one_line'         => __('This answer can\'t hold line breaks or tabs. Please write it on one line.', 'formfabricator'),
                 // translators: %s: the character's code point, e.g. "U+200B" (substituted client-side).
@@ -562,7 +564,7 @@ class Assets
         }
 
         /* Verification page */
-        if (str_contains($hook, 'fabricator-pdf-verification')) {
+        if (str_contains($hook, 'fabricator-forms-pdf-verification')) {
             \wp_enqueue_style(
                 'fabricator-forms-admin',
                 FABRICATOR_FORMS_URL . 'assets/css/admin.css',
@@ -619,13 +621,14 @@ class Assets
                     'server_busy_retry' => __('Server busy — retrying in %1$ds…', 'formfabricator'),
                     'processing'       => __('Processing response…', 'formfabricator'),
                     'done'             => __('Done', 'formfabricator'),
-                    // translators: %d: HTTP status code (substituted client-side).
-                    'server_error'     => __('Server error (HTTP %d)', 'formfabricator'),
+                    // translators: %s: HTTP status code and its title, e.g. HTTP 500 "Internal Server Error" (substituted client-side).
+                    'server_error'     => __('Server error (%s)', 'formfabricator'),
                     'network_error'    => __('Network error', 'formfabricator'),
                     'unknown_error'    => __('Unknown server error', 'formfabricator'),
                     // The pill of a file that could not be checked, as VerificationPage::problemCardHtml() writes it.
                     'error_pill'       => __('Error', 'formfabricator'),
                 ],
+                'httpStatus'  => \FabricatorForms\Utils\Text\HttpStatus::forScript(),
                 ]
             );
         }

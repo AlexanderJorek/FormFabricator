@@ -198,7 +198,8 @@ final class FieldBehaviourTest extends TestCase
         $this->check('render <input', fn() => self::contains($h->render($cfg, 'f1'), '<input'));
         $this->check('render required attr', fn() => self::contains($h->render(array_merge($cfg, ['required'=>true]), 'f1'), 'required'));
         $this->check('render hide_label', function () use ($h, $cfg) {
-            return !str_contains($h->render(array_merge($cfg, ['hide_label'=>true]), 'f1'), '<label') ? true : 'label still present';
+            // Hidden from sight only: the label still names the input for screen readers.
+            return str_contains($h->render(array_merge($cfg, ['hide_label'=>true]), 'f1'), '<label class="fabricator-label fabricator-visually-hidden" for="f1"') ? true : 'label not kept for screen readers';
         });
         $this->check('render placeholder', fn() => self::contains($h->render(array_merge($cfg, ['placeholder'=>'Enter']), 'f1'), 'Enter'));
         $this->check('render description', fn() => self::contains($h->render(array_merge($cfg, ['description'=>'Help']), 'f1'), 'Help'));

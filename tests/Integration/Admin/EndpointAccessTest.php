@@ -28,31 +28,31 @@ final class EndpointAccessTest extends AjaxTestCase
         'fabricator_forms_bulk_duplicate'     => 'edit_forms',
         'fabricator_forms_export'             => 'edit_forms',
         'fabricator_forms_import'             => 'edit_forms',
-        'fabricator_fsel_save'                => 'edit_forms',
-        'fabricator_fsel_delete'              => 'edit_forms',
-        'fabricator_save_general_settings'    => 'settings',
+        'fabricator_forms_fsel_save'                => 'edit_forms',
+        'fabricator_forms_fsel_delete'              => 'edit_forms',
+        'fabricator_forms_save_general_settings'    => 'settings',
         'fabricator_forms_unlock_settings'    => 'settings',
         'fabricator_forms_factory_reset'      => 'admin',
         'fabricator_forms_rotate_key'         => 'admin',
-        'fabricator_setup_keep_default'       => 'admin',
-        'fabricator_setup_get_master_key'     => 'admin',
-        'fabricator_upgrade_get_master_key'   => 'admin',
-        'fabricator_setup_confirm_secure'     => 'admin',
-        'fabricator_setup_reset_choice'       => 'admin',
-        'fabricator_add_legacy_key'           => 'admin',
-        'fabricator_peek_key_download'        => 'admin',
-        'fabricator_confirm_key_download'     => 'admin',
-        'fabricator_save_access_settings'     => 'admin',
-        'fabricator_access_user_search'       => 'admin',
+        'fabricator_forms_setup_keep_default'       => 'admin',
+        'fabricator_forms_setup_get_master_key'     => 'admin',
+        'fabricator_forms_upgrade_get_master_key'   => 'admin',
+        'fabricator_forms_setup_confirm_secure'     => 'admin',
+        'fabricator_forms_setup_reset_choice'       => 'admin',
+        'fabricator_forms_add_legacy_key'           => 'admin',
+        'fabricator_forms_peek_key_download'        => 'admin',
+        'fabricator_forms_confirm_key_download'     => 'admin',
+        'fabricator_forms_save_access_settings'     => 'admin',
+        'fabricator_forms_access_user_search'       => 'admin',
         'fabricator_forms_pdf_preview'        => 'edit_pdf_layout',
-        'fabricator_save_pdf_layout'          => 'edit_pdf_layout',
+        'fabricator_forms_save_pdf_layout'          => 'edit_pdf_layout',
         'fabricator_forms_unlock_pdf_layout'  => 'edit_pdf_layout',
-        'fabricator_verify_push_lines'        => 'use_verifier',
-        'fabricator_verify_progress'          => 'use_verifier',
+        'fabricator_forms_verify_push_lines'        => 'use_verifier',
+        'fabricator_forms_verify_progress'          => 'use_verifier',
     ];
 
     /** Actions a logged-out visitor uses on purpose: the form submission, its token and an ALTCHA field's challenge. */
-    private const PUBLIC_ACTIONS = ['fabricator_forms_submit', 'fabricator_forms_get_token', 'fabricator_altcha_challenge'];
+    private const PUBLIC_ACTIONS = ['fabricator_forms_submit', 'fabricator_forms_get_token', 'fabricator_forms_altcha_challenge'];
 
     private const PERMISSIONS = ['view_forms', 'edit_forms', 'use_verifier', 'edit_pdf_layout', 'settings'];
 

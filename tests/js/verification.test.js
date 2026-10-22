@@ -10,6 +10,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { adminWindow, script } = require('./support/admin-page');
+const { fixture } = require('./support/page');
 
 /** A Response-like object for the verifier's fetch() calls; `raw`, when given, is the body instead of `json`. */
 function response(page, status, json, raw) {
@@ -36,7 +37,7 @@ function loadVerifier({ check, gapMs = 20, delayMs = 25 }) {
     const page = adminWindow('<div id="fabricator-pdf-verification-results"></div>');
     const w = page.window;
     const stats = { checks: 0, maxChecks: 0, checkStarts: [], checkCount: 0, actions: [], checkBodies: [] };
-    w.FabricatorVerifier = { ajaxUrl: 'https://example.test/wp-admin/admin-ajax.php', nonce: 'n', i18n: {} };
+    w.FabricatorVerifier = { ajaxUrl: 'https://example.test/wp-admin/admin-ajax.php', nonce: 'n', i18n: {}, httpStatus: fixture.admin.httpStatus };
     w.FabricatorVerifierQueueData = [];
     w.fetch = (url, opts) => {
         const body = opts.body;
@@ -54,7 +55,7 @@ function loadVerifier({ check, gapMs = 20, delayMs = 25 }) {
                 }
             }, delayMs));
         };
-        if (action === 'fabricator_verify_push_lines') {
+        if (action === 'fabricator_forms_verify_push_lines') {
             stats.checkStarts.push(Date.now());
             stats.checkBodies.push(Object.fromEntries(body.entries()));
             const n = ++stats.checkCount;
@@ -92,8 +93,8 @@ test('a check is asked for by its token alone: no download, no text from the bro
 
     await verify(1);
 
-    assert.deepEqual(stats.checkBodies, [{ action: 'fabricator_verify_push_lines', pdf_token: 't1', nonce: 'n' }]);
-    assert.ok(stats.actions.every((a) => a === 'fabricator_verify_push_lines' || a === 'fabricator_verify_progress'), stats.actions.join(', '));
+    assert.deepEqual(stats.checkBodies, [{ action: 'fabricator_forms_verify_push_lines', pdf_token: 't1', nonce: 'n' }]);
+    assert.ok(stats.actions.every((a) => a === 'fabricator_forms_verify_push_lines' || a === 'fabricator_forms_verify_progress'), stats.actions.join(', '));
 });
 
 test('checks of a batch start one push slot apart, matching the server rate limit', async () => {
@@ -169,7 +170,17 @@ test('an answer that is no JSON becomes the problem card with the HTTP status', 
 
     await verify(1);
 
-    assert.deepEqual(problemCard(page), { error: true, name: 'order-1.pdf', pill: 'Error', text: 'Server error (HTTP 500)' });
+    assert.deepEqual(problemCard(page), { error: true, name: 'order-1.pdf', pill: 'Error', text: 'Server error (HTTP 500 "Internal Server Error")' });
+});
+
+test('a status without a translated title takes WordPress\'s, and one without any keeps its code alone', async () => {
+    const teapot = loadVerifier({ check: () => [418, null, 'short and stout'] });
+    await teapot.verify(1);
+    assert.equal(problemCard(teapot.page).text, 'Server error (HTTP 418 "I\'m a teapot")');
+
+    const unnamed = loadVerifier({ check: () => [599, null, ''] });
+    await unnamed.verify(1);
+    assert.equal(problemCard(unnamed.page).text, 'Server error (HTTP 599)');
 });
 
 test('a network failure becomes the problem card', async () => {

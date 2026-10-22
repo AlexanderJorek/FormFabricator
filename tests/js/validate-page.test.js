@@ -93,7 +93,7 @@ test('an answer is refused in the browser exactly where the server refuses it', 
 
 test('a refused answer names the character at its field', () => {
     const scope = fragment(page, field('text', {}, '<input type="text">'));
-    scope.querySelector('input').value = 'Ada​Lovelace';
+    scope.querySelector('input').value = 'Ada\u200BLovelace';
     const r = validatePage(scope);
     assert.equal(r.hasInvalid, true);
     assert.match(scope.querySelector('.fabricator-field-error').textContent, /U\+200B/);
@@ -102,6 +102,6 @@ test('a refused answer names the character at its field', () => {
 test('a field whose answer is not typed text is left to its own checks', () => {
     // An upload, a CAPTCHA, post data: BaseField::typedAnswer() is false (FabricatorUntypedAnswers).
     const scope = fragment(page, field('postdata', {}, '<input type="text">'));
-    scope.querySelector('input').value = 'a​b';
+    scope.querySelector('input').value = 'a\u200Bb';
     assert.equal(validatePage(scope).valid, true);
 });

@@ -36,7 +36,7 @@ function fabricator_ajax_verify_push_lines(): void
     \FabricatorForms\Utils\Security\AjaxGuard::capability(
         'use_verifier',
         __('Forbidden', 'formfabricator'),
-        'FabricatorForms fabricator_verify_push_lines: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.'
+        'FabricatorForms fabricator_forms_verify_push_lines: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.'
     );
     check_ajax_referer('fabricator_verifier_nonce', 'nonce');
 
@@ -46,7 +46,7 @@ function fabricator_ajax_verify_push_lines(): void
     /* ---- Hard limits for heavy PDF parsing, raised only after the auth checks (the soft budget aborts first) ---- */
     // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.IniSet.Risky -- resource-limit raise for heavy PDF parsing of uploaded files; scans are linear and the parse-time budget bounds the rest.
     if (ini_set('pcre.backtrack_limit', '268435456') === false) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: the host refused raising pcre.backtrack_limit; large PDFs may fail to parse.');
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_push_lines: the host refused raising pcre.backtrack_limit; large PDFs may fail to parse.');
     }
     // 900 s: handleUpload()'s soft budget tops out at 600 s and is checked inside the long loops, so this only stops a
     // single call that never returns.
@@ -57,7 +57,7 @@ function fabricator_ajax_verify_push_lines(): void
     /* ---- Rate limit: bounds self-DoS from repeated raised-limit requests ---- */
     $rl_key = 'verify_' . get_current_user_id();
     if (\FabricatorForms\Utils\Security\RateLimiter::increment($rl_key, 5) > 1) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rate-limited user ' . get_current_user_id() . '.');
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_push_lines: rate-limited user ' . get_current_user_id() . '.');
         wp_send_json_error(['message' => __('Please wait before verifying another PDF.', 'formfabricator')], 429);
     }
 
@@ -67,18 +67,18 @@ function fabricator_ajax_verify_push_lines(): void
     $pdf_token   = isset($_POST['pdf_token']) ? sanitize_key(wp_unslash($_POST['pdf_token'])) : '';
 
     if (!$pdf_token) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — missing pdf_token (user ' . get_current_user_id() . ').');
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_push_lines: rejected — missing pdf_token (user ' . get_current_user_id() . ').');
         wp_send_json_error(['message' => __('Invalid input: missing token', 'formfabricator')], 400);
     }
 
     /* ---- Resolve path from transient (avoids URL-to-path mapping) ---- */
     $pdf_transient = get_transient('fabricator_pdf_' . $pdf_token);
     if (!is_array($pdf_transient) || !isset($pdf_transient['path']) || !is_string($pdf_transient['path'])) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — token not found or expired (user ' . get_current_user_id() . ').');
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_push_lines: rejected — token not found or expired (user ' . get_current_user_id() . ').');
         wp_send_json_error(['message' => __('PDF not found or token expired', 'formfabricator')], 404);
     }
     if ((int)($pdf_transient['uid'] ?? -1) !== get_current_user_id()) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — token owned by a different user than ' . get_current_user_id() . '.');
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_push_lines: rejected — token owned by a different user than ' . get_current_user_id() . '.');
         wp_send_json_error(['message' => __('Forbidden', 'formfabricator')], 403);
     }
     $target_path = $pdf_transient['path'];
@@ -95,7 +95,7 @@ function fabricator_ajax_verify_push_lines(): void
         || !$real_target_path
         || strpos($real_target_path, $real_verfiles_dir . DIRECTORY_SEPARATOR) !== 0
     ) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — path-traversal guard failed for token-resolved path.');
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_push_lines: rejected — path-traversal guard failed for token-resolved path.');
         wp_send_json_error(['message' => __('Invalid PDF path', 'formfabricator')], 400);
     }
 
@@ -103,7 +103,7 @@ function fabricator_ajax_verify_push_lines(): void
     $finfo = new \finfo(FILEINFO_MIME_TYPE);
     $detected_mime = $finfo->file($real_target_path);
     if (!in_array($detected_mime, ['application/pdf', 'application/x-pdf'], true)) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_push_lines: rejected — stored file MIME re-check failed, detected "' . $detected_mime . '".');
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_push_lines: rejected — stored file MIME re-check failed, detected "' . $detected_mime . '".');
         wp_send_json_error(['message' => __('File is not a valid PDF', 'formfabricator')], 400);
     }
 
@@ -111,7 +111,7 @@ function fabricator_ajax_verify_push_lines(): void
     $file_size = filesize($real_target_path);
     if ($file_size > VerificationPage::MAX_PDF_BYTES) {
         \FabricatorForms\fabricator_log(
-            'FabricatorForms fabricator_verify_push_lines: rejected — stored file is '
+            'FabricatorForms fabricator_forms_verify_push_lines: rejected — stored file is '
             . round($file_size / 1048576, 1) . 'MB, exceeds MAX_PDF_BYTES ('
             . round(VerificationPage::MAX_PDF_BYTES / 1048576) . 'MB).'
         );
@@ -136,7 +136,7 @@ function fabricator_ajax_verify_push_lines(): void
         $fabricator_needed_mb = (int) round($needed / 1048576);
         $fabricator_budget_mb = (int) round($fabricator_mem_budget / 1048576);
         \FabricatorForms\fabricator_log(
-            'FabricatorForms fabricator_verify_push_lines: rejected — memory budget unavailable (needed '
+            'FabricatorForms fabricator_forms_verify_push_lines: rejected — memory budget unavailable (needed '
             . $fabricator_needed_mb . 'MB, budget ' . $fabricator_budget_mb . 'MB, '
             . (int) round(\FabricatorForms\Utils\Security\MemoryBudget::reservedBytes() / 1048576) . 'MB already reserved).'
         );
@@ -267,7 +267,7 @@ function fabricator_ajax_verify_progress(): void
 {
     // Capability first, as in the other verifier handlers.
     if (!\FabricatorForms\Capabilities::userCan('use_verifier')) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_progress: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_progress: rejected — user ' . get_current_user_id() . ' lacks use_verifier capability.');
         wp_send_json_error([], 403);
     }
     check_ajax_referer('fabricator_verifier_nonce', 'nonce');
@@ -276,7 +276,7 @@ function fabricator_ajax_verify_progress(): void
     $key  = isset($_POST['token']) ? sanitize_key(wp_unslash($_POST['token'])) : '';
     $data = $key ? get_transient('fabricator_vp_' . $key) : false;
     if ($data && (int)($data['uid'] ?? -1) !== get_current_user_id()) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_verify_progress: rejected — progress token owned by a different user than ' . get_current_user_id() . '.');
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_progress: rejected — progress token owned by a different user than ' . get_current_user_id() . '.');
         wp_send_json_error(['message' => __('Forbidden', 'formfabricator')], 403);
     }
     if (is_array($data)) {
@@ -393,8 +393,8 @@ final class VerificationPage
         add_filter('admin_body_class', [self::class, 'bodyClass']);
         // Hooked here, not at file scope, so loading the class has no side effects. admin-ajax.php is an admin request,
         // so register() runs for these.
-        add_action('wp_ajax_fabricator_verify_push_lines', __NAMESPACE__ . '\\fabricator_ajax_verify_push_lines');
-        add_action('wp_ajax_fabricator_verify_progress', __NAMESPACE__ . '\\fabricator_ajax_verify_progress');
+        add_action('wp_ajax_fabricator_forms_verify_push_lines', __NAMESPACE__ . '\\fabricator_ajax_verify_push_lines');
+        add_action('wp_ajax_fabricator_forms_verify_progress', __NAMESPACE__ . '\\fabricator_ajax_verify_progress');
         /* Verifier cron callbacks are hooked in Plugin::init(), not here — register() only runs under is_admin(), which wp-cron.php never is. */
     }
 
@@ -432,7 +432,7 @@ final class VerificationPage
     {
         // The admin page being shown, as WordPress resolved it from the request.
         global $plugin_page;
-        if ($plugin_page === 'fabricator-pdf-verification') {
+        if ($plugin_page === 'fabricator-forms-pdf-verification') {
             $classes .= ' fabricator-verification-page';
         }
         return $classes;
@@ -451,7 +451,7 @@ final class VerificationPage
                 __('FormFabricator Verification', 'formfabricator'),
                 __('PDF Verification', 'formfabricator'),
                 \FabricatorForms\Capabilities::ACCESS_CAP_PREFIX . 'use_verifier',
-                'fabricator-pdf-verification',
+                'fabricator-forms-pdf-verification',
                 [self::class, 'render']
             );
             if ($hook) {
@@ -642,7 +642,7 @@ final class VerificationPage
             ['queue' => $verification_queue, 'notices' => $notices, 'rejected' => $rejected],
             10 * MINUTE_IN_SECONDS
         );
-        wp_safe_redirect(add_query_arg('verified', '1', admin_url('admin.php?page=fabricator-pdf-verification')));
+        wp_safe_redirect(add_query_arg('verified', '1', admin_url('admin.php?page=fabricator-forms-pdf-verification')));
         exit;
     }
 

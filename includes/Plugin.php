@@ -151,8 +151,8 @@ class Plugin
         add_action('wp_ajax_nopriv_fabricator_forms_get_token', [self::class, 'ajaxGetToken']);
 
         /* A proof-of-work challenge for an ALTCHA CAPTCHA field, fetched by its widget (GET). */
-        add_action('wp_ajax_fabricator_altcha_challenge', [Utils\Security\Altcha::class, 'ajaxChallenge']);
-        add_action('wp_ajax_nopriv_fabricator_altcha_challenge', [Utils\Security\Altcha::class, 'ajaxChallenge']);
+        add_action('wp_ajax_fabricator_forms_altcha_challenge', [Utils\Security\Altcha::class, 'ajaxChallenge']);
+        add_action('wp_ajax_nopriv_fabricator_forms_altcha_challenge', [Utils\Security\Altcha::class, 'ajaxChallenge']);
 
         /* PDF mail hook */
         Form\MailSender::init();

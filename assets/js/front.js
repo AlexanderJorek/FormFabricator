@@ -32,7 +32,8 @@
     /* What an answer may hold, as Utils\Text\AnswerText checks it on the server: an answer is recorded as typed or refused,
        never changed. Refused are control and invisible format characters, line breaks and tabs outside a textarea, and
        HTML character references, which a page or email shows as the character they name. */
-    var REFUSED_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+    /* The zero-width non-joiner and joiner are typed (a Persian keyboard, emoji such as a family) and reorder nothing. */
+    var REFUSED_CHAR = /[\p{Cc}\p{Zl}\p{Zp}]|(?![\u200C\u200D])\p{Cf}/u;
     var CHAR_REFERENCE = /&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);/g;
 
     function codePoint(ch) {
@@ -204,6 +205,157 @@
         window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
     }
 
+    /* ── Errors for screen readers and the keyboard ───────────────────────── */
+    /* A field's error slots are no live regions: the form's message area announces the errors once, with a link to each
+       field, and the cursor goes to the first. Each control is tied to the field's description and to the slots that
+       concern it (aria-describedby), and is aria-invalid while one of them holds a message, so a screen reader reads the
+       error when the control gets the focus. */
+    var ERROR_SLOTS = '.fabricator-field-error, .fabricator-signature-place-error, .fabricator-upload-error';
+    var CONTROLS    = 'input:not([type="hidden"]), select, textarea';
+    var ariaIds     = 0;
+
+    /* Elements of this field, not of a field nested in it (a group's children). */
+    function ownedBy(fieldEl, selector) {
+        return Array.prototype.filter.call(fieldEl.querySelectorAll(selector), function (el) {
+            return el.closest('.fabricator-field') === fieldEl;
+        });
+    }
+
+    function idOf(el, kind) {
+        if (!el.id) el.id = 'fabricator-' + kind + '-' + (++ariaIds);
+        return el.id;
+    }
+
+    function hasMessage(slot) {
+        return slot.textContent.trim() !== '';
+    }
+
+    function syncFieldAria(fieldEl) {
+        var desc  = ownedBy(fieldEl, '.fabricator-field-description')[0];
+        var slots = ownedBy(fieldEl, ERROR_SLOTS);
+        ownedBy(fieldEl, CONTROLS).forEach(function (control) {
+            /* The ids the markup gave it come first and stay. */
+            if (control.dataset.fabricatorDescribedby === undefined) {
+                control.dataset.fabricatorDescribedby = control.getAttribute('aria-describedby') || '';
+            }
+            var ids = control.dataset.fabricatorDescribedby.split(/\s+/).filter(Boolean);
+            if (desc) ids.push(idOf(desc, 'description'));
+            var invalid = false;
+            slots.forEach(function (slot) {
+                /* A part's slot (a mandate's IBAN, an address's street) concerns that part; the field's, all of it. */
+                if (!slot.parentNode.contains(control)) return;
+                ids.push(idOf(slot, 'error'));
+                if (hasMessage(slot)) invalid = true;
+            });
+            ids = ids.filter(function (id, i) { return ids.indexOf(id) === i; });
+            if (ids.length) {
+                control.setAttribute('aria-describedby', ids.join(' '));
+            } else {
+                control.removeAttribute('aria-describedby');
+            }
+            if (invalid) {
+                control.setAttribute('aria-invalid', 'true');
+            } else {
+                control.removeAttribute('aria-invalid');
+            }
+        });
+    }
+
+    /* Messages reach the slots from validatePage(), the server's answer and the field scripts (a mandate checks its IBAN
+       when the visitor leaves it), so the slots are watched rather than each writer asked to keep the attributes. */
+    function initErrorAria(root) {
+        root.querySelectorAll('.fabricator-form').forEach(function (form) {
+            if (form.dataset.fabricatorAriaInit) return;
+            form.dataset.fabricatorAriaInit = '1';
+            form.querySelectorAll('.fabricator-field').forEach(syncFieldAria);
+            if (typeof MutationObserver !== 'function') return;
+            new MutationObserver(function (records) {
+                var fields = [];
+                records.forEach(function (record) {
+                    var el   = record.target.nodeType === 1 ? record.target : record.target.parentNode;
+                    var slot = el && el.closest && el.closest(ERROR_SLOTS);
+                    var fieldEl = slot && slot.closest('.fabricator-field');
+                    if (fieldEl && fields.indexOf(fieldEl) === -1) fields.push(fieldEl);
+                });
+                fields.forEach(syncFieldAria);
+            }).observe(form, { childList: true, characterData: true, subtree: true });
+        });
+    }
+
+    /* The fields in scope with an error, in page order. */
+    function fieldsWithErrors(scope) {
+        return Array.prototype.filter.call(scope.querySelectorAll('.fabricator-field'), function (fieldEl) {
+            return ownedBy(fieldEl, ERROR_SLOTS).some(hasMessage);
+        });
+    }
+
+    /* The field's name as its label gives it, without the required mark. */
+    function fieldName(fieldEl) {
+        var label = ownedBy(fieldEl, '.fabricator-label')[0];
+        var name  = '';
+        if (label) {
+            var copy = label.cloneNode(true);
+            copy.querySelectorAll('.fabricator-required').forEach(function (mark) { mark.remove(); });
+            name = copy.textContent.trim();
+        }
+        if (!name) {
+            var control = ownedBy(fieldEl, CONTROLS)[0];
+            name = (control && control.getAttribute('aria-label')) || '';
+        }
+        var i18n = (window.FabricatorForms && window.FabricatorForms.i18n) || {};
+        return name || i18n.unnamed_field || 'Unnamed field';
+    }
+
+    /* Shows the field (on its page, in view) and puts the cursor in it: in its first control with an error, else its
+       first control, else on the field itself (a drawing pad). */
+    function focusField(fieldEl) {
+        if (!fieldEl) return;
+        scrollToField(fieldEl);
+        var controls = ownedBy(fieldEl, CONTROLS).filter(function (c) { return !c.disabled; });
+        var target   = controls.filter(function (c) { return c.getAttribute('aria-invalid') === 'true'; })[0] || controls[0];
+        if (!target) {
+            if (!fieldEl.hasAttribute('tabindex')) fieldEl.setAttribute('tabindex', '-1');
+            target = fieldEl;
+        }
+        target.focus({ preventScroll: true });
+    }
+
+    /* After a check failed in scope: the message area names the fields with an error, each a link to it, and the cursor
+       goes to the first. The message area is the form's one live region, so this is read out once, not once a field. */
+    function reportErrors(form, scope, message) {
+        var fields = fieldsWithErrors(scope);
+        fields.forEach(syncFieldAria);
+        var wrap   = form.closest('.fabricator-form-wrap');
+        var msgBox = wrap && wrap.querySelector('.fabricator-form-messages');
+        if (msgBox && message) {
+            msgBox.className   = 'fabricator-form-messages error';
+            msgBox.textContent = message;
+            if (fields.length) {
+                var list = document.createElement('ul');
+                fields.forEach(function (fieldEl) {
+                    var control = ownedBy(fieldEl, CONTROLS)[0];
+                    var link    = document.createElement('a');
+                    link.href        = '#' + (control ? idOf(control, 'control') : idOf(fieldEl, 'field'));
+                    link.textContent = fieldName(fieldEl);
+                    link.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        focusField(fieldEl);
+                    });
+                    var item = document.createElement('li');
+                    item.appendChild(link);
+                    list.appendChild(item);
+                });
+                msgBox.appendChild(list);
+            }
+            msgBox.style.display = '';
+        }
+        if (fields.length) {
+            focusField(fields[0]);
+        } else {
+            scrollToMessages(msgBox);
+        }
+    }
+
     /* ── Multi-page navigation ────────────────────────────────────────────── */
 
     function initPageBreaks(root) {
@@ -290,6 +442,14 @@
                 requestAnimationFrame(tick);
             }
 
+            /* A page the visitor asked for: the cursor goes to its top, so the keyboard and a screen reader carry on there
+               instead of on the button that is now hidden. */
+            function goToPage(idx) {
+                showPage(idx, true);
+                if (!pages[idx].hasAttribute('tabindex')) pages[idx].setAttribute('tabindex', '-1');
+                pages[idx].focus({ preventScroll: true });
+            }
+
             function currentIdx() {
                 return pages.findIndex(function (p) {
                     return p.classList.contains('fabricator-page-active');
@@ -313,20 +473,20 @@
                     var idx    = currentIdx();
                     var result = validatePage(pages[idx]);
                     if (!result.valid) {
-                        scrollToField(result.firstError);
+                        focusField(result.firstError);
                         return;
                     }
-                    if (idx < pages.length - 1) showPage(idx + 1, true);
+                    if (idx < pages.length - 1) goToPage(idx + 1);
                 }
                 if (e.target.classList.contains('fabricator-btn-prev')) {
                     var idx2 = currentIdx();
-                    if (idx2 > 0) showPage(idx2 - 1, true);
+                    if (idx2 > 0) goToPage(idx2 - 1);
                 }
                 var gotoEl = e.target.closest('[data-fabricator-goto-page]');
                 if (gotoEl) {
                     var gotoIdx = parseInt(gotoEl.getAttribute('data-fabricator-goto-page'), 10);
                     if (!isNaN(gotoIdx) && gotoIdx >= 0 && gotoIdx <= furthest && gotoIdx !== currentIdx()) {
-                        showPage(gotoIdx, true);
+                        goToPage(gotoIdx);
                     }
                 }
             });
@@ -513,12 +673,7 @@
                         : vr.hasRequired
                             ? (i18n.validation_required || 'Please fill in all required fields.')
                             : (i18n.validation_invalid || 'Please enter valid data.');
-                    if (msgBox) {
-                        msgBox.className    = 'fabricator-form-messages error';
-                        msgBox.textContent  = msg;
-                        msgBox.style.display = '';
-                    }
-                    scrollToField(vr.firstError);
+                    reportErrors(form, form, msg);
                     return;
                 }
 
@@ -641,31 +796,18 @@
                         var errMsg = (res.data && res.data.message)
                             || i18n.error_server
                             || 'Server error. Please try again.';
-                        if (msgBox) {
-                            msgBox.className    = 'fabricator-form-messages error';
-                            msgBox.textContent  = errMsg;
-                            msgBox.style.display = '';
-                        }
 
-                        /* Show per-field server errors; without one to show, the message itself is brought into view. */
+                        /* Per-field server errors go to their fields; the message names them, or stands alone. */
                         var fieldErrors = res.data && res.data.errors;
-                        var firstErrEl  = null;
                         if (fieldErrors) {
                             /* A later copy of the same form on the page carries an id suffix (FormRenderer::uniqueIds()). */
                             var idSuffix = form.dataset.fabricatorIdSuffix || '';
                             Object.keys(fieldErrors).forEach(function (fid) {
                                 var errEl = form.querySelector('#' + CSS.escape(fid + '-error' + idSuffix));
-                                if (errEl) {
-                                    errEl.textContent = fieldErrors[fid];
-                                    if (!firstErrEl) firstErrEl = errEl.closest('.fabricator-field');
-                                }
+                                if (errEl) errEl.textContent = fieldErrors[fid];
                             });
                         }
-                        if (firstErrEl) {
-                            scrollToField(firstErrEl);
-                        } else {
-                            scrollToMessages(msgBox);
-                        }
+                        reportErrors(form, form, errMsg);
                     }
                     })
                     .catch(function () {
@@ -781,6 +923,7 @@
         initConditions(root);
         initForms(root);
         initCaptchaGates(root);
+        initErrorAria(root);
     }
 
     /* Scoped to the new wrapper, never document: boots only what arrived, instead of re-running every step over the whole page. */
@@ -871,6 +1014,7 @@
     if (window.__FABRICATOR_TEST__) {
         window.FabricatorTestHooks = {
             validatePage:               validatePage,
+            reportErrors:               reportErrors,
             initConditions:             initConditions,
             showCaptchaBlockedNotice:   showCaptchaBlockedNotice,
             resetFormsOnBfcacheRestore: resetFormsOnBfcacheRestore,

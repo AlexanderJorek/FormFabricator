@@ -128,7 +128,7 @@ final class VerifierPageTest extends AjaxTestCase
             VerificationPage::handleUploadPost();
             self::fail('the upload ends in a redirect (Post/Redirect/Get)');
         } catch (\RuntimeException $e) {
-            self::assertStringContainsString('page=fabricator-pdf-verification', $e->getMessage());
+            self::assertStringContainsString('page=fabricator-forms-pdf-verification', $e->getMessage());
         }
         $batch = get_transient('fabricator_vbatch_' . get_current_user_id());
         $token = $batch['queue'][0]['token'];
@@ -138,7 +138,7 @@ final class VerifierPageTest extends AjaxTestCase
         $imageDir = wp_upload_dir()['basedir'] . '/formfabricator/verimages/*';
         $before   = glob($imageDir) ?: [];
 
-        $r = $this->ajax('fabricator_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $token, 'visualLines' => '[]']);
+        $r = $this->ajax('fabricator_forms_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $token, 'visualLines' => '[]']);
 
         self::assertTrue($r['success'], $r['raw']);
         self::assertStringContainsString('data:image/png;base64,', $r['data']['html'], 'the signature image was taken out of the PDF for the report');
@@ -165,7 +165,7 @@ final class VerifierPageTest extends AjaxTestCase
         $other = MemoryBudget::reserve(480 * 1048576, 600, true);
         self::assertIsString($other);
 
-        $r = $this->ajax('fabricator_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $this->storedCopy()]);
+        $r = $this->ajax('fabricator_forms_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $this->storedCopy()]);
 
         self::assertFalse($r['success']);
         self::assertSame('Server busy verifying other PDFs right now.', $r['data']['message']);
@@ -178,7 +178,7 @@ final class VerifierPageTest extends AjaxTestCase
     {
         self::setBudget(64);
 
-        $r = $this->ajax('fabricator_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $this->storedCopy()]);
+        $r = $this->ajax('fabricator_forms_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $this->storedCopy()]);
 
         self::assertFalse($r['success']);
         self::assertSame('too_large', $r['data']['code']);

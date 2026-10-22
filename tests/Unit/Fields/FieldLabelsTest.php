@@ -66,12 +66,13 @@ final class FieldLabelsTest extends TestCase
         self::assertStringContainsString('id="' . $fid . '-label"', $html);
     }
 
-    public function testAHiddenOrEmptyLabelLeavesNoDanglingReference(): void
+    public function testAHiddenLabelStillNamesTheGroupAndAnEmptyOneLeavesNoDanglingReference(): void
     {
         $rating = new RatingField();
         $hidden = $rating->render(array_merge($rating->getDefaultConfig(), ['label' => 'Rating', 'hide_label' => true]), self::FID);
-        self::assertStringNotContainsString('aria-labelledby', $hidden);
-        self::assertStringNotContainsString('role="group"', $hidden, 'no unnamed group');
+        // Hidden from sight only: screen readers still hear the group's name.
+        self::assertStringContainsString('role="group" aria-labelledby="' . self::FID . '-label"', $hidden);
+        self::assertStringContainsString('<div class="fabricator-label fabricator-visually-hidden" id="' . self::FID . '-label">Rating</div>', $hidden);
 
         $empty = $rating->render(array_merge($rating->getDefaultConfig(), ['label' => '']), self::FID);
         self::assertStringNotContainsString('aria-labelledby', $empty);

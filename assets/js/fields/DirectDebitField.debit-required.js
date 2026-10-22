@@ -48,5 +48,5 @@ function (fieldEl) {
         if (sigErr && !sigErr.textContent) sigErr.textContent = (_i18n && _i18n.debit_sig_required) || 'Please sign.';
         missing = true;
     }
-    return missing ? '​' : null;
+    return missing ? '\u200B' : null;
 }

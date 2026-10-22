@@ -84,7 +84,7 @@ test('ALTCHA field: the widget posts under the field id, starts on the visitor\'
 
     assert.equal(widget.getAttribute('name'), 'cap');
     assert.equal(widget.getAttribute('auto'), 'onfocus');
-    assert.match(widget.getAttribute('challenge'), /\/admin-ajax\.php\?action=fabricator_altcha_challenge$/);
+    assert.match(widget.getAttribute('challenge'), /\/admin-ajax\.php\?action=fabricator_forms_altcha_challenge$/);
     const config = JSON.parse(widget.getAttribute('configuration'));
     assert.equal(config.humanInteractionSignature, false);
     assert.equal(config.hideFooter, true);

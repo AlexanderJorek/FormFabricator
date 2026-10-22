@@ -44,13 +44,13 @@ final class FirstRunTest extends AjaxTestCase
     {
         $settings = admin_url('admin.php?page=fabricator-forms-settings');
         // The verifier included: its slug does not start with "fabricator-forms", which the redirect once required.
-        foreach (['fabricator-forms', 'fabricator-forms-editor', 'fabricator-forms-select', 'fabricator-forms-pdf-layout', 'fabricator-pdf-verification'] as $page) {
+        foreach (['fabricator-forms', 'fabricator-forms-editor', 'fabricator-forms-select', 'fabricator-forms-pdf-layout', 'fabricator-forms-pdf-verification'] as $page) {
             self::assertSame($settings, $this->setupRedirectFor($page), "$page before setup: form creation stays blocked");
         }
         self::assertNull($this->setupRedirectFor('fabricator-forms-settings'), 'Settings itself opens, with the setup dialog');
         self::assertNull($this->setupRedirectFor('another-plugin'), 'other plugins are left alone');
 
-        $this->ajax('fabricator_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $this->ajax('fabricator_forms_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
 
         self::assertNull($this->setupRedirectFor('fabricator-forms-editor'), 'after setup the editor opens');
     }
@@ -59,14 +59,14 @@ final class FirstRunTest extends AjaxTestCase
     {
         self::assertStringContainsString('id="fabricator-setup-blocker"', $this->settingsPage());
 
-        $this->ajax('fabricator_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $this->ajax('fabricator_forms_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
 
         self::assertStringNotContainsString('id="fabricator-setup-blocker"', $this->settingsPage());
     }
 
     public function testTheNewKeyIsOfferedForBackupUntilItsDownloadIsConfirmed(): void
     {
-        $setup = $this->ajax('fabricator_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $setup = $this->ajax('fabricator_forms_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         self::assertTrue($setup['success'], wp_json_encode($setup));
         $key = $setup['data'];
         self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $key['key']);
@@ -74,11 +74,11 @@ final class FirstRunTest extends AjaxTestCase
 
         // Reloading the page must not use up the one chance to save the key: peeking twice returns it twice.
         $nonce = wp_create_nonce('fabricator_forms_admin_nonce');
-        self::assertSame($key['key'], $this->ajax('fabricator_peek_key_download', ['nonce' => $nonce])['data']['key']);
-        self::assertSame($key['key'], $this->ajax('fabricator_peek_key_download', ['nonce' => $nonce])['data']['key']);
+        self::assertSame($key['key'], $this->ajax('fabricator_forms_peek_key_download', ['nonce' => $nonce])['data']['key']);
+        self::assertSame($key['key'], $this->ajax('fabricator_forms_peek_key_download', ['nonce' => $nonce])['data']['key']);
 
-        self::assertTrue($this->ajax('fabricator_confirm_key_download', ['nonce' => $nonce])['success']);
-        self::assertFalse($this->ajax('fabricator_peek_key_download', ['nonce' => $nonce])['success'], 'gone once saved');
+        self::assertTrue($this->ajax('fabricator_forms_confirm_key_download', ['nonce' => $nonce])['success']);
+        self::assertFalse($this->ajax('fabricator_forms_peek_key_download', ['nonce' => $nonce])['success'], 'gone once saved');
     }
 
     /**
@@ -94,7 +94,7 @@ final class FirstRunTest extends AjaxTestCase
     #[\PHPUnit\Framework\Attributes\DataProvider('brokenKeys')]
     public function testABrokenKeyWarnsTheAdminAndRefusesSealedSubmissionsUntilRotated(callable $break): void
     {
-        $this->ajax('fabricator_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $this->ajax('fabricator_forms_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         $admin = get_current_user_id();
         $form  = $this->createForm(
             [['id' => 'name', 'type' => 'text', 'label' => 'Name']],

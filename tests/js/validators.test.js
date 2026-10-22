@@ -112,7 +112,7 @@ test('website-url', () => {
     // As WebsiteField::validate(): invisible characters are refused, also a non-breaking space at the end.
     const url = (v) => check('website-url', '<input type="url" data-validate-url="1">', (el) => { el.querySelector('input').value = v; });
     assert.equal(url('https://müller.de/über'), null);
-    for (const v of ['https://exa‮lpmoc.de', 'https://exa​mple.de', 'https://example.de ']) {
+    for (const v of ['https://exa\u202Elpmoc.de', 'https://exa\u200Bmple.de', 'https://example.de\u00A0']) {
         assert.equal(url(v), i18n.website_invalid_url, JSON.stringify(v));
     }
 });
@@ -151,7 +151,7 @@ test('debit-bic: a wrong BIC is flagged at the BIC input itself', () => {
     // field counts as invalid without a second, field-level message.
     let el;
     const r = check('debit-bic', '<div><input class="fabricator-debit-bic" value="INVALID"><span class="fabricator-field-error"></span></div>', (e) => { el = e; });
-    assert.equal(r, '​');
+    assert.equal(r, '\u200B');
     assert.equal(el.querySelector('.fabricator-field-error').textContent, i18n.debit_bic_invalid);
 });
 

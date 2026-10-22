@@ -5,5 +5,5 @@ function (fieldEl) {
     if (/^[A-Za-z]{6}[A-Za-z0-9]{2}([A-Za-z0-9]{3})?$/.test(bic.value.trim())) return null;
     var _i18nB = window.FabricatorForms && window.FabricatorForms.i18n;
     if (bicErr && !bicErr.textContent) bicErr.textContent = (_i18nB && _i18nB.debit_bic_invalid) || 'Please enter a valid BIC.';
-    return '​';
+    return '\u200B';
 }

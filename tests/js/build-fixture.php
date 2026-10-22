@@ -86,7 +86,8 @@ $answerCorpus = [
     'Ada Lovelace', '  Ada  ', 'a<b and c>d', '20%AB', 'AT&T R&D', 'Tom & Jerry;', '&foo;', '&amp', 'x&nbsp',
     'Smith &amp; Co', 'caf&#233;', '&#x41;', '&copy; 2026', '&AMP;', "Ada\u{200B}Lovelace", "Ada\u{00AD}", "\u{FEFF}x",
     "\u{202E}abc", "a\u{2066}b", "a\u{061C}b", "a\u{200E}b", "tab\there", "a\u{0007}b", "a\u{007F}b", "a\u{0085}b",
-    "a\u{2028}b", "a\u{2029}b", "line1\nline2", "line1\r\nline2", "a\u{00A0}b", 'ünïcödé ΣΊΣΥΦΟΣ 漢字 🎀', "e\u{0301}",
+    "a\u{2028}b", "a\u{2029}b", "\u{0645}\u{06CC}\u{200C}\u{062E}\u{0648}\u{0627}\u{0647}\u{0645}",
+    "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}", "a\u{200B}\u{200D}b", "line1\nline2", "line1\r\nline2", "a\u{00A0}b", 'ünïcödé ΣΊΣΥΦΟΣ 漢字 🎀', "e\u{0301}",
 ];
 $answerCases = [];
 foreach ($answerCorpus as $typed) {
@@ -462,6 +463,12 @@ $formCases  = [
         ['id' => 'name', 'type' => 'text', 'label' => 'Name', 'required' => true],
         ['id' => 'email', 'type' => 'email', 'label' => 'Email'],
     ], []],
+    // Errors for screen readers: a description to tie in, a hidden label that still names its field.
+    'accessible errors' => [[
+        ['id' => 'name', 'type' => 'text', 'label' => 'Name', 'required' => true, 'description' => 'As on your ID card.'],
+        ['id' => 'email', 'type' => 'email', 'label' => 'Email', 'hide_label' => true, 'required' => true],
+        ['id' => 'msg', 'type' => 'textarea', 'label' => 'Message'],
+    ], []],
     'callback' => [[
         ['id' => 'email', 'type' => 'email', 'label' => 'Email', 'required' => true],
         ['id' => 'phone', 'type' => 'text', 'label' => 'Phone'],
@@ -510,6 +517,10 @@ $forms['contact and callback'] = FormRenderer::render(0, [], $contactFields) . F
 // data-palette, and the strings admin-builder.js reads from window.FabricatorBuilderI18n. Tests put their own form into
 // data-form. Last, since it makes the visitor an administrator.
 Brain\Monkey\Functions\when('get_current_user_id')->justReturn(1);
+// A few of WordPress's status titles (Utils\Text\HttpStatus translates the common error ones itself).
+Brain\Monkey\Functions\when('get_status_header_desc')->alias(
+    static fn($code): string => [200 => 'OK', 301 => 'Moved Permanently', 418 => "I'm a teapot"][(int) $code] ?? ''
+);
 Brain\Monkey\Functions\when('user_can')->justReturn(true);
 Brain\Monkey\Functions\when('current_user_can')->justReturn(true);
 Brain\Monkey\Functions\when('esc_html_e')->alias(static function (string $s): void {
@@ -594,6 +605,8 @@ Brain\Monkey\Functions\when('get_transient')->justReturn(false);
 ob_start();
 \FabricatorForms\Admin\VerificationPage::render();
 $admin['verifier'] = (string) ob_get_clean();
+// How the verifier names an HTTP status (window.FabricatorVerifier.httpStatus, localized by Assets::enqueueAdmin()).
+$admin['httpStatus'] = \FabricatorForms\Utils\Text\HttpStatus::forScript();
 
 // FormFabricator → PDF Layout (PDFLayoutEditor::render()) with the default layout, and the objects it localizes. The
 // preview's dates are fixed, as wp_date() would write them for the site.

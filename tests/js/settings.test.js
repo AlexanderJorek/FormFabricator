@@ -54,7 +54,7 @@ test('general settings: a second save without reloading carries the snapshot the
     assert.match(loaded, /^[0-9a-f]{32}$/, 'the page carries the snapshot it was rendered with');
 
     // The script sends after two animation frames; wait until this save was sent and answered (the button is back).
-    const sentSaves = () => page.requests.filter((r) => r.body && r.body.action === 'fabricator_save_general_settings').length;
+    const sentSaves = () => page.requests.filter((r) => r.body && r.body.action === 'fabricator_forms_save_general_settings').length;
     const save = async () => {
         const before = sentSaves();
         form.dispatchEvent(new page.window.Event('submit', { cancelable: true }));
@@ -63,9 +63,13 @@ test('general settings: a second save without reloading carries the snapshot the
     await save();
     await save();
 
-    const sent = page.requests.filter((r) => r.body && r.body.action === 'fabricator_save_general_settings').map((r) => r.body.fabricator_settings_snapshot);
+    const sent = page.requests.filter((r) => r.body && r.body.action === 'fabricator_forms_save_general_settings').map((r) => r.body.fabricator_settings_snapshot);
     assert.deepEqual(sent, [loaded, 'after-save-1']);
-    assert.match(page.document.querySelector('.fabricator-settings-notice').textContent, /Settings saved\./);
+    // One save notice, the second save's in place of the first; the edit lock's notice beside it stays.
+    const saveNotices = page.document.querySelectorAll('.fabricator-settings-notice:not(#fabricator-lock-notice)');
+    assert.equal(saveNotices.length, 1);
+    assert.match(saveNotices[0].textContent, /Settings saved\./);
+    assert.notEqual(page.document.getElementById('fabricator-lock-notice'), null);
 });
 
 test('general settings: a save refused as changed elsewhere says so and keeps the old baseline', async () => {
@@ -80,11 +84,12 @@ test('general settings: a save refused as changed elsewhere says so and keeps th
 
     assert.match(shown().textContent, /changed elsewhere/);
     assert.equal(form.querySelector('[name="fabricator_settings_snapshot"]').value, loaded);
+    assert.notEqual(page.document.getElementById('fabricator-lock-notice'), null, "the edit lock's notice stays");
 });
 
 test('access matrix: a second save in the same tab carries the snapshot the first one returned', async () => {
     let round = 0;
-    const page = loadSettings((url, body) => (body.action === 'fabricator_save_access_settings'
+    const page = loadSettings((url, body) => (body.action === 'fabricator_forms_save_access_settings'
         ? { success: true, data: { snapshot: 'access-' + (++round) } }
         : { success: true, data: {} }));
     const doc = page.document;
@@ -97,7 +102,7 @@ test('access matrix: a second save in the same tab carries the snapshot the firs
         assert.equal(doc.getElementById('fabricator-access-overlay').hidden, true, 'saved and closed');
     }
 
-    const sent = page.requests.filter((r) => r.body && r.body.action === 'fabricator_save_access_settings').map((r) => r.body.snapshot);
+    const sent = page.requests.filter((r) => r.body && r.body.action === 'fabricator_forms_save_access_settings').map((r) => r.body.snapshot);
     assert.deepEqual(sent, [loaded || '', 'access-1']);
 });
 

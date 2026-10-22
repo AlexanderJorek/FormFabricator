@@ -329,12 +329,11 @@ class DirectDebitField extends BaseField
         $html .= '</div>';
         $html .= '</div>';
         $html .= '<div class="fabricator-field-error fabricator-debit-sig-error"'
-            . ' id="' . esc_attr($field_id) . '-sig-error" role="alert"></div>';
+            . ' id="' . esc_attr($field_id) . '-sig-error"></div>';
         $html .= '</div>'; /* sig-block */
         $html .= '</div>'; /* signatures */
 
-        $html .= '<div class="fabricator-field-error" id="'
-            . esc_attr($field_id) . '-error" role="alert" aria-live="polite"></div>';
+        $html .= '<div class="fabricator-field-error" id="' . esc_attr($field_id) . '-error"></div>';
         $html .= '</div>'; /* fabricator-debit-mandate */
         $html .= '</div>'; /* fabricator-field */
 
@@ -387,7 +386,7 @@ class DirectDebitField extends BaseField
         if ($part === 'iban') {
             $html .= '<div class="fabricator-field-hint"></div>';
         }
-        $html .= '<div class="fabricator-field-error" id="' . esc_attr($id) . '-error" role="alert"></div>';
+        $html .= '<div class="fabricator-field-error" id="' . esc_attr($id) . '-error"></div>';
         $html .= '</div>';
         return $html;
     }

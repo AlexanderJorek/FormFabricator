@@ -44,4 +44,10 @@ test('a required field left empty stops the form in the browser, and nothing is 
 
     await expect(page.locator('[data-field-id="name"] .fabricator-field-error')).not.toBeEmpty();
     await expect(page.locator('.fabricator-form-messages.success')).toHaveCount(0);
+    // For the keyboard and screen readers: the cursor is in the field, which says it is wrong and why.
+    const input = page.locator('[name="name"]');
+    await expect(input).toBeFocused();
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    await expect(input).toHaveAccessibleDescription(/\S/);
+    await expect(page.locator('.fabricator-form-messages a')).toHaveText(['Name']);
 });

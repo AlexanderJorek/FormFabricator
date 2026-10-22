@@ -87,7 +87,7 @@ class PDFLayoutEditor
         add_action('admin_menu', [self::class, 'addPage']);
         add_action('admin_body_class', [self::class, 'bodyClass']);
         add_action('wp_ajax_fabricator_forms_pdf_preview', [self::class, 'ajaxPreview']);
-        add_action('wp_ajax_fabricator_save_pdf_layout', [self::class, 'handleSave']);
+        add_action('wp_ajax_fabricator_forms_save_pdf_layout', [self::class, 'handleSave']);
     }
 
     /**
@@ -299,6 +299,7 @@ class PDFLayoutEditor
             [
             'i18n' => self::pdfLayoutI18n(),
             'data' => [
+                'httpStatus'      => \FabricatorForms\Utils\Text\HttpStatus::forScript(),
                 'siteName'        => $site_name,
                 'siteUrl'         => $site_url,
                 'ajaxUrl'         => admin_url('admin-ajax.php'),
@@ -625,8 +626,8 @@ class PDFLayoutEditor
             'selectImage'        => __('Select image', 'formfabricator'),
             'pdfNotGenerated'    => __('The PDF could not be generated.', 'formfabricator'),
             'requestUnreachable' => __('The request could not reach the server. Please check your connection and try again.', 'formfabricator'), // phpcs:ignore Generic.Files.LineLength
-            // translators: %d is the HTTP status code returned by the server.
-            'unexpectedResponse' => __('Unexpected server response (HTTP %d). See browser console for details.', 'formfabricator'),
+            // translators: %s: the HTTP status code the server returned and its title, e.g. HTTP 500 "Internal Server Error".
+            'unexpectedResponse' => __('Unexpected server response (%s). See browser console for details.', 'formfabricator'),
             'orLabel'            => __('or', 'formfabricator'),
             // translators: %1$s is the current page number, %2$s is the total page count.
             'pageOfPage'         => sprintf(__('Page %1$s of %2$s', 'formfabricator'), '%1$s', '%2$s'),

@@ -242,7 +242,7 @@ class SignatureField extends BaseField
                 . ' data-required-message="' . esc_attr(self::placeRequiredMessage($config)) . '"'
                 . ' value="' . esc_attr(self::posted($value)['place']) . '">'
                 // Own class: front.js fills a field's first "fabricator-field-error", which stays the pad's.
-                . '<div class="fabricator-signature-place-error" id="' . esc_attr($place_id) . '-error" role="alert"></div>'
+                . '<div class="fabricator-signature-place-error" id="' . esc_attr($place_id) . '-error"></div>'
                 . '</div>';
         }
 

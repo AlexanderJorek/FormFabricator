@@ -35,8 +35,8 @@ class FormSelectList
     public static function init(): void
     {
         add_action('admin_menu', [self::class, 'menu']);
-        add_action('wp_ajax_fabricator_fsel_save', [self::class, 'ajaxSave']);
-        add_action('wp_ajax_fabricator_fsel_delete', [self::class, 'ajaxDelete']);
+        add_action('wp_ajax_fabricator_forms_fsel_save', [self::class, 'ajaxSave']);
+        add_action('wp_ajax_fabricator_forms_fsel_delete', [self::class, 'ajaxDelete']);
         add_filter('admin_body_class', [self::class, 'bodyClass']);
     }
 
@@ -92,7 +92,7 @@ class FormSelectList
 
         $selects    = FormSelectModel::getAll();
         $all_forms  = FormModel::getAll();
-        $save_nonce = wp_create_nonce('fabricator_fsel_save');
+        $save_nonce = wp_create_nonce('fabricator_forms_fsel_save');
         ?>
         <canvas id="fabricator-particle-canvas"></canvas>
 
@@ -315,7 +315,7 @@ class FormSelectList
     public static function ajaxSave(): void
     {
         \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
-        check_ajax_referer('fabricator_fsel_save', 'nonce');
+        check_ajax_referer('fabricator_forms_fsel_save', 'nonce');
 
         $id        = isset($_POST['id']) ? absint(wp_unslash($_POST['id'])) : 0;
         $title     = isset($_POST['title']) ? sanitize_text_field(wp_unslash($_POST['title'])) : '';

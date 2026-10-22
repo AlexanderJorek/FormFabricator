@@ -2473,8 +2473,8 @@ msgstr "Die Anfrage konnte den Server nicht erreichen. Bitte prüfen Sie Ihre Ve
 #. translators: %d is the HTTP status code returned by the server.
 #: includes/Admin/PDFLayoutEditor.php:629
 #, php-format
-msgid "Unexpected server response (HTTP %d). See browser console for details."
-msgstr "Unerwartete Serverantwort (HTTP %d). Details siehe Browser-Konsole."
+msgid "Unexpected server response (%s). See browser console for details."
+msgstr "Unerwartete Serverantwort (%s). Details siehe Browser-Konsole."
 
 #: includes/Admin/PDFLayoutEditor.php:630
 msgid "or"
@@ -6238,8 +6238,8 @@ msgstr "Antwort wird verarbeitet…"
 #. translators: %d: HTTP status code (substituted client-side).
 #: includes/Utils/Assets.php:623
 #, php-format
-msgid "Server error (HTTP %d)"
-msgstr "Serverfehler (HTTP %d)"
+msgid "Server error (%s)"
+msgstr "Serverfehler (%s)"
 
 #: includes/Utils/Assets.php:625
 msgid "Unknown server error"
@@ -6254,3 +6254,48 @@ msgstr "Diese Antwort enthält Zeichen, die nicht gelesen werden können. Bitte 
 #, php-format
 msgid "%1$s, %2$s UTC"
 msgstr "%1$s, %2$s UTC"
+
+msgid "HTTP %1$d \"%2$s\""
+msgstr "HTTP %1$d „%2$s“"
+
+msgid "Bad Request"
+msgstr "Ungültige Anfrage"
+
+msgid "Unauthorized"
+msgstr "Nicht angemeldet"
+
+msgid "Not Found"
+msgstr "Nicht gefunden"
+
+msgid "Method Not Allowed"
+msgstr "Methode nicht erlaubt"
+
+msgid "Request Timeout"
+msgstr "Zeitüberschreitung der Anfrage"
+
+msgid "Conflict"
+msgstr "Konflikt"
+
+msgid "Content Too Large"
+msgstr "Inhalt zu groß"
+
+msgid "Unprocessable Content"
+msgstr "Nicht verarbeitbarer Inhalt"
+
+msgid "Too Many Requests"
+msgstr "Zu viele Anfragen"
+
+msgid "Internal Server Error"
+msgstr "Interner Serverfehler"
+
+msgid "Bad Gateway"
+msgstr "Fehlerhaftes Gateway"
+
+msgid "Service Unavailable"
+msgstr "Dienst nicht verfügbar"
+
+msgid "Gateway Timeout"
+msgstr "Zeitüberschreitung des Gateways"
+
+msgid "Unnamed field"
+msgstr "Feld ohne Bezeichnung"

@@ -45,7 +45,7 @@ class FormSettings
         add_action('admin_menu', [self::class, 'addSettingsPage']);
         add_action('admin_body_class', [self::class, 'bodyClass']);
         add_action('wp_ajax_fabricator_forms_factory_reset', [self::class, 'handleFactoryReset']);
-        add_action('wp_ajax_fabricator_save_general_settings', [self::class, 'handleSaveGeneralSettings']);
+        add_action('wp_ajax_fabricator_forms_save_general_settings', [self::class, 'handleSaveGeneralSettings']);
         // The page's seal-key and user-access parts register their own handlers.
         SealKeySettings::init();
         AccessSettings::init();

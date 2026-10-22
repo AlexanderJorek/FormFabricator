@@ -70,7 +70,6 @@ class FormProcessor
         // change it ("a<b and c>d" to "ad", "20%AB" to "20"), and a changed answer is a different statement (a mandate's
         // account holder). What can't be recorded as typed is refused at its field instead (Utils\Text\AnswerText, below).
         // Nothing is stored, and every place that shows an answer escapes it there.
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- answers are validated per field below and escaped wherever shown; sanitizing would change them.
         $post  = wp_unslash($_POST);
         // Each part sanitized for what it is ($_FILES is never slashed). Field ids are saved through sanitize_text_field(),
         // so a key it would change matches no field.
@@ -213,6 +212,9 @@ class FormProcessor
         $makes_pdf = MailSender::attachesPdf($form_id, $form->notifications);
         // Checks that reach outside this request (the single-use CAPTCHA token) run only once every other field is valid.
         $deferred = [];
+        // The answers the PDF's fonts are checked against, after the CAPTCHA: reading the fonts loads mPDF and its
+        // metrics (tens of MB), which no one gets to trigger for free.
+        $font_checks = [];
 
         foreach ($form->fields as $field_cfg) {
             $field_id   = $field_cfg['id'] ?? '';
@@ -258,11 +260,12 @@ class FormProcessor
                         $errors[$child_id] = sprintf(__('%s is a required field.', 'formfabricator'), $child_cfg['label'] ?? $child_id);
                     } elseif ($ch->typedAnswer() && ($problem = AnswerText::problemIn($val, $ch->multilineAnswer())) !== null) {
                         $errors[$child_id] = $problem;
-                    } elseif ($makes_pdf && $ch->typedAnswer() && ($problem = self::undrawableError($val)) !== null) {
-                        $errors[$child_id] = $problem;
                     } elseif (($reserved = self::reservedMarkerError($val, $mail_markers)) !== null) {
                         $errors[$child_id] = $reserved;
                     } else {
+                        if ($makes_pdf && $ch->typedAnswer()) {
+                            $font_checks[$child_id] = $val;
+                        }
                         $child_cfg['field_id'] = $child_id;
                         if ($ch->defersValidation()) {
                             $deferred[$child_id] = [$ch, $val, $child_cfg];
@@ -285,9 +288,8 @@ class FormProcessor
                 $errors[$field_id] = $problem;
                 continue;
             }
-            if ($makes_pdf && $handler->typedAnswer() && ($problem = self::undrawableError($value)) !== null) {
-                $errors[$field_id] = $problem;
-                continue;
+            if ($makes_pdf && $handler->typedAnswer()) {
+                $font_checks[$field_id] = $value;
             }
             if (($reserved = self::reservedMarkerError($value, $mail_markers)) !== null) {
                 $errors[$field_id] = $reserved;
@@ -312,6 +314,15 @@ class FormProcessor
             $result = $deferred_handler->validate($deferred_value, $deferred_cfg);
             if ($result !== true) {
                 $errors[$deferred_id] = $result;
+            }
+        }
+
+        if (empty($errors)) {
+            foreach ($font_checks as $checked_id => $checked_value) {
+                $problem = self::undrawableError($checked_value);
+                if ($problem !== null) {
+                    $errors[$checked_id] = $problem;
+                }
             }
         }
 

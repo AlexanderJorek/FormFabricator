@@ -37,8 +37,8 @@ class AccessSettings
      */
     public static function init(): void
     {
-        add_action('wp_ajax_fabricator_save_access_settings', [self::class, 'handleSaveAccessSettings']);
-        add_action('wp_ajax_fabricator_access_user_search', [self::class, 'handleAccessUserSearch']);
+        add_action('wp_ajax_fabricator_forms_save_access_settings', [self::class, 'handleSaveAccessSettings']);
+        add_action('wp_ajax_fabricator_forms_access_user_search', [self::class, 'handleAccessUserSearch']);
     }
 
     /**

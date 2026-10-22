@@ -40,14 +40,14 @@ class SealKeySettings
     public static function init(): void
     {
         add_action('wp_ajax_fabricator_forms_rotate_key', [self::class, 'handleRotateKey']);
-        add_action('wp_ajax_fabricator_setup_keep_default', [self::class, 'handleSetupKeepDefault']);
-        add_action('wp_ajax_fabricator_setup_get_master_key', [self::class, 'handleSetupGetMasterKey']);
-        add_action('wp_ajax_fabricator_upgrade_get_master_key', [self::class, 'handleUpgradeGetMasterKey']);
-        add_action('wp_ajax_fabricator_setup_confirm_secure', [self::class, 'handleSetupConfirmSecure']);
-        add_action('wp_ajax_fabricator_setup_reset_choice', [self::class, 'handleSetupResetChoice']);
-        add_action('wp_ajax_fabricator_add_legacy_key', [self::class, 'handleAddLegacyKey']);
-        add_action('wp_ajax_fabricator_peek_key_download', [self::class, 'handlePeekKeyDownload']);
-        add_action('wp_ajax_fabricator_confirm_key_download', [self::class, 'handleConfirmKeyDownload']);
+        add_action('wp_ajax_fabricator_forms_setup_keep_default', [self::class, 'handleSetupKeepDefault']);
+        add_action('wp_ajax_fabricator_forms_setup_get_master_key', [self::class, 'handleSetupGetMasterKey']);
+        add_action('wp_ajax_fabricator_forms_upgrade_get_master_key', [self::class, 'handleUpgradeGetMasterKey']);
+        add_action('wp_ajax_fabricator_forms_setup_confirm_secure', [self::class, 'handleSetupConfirmSecure']);
+        add_action('wp_ajax_fabricator_forms_setup_reset_choice', [self::class, 'handleSetupResetChoice']);
+        add_action('wp_ajax_fabricator_forms_add_legacy_key', [self::class, 'handleAddLegacyKey']);
+        add_action('wp_ajax_fabricator_forms_peek_key_download', [self::class, 'handlePeekKeyDownload']);
+        add_action('wp_ajax_fabricator_forms_confirm_key_download', [self::class, 'handleConfirmKeyDownload']);
     }
 
     /**
@@ -70,9 +70,9 @@ class SealKeySettings
             return;
         }
         $current_page = is_string($plugin_page) ? $plugin_page : '';
-        // Only redirect within FormFabricator pages, not the whole WP admin. The verifier's slug has another prefix; before
-        // setup it has no key to check a PDF against, so every PDF would come back unknown.
-        if (strncmp($current_page, 'fabricator-forms', 16) !== 0 && $current_page !== 'fabricator-pdf-verification') {
+        // Only redirect within FormFabricator pages, not the whole WP admin. The verifier among them: before setup it has
+        // no key to check a PDF against, so every PDF would come back unknown.
+        if (strncmp($current_page, 'fabricator-forms', 16) !== 0) {
             return;
         }
         if ($current_page === 'fabricator-forms-settings') {
@@ -716,7 +716,7 @@ class SealKeySettings
             ],
             'data'   => [
                 'setupNonce'         => wp_create_nonce('fabricator_seal_setup'),
-                'legacyKeyNonce'     => wp_create_nonce('fabricator_add_legacy_key'),
+                'legacyKeyNonce'     => wp_create_nonce('fabricator_forms_add_legacy_key'),
                 // Flag only, never the key — see the comment where $has_pending_download is set.
                 'hasPendingDownload' => $has_pending_download,
                 'setupState'         => $setup_state,
@@ -1127,7 +1127,7 @@ class SealKeySettings
     public static function handleAddLegacyKey(): void
     {
         \FabricatorForms\Utils\Security\AjaxGuard::capability(static fn() => \FabricatorForms\Capabilities::userCan('settings') && current_user_can('manage_options'));
-        check_ajax_referer('fabricator_add_legacy_key', 'nonce');
+        check_ajax_referer('fabricator_forms_add_legacy_key', 'nonce');
 
         $raw = isset($_POST['key_json']) ? sanitize_textarea_field(wp_unslash($_POST['key_json'])) : '';
         if ($raw === '') {

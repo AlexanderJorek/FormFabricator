@@ -132,7 +132,7 @@ class CaptchaField extends BaseField
             'waitAlert'            => __('Verifying… please wait.', 'formfabricator'),
         ];
         $inner = '<altcha-widget'
-            . ' challenge="' . esc_url(admin_url('admin-ajax.php?action=fabricator_altcha_challenge')) . '"'
+            . ' challenge="' . esc_url(admin_url('admin-ajax.php?action=fabricator_forms_altcha_challenge')) . '"'
             . ' name="' . esc_attr($field_id) . '"'
             . ' language="fabricator"'
             // Starts solving as soon as the visitor works on the form, so the check is usually done before they reach it.
@@ -255,7 +255,7 @@ class CaptchaField extends BaseField
             \FabricatorForms\fabricator_log(
                 'FabricatorForms CaptchaField: reCAPTCHA hostname mismatch — allowed "'
                 . implode(', ', $allowed_hosts) . '", got "' . $reported_host . '". If this site is '
-                . 'reachable on a hostname not listed, add it via the fabricator_recaptcha_allowed_hosts filter.'
+                . 'reachable on a hostname not listed, add it via the fabricator_forms_recaptcha_allowed_hosts filter.'
             );
             return __('Please confirm the CAPTCHA.', 'formfabricator');
         }
@@ -282,7 +282,7 @@ class CaptchaField extends BaseField
          * @param string[] $hosts Default: the home_url() host plus its apex/www counterpart.
          */
         // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- already lowercase/underscored.
-        $filtered = apply_filters('fabricator_recaptcha_allowed_hosts', $hosts);
+        $filtered = apply_filters('fabricator_forms_recaptcha_allowed_hosts', $hosts);
 
         if (!is_array($filtered)) {
             return $hosts;

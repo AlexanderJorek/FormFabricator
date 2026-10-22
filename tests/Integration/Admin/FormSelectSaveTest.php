@@ -25,8 +25,8 @@ final class FormSelectSaveTest extends AjaxTestCase
     {
         $form = $this->createForm([['id' => 'name', 'type' => 'text', 'label' => 'Name']], [self::notification()]);
 
-        $r = $this->ajax('fabricator_fsel_save', [
-            'nonce' => wp_create_nonce('fabricator_fsel_save'),
+        $r = $this->ajax('fabricator_forms_fsel_save', [
+            'nonce' => wp_create_nonce('fabricator_forms_fsel_save'),
             'id'    => '0',
             'title' => 'Pick <b>one</b>',
             'items' => [

@@ -908,10 +908,11 @@ abstract class BaseField
         $owns_control = $this->labelsOwnControl($config);
         $label_id     = $field_id . '-label';
         $group_attr   = '';
-        if (!$hide_label && $label !== '') {
+        if ($label !== '') {
+            // A hidden label still names the field for screen readers: only its look is hidden.
             $label_html = $owns_control
-                ? '<label class="fabricator-label" for="' . esc_attr($field_id) . '">' . esc_html($label) . $req_html . '</label>'
-                : '<div class="fabricator-label" id="' . esc_attr($label_id) . '">' . esc_html($label) . $req_html . '</div>';
+                ? '<label class="fabricator-label' . ($hide_label ? ' fabricator-visually-hidden' : '') . '" for="' . esc_attr($field_id) . '">' . esc_html($label) . $req_html . '</label>'
+                : '<div class="fabricator-label' . ($hide_label ? ' fabricator-visually-hidden' : '') . '" id="' . esc_attr($label_id) . '">' . esc_html($label) . $req_html . '</div>';
             if (!$owns_control) {
                 $group_attr = ' role="group" aria-labelledby="' . esc_attr($label_id) . '"';
             }
@@ -933,8 +934,9 @@ abstract class BaseField
             . $label_html
             . $desc_html
             . $inner_html
-            . '<div class="fabricator-field-error" id="' . esc_attr($field_id)
-            . '-error" role="alert" aria-live="polite"></div>'
+            // No live region: the form's message area announces the errors once, and front.js ties this slot to the
+            // field's controls (aria-describedby), which read it out when they get the focus.
+            . '<div class="fabricator-field-error" id="' . esc_attr($field_id) . '-error"></div>'
             . '</div>';
     }
 

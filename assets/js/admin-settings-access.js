@@ -208,7 +208,7 @@
                 searchTimer = setTimeout(function () {
                     var seq = ++searchSeq;
                     var fd  = new FormData();
-                    fd.append('action', 'fabricator_access_user_search');
+                    fd.append('action', 'fabricator_forms_access_user_search');
                     fd.append('nonce', DATA.accessNonce);
                     fd.append('term', term || '');
                     fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
@@ -297,7 +297,7 @@
                     });
                 });
                 jQuery.post(ajaxurl, {
-                    action: 'fabricator_save_access_settings',
+                    action: 'fabricator_forms_save_access_settings',
                     nonce: DATA.accessNonce,
                     /* What this page loaded, so a save that would overwrite another administrator's is refused. */
                     snapshot: DATA.accessSnapshot || '',

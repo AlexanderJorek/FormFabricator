@@ -35,11 +35,13 @@ final class AnswerText
 {
     /**
      * Characters no answer may hold: control characters, invisible format characters, line and paragraph separators.
-     * A multi-line answer may hold line breaks and tabs (checked apart).
+     * A multi-line answer may hold line breaks and tabs (checked apart). The zero-width non-joiner and joiner (U+200C,
+     * U+200D) are typed: a Persian keyboard writes the non-joiner, and an emoji such as the family is man, U+200D,
+     * woman, U+200D, girl. Neither reorders text.
      *
      * @var string
      */
-    private const REFUSED = '/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u';
+    private const REFUSED = '/[\p{Cc}\p{Zl}\p{Zp}]|(?![\x{200C}\x{200D}])\p{Cf}/u';
 
     /**
      * Why $text can't be recorded as typed, or null when it can.
