@@ -108,6 +108,29 @@
     display: none;
 }
 
+/* Out of sight, still read by screen readers: a label the admin hid. */
+.fabricator-visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* Focused by script only, to read a new page from its top: no ring around the whole page. */
+.fabricator-form-page:focus {
+    outline: none;
+}
+
+.fabricator-form-messages ul {
+    margin: 6px 0 0;
+    padding-left: 20px;
+}
+
 /* ── Inputs ───────────────────────────────────────────────────────────────── */
 .fabricator-input {
     display: block;

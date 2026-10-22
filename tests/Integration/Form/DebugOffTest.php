@@ -2,7 +2,7 @@
 
 namespace FabricatorForms\Tests\Integration\Form;
 
-use FabricatorForms\Admin\Verificationpage;
+use FabricatorForms\Admin\VerificationPage;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
 use FabricatorForms\Tests\Support\Reflect;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
@@ -54,8 +54,8 @@ final class DebugOffTest extends AjaxTestCase
         $log      = (string) tempnam(sys_get_temp_dir(), 'ff-log');
         $previous = ini_set('error_log', $log);
 
-        $internal = Reflect::call(Verificationpage::class, 'failureMessage', new \LogicException('Unexpected state.'), 'Ada Lovelace order.pdf');
-        $damaged  = Reflect::call(Verificationpage::class, 'failureMessage', new \RuntimeException('PDF structure unreadable.'), 'Ada Lovelace order.pdf');
+        $internal = Reflect::call(VerificationPage::class, 'failureMessage', new \LogicException('Unexpected state.'), 'Ada Lovelace order.pdf');
+        $damaged  = Reflect::call(VerificationPage::class, 'failureMessage', new \RuntimeException('PDF structure unreadable.'), 'Ada Lovelace order.pdf');
 
         ini_set('error_log', (string) $previous);
         $logged = (string) file_get_contents($log);

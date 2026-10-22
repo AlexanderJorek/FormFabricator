@@ -310,3 +310,86 @@ test('dropdown: Tab reaches it exactly once, its label names it, and clicking th
     label.click();
     assert.equal(page.document.activeElement, custom);
 });
+
+/* Errors for screen readers and the keyboard: one announcement, the cursor on the problem, each control tied to its error. */
+
+const describedBy = (page, el) => (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean)
+    .map((id) => page.document.getElementById(id).textContent.trim());
+
+test('a refused submission names the fields once, puts the cursor in the first, and ties each control to its error', async () => {
+    const page = await open(fixture.forms['accessible errors']);
+    const form = page.document.querySelector('form');
+    const name = form.querySelector('[name="name"]');
+    const email = form.querySelector('[name="email"]');
+    recordScrolls(page);
+
+    // Before anything is wrong, a control names its description and nothing is invalid.
+    assert.deepEqual(describedBy(page, name), ['As on your ID card.', '']);
+    assert.equal(name.hasAttribute('aria-invalid'), false);
+
+    submit(page, form);
+    await settle(page);
+
+    const box = page.document.querySelector('.fabricator-form-messages');
+    assert.equal(box.getAttribute('role'), 'alert');
+    assert.deepEqual(Array.from(box.querySelectorAll('li a')).map((a) => a.textContent), ['Name', 'Email'], 'a hidden label still names its field');
+    assert.deepEqual(Array.from(form.querySelectorAll('[role="alert"], [aria-live]')), [], 'the fields\' slots announce nothing themselves');
+    assert.equal(page.document.activeElement, name, 'the cursor is in the first field with an error');
+    assert.equal(name.getAttribute('aria-invalid'), 'true');
+    assert.deepEqual(describedBy(page, name), ['As on your ID card.', 'This field is required.']);
+    assert.equal(email.getAttribute('aria-invalid'), 'true');
+    assert.equal(form.querySelector('[name="msg"]').hasAttribute('aria-invalid'), false);
+
+    box.querySelectorAll('li a')[1].click();
+    assert.equal(page.document.activeElement, email, 'a link in the list goes to its field');
+
+    // The visitor fixes the name; the next check clears its error, and the attribute goes with it.
+    type(page, name, 'Ada');
+    submit(page, form);
+    await settle(page);
+    assert.equal(name.hasAttribute('aria-invalid'), false);
+    assert.equal(page.document.activeElement, email);
+});
+
+test('a server error for a field marks it, names it in the message and moves the cursor there', async () => {
+    const page = await open(fixture.forms['accessible errors']);
+    const form = page.document.querySelector('form');
+    type(page, form.querySelector('[name="name"]'), 'Ada');
+    type(page, form.querySelector('[name="email"]'), 'ada@example.org');
+    const msg = form.querySelector('[name="msg"]');
+    recordScrolls(page);
+    stubServer(page, { success: false, data: { message: 'Please correct the highlighted fields.', errors: { msg: 'This answer contains an invisible character (U+200B).' } } });
+
+    submit(page, form);
+    await settle(page);
+
+    const box = page.document.querySelector('.fabricator-form-messages');
+    assert.equal(box.firstChild.textContent, 'Please correct the highlighted fields.');
+    assert.deepEqual(Array.from(box.querySelectorAll('li a')).map((a) => a.textContent), ['Message']);
+    assert.equal(page.document.activeElement, msg);
+    assert.equal(msg.getAttribute('aria-invalid'), 'true');
+    assert.ok(describedBy(page, msg).includes('This answer contains an invisible character (U+200B).'));
+});
+
+test('an error a field script writes on its own is tied to the control too', async () => {
+    const page = await open(fixture.forms['accessible errors']);
+    const name = page.document.querySelector('[name="name"]');
+    page.document.getElementById('name-error').textContent = 'Checked when leaving the field.';
+    await settle(page);
+    assert.equal(name.getAttribute('aria-invalid'), 'true');
+    page.document.getElementById('name-error').textContent = '';
+    await settle(page);
+    assert.equal(name.hasAttribute('aria-invalid'), false);
+});
+
+test('pages: a new page the visitor asks for takes the cursor to its top', async () => {
+    const page = await open(fixture.forms['submit condition, three pages']);
+    const form = page.document.querySelector('form');
+    const active = () => form.querySelector('.fabricator-page-active');
+    recordScrolls(page);
+
+    active().querySelector('.fabricator-btn-next').click();
+    assert.equal(page.document.activeElement, active(), 'on the second page, from its top');
+    active().querySelector('.fabricator-btn-prev').click();
+    assert.equal(page.document.activeElement, active(), 'back on the first page, from its top');
+});

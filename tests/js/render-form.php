@@ -2,7 +2,7 @@
 
 /**
  * Renders a form as the builder saved it, for tests/js/builder-conditions.test.js: the fields go through the save's own
- * FormEditor::sanitizeFields(), then FormRenderer::render() prints them as a page would, and
+ * FormSanitizer::sanitizeFields(), then FormRenderer::render() prints them as a page would, and
  * FormProcessor::resolveVisibility() names the fields the server hides for each set of posted values.
  *
  * Reads {"fields": [...], "posted": [{field_id: value, ...}, ...]} on stdin; writes {"html": "...", "hidden": [[ids], ...]}.
@@ -10,7 +10,7 @@
  */
 
 use Brain\Monkey;
-use FabricatorForms\Admin\FormEditor;
+use FabricatorForms\Form\FormSanitizer;
 use FabricatorForms\Form\FormProcessor;
 use FabricatorForms\Form\FormRenderer;
 use FabricatorForms\Tests\Support\FieldStubs;
@@ -39,7 +39,7 @@ $withDefaults = static function (array $fields) use (&$withDefaults): array {
     }, $fields);
 };
 $input  = json_decode((string) stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
-$fields = FormEditor::sanitizeFields($withDefaults((array) ($input['fields'] ?? [])));
+$fields = FormSanitizer::sanitizeFields($withDefaults((array) ($input['fields'] ?? [])));
 $hidden = [];
 foreach ((array) ($input['posted'] ?? []) as $posted) {
     [$ids]    = Reflect::call(FormProcessor::class, 'resolveVisibility', $fields, (array) $posted, []);

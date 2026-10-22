@@ -20,11 +20,11 @@ final class FormSelectModelTest extends TestCase
     public function testADeletedSelectionsIdIsNeverReused(): void
     {
         // "Highest ID + 1" gave the deleted newest selection's ID to the next one, and an old shortcode showed it.
-        $first  = FormSelectModel::save(['title' => 'First', 'items' => []], 0, true);
-        $second = FormSelectModel::save(['title' => 'Second', 'items' => []], 0, true);
-        self::assertTrue(FormSelectModel::delete($second, true));
+        $first  = FormSelectModel::save(['title' => 'First', 'items' => []], 0);
+        $second = FormSelectModel::save(['title' => 'Second', 'items' => []], 0);
+        self::assertTrue(FormSelectModel::delete($second));
 
-        $third = FormSelectModel::save(['title' => 'Third', 'items' => []], 0, true);
+        $third = FormSelectModel::save(['title' => 'Third', 'items' => []], 0);
         self::assertGreaterThan($second, $third);
         self::assertNotSame($first, $third);
     }
@@ -32,13 +32,13 @@ final class FormSelectModelTest extends TestCase
     public function testATrashedFavoriteFallsBackToAFormThatShows(): void
     {
         // A favorite (or first) form in the trash is not rendered, and data-fav pointing at it showed no form at all.
-        $form = static fn(string $title): int => (int) \FabricatorForms\Form\FormModel::save(['title' => $title, 'fields' => [], 'notifications' => [], 'settings' => []], 0, true);
+        $form = static fn(string $title): int => (int) \FabricatorForms\Form\FormModel::save(['title' => $title, 'fields' => [], 'notifications' => [], 'settings' => []], 0);
         $gone = $form('Trashed favorite');
         $kept = $form('Still published');
         $id   = FormSelectModel::save(['title' => 'Pick one', 'items' => [
             ['form_id' => $gone, 'label' => 'Gone', 'favorite' => true],
             ['form_id' => $kept, 'label' => 'Kept'],
-        ]], 0, true);
+        ]], 0);
         wp_trash_post($gone);
 
         $html = do_shortcode('[fabricator_form_select id="' . $id . '"]');
@@ -48,10 +48,10 @@ final class FormSelectModelTest extends TestCase
 
     public function testADeleteReportsWhatHappened(): void
     {
-        self::assertFalse(FormSelectModel::delete(9999, true), 'no such selection');
+        self::assertFalse(FormSelectModel::delete(9999), 'no such selection');
 
-        $id = FormSelectModel::save(['title' => 'Kept', 'items' => []], 0, true);
+        $id = FormSelectModel::save(['title' => 'Kept', 'items' => []], 0);
         wp_set_current_user(self::factory()->user->create(['role' => 'subscriber']));
-        self::assertFalse(FormSelectModel::delete($id, true), 'refused without edit_forms');
+        self::assertFalse(FormSelectModel::delete($id), 'refused without edit_forms');
     }
 }

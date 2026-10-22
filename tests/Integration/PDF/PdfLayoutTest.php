@@ -50,6 +50,29 @@ final class PdfLayoutTest extends TestCase
         self::assertStringContainsString(' 12.000 Tf', $content, 'the body size');
     }
 
+    public function testAHiddenLabelDropsTheLabelAndItsLineButTheFieldStillEndsWithItsLine(): void
+    {
+        // The thin line under a label is drawn in the separator colour, the line that ends a field in the accent colour.
+        update_option('fabricator_forms_pdf_layout', ['accent_color' => '#112233', 'separator_color' => '#445566']);
+        $accent    = '0.067 0.133 0.200 RG';
+        $separator = '0.267 0.333 0.400 RG';
+
+        $shown  = self::pageContent($this->generate());
+        $hidden = self::pageContent($this->generate('Please deliver on Monday.', true));
+
+        self::assertSame(substr_count($shown, $accent), substr_count($hidden, $accent), 'every field still ends with its line');
+        self::assertSame(substr_count($shown, $separator) - 2, substr_count($hidden, $separator), 'the two labels\' lines are gone');
+    }
+
+    public function testTheMetadataBlockDatesThePdfAsSignaturesAre(): void
+    {
+        update_option('date_format', 'j. F Y');
+
+        $text = implode("\n", self::pageTexts($this->generate()));
+
+        self::assertMatchesRegularExpression('/Created:\s*\d{1,2}\. \w+ \d{4}, \d{2}:\d{2}:\d{2} UTC/u', $text, 'Utils\Text\SigningTime');
+    }
+
     public function testEveryFontTheEditorOffersIsEmbeddedAndKeptByTheBuild(): void
     {
         $offered = $this->offeredFonts();
@@ -66,6 +89,25 @@ final class PdfLayoutTest extends TestCase
             foreach (array_intersect_key($fontdata[$family], array_flip(['R', 'B', 'I', 'BI'])) as $file) {
                 self::assertContains($file, $kept, "$family needs $file, which the build's font trim (tools/build-config.php) must keep");
             }
+        }
+    }
+
+    public function testASealLineOfItsWidestCharacterFitsTheNarrowestTextAreaInEveryFont(): void
+    {
+        // The seal's characters follow the visitor's answers; a line wider than the text area would make mPDF break it,
+        // in time growing with the square of its length. The narrowest area: A4 with both margins at their 50 mm cap.
+        $narrowest = 210 - 50 - 50;
+        $line      = Generator::SEAL_LINE_CHARS + strlen('---BEGIN-SEAL---');
+        foreach ($this->offeredFonts() as $font) {
+            $mpdf = new \Mpdf\Mpdf(['tempDir' => get_temp_dir() . 'fabricator-seal-width', 'default_font' => $font]);
+            $mpdf->SetFont($font);
+            // The seal's font size: 0.1 px at mPDF's 96 dpi, in points.
+            $mpdf->SetFontSize(0.1 * 72 / 96);
+            $widest = max(array_map(
+                static fn(string $c): float => (float) $mpdf->GetStringWidth($c),
+                str_split('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=-')
+            ));
+            self::assertLessThan($narrowest, $line * $widest, "$font: a seal line of its widest character, in mm");
         }
     }
 
@@ -149,13 +191,13 @@ final class PdfLayoutTest extends TestCase
         $this->generate();
         $folders = [];
         foreach (\FabricatorForms\Tests\Support\Overrides::$shutdownFunctions as [$callback, $args]) {
-            if ($callback === [\FabricatorForms\Utils\PrivateDir::class, 'removeTree'] && str_contains((string) $args[0], '/pdf/')) {
+            if ($callback === [\FabricatorForms\Utils\Storage\PrivateDir::class, 'removeTree'] && str_contains((string) $args[0], '/pdf/')) {
                 $folders[] = (string) $args[0];
             }
         }
         self::assertNotEmpty($folders, 'the removal of the PDF folder is registered');
         $folder = $folders[0];
-        $shared = glob(\FabricatorForms\Utils\PrivateDir::sharedMpdfTemp() . '/mpdf/ttfontdata/*') ?: [];
+        $shared = glob(\FabricatorForms\Utils\Storage\PrivateDir::sharedMpdfTemp() . '/mpdf/ttfontdata/*') ?: [];
         self::assertNotEmpty($shared, 'the font metrics this PDF needed are in the shared cache');
         self::assertFileExists($folder . '/mpdf/ttfontdata/' . basename($shared[0]), 'and reach the next PDF in its own folder');
         // What a request stopped before the inline delete leaves behind.
@@ -173,13 +215,13 @@ final class PdfLayoutTest extends TestCase
     /**
      * A sealed PDF of one submission, as a notification would attach it.
      */
-    private function generate(string $message = 'Please deliver on Monday.'): string
+    private function generate(string $message = 'Please deliver on Monday.', bool $hide_labels = false): string
     {
         $fields = [
-            ['id' => 'name', 'type' => 'text', 'label' => 'Name'],
-            ['id' => 'note', 'type' => 'textarea', 'label' => 'Message'],
+            ['id' => 'name', 'type' => 'text', 'label' => 'Name', 'hide_label' => $hide_labels],
+            ['id' => 'note', 'type' => 'textarea', 'label' => 'Message', 'hide_label' => $hide_labels],
         ];
-        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0, true);
+        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
         self::assertIsInt($form);
         $path = Generator::generate(FieldRegistry::mapSubmission($fields, ['name' => 'Ada Lovelace', 'note' => $message], [], []), $form, 'Order');
         self::assertIsString($path, 'Generator produced a PDF');

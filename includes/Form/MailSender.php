@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -23,7 +23,6 @@ namespace FabricatorForms\Form;
 
 use FabricatorForms\Fields\FieldRegistry;
 use FabricatorForms\Form\FormModel;
-use FabricatorForms\Admin\FormSettings;
 use FabricatorForms\PDF\Generator;
 
 defined('ABSPATH') || exit;
@@ -53,6 +52,21 @@ class MailSender
      * @var int
      */
     private const FAILURE_FORMS_KEPT = 20;
+
+    /**
+     * Starts an automation marker: "[FABRICATOR_FIELD_<id>]" before an answer, FIELD_MARKER_END after it, written into
+     * the mail when the notification adds automation markers, so a mail parser can find each answer.
+     *
+     * @var string
+     */
+    public const FIELD_MARKER = '[FABRICATOR_FIELD_';
+
+    /**
+     * Ends the answer an automation marker started.
+     *
+     * @var string
+     */
+    public const FIELD_MARKER_END = '[FABRICATOR_FIELD_END]';
 
     /**
      * Strips newlines from a value before it's interpolated into a log line, preventing a crafted
@@ -268,8 +282,11 @@ class MailSender
      */
     private static function notificationAttachesPdf(int $form_id, array $notif): bool
     {
-        return !empty($notif['attach_pdf'])
-            || FormSettings::shouldAttachPdf($form_id, $notif['slug'] ?? '');
+        if (!empty($notif['attach_pdf'])) {
+            return true;
+        }
+        $saved = get_option('fabricator_forms_pdf_settings', []);
+        return is_array($saved) && !empty($saved[$form_id . '|' . ($notif['slug'] ?? '')]);
     }
 
     /**
@@ -350,7 +367,8 @@ class MailSender
             $body    = self::buildEmailBody(
                 \FabricatorForms\Utils\Cast::stringOrDefault($notif['body'] ?? null),
                 $mapped,
-                $form
+                $form,
+                !empty($notif['automation_markers'])
             );
 
             $subject = sanitize_text_field(str_replace(["\r", "\n"], '', $subject));
@@ -513,7 +531,7 @@ class MailSender
      */
     private static function fromHeader(array $notif, array $mapped, FormModel $form): string
     {
-        // Never a form field: see FormEditor::sanitizeFromEmail(). A stored or imported {field} is ignored here too, and
+        // Never a form field: see FormSanitizer::sanitizeFromEmail(). A stored or imported {field} is ignored here too, and
         // the site's sender applies.
         $notif_email = trim(\FabricatorForms\Utils\Cast::stringOrDefault($notif['from_email'] ?? null));
         if ($notif_email === '{admin_email}') {
@@ -575,7 +593,7 @@ class MailSender
     }
 
     /**
-     * Records that a submission could not be delivered, for the admin notice (Plugin::maybeWarnMailFailures()): when,
+     * Records that a submission could not be delivered, for the admin notice (Notices::maybeWarnMailFailures()): when,
      * which form and what failed, never an address or an answer. Nothing is stored locally, so a mail setup that
      * keeps failing loses every submission, while the visitors' "try again" reaches no one who can fix it.
      *
@@ -590,7 +608,7 @@ class MailSender
     {
         // Locked: two submissions failing at once, or one failing while another form's delivery clears its own entry,
         // must not undo each other's write.
-        \FabricatorForms\Utils\OptionMutex::run(
+        \FabricatorForms\Utils\Storage\OptionMutex::run(
             self::FAILURE_OPTION,
             static function () use ($form_id, $reason): void {
                 $records = self::failureRecords();
@@ -653,7 +671,7 @@ class MailSender
             delete_option(self::FAILURE_OPTION);
             return;
         }
-        \FabricatorForms\Utils\OptionMutex::run(
+        \FabricatorForms\Utils\Storage\OptionMutex::run(
             self::FAILURE_OPTION,
             static function () use ($form_id): void {
                 $records = self::failureRecords();
@@ -686,7 +704,7 @@ class MailSender
         }
 
         // The submission's mail folder (PrivateDir), which removes itself at the end of the request.
-        $tmp_dir = \FabricatorForms\Utils\PrivateDir::forSubmission('mail');
+        $tmp_dir = \FabricatorForms\Utils\Storage\PrivateDir::forSubmission('mail');
         if ($tmp_dir === '') {
             $result['complete'] = false;
             return $result;
@@ -708,7 +726,7 @@ class MailSender
                 }
                 // One subfolder per file keeps the original names without collisions.
                 $file_dir = $tmp_dir . '/f' . bin2hex(random_bytes(8)) . '/';
-                if (!\FabricatorForms\Utils\PrivateDir::makeDir($file_dir)) {
+                if (!\FabricatorForms\Utils\Storage\PrivateDir::makeDir($file_dir)) {
                     \FabricatorForms\fabricator_log("FabricatorForms: could not create temp dir {$file_dir}");
                     $result['complete'] = false;
                     continue;
@@ -716,7 +734,7 @@ class MailSender
                 $dest = $file_dir . $name;
                 // Same helper the directory hardening uses: WP_Filesystem where the host's
                 // transport is 'direct', a direct write (justified once, in SecureDir) elsewhere.
-                if (!\FabricatorForms\Utils\SecureDir::putFile($dest, $binary, 0600)) {
+                if (!\FabricatorForms\Utils\Storage\SecureDir::putFile($dest, $binary, 0600)) {
                     // The upload's own name, which may name a person, only as fabricator_log_file() records it.
                     \FabricatorForms\fabricator_log('FabricatorForms: failed to write temp file ' . \FabricatorForms\fabricator_log_file($name));
                     $result['complete'] = false;
@@ -814,7 +832,7 @@ class MailSender
                 (string) ($rule['value'] ?? '')
             );
             $raw = array_key_exists($field_id, $raw_values) ? $raw_values[$field_id] : null;
-            if (self::ruleMatches($actual, $operator, $expected, $raw, (string) ($rule['value'] ?? ''))) {
+            if (ConditionRule::routes($actual, $operator, $expected, $raw, (string) ($rule['value'] ?? ''))) {
                 // Cc/Bcc travel with the matched rule, not the notification, so routing can send different groups to different copy lists.
                 return [
                     'to'  => implode(', ', $to),
@@ -872,120 +890,21 @@ class MailSender
     }
 
     /**
-     * Evaluates a single routing-rule comparison against a submitted value.
-     *
-     * @param string $actual   The field's display value, as it appears in the email and PDF.
-     * @param string $operator One of the supported comparison operators.
-     * @param string $expected The rule's comparison value.
-     * @param mixed  $raw      The value as submitted, or null when it isn't available.
-     * @param string $option   The rule's value as stored (an option value, before its label replaced it in $expected).
-     * @return bool Whether the rule matches.
-     */
-    private static function ruleMatches(
-        string $actual,
-        string $operator,
-        string $expected,
-        mixed $raw = null,
-        string $option = ''
-    ): bool {
-        // A multi-value answer equals an option when it is among those chosen, as in FormProcessor::evalConditionRule().
-        if (is_array($raw) && ($operator === 'equals' || $operator === 'not_equals')) {
-            unset($raw['__other_text__']);
-            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-            $chosen = array_map(static fn($v) => is_scalar($v) ? mb_strtolower((string) $v) : '', $raw);
-            $hit    = in_array(mb_strtolower($option !== '' ? $option : $expected), $chosen, true);
-            return $operator === 'equals' ? $hit : !$hit;
-        }
-        switch ($operator) {
-            case 'not_equals':
-                return mb_strtolower($actual) !== mb_strtolower($expected);
-            case 'contains':
-                return $expected !== '' && mb_stripos($actual, $expected) !== false;
-            case 'not_contains':
-                // Empty value = half-configured routing rule: unsatisfied, or it would route every submission.
-                return $expected !== '' && mb_stripos($actual, $expected) === false;
-            case 'empty':
-                return self::valueIsEmpty($actual, $raw);
-            case 'not_empty':
-                return !self::valueIsEmpty($actual, $raw);
-            case 'greater':
-                $number = self::numericValue($actual, $raw);
-                return $number !== null && is_numeric($expected) && $number > (float) $expected;
-            case 'less':
-                $number = self::numericValue($actual, $raw);
-                return $number !== null && is_numeric($expected) && $number < (float) $expected;
-            case 'equals':
-            default:
-                return mb_strtolower($actual) === mb_strtolower($expected);
-        }
-    }
-
-    /**
-     * Whether a field was left blank, judged on the value as submitted.
-     *
-     * A visitor can type "[No entry]", so the display value decides only when the submitted one is unavailable.
-     *
-     * @param string $display The field's display value.
-     * @param mixed  $raw     The value as submitted, or null when it isn't available.
-     * @return bool
-     */
-    private static function valueIsEmpty(string $display, mixed $raw): bool
-    {
-        if ($raw === null) {
-            return trim($display) === '';
-        }
-        if (is_array($raw)) {
-            foreach ($raw as $item) {
-                if (is_scalar($item) && trim((string) $item) !== '') {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return trim((string) $raw) === '';
-    }
-
-    /**
-     * The number behind a field value, for the greater/less operators.
-     *
-     * Prefers the value as submitted; a display value ("1.234,56 €") is read back through the site's number format.
-     *
-     * @param string $display The field's display value.
-     * @param mixed  $raw     The value as submitted, or null when it isn't available.
-     * @return float|null Null when neither holds a number.
-     */
-    private static function numericValue(string $display, mixed $raw): ?float
-    {
-        if (is_numeric($raw)) {
-            return (float) $raw;
-        }
-        $display = trim($display);
-        if (is_numeric($display)) {
-            return (float) $display;
-        }
-        global $wp_locale;
-        $decimal   = is_object($wp_locale) ? (string) ($wp_locale->number_format['decimal_point'] ?? '.') : '.';
-        $thousands = is_object($wp_locale) ? (string) ($wp_locale->number_format['thousands_sep'] ?? ',') : ',';
-        $plain     = str_replace([$thousands, ' ', "\xc2\xa0"], '', $display);
-        if ($decimal !== '') {
-            $plain = str_replace($decimal, '.', $plain);
-        }
-        return preg_match('/-?\d+(?:\.\d+)?/', $plain, $m) === 1 ? (float) $m[0] : null;
-    }
-
-    /**
      * Replaces template placeholders in a text string.
      *
-     * @param string    $text   Template string with placeholders.
-     * @param array     $mapped Mapped submission data.
-     * @param FormModel $form   The form model instance.
+     * @param string    $text    Template string with placeholders.
+     * @param array     $mapped  Mapped submission data.
+     * @param FormModel $form    The form model instance.
+     * @param bool      $as_html Whether the text is markup (a body) or plain text (an address, a subject).
+     * @param bool      $markers Whether each answer is wrapped in automation markers (FIELD_MARKER); markup only.
      * @return string Text with placeholders replaced.
      */
     private static function replacePlaceholders(
         string $text,
         array $mapped,
         FormModel $form,
-        bool $as_html = true
+        bool $as_html = true,
+        bool $markers = false
     ): string {
         // Build the full token map then substitute via one strtr() pass, so a submitted value containing
         // literal "{token}" text can't get expanded by a later sequential str_replace() re-scan.
@@ -998,6 +917,8 @@ class MailSender
         $needs_all_fields = str_contains($text, '{all_fields}');
         $inline           = get_option('fabricator_forms_field_layout', 'block') === 'inline';
         $all = '';
+        // Boxes {all_fields} has opened and not yet closed (BaseField::framePart()).
+        $open_frames = 0;
         // A field id matching a reserved token name (e.g. "admin_email") must not shadow the built-in token.
         $reserved_tokens = array_merge(array_keys($tokens), ['{all_fields}']);
 
@@ -1008,22 +929,56 @@ class MailSender
             $raw_val   = $entry['value'] ?? '';
             $plain_val = is_array($raw_val) ? implode(', ', $raw_val) : (string) $raw_val;
 
+            // "Hide label" (FieldRegistry::withHiddenLabel()): the answer is listed without its label, never left out.
+            $shown_label = empty($entry['label_hidden']) ? (string) ($entry['label'] ?? '') : '';
+            // A box's start or end (signature text, mandate): its label is the box's title, not an answer's label.
+            $frame = $handler ? $handler->framePart($entry) : '';
+
             // Both forms are always computed: {all_fields} below needs the matching pair for this context.
             if ($as_html) {
                 // rawEmailHtml() fields already passed through wp_kses(), so inject as-is.
-                $safe_val = ($handler && $handler->rawEmailHtml())
+                $is_raw     = $handler && $handler->rawEmailHtml();
+                $value_html = $is_raw
                     ? (is_array($raw_val) ? implode('', $raw_val) : (string)$raw_val)
                     : nl2br(esc_html($plain_val));
-                $safe_lbl = esc_html((string)($entry['label'] ?? ''));
-                $token    = $safe_lbl !== ''
-                    ? ($inline
-                        ? '<strong>' . $safe_lbl . ':</strong> ' . $safe_val . '<br>'
-                        : '<strong>' . $safe_lbl . '</strong><br>' . $safe_val . '<br><br>')
-                    : $safe_val;
+                $label_text = $frame === '' ? $shown_label : '';
+                // Spaced like any other answer: no outer paragraph margins, and one break less after a closing block.
+                $ends_block  = false;
+                $listed_html = $is_raw ? self::withoutOuterMargins($value_html, $ends_block) : $value_html;
+                if ($markers) {
+                    // An answer made of parts (a name's, an address's) marks each part on its line; any other is
+                    // marked whole. The end marker is text after the block, so the next answer needs its line break.
+                    $parts       = self::markerParts($entry);
+                    $listed_html = $parts !== [] ? self::markedParts((string) $key, $parts) : self::marked((string) $key, $listed_html);
+                    $value_html  = $parts !== [] ? $listed_html : self::marked((string) $key, $value_html);
+                    $ends_block  = false;
+                }
+                $tail_html = $inline ? ($ends_block ? '' : '<br>') : ($ends_block ? '<br>' : '<br><br>');
+                if ($frame === 'open') {
+                    $title        = (string) ($entry['label'] ?? '');
+                    $heading_html = $title !== '' ? '<strong>' . esc_html($title) . '</strong><br>' : '';
+                    // Without a text (and unmarked), the heading alone, a line above the box's first answer; without
+                    // either, nothing.
+                    $entry_html = $listed_html !== ''
+                        ? $heading_html . $listed_html . $tail_html
+                        : ($heading_html !== '' && !$inline ? $heading_html . '<br>' : $heading_html);
+                    $token      = $heading_html . $value_html;
+                } elseif ($frame === 'close') {
+                    // Nothing of its own to show: the end of the box is the box closing (marked, an empty answer).
+                    $entry_html = $markers ? $listed_html . $tail_html : '';
+                    $token      = $markers ? $value_html : '';
+                } else {
+                    $entry_html = $label_text !== ''
+                        ? ($inline
+                            ? '<strong>' . esc_html($label_text) . ':</strong> ' . $listed_html . $tail_html
+                            : '<strong>' . esc_html($label_text) . '</strong><br>' . $listed_html . $tail_html)
+                        : $listed_html . $tail_html;
+                    $token      = $label_text !== '' ? $entry_html : $value_html;
+                }
             } else {
                 // Plain-text sink (address, subject, From name).
                 $safe_val = $plain_val;
-                $safe_lbl = (string) ($entry['label'] ?? '');
+                $safe_lbl = $shown_label;
                 $token    = $plain_val;
             }
             $token_key = '{' . $key . '}';
@@ -1052,28 +1007,205 @@ class MailSender
                     continue;
                 }
                 $label = $entry['label'] ?? '';
-                if ($label !== '') {
+                if ($frame !== '' && $as_html) {
+                    if ($frame === 'open') {
+                        $all .= self::FRAME_OPEN . $entry_html;
+                        $open_frames++;
+                    } elseif ($open_frames > 0) {
+                        $all = self::withoutTrailingBreaks($all . $entry_html) . self::FRAME_CLOSE;
+                        $open_frames--;
+                    }
+                } elseif ($frame === 'close' || ($frame === 'open' && trim($plain_val) === '')) {
+                    // Plain text has no box: its end names no answer, nor does a start without a text.
+                    continue;
+                } elseif ($label !== '') {
                     if ($as_html) {
-                        $all .= $inline
-                            ? '<strong>' . $safe_lbl . ':</strong> ' . $safe_val . '<br>'
-                            : '<strong>' . $safe_lbl . '</strong><br>' . $safe_val . '<br><br>';
+                        $all .= $entry_html;
                     } else {
                         // Plain-text {all_fields} (e.g. in a subject line): no markup at all.
-                        $all .= $safe_lbl . ': ' . $safe_val . "\n";
+                        $all .= ($safe_lbl !== '' ? $safe_lbl . ': ' : '') . $safe_val . "\n";
                     }
                 } elseif ($handler && $handler->rawEmailHtml()) {
                     // Unlabeled HTML blocks still appear (e.g. banners), unlike other unlabeled fields.
-                    $all .= $safe_val;
+                    $all .= $as_html ? $entry_html : $safe_val;
                 }
             }
         }
 
         if ($needs_all_fields) {
+            // A box whose end isn't listed still closes, so the markup after {all_fields} stays outside it.
+            if ($open_frames > 0) {
+                $all = self::withoutTrailingBreaks($all) . str_repeat(self::FRAME_CLOSE, $open_frames);
+            }
             $tokens['{all_fields}'] = $all;
         }
 
         $filled = strtr($text, $tokens);
         return $as_html ? self::restrictLinkProtocols($filled) : $filled;
+    }
+
+    /**
+     * The start of a box around a group of answers in the mail: a one-cell table, since mail programs (Outlook among
+     * them) draw a table's border where they drop a div's.
+     *
+     * @var string
+     */
+    private const FRAME_OPEN = '<table role="presentation" cellpadding="0" cellspacing="0" '
+        . 'style="border:1px solid #c3c4c7;border-collapse:collapse;margin:0 0 14px;width:100%;">'
+        . '<tr><td style="padding:10px 12px;">';
+
+    /**
+     * The end of a box FRAME_OPEN started.
+     *
+     * @var string
+     */
+    private const FRAME_CLOSE = '</td></tr></table>';
+
+    /**
+     * An answer between automation markers: FIELD_MARKER with the entry's key before it, FIELD_MARKER_END after it.
+     *
+     * @param string $key  The entry's key in the mapped submission.
+     * @param string $html The answer as the mail shows it.
+     * @return string
+     */
+    private static function marked(string $key, string $html): string
+    {
+        return self::FIELD_MARKER . esc_html($key) . ']' . $html . self::FIELD_MARKER_END;
+    }
+
+    /**
+     * An entry's parts (BaseField::withMarkerParts()), each with a string key, value and separator; malformed ones are
+     * left out.
+     *
+     * @param array $entry The entry.
+     * @return array<int, array{key: string, value: string, sep: string}>
+     */
+    private static function markerParts(array $entry): array
+    {
+        $parts = [];
+        foreach ((array) ($entry['parts'] ?? []) as $part) {
+            if (is_array($part) && is_string($part['key'] ?? null) && is_string($part['value'] ?? null)) {
+                $parts[] = ['key' => $part['key'], 'value' => $part['value'], 'sep' => is_string($part['sep'] ?? null) ? $part['sep'] : ' '];
+            }
+        }
+        return $parts;
+    }
+
+    /**
+     * An answer made of parts on one line: an empty "<key>_begin" pair, a "<key>_<part>" pair per part, an empty
+     * "<key>_end" pair. No pair nests, so a parser reads each part as an answer of its own.
+     *
+     * @param string                                                  $key   The entry's key.
+     * @param array<int, array{key: string, value: string, sep: string}> $parts The entry's parts.
+     * @return string
+     */
+    private static function markedParts(string $key, array $parts): string
+    {
+        $line = self::marked($key . '_begin', '');
+        foreach ($parts as $i => $part) {
+            $line .= ($i > 0 ? esc_html($part['sep']) : '') . self::marked($key . '_' . $part['key'], esc_html($part['value']));
+        }
+        return $line . self::marked($key . '_end', '');
+    }
+
+    /**
+     * $html without the line breaks at its end, so a box closes right after its last answer.
+     *
+     * @param string $html Mail markup.
+     * @return string
+     */
+    private static function withoutTrailingBreaks(string $html): string
+    {
+        return (string) preg_replace('/(?:<br>)+$/', '', $html);
+    }
+
+    /**
+     * Whether any of a form's enabled notifications adds automation markers, so answers may not contain one.
+     *
+     * @param FormModel $form The form.
+     * @return bool
+     */
+    public static function marksAnswers(FormModel $form): bool
+    {
+        foreach ($form->notifications as $notif) {
+            if (is_array($notif) && !empty($notif['enabled']) && !empty($notif['automation_markers'])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Elements whose default margins put a blank line around them in a mail program.
+     *
+     * @var string[]
+     */
+    private const MARGIN_BLOCKS = [
+        'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'DL', 'TABLE', 'BLOCKQUOTE', 'PRE', 'FIGURE',
+        'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'ADDRESS', 'HR',
+    ];
+
+    /**
+     * Elements without a closing tag, which open no level.
+     *
+     * @var string[]
+     */
+    private const VOID_ELEMENTS = [
+        'AREA', 'BASE', 'BR', 'COL', 'EMBED', 'HR', 'IMG', 'INPUT', 'LINK', 'META', 'SOURCE', 'TRACK', 'WBR',
+    ];
+
+    /**
+     * Zeroes the outer margins of the first and last top-level blocks, which mail programs pad with blank lines.
+     * A margin the author set in the element's style still wins: it comes later in the attribute.
+     *
+     * @param string $html            Sanitized HTML.
+     * @param bool   $ends_with_block Set to whether the HTML ends with a block, which ends its line itself.
+     * @return string
+     */
+    private static function withoutOuterMargins(string $html, bool &$ends_with_block): string
+    {
+        $ends_with_block = false;
+        $tags            = new \WP_HTML_Tag_Processor($html);
+        $depth           = 0;
+        $seen_content    = false;
+        $last_is_block   = false;
+        while ($tags->next_token()) {
+            $type = $tags->get_token_type();
+            if ($type === '#text') {
+                if ($depth === 0 && trim($tags->get_modifiable_text()) !== '') {
+                    $seen_content  = true;
+                    $last_is_block = false;
+                }
+                continue;
+            }
+            if ($type !== '#tag') {
+                continue;
+            }
+            $tag = (string) $tags->get_tag();
+            if ($tags->is_tag_closer()) {
+                $depth = max(0, $depth - 1);
+                continue;
+            }
+            if ($depth === 0) {
+                $is_block = in_array($tag, self::MARGIN_BLOCKS, true);
+                if (!$seen_content && $is_block) {
+                    $tags->set_attribute('style', 'margin-top:0;' . (string) $tags->get_attribute('style'));
+                }
+                $seen_content  = true;
+                $last_is_block = $is_block;
+                if ($is_block) {
+                    $tags->set_bookmark('last-block');
+                }
+            }
+            if (!in_array($tag, self::VOID_ELEMENTS, true)) {
+                $depth++;
+            }
+        }
+        if ($last_is_block && $tags->seek('last-block')) {
+            $tags->set_attribute('style', 'margin-bottom:0;' . (string) $tags->get_attribute('style'));
+            $ends_with_block = true;
+        }
+        return $tags->get_updated_html();
     }
 
     /**
@@ -1119,23 +1251,24 @@ class MailSender
      * @param string    $body_template Email body template string (HTML).
      * @param array     $mapped        Mapped submission data.
      * @param FormModel $form          The form model instance.
+     * @param bool      $markers       Whether each answer is wrapped in automation markers (FIELD_MARKER).
      * @return string Complete HTML email body.
      */
     private static function buildEmailBody(
         string $body_template,
         array $mapped,
-        FormModel $form
+        FormModel $form,
+        bool $markers = false
     ): string {
-        $body = self::replacePlaceholders($body_template, $mapped, $form);
+        $body_html = self::replacePlaceholders($body_template, $mapped, $form, true, $markers);
 
-        if (stripos($body, '<html') !== false || stripos($body, '<body') !== false) {
-            return $body;
+        if (stripos($body_html, '<html') !== false || stripos($body_html, '<body') !== false) {
+            return $body_html;
         }
 
-        $style = 'font-family:Arial,sans-serif;font-size:14px;color:#333;';
         return '<!DOCTYPE html><html>'
-            . '<body style="' . $style . '">'
-            . $body
+            . '<body style="font-family:Arial,sans-serif;font-size:14px;color:#333;">'
+            . $body_html
             . '</body></html>';
     }
 

@@ -5,7 +5,7 @@ namespace FabricatorForms\Tests\Integration;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\Tests\Integration\Support\PhpUnit10Compat;
 use FabricatorForms\Tests\Support\Overrides;
-use FabricatorForms\Utils\SingleUseToken;
+use FabricatorForms\Utils\Security\SingleUseToken;
 
 /**
  * Base case for tests that submit a form as the browser does, with the nonce and one-time token front.js fetches.
@@ -48,7 +48,7 @@ abstract class AjaxTestCase extends \WP_Ajax_UnitTestCase
     {
         $previous = get_current_user_id();
         wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
-        $id = FormModel::save(['title' => 'Test form', 'fields' => $fields, 'notifications' => $notifications, 'settings' => $settings], 0, true);
+        $id = FormModel::save(['title' => 'Test form', 'fields' => $fields, 'notifications' => $notifications, 'settings' => $settings], 0);
         wp_set_current_user($previous);
         self::assertIsInt($id, is_wp_error($id) ? $id->get_error_message() : 'form saved');
         return $id;

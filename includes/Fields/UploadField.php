@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -147,8 +147,7 @@ class UploadField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $req      = !empty($config['required']) ? ' required aria-required="true"' : '';
-        $multiple = !empty($config['multiple']) ? ' multiple' : '';
+        $multiple = !empty($config['multiple']);
         $accept   = $this->buildAccept($config);
         $acc_attr = $accept !== '' ? ' accept="' . esc_attr($accept) . '"' : '';
 
@@ -158,11 +157,12 @@ class UploadField extends BaseField
         $max_files = $multiple ? max(1, (int)(ini_get('max_file_uploads') ?: 20)) : 1;
         $inner  = '<div class="fabricator-upload-zone"'
             . ' data-multiple="' . ($multiple ? '1' : '0') . '"'
-            . ' data-max-files="' . $max_files . '"'
+            . ' data-max-files="' . esc_attr($max_files) . '"'
             . '>';
         $inner .= '<input type="file" id="' . esc_attr($field_id) . '" name="'
             . esc_attr($field_id) . ($multiple ? '[]' : '') . '"'
-            . ' class="fabricator-upload-input"' . $acc_attr . $multiple . $req . '>';
+            . ' class="fabricator-upload-input"' . $acc_attr . ($multiple ? ' multiple' : '')
+            . (!empty($config['required']) ? ' required aria-required="true"' : '') . '>';
         $inner .= '<div class="fabricator-upload-zone-body" aria-hidden="true">'
             . '<span class="fabricator-upload-icon">↑</span>'
             . '<span class="fabricator-upload-prompt">' . esc_html__('Drop file here or', 'formfabricator') . ' '
@@ -176,11 +176,11 @@ class UploadField extends BaseField
         if ($accept !== '') {
             $inner .= '<p class="fabricator-field-hint">'
                 // translators: %s: comma-separated list of allowed file extensions.
-                . sprintf(esc_html__('Allowed file types: %s', 'formfabricator'), esc_html($accept)) . '</p>';
+                . esc_html(sprintf(__('Allowed file types: %s', 'formfabricator'), $accept)) . '</p>';
         }
         $inner .= '<p class="fabricator-field-hint">'
             // translators: %s: maximum file size in megabytes.
-            . sprintf(esc_html__('Maximum file size: %s MB', 'formfabricator'), esc_html((string) $max)) . '</p>';
+            . esc_html(sprintf(__('Maximum file size: %s MB', 'formfabricator'), (string) $max)) . '</p>';
 
         return $this->wrap($field_id, $config, $inner);
     }
@@ -195,7 +195,7 @@ class UploadField extends BaseField
     {
         return min(
             (int)($config['max_size_mb'] ?? 10),
-            intdiv(\FabricatorForms\Utils\MemoryBudget::largestUploadBytes(), 1024 * 1024)
+            intdiv(\FabricatorForms\Utils\Security\MemoryBudget::largestUploadBytes(), 1024 * 1024)
         );
     }
 
@@ -250,17 +250,16 @@ class UploadField extends BaseField
     }
 
     /**
-     * Returns the raw $_FILES entry for this upload field.
+     * This upload field's file entry, its name sanitized as a file name.
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
+     * @return mixed
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // No wp_unslash(): wp_magic_quotes() never slashes $_FILES, so unslashing only damages it. It strips the
-        // backslashes out of a Windows tmp_name, is_readable() then fails, and validate() would skip the MIME check.
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- verified above; 'name' sanitized below, the other keys are PHP-generated and tmp_name is gated by is_uploaded_file().
-        $file = isset($_FILES[$field_id]) ? $_FILES[$field_id] : null;
+        $file = $files[$field_id] ?? null;
         // A shape this field's input never posts (name="f[a][]") is no upload of this field; see Cast::isFlatFilesEntry().
         if (!\FabricatorForms\Utils\Cast::isFlatFilesEntry($file) || !isset($file['name'])) {
             return null;
@@ -661,5 +660,15 @@ class UploadField extends BaseField
                 'hint'  => __('e.g. .pdf,.docx', 'formfabricator'),
             ],
         ];
+    }
+
+    /**
+     * A file entry, not typed text (BaseField::typedAnswer()).
+     *
+     * @return bool
+     */
+    public function typedAnswer(): bool
+    {
+        return false;
     }
 }

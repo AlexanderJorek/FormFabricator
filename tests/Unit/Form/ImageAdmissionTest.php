@@ -8,7 +8,7 @@ use FabricatorForms\PDF\PdfUtils;
 use FabricatorForms\Tests\Support\Overrides;
 use FabricatorForms\Tests\Support\Reflect;
 use FabricatorForms\Tests\Support\TestCase;
-use FabricatorForms\Utils\MemoryBudget;
+use FabricatorForms\Utils\Security\MemoryBudget;
 
 /**
  * Image admission on forms that build a PDF: the pixel limit, the memory reservation per image, and the messages a

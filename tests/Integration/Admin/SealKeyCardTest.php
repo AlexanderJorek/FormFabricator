@@ -41,7 +41,7 @@ final class SealKeyCardTest extends AjaxTestCase
         self::assertStringContainsString('Standard — unencrypted', $card);
         self::assertStringContainsString('id="fabricator-upgrade-enc-btn"', $card);
 
-        $upgrade = $this->ajax('fabricator_upgrade_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $upgrade = $this->ajax('fabricator_forms_upgrade_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         self::assertTrue($upgrade['success'], wp_json_encode($upgrade));
         self::assertMatchesRegularExpression("/^define\\('FABRICATOR_SEAL_MASTER_KEY', '[0-9a-f]{64}'\\);$/", $upgrade['data']['define_line']);
         self::assertArrayNotHasKey('existing', $upgrade['data']);
@@ -51,9 +51,9 @@ final class SealKeyCardTest extends AjaxTestCase
     public function testConfirmingWithoutTheLineInWpConfigChangesNothing(): void
     {
         $this->setUpStandard();
-        $this->ajax('fabricator_upgrade_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $this->ajax('fabricator_forms_upgrade_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
 
-        $confirm = $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $confirm = $this->ajax('fabricator_forms_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
 
         self::assertFalse($confirm['success']);
         self::assertStringContainsString('FABRICATOR_SEAL_MASTER_KEY not found', $confirm['data']['message']);
@@ -78,11 +78,11 @@ final class SealKeyCardTest extends AjaxTestCase
     public function testTheIssuedLineOnceInWpConfigTurnsTheCardEncrypted(): void
     {
         $this->setUpStandard();
-        $upgrade = $this->ajax('fabricator_upgrade_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $upgrade = $this->ajax('fabricator_forms_upgrade_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         self::assertSame(1, preg_match("/'([0-9a-f]{64})'/", $upgrade['data']['define_line'], $master));
 
         define('FABRICATOR_SEAL_MASTER_KEY', $master[1]); // the admin pasted the line into wp-config.php
-        $confirm = $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $confirm = $this->ajax('fabricator_forms_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
 
         self::assertTrue($confirm['success'], wp_json_encode($confirm));
         $card = $this->securityCard();
@@ -97,14 +97,14 @@ final class SealKeyCardTest extends AjaxTestCase
     {
         // A Standard site whose wp-config.php already holds a master key (an upgrade never confirmed, or a kept line).
         $backups = [$this->setUpStandard()];
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
         $backups[] = HashSeal::peekPendingDownload();
         define('FABRICATOR_SEAL_MASTER_KEY', str_repeat('ab', 32));
 
         $card = $this->securityCard();
         self::assertStringContainsString('Standard — unencrypted', $card, 'the same button');
 
-        $upgrade = $this->ajax('fabricator_upgrade_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $upgrade = $this->ajax('fabricator_forms_upgrade_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         self::assertTrue($upgrade['success'], wp_json_encode($upgrade));
         self::assertTrue($upgrade['data']['existing']);
         self::assertArrayNotHasKey('define_line', $upgrade['data'], 'no new line to paste over the one already there');
@@ -114,7 +114,7 @@ final class SealKeyCardTest extends AjaxTestCase
         }
 
         // Tick only the newer key: it is encrypted, the other stays refused.
-        $confirm = $this->ajax('fabricator_setup_confirm_secure', [
+        $confirm = $this->ajax('fabricator_forms_setup_confirm_secure', [
             'nonce' => wp_create_nonce('fabricator_seal_setup'),
             'keys'  => [$backups[1]['uuid']],
         ]);
@@ -164,14 +164,14 @@ final class SealKeyCardTest extends AjaxTestCase
         $needs = 'Encrypted key storage needs the PHP openssl extension';
 
         self::assertStringContainsString('fabricator-settings', $this->settingsPage(), 'the first-run page loads');
-        $secure = $this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $secure = $this->ajax('fabricator_forms_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         self::assertFalse($secure['success']);
         self::assertStringContainsString($needs, $secure['data']['message']);
 
         $this->setUpStandard();
         self::assertStringContainsString('Standard — unencrypted', $this->securityCard(), 'Standard storage works without it');
         self::assertSame('', HashSeal::activeKeyProblem());
-        foreach (['fabricator_upgrade_get_master_key', 'fabricator_setup_confirm_secure'] as $action) {
+        foreach (['fabricator_forms_upgrade_get_master_key', 'fabricator_forms_setup_confirm_secure'] as $action) {
             $refused = $this->ajax($action, ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
             self::assertFalse($refused['success'], $action);
             self::assertStringContainsString($needs, $refused['data']['message'], $action);
@@ -187,12 +187,12 @@ final class SealKeyCardTest extends AjaxTestCase
         // key, and that site's keys are encrypted with it.
         define('FABRICATOR_SEAL_MASTER_KEY', str_repeat('cd', 32));
 
-        $secure = $this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $secure = $this->ajax('fabricator_forms_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         self::assertTrue($secure['success'], wp_json_encode($secure));
         self::assertTrue($secure['data']['existing'] ?? false, 'the key already there is taken');
         self::assertArrayNotHasKey('define_line', $secure['data'], 'no new line to put into the shared file');
 
-        $confirm = $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $confirm = $this->ajax('fabricator_forms_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         self::assertTrue($confirm['success'], wp_json_encode($confirm));
         self::assertTrue((bool) get_option('fabricator_forms_seal_setup_done'));
         self::assertSame('', HashSeal::activeKeyProblem(), 'a key, encrypted with the existing master key, is in use');
@@ -208,8 +208,8 @@ final class SealKeyCardTest extends AjaxTestCase
         $planted = (string) wp_json_encode(['uuid' => 'planted', 'key' => str_repeat('f', 64), 'created_at' => '2026-01-01 00:00:00']);
         update_option('fabricator_forms_seal_key', $planted, false);
 
-        self::assertTrue($this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')])['success']);
-        $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        self::assertTrue($this->ajax('fabricator_forms_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')])['success']);
+        $this->ajax('fabricator_forms_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
 
         self::assertSame($planted, get_option('fabricator_forms_seal_key'), 'left as it was, unencrypted');
         self::assertNotSame('', HashSeal::activeKeyProblem(), 'and not usable');
@@ -219,13 +219,13 @@ final class SealKeyCardTest extends AjaxTestCase
     #[PreserveGlobalState(false)]
     public function testAfterTheReloadTheKeyIssuedInThisSessionIsStillTheOneConfirmed(): void
     {
-        $issued = $this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $issued = $this->ajax('fabricator_forms_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         self::assertArrayHasKey('define_line', $issued['data'], wp_json_encode($issued));
         // The admin put a different key into wp-config.php than the one shown, and reloaded: the "ready" step asks again.
         define('FABRICATOR_SEAL_MASTER_KEY', str_repeat('cd', 32));
-        self::assertTrue($this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')])['success']);
+        self::assertTrue($this->ajax('fabricator_forms_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')])['success']);
 
-        $confirm = $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $confirm = $this->ajax('fabricator_forms_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
 
         self::assertFalse($confirm['success'], 'the backup the admin saved would not open the keys');
         self::assertStringContainsString('does not match', $confirm['data']['message']);
@@ -237,9 +237,9 @@ final class SealKeyCardTest extends AjaxTestCase
     public function testAMistypedMasterKeyIsNamedAtConfirmationRatherThanFailingTheRequest(): void
     {
         define('FABRICATOR_SEAL_MASTER_KEY', 'cdcd-not-a-key');
-        self::assertTrue($this->ajax('fabricator_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')])['success']);
+        self::assertTrue($this->ajax('fabricator_forms_setup_get_master_key', ['nonce' => wp_create_nonce('fabricator_seal_setup')])['success']);
 
-        $confirm = $this->ajax('fabricator_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $confirm = $this->ajax('fabricator_forms_setup_confirm_secure', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
 
         self::assertFalse($confirm['success'], wp_json_encode($confirm));
         self::assertStringContainsString('64 hexadecimal characters', $confirm['data']['message']);
@@ -283,7 +283,7 @@ final class SealKeyCardTest extends AjaxTestCase
      */
     private function setUpStandard(): array
     {
-        $setup = $this->ajax('fabricator_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
+        $setup = $this->ajax('fabricator_forms_setup_keep_default', ['nonce' => wp_create_nonce('fabricator_seal_setup')]);
         self::assertTrue($setup['success'], wp_json_encode($setup));
         return $setup['data'];
     }
@@ -304,7 +304,7 @@ final class SealKeyCardTest extends AjaxTestCase
     private function sealKeyNotice(): string
     {
         ob_start();
-        \FabricatorForms\Plugin::maybeWarnSealKeyUnusable();
+        \FabricatorForms\Admin\Notices::maybeWarnSealKeyUnusable();
         return (string) ob_get_clean();
     }
 

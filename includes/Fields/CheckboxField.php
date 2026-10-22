@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -142,8 +142,6 @@ class CheckboxField extends BaseField
         $other_text = is_array($value) ? trim((string)($value['__other_text__'] ?? '')) : '';
         $selected   = is_array($value) ? $value : (array)$value;
         unset($selected['__other_text__']);
-        $layout   = !empty($config['layout']) ? ' fabricator-checkbox-group--horizontal' : '';
-
         $min_sel   = (int)($config['min_selections'] ?? 0);
         $max_sel   = (int)($config['max_selections'] ?? 0);
         $sel_attrs = '';
@@ -152,68 +150,63 @@ class CheckboxField extends BaseField
         if ($min_sel > 0) {
             // translators: %d: minimum number of options that must be selected.
             $min_msg    = sprintf(_n('Please select at least %d option.', 'Please select at least %d options.', $min_sel, 'formfabricator'), $min_sel);
-            $sel_attrs .= ' data-min-selections="' . $min_sel . '" data-min-message="' . esc_attr($min_msg) . '"';
+            $sel_attrs .= ' data-min-selections="' . esc_attr($min_sel) . '" data-min-message="' . esc_attr($min_msg) . '"';
         }
         if ($max_sel > 0) {
             // translators: %d: maximum number of options that may be selected.
             $max_msg    = sprintf(_n('Please select at most %d option.', 'Please select at most %d options.', $max_sel, 'formfabricator'), $max_sel);
-            $sel_attrs .= ' data-max-selections="' . $max_sel . '" data-max-message="' . esc_attr($max_msg) . '"';
+            $sel_attrs .= ' data-max-selections="' . esc_attr($max_sel) . '" data-max-message="' . esc_attr($max_msg) . '"';
         }
 
         // No role="group" here: BaseField::wrap() marks the field wrapper as the group and names it from the
         // field's own label, so a second unnamed group inside it would only be announced again with no name.
-        $inner = '<div class="fabricator-checkbox-group' . $layout . '"' . $sel_attrs . '>';
+        $inner_html = '<div class="fabricator-checkbox-group'
+            . (!empty($config['layout']) ? ' fabricator-checkbox-group--horizontal' : '') . '"' . $sel_attrs . '>';
+        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
+        $selected = array_map('strval', $selected);
         foreach ($options as $i => $opt) {
             $opt_val   = $opt['value'] ?? '';
             $opt_label = $opt['label'] ?? $opt_val;
             $id_i      = $field_id . '-' . $i;
-            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-            $checked   = in_array((string)$opt_val, array_map('strval', $selected), true) ? ' checked' : '';
-            $inner .= '<label class="fabricator-checkbox-label">'
+            $inner_html .= '<label class="fabricator-checkbox-label">'
                 . '<input type="checkbox" id="' . esc_attr($id_i)
                 . '" name="' . esc_attr($field_id) . '[]"'
-                . ' value="' . esc_attr((string)$opt_val) . '" autocomplete="off"' . $checked . '> '
+                . ' value="' . esc_attr((string)$opt_val) . '" autocomplete="off"'
+                . (in_array((string)$opt_val, $selected, true) ? ' checked' : '') . '> '
                 . esc_html((string)$opt_label) . '</label>';
         }
         if (!empty($config['other_option'])) {
-            $other_id  = $field_id . '-other';
-            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-            $other_chk = in_array('__other__', array_map('strval', $selected), true) ? ' checked' : '';
-            $inner .= '<label class="fabricator-checkbox-label">'
+            $other_id      = $field_id . '-other';
+            $other_checked = in_array('__other__', $selected, true);
+            $inner_html .= '<label class="fabricator-checkbox-label">'
                 . '<input type="checkbox" id="' . esc_attr($other_id) . '" name="' . esc_attr($field_id) . '[]"'
-                . ' value="__other__"' . $other_chk . '> ' . esc_html__('Other…', 'formfabricator') . '</label>';
-            $show  = $other_chk ? '' : ' style="display:none"';
-            $inner .= '<input type="text" name="' . esc_attr($field_id) . '_other"'
+                . ' value="__other__"' . ($other_checked ? ' checked' : '') . '> ' . esc_html__('Other…', 'formfabricator') . '</label>';
+            $inner_html .= '<input type="text" name="' . esc_attr($field_id) . '_other"'
                 . ' class="fabricator-input fabricator-other-input" value="' . esc_attr($other_text) . '"'
-                . ' placeholder="' . esc_attr__('Please specify', 'formfabricator') . '"' . $show
+                . ' placeholder="' . esc_attr__('Please specify', 'formfabricator') . '"' . ($other_checked ? '' : ' style="display:none"')
                 . self::otherInputAttrs($config) . '>';
         }
-        $inner .= '</div>';
+        $inner_html .= '</div>';
 
-        return $this->wrap($field_id, $config, $inner);
+        return $this->wrap($field_id, $config, $inner_html);
     }
 
     /**
      * Returns the sanitized array of checked values submitted as $field_id[].
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // Cap value count BEFORE map_deep() walks them; map_deep itself has no limit.
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        $vals = isset($_POST[$field_id])
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified in FormProcessor::handle(); map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
-            ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id]), 200), 'sanitize_text_field')
-            : [];
+        // Value count capped before they are walked.
+        $vals = isset($post[$field_id]) ? self::answers(self::capRawArray($post[$field_id], 200)) : [];
         // Strings only (a nested POST array stays an array), and each value once, so a repeated value can't meet
         // min_selections.
         $out  = is_array($vals) ? array_values(array_unique(array_filter($vals, 'is_string'))) : [];
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
-        if (in_array('__other__', $out, true) && isset($_POST[$field_id . '_other'])) {
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce verified in FormProcessor::handle(); capOtherText() sanitizes/unslashes, WPCS misses the helper form.
-            $out['__other_text__'] = self::capOtherText($_POST[$field_id . '_other']);
+        if (in_array('__other__', $out, true) && isset($post[$field_id . '_other'])) {
+            $out['__other_text__'] = self::capOtherText($post[$field_id . '_other']);
         }
         return $out;
     }

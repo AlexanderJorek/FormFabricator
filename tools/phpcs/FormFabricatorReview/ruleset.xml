@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<ruleset name="FormFabricatorReview">
+    <description>
+        What WordPress.org's plugin reviewers ask for beyond WordPress.Security's sniffs: late escaping with the function
+        that fits the context (LateEscape), request input read as sanitize_*(wp_unslash(...)) in place (RequestInput), and
+        nonce checks no path can skip (NonceShape). Used by .phpcs-review.xml. Dev tooling, never shipped.
+    </description>
+</ruleset>

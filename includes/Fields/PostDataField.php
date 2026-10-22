@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -175,16 +175,17 @@ class PostDataField extends BaseField
     }
 
     /**
-     * Regenerates post metadata server-side; only _source_post_id is taken from $_POST, and only when its
+     * Regenerates post metadata server-side; only _source_post_id is taken from the answers, and only when its
      * _source_sig verifies and get_post() finds it public (global $post is unset during admin-ajax.php).
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
+     * @return mixed
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; only _source_post_id is used, unslashed and absint()'d below.
-        $submitted   = isset($_POST[$field_id]) ? wp_unslash($_POST[$field_id]) : null;
+        $submitted   = $post[$field_id] ?? null;
         $source_id   = is_array($submitted) && isset($submitted['_source_post_id']) && is_scalar($submitted['_source_post_id'])
             ? absint($submitted['_source_post_id'])
             : 0;
@@ -193,13 +194,13 @@ class PostDataField extends BaseField
         if ($source_id && !hash_equals(self::sourceSignature($field_id, $source_id), $signature)) {
             $source_id = 0;
         }
-        $post = $source_id ? get_post($source_id) : null;
+        $source = $source_id ? get_post($source_id) : null;
         // Client-submitted post ID; reject non-public posts so drafts/private data can't leak into output.
-        $post = self::publicPost($post);
+        $source = self::publicPost($source);
 
         $out = [];
         foreach (self::ALLOWED_FIELDS as $key) {
-            $out[$key] = self::resolveField($key, $post);
+            $out[$key] = self::resolveField($key, $source);
         }
         return $out;
     }
@@ -215,9 +216,58 @@ class PostDataField extends BaseField
         if (!is_array($value) || empty($value)) {
             return __('[No entry]', 'formfabricator');
         }
-        $filtered = array_intersect_key($value, array_flip(self::selectedFields($config)));
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-        return implode(', ', array_filter(array_map('strval', $filtered), static fn($v) => $v !== ''));
+        $shown = [];
+        foreach (self::shownParts($value, $config) as $part) {
+            if ($part['value'] !== '') {
+                $shown[] = $part['value'];
+            }
+        }
+        return implode(', ', $shown);
+    }
+
+    /**
+     * The entry map() makes, with each sub-value as a part for a mail with automation markers
+     * (BaseField::withMarkerParts()).
+     *
+     * @param string $field_id Field identifier.
+     * @param string $label    Field label.
+     * @param mixed  $value    Submitted value.
+     * @param array  $config   Field configuration.
+     * @param array  $context  Submission context.
+     * @return array<string, array>
+     */
+    public function mapNormalized(
+        string $field_id,
+        string $label,
+        mixed $value,
+        array $config,
+        array $context
+    ): array {
+        return self::withMarkerParts(
+            parent::mapNormalized($field_id, $label, $value, $config, $context),
+            $field_id,
+            self::shownParts($value, $config)
+        );
+    }
+
+    /**
+     * The selected post details, in the order the post's value lists them: what map() joins and a marked mail marks
+     * one by one.
+     *
+     * @param mixed $value  Server-regenerated value (array of post field strings).
+     * @param array $config Field configuration.
+     * @return array<int, array{key: string, value: string, sep: string}>
+     */
+    private static function shownParts(mixed $value, array $config): array
+    {
+        if (!is_array($value)) {
+            return [];
+        }
+        $parts = [];
+        foreach (array_intersect_key($value, array_flip(self::selectedFields($config))) as $key => $v) {
+            $parts[] = ['key' => (string) $key, 'value' => is_scalar($v) ? (string) $v : '', 'sep' => ', '];
+        }
+        return $parts;
     }
 
     /**
@@ -250,5 +300,15 @@ class PostDataField extends BaseField
                 'labels' => [__('Title', 'formfabricator'), __('URL', 'formfabricator'), __('ID', 'formfabricator'), __('Author', 'formfabricator')],
             ],
         ];
+    }
+
+    /**
+     * The post's details are the site's, not typed (BaseField::typedAnswer()).
+     *
+     * @return bool
+     */
+    public function typedAnswer(): bool
+    {
+        return false;
     }
 }

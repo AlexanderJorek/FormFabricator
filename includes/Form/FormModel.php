@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -103,30 +103,24 @@ class FormModel
     }
 
     /**
-     * Creates or updates a form. Returns the form ID on success or WP_Error on failure.
+     * Creates or updates a form. Returns the form ID on success or WP_Error on failure. The request's nonce is the
+     * caller's to check (the AJAX handler, before it reads any input); this reads no request.
      *
-     * @param array $data           Keys: title, fields, notifications, settings.
-     * @param int   $form_id        Existing post ID to update, or 0 to create.
-     * @param bool  $nonce_verified Whether the caller already verified its own (action-specific)
-     *                              nonce before calling this method. When false (the default), a generic
-     *                              internal nonce check is performed as a backstop — see
-     *                              {@see self::nonceVerifiedOrCheck()}.
+     * @param array  $data              Keys: title, fields, notifications, settings.
+     * @param int    $form_id           Existing post ID to update, or 0 to create.
      * @param string $expected_snapshot Optimistic-concurrency token; rejects with WP_Error on mismatch.
      */
-    public static function save(array $data, int $form_id = 0, bool $nonce_verified = false, string $expected_snapshot = ''): int|\WP_Error
+    public static function save(array $data, int $form_id = 0, string $expected_snapshot = ''): int|\WP_Error
     {
         // Defense-in-depth: don't rely solely on callers remembering to gate on edit_forms.
-        if (!\FabricatorForms\Plugin::userCan('edit_forms')) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_forms')) {
             return new \WP_Error('forbidden', __('Insufficient permissions.', 'formfabricator'));
-        }
-        if (!self::nonceVerifiedOrCheck($nonce_verified)) {
-            return new \WP_Error('invalid_nonce', __('Security check failed. Please reload and try again.', 'formfabricator'));
         }
 
         // The snapshot check and the write that follows have to be one step, or two saves landing at the same moment
         // both read the same unchanged timestamp, both pass, and the later one silently overwrites the earlier.
         if ($form_id > 0 && $expected_snapshot !== '') {
-            return \FabricatorForms\Utils\OptionMutex::run(
+            return \FabricatorForms\Utils\Storage\OptionMutex::run(
                 'fabricator_form_save_' . $form_id,
                 static fn() => self::writeForm($form_id, $data, $expected_snapshot)
             );
@@ -210,12 +204,10 @@ class FormModel
     /**
      * Creates a copy of an existing form. Forwarded to save() — see its docblock.
      *
-     * @param int  $form_id        The post ID of the form to duplicate.
-     * @param bool $nonce_verified Whether the caller already verified its own (action-specific)
-     *                             nonce before calling this method.
+     * @param int $form_id The post ID of the form to duplicate.
      * @return int|\WP_Error New form post ID, or WP_Error on failure.
      */
-    public static function duplicate(int $form_id, bool $nonce_verified = false): int|\WP_Error
+    public static function duplicate(int $form_id): int|\WP_Error
     {
         $source = self::get($form_id);
         if (!$source) {
@@ -229,28 +221,20 @@ class FormModel
             'notifications' => $source->notifications,
             'settings'      => $source->settings,
             ],
-            0,
-            $nonce_verified
+            0
         );
     }
 
     /**
      * Permanently deletes a form post.
      *
-     * @param int  $form_id        The post ID of the form to delete.
-     * @param bool $nonce_verified Whether the caller already verified its own (action-specific)
-     *                             nonce before calling this method. When false (the default), a generic
-     *                             internal nonce check is performed as a backstop — see
-     *                             {@see self::nonceVerifiedOrCheck()}.
+     * @param int $form_id The post ID of the form to delete.
      * @return bool True on success, false on failure.
      */
     // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a method named delete(), not the filesystem function.
-    public static function delete(int $form_id, bool $nonce_verified = false): bool
+    public static function delete(int $form_id): bool
     {
-        if (!\FabricatorForms\Plugin::userCan('edit_forms') && !current_user_can('manage_options')) {
-            return false;
-        }
-        if (!self::nonceVerifiedOrCheck($nonce_verified)) {
+        if (!\FabricatorForms\Capabilities::userCan('edit_forms') && !current_user_can('manage_options')) {
             return false;
         }
         if (get_post_type($form_id) !== 'fabricator_form') {
@@ -266,7 +250,7 @@ class FormModel
      */
     public static function getAll(): array
     {
-        if (!\FabricatorForms\Plugin::userCan('view_forms')) {
+        if (!\FabricatorForms\Capabilities::userCan('view_forms')) {
             return [];
         }
         // Read a page at a time rather than posts_per_page => -1: an unbounded query loads every form in one go, which
@@ -317,7 +301,7 @@ class FormModel
             return;
         }
         // Under OptionMutex, like FormEditor::ajaxSave(): a form saved at the same moment rewrites this option too.
-        \FabricatorForms\Utils\OptionMutex::run(
+        \FabricatorForms\Utils\Storage\OptionMutex::run(
             'fabricator_forms_pdf_settings',
             static function () use ($post_id): void {
                 $saved = get_option('fabricator_forms_pdf_settings', []);
@@ -357,19 +341,5 @@ class FormModel
             return is_array($decoded) ? $decoded : [];
         }
         return [];
-    }
-
-    /**
-     * CSRF backstop for save()/duplicate()/delete(); falls back to the shared admin nonce if $nonce_verified is false.
-     *
-     * @param bool $nonce_verified Whether the caller already verified its own nonce.
-     * @return bool True if the request may proceed.
-     */
-    private static function nonceVerifiedOrCheck(bool $nonce_verified): bool
-    {
-        if ($nonce_verified) {
-            return true;
-        }
-        return (bool) check_ajax_referer('fabricator_forms_admin_nonce', 'nonce', false);
     }
 }
