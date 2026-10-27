@@ -6299,3 +6299,9 @@ msgstr "Zeitüberschreitung des Gateways"
 
 msgid "Unnamed field"
 msgstr "Feld ohne Bezeichnung"
+
+msgid "Show the field label with a single field's placeholder"
+msgstr "Feldbezeichnung beim Platzhalter eines einzelnen Felds anzeigen"
+
+msgid "A single field's placeholder in the message, such as {name}, then shows the field's label above its answer, as the list of all fields does. Off, it shows the answer alone, to use within a sentence."
+msgstr "Der Platzhalter eines einzelnen Felds in der Nachricht, etwa {name}, zeigt dann die Feldbezeichnung über der Antwort, wie die Liste aller Felder. Ausgeschaltet zeigt er nur die Antwort, zum Einsetzen in einen Satz."

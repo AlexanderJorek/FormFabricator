@@ -147,6 +147,19 @@ test('a notification saves whether it adds automation markers', async () => {
     assert.equal(saved.notifications[0].automation_markers, true);
 });
 
+test('a notification saves whether a single field\'s placeholder shows the field label', async () => {
+    const page = await loadBuilder({ fields: [TEXT('name')], notifications: [NOTIFICATION] });
+    openNotification(page);
+    await settle(page);
+    const box = page.document.getElementById('fabricator-sp-notif-placeholder-labels');
+    assert.equal(box.checked, false, 'off unless asked for: the answer alone');
+
+    box.click();
+    const saved = await saveAndRead(page);
+
+    assert.equal(saved.notifications[0].placeholder_labels, true);
+});
+
 test('editing the submit button condition warns on leaving', async () => {
     const page = await loadBuilder({ fields: [TEXT('code')], notifications: [NOTIFICATION] });
     page.document.getElementById('fabricator-submit-preview-bar').querySelector('button, [class*="edit"], div').click();

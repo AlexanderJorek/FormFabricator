@@ -34,8 +34,23 @@ final class MailMarkersTest extends AjaxTestCase
         self::assertStringContainsString('<strong>Order confirmation</strong><br>[FABRICATOR_FIELD_sign_begin]I confirm.[FABRICATOR_FIELD_END]', $list, 'a box\'s title stays outside its markers');
         self::assertStringContainsString('[FABRICATOR_FIELD_sign_end][FABRICATOR_FIELD_END]</td></tr></table>', $list, 'its end is an empty answer, then the box closes');
         self::assertStringContainsString('[FABRICATOR_FIELD_sign_signed]', $list);
-        self::assertStringContainsString('Hello <strong>Your name</strong><br>[FABRICATOR_FIELD_name]Ada Lovelace[FABRICATOR_FIELD_END]', (string) $mail[1]->body, 'a single field\'s placeholder too');
+        self::assertStringContainsString('Hello [FABRICATOR_FIELD_name]Ada Lovelace[FABRICATOR_FIELD_END]</p>', (string) $mail[1]->body, 'a single field\'s placeholder too, its answer alone');
         self::assertStringNotContainsString('[FABRICATOR_FIELD_', (string) $mail[2]->body, 'not where the notification doesn\'t ask for them');
+    }
+
+    public function testASingleFieldsPlaceholderShowsItsLabelOnlyWhereTheNotificationAsksForIt(): void
+    {
+        // For a mail parser that reads the label beside the marked answer.
+        $form = $this->createForm(self::FIELDS, [
+            self::notification(['body' => '<p>Hello {name}</p>', 'automation_markers' => true, 'placeholder_labels' => true]),
+        ]);
+
+        self::assertTrue($this->submit($form, ['name' => 'Ada Lovelace', 'sign' => 'Ada L.'])['success']);
+
+        self::assertStringContainsString(
+            'Hello <strong>Your name</strong><br>[FABRICATOR_FIELD_name]Ada Lovelace[FABRICATOR_FIELD_END]',
+            (string) self::sentMail()[0]->body
+        );
     }
 
     public function testAnAnswerHoldingAMarkerIsRefusedOnlyWhileANotificationWritesThem(): void

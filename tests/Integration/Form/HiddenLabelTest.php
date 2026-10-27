@@ -42,4 +42,19 @@ final class HiddenLabelTest extends AjaxTestCase
         self::assertStringContainsString('Ada Lovelace', (string) $mail[1]->subject);
         self::assertStringContainsString('Email: ada@example.net', (string) $mail[1]->subject);
     }
+
+    public function testAFieldsPlaceholderIsItsAnswerAloneWhateverItsLabel(): void
+    {
+        // The placeholder stands in the admin's own sentence: no label, no line breaks around it.
+        $form = $this->createForm(
+            [['id' => 'name-1', 'type' => 'text', 'label' => 'Name']],
+            [self::notification(['body' => '<p>Hallo {name-1},</p>'])]
+        );
+
+        self::assertTrue($this->submit($form, ['name-1' => 'Alexander Jorek'])['success']);
+
+        $body = (string) self::sentMail()[0]->body;
+        self::assertStringContainsString('<p>Hallo Alexander Jorek,</p>', $body);
+        self::assertStringNotContainsString('<strong>Name</strong>', $body);
+    }
 }

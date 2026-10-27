@@ -351,6 +351,7 @@ class FormSanitizer
                 'attach_pdf'       => !empty($n['attach_pdf']),
                 'attach_uploads'   => !empty($n['attach_uploads']),
                 'automation_markers' => !empty($n['automation_markers']),
+                'placeholder_labels' => !empty($n['placeholder_labels']),
                 'enabled'          => !isset($n['enabled']) || !empty($n['enabled']),
             ];
             if ($body_removed) {

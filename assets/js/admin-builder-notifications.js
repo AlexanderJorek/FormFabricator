@@ -564,6 +564,11 @@ function buildNotifContentTab(notif) {
         _i18n.automationMarkersHint || 'Each answer in the email is written between [FABRICATOR_FIELD_<field id>] and [FABRICATOR_FIELD_END], so a mail parser can find it. Answers containing "[FABRICATOR_FIELD_" are then refused.',
         !!notif.automation_markers,
         function (v) { state.notifications[notifModalIdx].automation_markers = v; });
+
+    spCheckboxHint(panel, 'notif-placeholder-labels', _i18n.placeholderLabels || 'Show the field label with a single field\'s placeholder',
+        _i18n.placeholderLabelsHint || 'A single field\'s placeholder in the message, such as {name}, then shows the field\'s label above its answer, as the list of all fields does. Off, it shows the answer alone, to use within a sentence.',
+        !!notif.placeholder_labels,
+        function (v) { state.notifications[notifModalIdx].placeholder_labels = v; });
 }
 
 function buildNotifSenderTab(notif) {

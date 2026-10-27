@@ -368,7 +368,8 @@ class MailSender
                 \FabricatorForms\Utils\Cast::stringOrDefault($notif['body'] ?? null),
                 $mapped,
                 $form,
-                !empty($notif['automation_markers'])
+                !empty($notif['automation_markers']),
+                !empty($notif['placeholder_labels'])
             );
 
             $subject = sanitize_text_field(str_replace(["\r", "\n"], '', $subject));
@@ -897,6 +898,8 @@ class MailSender
      * @param FormModel $form    The form model instance.
      * @param bool      $as_html Whether the text is markup (a body) or plain text (an address, a subject).
      * @param bool      $markers Whether each answer is wrapped in automation markers (FIELD_MARKER); markup only.
+     * @param bool      $labels  Whether a field's own placeholder shows its label above the answer, as {all_fields}
+     *                           lists it; markup only.
      * @return string Text with placeholders replaced.
      */
     private static function replacePlaceholders(
@@ -904,7 +907,8 @@ class MailSender
         array $mapped,
         FormModel $form,
         bool $as_html = true,
-        bool $markers = false
+        bool $markers = false,
+        bool $labels = false
     ): string {
         // Build the full token map then substitute via one strtr() pass, so a submitted value containing
         // literal "{token}" text can't get expanded by a later sequential str_replace() re-scan.
@@ -973,7 +977,9 @@ class MailSender
                             ? '<strong>' . esc_html($label_text) . ':</strong> ' . $listed_html . $tail_html
                             : '<strong>' . esc_html($label_text) . '</strong><br>' . $listed_html . $tail_html)
                         : $listed_html . $tail_html;
-                    $token      = $label_text !== '' ? $entry_html : $value_html;
+                    // A field's own placeholder stands in the admin's sentence ("Hello {name},"): the answer alone,
+                    // unless the notification asks for the label and line breaks the {all_fields} list gives it.
+                    $token      = $labels && $label_text !== '' ? $entry_html : $value_html;
                 }
             } else {
                 // Plain-text sink (address, subject, From name).
@@ -1258,9 +1264,10 @@ class MailSender
         string $body_template,
         array $mapped,
         FormModel $form,
-        bool $markers = false
+        bool $markers = false,
+        bool $labels = false
     ): string {
-        $body_html = self::replacePlaceholders($body_template, $mapped, $form, true, $markers);
+        $body_html = self::replacePlaceholders($body_template, $mapped, $form, true, $markers, $labels);
 
         if (stripos($body_html, '<html') !== false || stripos($body_html, '<body') !== false) {
             return $body_html;

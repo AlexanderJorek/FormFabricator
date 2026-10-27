@@ -998,6 +998,9 @@ class FormEditor
                 'automationMarkers'   => __('Add automation markers', 'formfabricator'),
                 'automationMarkersHint' =>
                     __('Each answer in the email is written between [FABRICATOR_FIELD_<field id>] and [FABRICATOR_FIELD_END], so a mail parser can find it. Answers containing "[FABRICATOR_FIELD_" are then refused.', 'formfabricator'),
+                'placeholderLabels'   => __('Show the field label with a single field\'s placeholder', 'formfabricator'),
+                'placeholderLabelsHint' =>
+                    __('A single field\'s placeholder in the message, such as {name}, then shows the field\'s label above its answer, as the list of all fields does. Off, it shows the answer alone, to use within a sentence.', 'formfabricator'),
                 'sendTestMail'        => __('Send test email', 'formfabricator'),
                 'sendTestMailHint'    => __('Sends a short email with this sender to your own address.', 'formfabricator'),
                 'notifBodyHint'       => __(
