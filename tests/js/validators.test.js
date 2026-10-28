@@ -147,11 +147,11 @@ test('debit-bic', () => {
 });
 
 test('debit-bic: a wrong BIC is flagged at the BIC input itself', () => {
-    // The direct debit rules write their message into the sub-field's own error slot and return a zero-width space: the
-    // field counts as invalid without a second, field-level message.
+    // The direct debit rules write their message into the sub-field's own error slot and return true: the field counts
+    // as invalid without a second, field-level message.
     let el;
     const r = check('debit-bic', '<div><input class="fabricator-debit-bic" value="INVALID"><span class="fabricator-field-error"></span></div>', (e) => { el = e; });
-    assert.equal(r, '\u200B');
+    assert.equal(r, true);
     assert.equal(el.querySelector('.fabricator-field-error').textContent, i18n.debit_bic_invalid);
 });
 
@@ -160,6 +160,6 @@ test('debit-required', () => {
     const sepa = (iban, bic, holder) => part('iban', iban) + part('bic', bic) + part('holder', holder);
     const required = (el) => { el.dataset.required = 'true'; };
     assert.equal(check('debit-required', part('iban', '')), null, 'not required');
-    assert.equal(typeof check('debit-required', sepa('', 'COBADEFF', 'Max'), required), 'string', 'IBAN missing');
+    assert.equal(check('debit-required', sepa('', 'COBADEFF', 'Max'), required), true, 'IBAN missing: invalid, the message at the IBAN');
     assert.equal(check('debit-required', sepa('DE89370400440532013000', 'COBADEFF', 'Max Muster'), required), null);
 });

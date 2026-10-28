@@ -596,7 +596,8 @@ abstract class BaseField
     }
 
     // Client-side validation rules, collected into window.FabricatorValidators.
-    // Required/empty is handled implicitly — only declare FORMAT rules here.
+    // Required/empty is handled implicitly — only declare FORMAT rules here. Each fn returns null when valid, the
+    // error text, or true when it wrote its message at the part that is wrong itself.
     public function getClientValidation(): array
     {
         return [];

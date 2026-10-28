@@ -110,7 +110,9 @@ jobs:
 
   e2e:
     name: E2E (Chromium, Firefox, WebKit)
-    runs-on: ubuntu-latest
+    # Pinned: Playwright builds its WebKit for named Ubuntu releases, and the one ubuntu-latest moved to (26.04) has
+    # none yet, so WebKit can't start there (libicudata.so.74 missing). Move on once a Playwright release supports it.
+    runs-on: ubuntu-24.04
     # A stalled step fails the job instead of holding the runner for GitHub's six-hour limit.
     timeout-minutes: 40
     services:

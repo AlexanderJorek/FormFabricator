@@ -11,5 +11,5 @@ function (fieldEl) {
     if (place.value.replace(/^[ \t\n\r\0\x0B]+|[ \t\n\r\0\x0B]+$/g, '') !== '') return null;
     if (err) err.textContent = place.getAttribute('data-required-message') || 'This field is required.';
     // The message is at the input; the field's own error slot stays empty, and the page still isn't sent.
-    return '\u200B';
+    return true;
 }

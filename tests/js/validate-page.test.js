@@ -91,6 +91,16 @@ test('an answer is refused in the browser exactly where the server refuses it', 
     assert.deepEqual(disagreements, []);
 });
 
+test('a rule that wrote its message at the part makes the field invalid and writes nothing of its own', () => {
+    const scope = fragment(page, field('directdebit', { validate: ['debit-bic'] },
+        '<div><input class="fabricator-debit-bic" value="INVALID"><div class="fabricator-field-error"></div></div>'));
+    const r = validatePage(scope);
+    assert.equal(r.hasInvalid, true);
+    assert.equal(r.firstError, scope.querySelector('.fabricator-field'), 'the cursor goes there');
+    const slots = Array.from(scope.querySelectorAll('.fabricator-field-error')).map((s) => s.textContent);
+    assert.deepEqual(slots, [fixture.localization.i18n.debit_bic_invalid, ''], 'the message at the BIC, the field\'s own slot empty');
+});
+
 test('a refused answer names the character at its field', () => {
     const scope = fragment(page, field('text', {}, '<input type="text">'));
     scope.querySelector('input').value = 'Ada\u200BLovelace';

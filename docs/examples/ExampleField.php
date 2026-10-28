@@ -410,7 +410,8 @@ class ExampleField extends BaseField
     //  "blank" isn't "the first visible input is empty". [] uses that fallback.
     //
     //  getClientValidation(): a list of ['rule' => name, 'fn' => function (fieldEl)], run only when the field has
-    //  content; fn returns null or the error text. Rule names are global, and the first field to use a name wins,
+    //  content; fn returns null, the error text, or true once it wrote the message at the part that is wrong itself
+    //  (a composite field's sub-input). Rule names are global, and the first field to use a name wins,
     //  so prefix them with the type. wrap() lists them in data-validate.
 
     /**

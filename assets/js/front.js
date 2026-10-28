@@ -168,8 +168,13 @@
                 try { rules = JSON.parse(fieldEl.dataset.validate || '[]'); } catch (_) {}
                 rules.forEach(function (rule) {
                     if (!VALIDATORS[rule]) return;
+                    /* null: valid; a text: the message for the field; true: invalid, the rule wrote its message at the
+                       part that is wrong (a mandate's IBAN) and the field's own slot stays empty. */
                     var err = VALIDATORS[rule](fieldEl);
-                    if (err) {
+                    if (err === true) {
+                        hasInvalid = true;
+                        if (!firstError) firstError = fieldEl;
+                    } else if (err) {
                         hasInvalid = true;
                         markError(fieldEl, err);
                     }

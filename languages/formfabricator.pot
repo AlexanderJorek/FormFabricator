@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-27T22:57:23+00:00\n"
+"POT-Creation-Date: 2026-10-28T09:31:27+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: FormFabricator languages/make-pot.php\n"
 "X-Domain: formfabricator\n"
@@ -833,7 +833,7 @@ msgstr ""
 
 #: includes/Admin/FormEditor.php:961
 #: includes/Fields/AddressField.php:427
-#: includes/Fields/BaseField.php:698
+#: includes/Fields/BaseField.php:699
 #: includes/Fields/NameField.php:451
 msgid "Placeholder"
 msgstr ""
@@ -1754,7 +1754,7 @@ msgstr ""
 
 #: includes/Admin/FormSelectList.php:188
 #: includes/Admin/FormSelectList.php:507
-#: includes/Fields/BaseField.php:703
+#: includes/Fields/BaseField.php:704
 #: includes/Fields/CheckboxField.php:367
 #: includes/Fields/DateField.php:340
 #: includes/Fields/GroupField.php:306
