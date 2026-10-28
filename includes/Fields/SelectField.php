@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -83,7 +83,6 @@ class SelectField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $req     = !empty($config['required']) ? ' required aria-required="true"' : '';
         $options = $config['options'] ?? [];
 
         /* With "Other" text, extractValue() returns ['value' => …, '__other_text__' => …]: unwrap the selection. */
@@ -103,14 +102,14 @@ class SelectField extends BaseField
         }
 
         $inner = '<select id="' . esc_attr($field_id) . '" name="' . esc_attr($field_id)
-            . '" class="fabricator-input fabricator-select" autocomplete="off"' . $req . '>';
+            . '" class="fabricator-input fabricator-select" autocomplete="off"'
+            . (!empty($config['required']) ? ' required aria-required="true"' : '') . '>';
         $inner .= '<option value="">' . esc_html__('— Please select —', 'formfabricator') . '</option>';
         foreach ($options as $opt) {
             $opt_val   = $opt['value'] ?? '';
             $opt_label = $opt['label'] ?? $opt_val;
-            $selected  = selected((string)($value ?? ''), (string)$opt_val, false);
             $inner .= '<option value="' . esc_attr((string)$opt_val) . '"'
-                . $selected . '>'
+                . selected((string)($value ?? ''), (string)$opt_val, false) . '>'
                 . esc_html((string)$opt_label)
                 . '</option>';
         }
@@ -120,10 +119,10 @@ class SelectField extends BaseField
         }
         $inner .= '</select>';
         if (!empty($config['other_option'])) {
-            $show  = (string)($value ?? '') === '__other__' ? '' : ' style="display:none"';
             $inner .= '<input type="text" name="' . esc_attr($field_id) . '_other"'
                 . ' class="fabricator-input fabricator-other-input" value="' . esc_attr($other_text) . '"'
-                . ' placeholder="' . esc_attr__('Please specify', 'formfabricator') . '"' . $show
+                . ' placeholder="' . esc_attr__('Please specify', 'formfabricator') . '"'
+                . ((string)($value ?? '') === '__other__' ? '' : ' style="display:none"')
                 . self::otherInputAttrs($config) . '>';
         }
 
@@ -207,20 +206,18 @@ class SelectField extends BaseField
      * Returns the selected option, plus the typed "Other" text when present.
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      * @return mixed String selection, or ['value' => ..., 'other_text' => ...] when "Other" was
      *               selected and a companion text field was submitted.
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        $selected = isset($_POST[$field_id]) ? sanitize_text_field(wp_unslash($_POST[$field_id])) : '';
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
-        if ($selected === '__other__' && isset($_POST[$field_id . '_other'])) {
+        $selected = self::answer($post[$field_id] ?? null);
+        if ($selected === '__other__' && isset($post[$field_id . '_other'])) {
             return [
-                'value'           => $selected,
-                // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- nonce verified in FormProcessor::handle(); capOtherText() sanitizes/unslashes, WPCS misses the helper form.
-                '__other_text__'  => self::capOtherText($_POST[$field_id . '_other']),
+                'value'          => $selected,
+                '__other_text__' => self::capOtherText($post[$field_id . '_other']),
             ];
         }
         return $selected;

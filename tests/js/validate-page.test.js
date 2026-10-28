@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadPage, fragment } = require('./support/page');
+const { fixture, loadPage, fragment } = require('./support/page');
 
 const page = loadPage();
 const validatePage = page.hooks.validatePage;
@@ -68,4 +68,50 @@ test('the first error message is written into the field', () => {
     const el = fragment(page, field('email', { validate: ['email'] }, '<input type="email" value="not-valid">'));
     validatePage(el);
     assert.equal(el.querySelector('.fabricator-field-error').textContent, page.window.FabricatorForms.i18n.email_invalid);
+});
+
+/* What an answer may hold: front.js refuses what the server's Utils\Text\AnswerText refuses, before anything is sent. */
+test('an answer is refused in the browser exactly where the server refuses it', () => {
+    const disagreements = [];
+    for (const [typed, oneLineOk, multiLineOk] of fixture.answerText) {
+        const textarea = fragment(page, field('textarea', {}, '<textarea></textarea>'));
+        textarea.querySelector('textarea').value = typed;
+        if (validatePage(textarea).valid !== multiLineOk) {
+            disagreements.push('textarea ' + JSON.stringify(typed) + (multiLineOk ? ' passes' : ' is refused') + ' on the server');
+        }
+        // A text input can't hold a line break: the browser strips it before anything reads the value.
+        if (!/[\r\n]/.test(typed)) {
+            const input = fragment(page, field('text', {}, '<input type="text">'));
+            input.querySelector('input').value = typed;
+            if (validatePage(input).valid !== oneLineOk) {
+                disagreements.push('input ' + JSON.stringify(typed) + (oneLineOk ? ' passes' : ' is refused') + ' on the server');
+            }
+        }
+    }
+    assert.deepEqual(disagreements, []);
+});
+
+test('a rule that wrote its message at the part makes the field invalid and writes nothing of its own', () => {
+    const scope = fragment(page, field('directdebit', { validate: ['debit-bic'] },
+        '<div><input class="fabricator-debit-bic" value="INVALID"><div class="fabricator-field-error"></div></div>'));
+    const r = validatePage(scope);
+    assert.equal(r.hasInvalid, true);
+    assert.equal(r.firstError, scope.querySelector('.fabricator-field'), 'the cursor goes there');
+    const slots = Array.from(scope.querySelectorAll('.fabricator-field-error')).map((s) => s.textContent);
+    assert.deepEqual(slots, [fixture.localization.i18n.debit_bic_invalid, ''], 'the message at the BIC, the field\'s own slot empty');
+});
+
+test('a refused answer names the character at its field', () => {
+    const scope = fragment(page, field('text', {}, '<input type="text">'));
+    scope.querySelector('input').value = 'Ada\u200BLovelace';
+    const r = validatePage(scope);
+    assert.equal(r.hasInvalid, true);
+    assert.match(scope.querySelector('.fabricator-field-error').textContent, /U\+200B/);
+});
+
+test('a field whose answer is not typed text is left to its own checks', () => {
+    // An upload, a CAPTCHA, post data: BaseField::typedAnswer() is false (FabricatorUntypedAnswers).
+    const scope = fragment(page, field('postdata', {}, '<input type="text">'));
+    scope.querySelector('input').value = 'a\u200Bb';
+    assert.equal(validatePage(scope).valid, true);
 });

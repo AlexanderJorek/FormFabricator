@@ -51,7 +51,7 @@ final class TranslationTest extends TestCase
         $form = FormModel::save(['title' => 'Kontakt', 'fields' => [
             ['id' => 'who', 'type' => 'name', 'label' => 'Name', 'expanded' => true] + $unlabelled('name'),
             ['id' => 'where', 'type' => 'address', 'label' => 'Adresse', 'expanded' => true] + $unlabelled('address'),
-        ], 'notifications' => [], 'settings' => []], 0, true);
+        ], 'notifications' => [], 'settings' => []], 0);
         self::assertIsInt($form);
 
         $html = FormRenderer::render($form);

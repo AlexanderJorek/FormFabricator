@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -79,7 +79,6 @@ class CurrencyField extends BaseField
     public function render(array $config, string $field_id, mixed $value = null): string
     {
         $symbol  = self::CURRENCIES[$config['currency'] ?? 'EUR'] ?? '€';
-        $req     = !empty($config['required']) ? ' required aria-required="true"' : '';
         $min_attr = ($config['min_value'] ?? '') !== '' ? ' min="' . esc_attr((string)$config['min_value']) . '"' : '';
         $max_attr = ($config['max_value'] ?? '') !== '' ? ' max="' . esc_attr((string)$config['max_value']) . '"' : '';
         $inner   = '<div class="fabricator-currency-wrap">'
@@ -87,7 +86,7 @@ class CurrencyField extends BaseField
             . '<input type="number" step="0.01" id="' . esc_attr($field_id) . '" name="' . esc_attr($field_id) . '"'
             . ' class="fabricator-input fabricator-currency-input" placeholder="' . esc_attr(number_format_i18n(0, 2)) . '"'
             . ' value="' . esc_attr((string)($value ?? '')) . '"'
-            . $min_attr . $max_attr . $req . '>'
+            . $min_attr . $max_attr . (!empty($config['required']) ? ' required aria-required="true"' : '') . '>'
             . '</div>';
         return $this->wrap($field_id, $config, $inner);
     }

@@ -2,15 +2,15 @@
 
 namespace FabricatorForms\Tests\Integration\Admin;
 
+use FabricatorForms\Capabilities;
 use FabricatorForms\Admin;
-use FabricatorForms\Plugin;
 use FabricatorForms\Tests\Integration\TestCase;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 
 /**
  * Who may reach which FormFabricator screen (TESTING.md §7). The admin pages are registered with
- * "fabricator_access_<cap>" capabilities that Plugin::grantAccessCaps() derives from the access settings, so WordPress
+ * "fabricator_access_<cap>" capabilities that Capabilities::grantAccessCaps() derives from the access settings, so WordPress
  * itself refuses a Subscriber who opens a page URL directly — the page callbacks' own checks are a second line.
  */
 final class AccessControlTest extends TestCase
@@ -33,7 +33,7 @@ final class AccessControlTest extends TestCase
         Admin\FormSelectList::menu();
         Admin\FormSettings::addSettingsPage();
         Admin\PDFLayoutEditor::addPage();
-        Admin\Verificationpage::menu();
+        Admin\VerificationPage::menu();
 
         $pages = [];
         foreach ($GLOBALS['menu'] as $item) {
@@ -50,7 +50,7 @@ final class AccessControlTest extends TestCase
         }
 
         self::assertGreaterThanOrEqual(5, count($pages), 'screens registered: ' . implode(', ', array_keys($pages)));
-        $known = array_map(static fn($c) => Plugin::ACCESS_CAP_PREFIX . $c, ['view_forms', 'edit_forms', 'use_verifier', 'edit_pdf_layout', 'settings']);
+        $known = array_map(static fn($c) => Capabilities::ACCESS_CAP_PREFIX . $c, ['view_forms', 'edit_forms', 'use_verifier', 'edit_pdf_layout', 'settings']);
         foreach ($pages as $slug => $capability) {
             self::assertContains($capability, $known, "$slug is registered with '$capability'");
         }
@@ -68,11 +68,11 @@ final class AccessControlTest extends TestCase
         set_current_screen('dashboard');
 
         Admin\FormList::menu();
-        Admin\Verificationpage::menu();
+        Admin\VerificationPage::menu();
 
         self::assertContains('fabricator-forms', array_column($GLOBALS['menu'], 2), 'the top-level menu is registered');
         $subs = array_column($GLOBALS['submenu']['fabricator-forms'] ?? [], 1);
-        self::assertContains(Plugin::ACCESS_CAP_PREFIX . 'use_verifier', $subs, 'with the verifier page this user may open');
+        self::assertContains(Capabilities::ACCESS_CAP_PREFIX . 'use_verifier', $subs, 'with the verifier page this user may open');
     }
 
     #[RunInSeparateProcess]
@@ -96,25 +96,25 @@ final class AccessControlTest extends TestCase
         add_action('admin_menu', [Admin\FormSelectList::class, 'menu']);
         add_action('admin_menu', [Admin\FormSettings::class, 'addSettingsPage']);
         add_action('admin_menu', [Admin\PDFLayoutEditor::class, 'addPage']);
-        add_action('admin_menu', [Admin\Verificationpage::class, 'menu']);
+        add_action('admin_menu', [Admin\VerificationPage::class, 'menu']);
 
-        // Opening the verifier's own address, admin.php?page=fabricator-pdf-verification.
+        // Opening the verifier's own address, admin.php?page=fabricator-forms-pdf-verification.
         $pagenow       = 'admin.php';
-        $plugin_page   = 'fabricator-pdf-verification';
+        $plugin_page   = 'fabricator-forms-pdf-verification';
         $_GET['page']  = $plugin_page;
         $typenow       = '';
         require ABSPATH . 'wp-admin/includes/menu.php';
 
         $entry = array_values(array_filter($menu, static fn(array $item): bool => str_contains((string) ($item[0] ?? ''), 'FormFabricator')));
         self::assertCount(1, $entry, 'the page was not refused, and the menu has one FormFabricator entry');
-        self::assertSame(['fabricator-pdf-verification'], array_column($submenu[$entry[0][2]] ?? [], 2), 'holding only the verifier');
+        self::assertSame(['fabricator-forms-pdf-verification'], array_column($submenu[$entry[0][2]] ?? [], 2), 'holding only the verifier');
 
         // The menu as WordPress prints it: an entry whose own page the user may not open links to its first page below.
-        $self = 'fabricator-pdf-verification';
+        $self = 'fabricator-forms-pdf-verification';
         ob_start();
         require ABSPATH . 'wp-admin/menu-header.php';
         $html = (string) ob_get_clean();
-        self::assertMatchesRegularExpression('#<li[^>]*toplevel_page_fabricator-forms[^>]*><a href=["\']admin\.php\?page=fabricator-pdf-verification["\']#', $html);
+        self::assertMatchesRegularExpression('#<li[^>]*toplevel_page_fabricator-forms[^>]*><a href=["\']admin\.php\?page=fabricator-forms-pdf-verification["\']#', $html);
         self::assertStringNotContainsString('href=\'admin.php?page=fabricator-forms\'', $html, 'never to the form list this user may not open');
     }
 
@@ -133,16 +133,16 @@ final class AccessControlTest extends TestCase
     {
         $subscriber = self::factory()->user->create(['role' => 'subscriber']);
         foreach (['view_forms', 'edit_forms', 'use_verifier', 'edit_pdf_layout', 'settings'] as $cap) {
-            self::assertFalse(user_can($subscriber, Plugin::ACCESS_CAP_PREFIX . $cap), $cap);
-            self::assertFalse(Plugin::userCan($cap, $subscriber), $cap);
+            self::assertFalse(user_can($subscriber, Capabilities::ACCESS_CAP_PREFIX . $cap), $cap);
+            self::assertFalse(Capabilities::userCan($cap, $subscriber), $cap);
         }
     }
 
     public function testAnAdministratorHoldsEveryAccessCapability(): void
     {
         $admin = self::factory()->user->create(['role' => 'administrator']);
-        self::assertTrue(user_can($admin, Plugin::ACCESS_CAP_PREFIX . 'use_verifier'));
-        self::assertTrue(user_can($admin, Plugin::ACCESS_CAP_PREFIX . 'edit_forms'));
+        self::assertTrue(user_can($admin, Capabilities::ACCESS_CAP_PREFIX . 'use_verifier'));
+        self::assertTrue(user_can($admin, Capabilities::ACCESS_CAP_PREFIX . 'edit_forms'));
     }
 
     public function testARoleGrantedInTheAccessSettingsGetsExactlyThatCapability(): void
@@ -150,21 +150,21 @@ final class AccessControlTest extends TestCase
         $editor = self::factory()->user->create(['role' => 'editor']);
         update_option('fabricator_forms_access', ['roles' => ['editor' => ['use_verifier' => true]]]);
 
-        self::assertTrue(user_can($editor, Plugin::ACCESS_CAP_PREFIX . 'use_verifier'));
-        self::assertFalse(user_can($editor, Plugin::ACCESS_CAP_PREFIX . 'edit_forms'));
+        self::assertTrue(user_can($editor, Capabilities::ACCESS_CAP_PREFIX . 'use_verifier'));
+        self::assertFalse(user_can($editor, Capabilities::ACCESS_CAP_PREFIX . 'edit_forms'));
     }
 
     public function testAPerUserGrantAddsToTheRoleAndDoesNotReplaceIt(): void
     {
-        // "A per-user entry GRANTS on top of the role, it does not replace it" (Plugin::userCan()).
+        // "A per-user entry GRANTS on top of the role, it does not replace it" (Capabilities::userCan()).
         $author = self::factory()->user->create(['role' => 'author']);
         update_option('fabricator_forms_access', [
             'roles' => ['author' => ['edit_forms' => true]],
             'users' => [$author => ['use_verifier' => true]],
         ]);
 
-        self::assertTrue(user_can($author, Plugin::ACCESS_CAP_PREFIX . 'edit_forms'), 'kept from the role');
-        self::assertTrue(user_can($author, Plugin::ACCESS_CAP_PREFIX . 'use_verifier'), 'added for the user');
+        self::assertTrue(user_can($author, Capabilities::ACCESS_CAP_PREFIX . 'edit_forms'), 'kept from the role');
+        self::assertTrue(user_can($author, Capabilities::ACCESS_CAP_PREFIX . 'use_verifier'), 'added for the user');
     }
 
     public function testNobodyLoggedOutHoldsAnAccessCapability(): void
@@ -172,14 +172,14 @@ final class AccessControlTest extends TestCase
         update_option('fabricator_forms_access', ['roles' => ['subscriber' => ['use_verifier' => true]]]);
         wp_set_current_user(0);
 
-        self::assertFalse(current_user_can(Plugin::ACCESS_CAP_PREFIX . 'use_verifier'));
-        self::assertFalse(Plugin::userCan('use_verifier'));
+        self::assertFalse(current_user_can(Capabilities::ACCESS_CAP_PREFIX . 'use_verifier'));
+        self::assertFalse(Capabilities::userCan('use_verifier'));
     }
 
     public function testASubscriberCannotSaveAForm(): void
     {
         wp_set_current_user(self::factory()->user->create(['role' => 'subscriber']));
-        $result = \FabricatorForms\Form\FormModel::save(['title' => 'x', 'fields' => [], 'notifications' => [], 'settings' => []], 0, true);
+        $result = \FabricatorForms\Form\FormModel::save(['title' => 'x', 'fields' => [], 'notifications' => [], 'settings' => []], 0);
 
         self::assertWPError($result);
         self::assertSame('forbidden', $result->get_error_code());

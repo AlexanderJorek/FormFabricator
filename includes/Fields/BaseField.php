@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -37,7 +37,7 @@ abstract class BaseField
     protected static function readFieldAsset(string $relativePath): string
     {
         if (!isset(self::$assetCache[$relativePath])) {
-            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site, never request input.
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site, never request input.
             $path = \FABRICATOR_FORMS_PATH . $relativePath;
             // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: the plugin's own asset file.
             $contents = is_readable($path) ? file_get_contents($path) : false;
@@ -77,13 +77,45 @@ abstract class BaseField
         return $out;
     }
 
-    // Always >= other_max_length so truncation never pre-empts the "too long" error.
+    /**
+     * An answer as the visitor typed it, without the spaces around it: nothing else is changed (Utils\Text\AnswerText refuses
+     * what can't be recorded as typed). A non-string reads as empty.
+     *
+     * @param mixed $raw The posted value.
+     * @return string
+     */
+    protected static function answer(mixed $raw): string
+    {
+        return is_string($raw) ? trim($raw) : '';
+    }
+
+    /**
+     * answer() for every string in $raw, nested ones included; anything else stays as it is.
+     *
+     * @param mixed $raw The posted value, capped with capRawArray() first.
+     * @return mixed
+     */
+    protected static function answers(mixed $raw): mixed
+    {
+        if (is_string($raw)) {
+            return trim($raw);
+        }
+        if (!is_array($raw)) {
+            return $raw;
+        }
+        foreach ($raw as $key => $value) {
+            $raw[$key] = self::answers($value);
+        }
+        return $raw;
+    }
+
+    // The longest "Other" text taken, configured limit or not; longer is refused (validateOtherText()), never cut.
     private const OTHER_TEXT_HARD_CAP = 5000;
 
-    // Shared cap so the limit can't drift between fields' implementations.
+    // The "Other" text as typed (answer()).
     protected static function capOtherText(mixed $raw): string
     {
-        return mb_substr(sanitize_text_field(wp_unslash($raw)), 0, self::OTHER_TEXT_HARD_CAP);
+        return self::answer($raw);
     }
 
     // Client-side hint attribute for the configurable "Other" text limit;
@@ -95,13 +127,17 @@ abstract class BaseField
             return '';
         }
         $type = $config['other_max_type'] ?? 'chars';
-        return $type === 'words' ? ' data-word-limit="' . $max . '"' : ' maxlength="' . $max . '"';
+        return $type === 'words' ? ' data-word-limit="' . esc_attr($max) . '"' : ' maxlength="' . esc_attr($max) . '"';
     }
 
     // Validates the "Other" value against the configured other_max_type/
     // other_max_length limit.
     protected static function validateOtherText(string $other, array $config): bool|string
     {
+        if (mb_strlen($other) > self::OTHER_TEXT_HARD_CAP) {
+            // translators: %1$d: maximum character count allowed, %2$d: current character count.
+            return sprintf(__('Please enter at most %1$d characters for "Other" (currently: %2$d).', 'formfabricator'), self::OTHER_TEXT_HARD_CAP, mb_strlen($other));
+        }
         $max = self::clampOtherMax((int)($config['other_max_length'] ?? 0));
         if ($max <= 0 || $other === '') {
             return true;
@@ -122,8 +158,7 @@ abstract class BaseField
         return true;
     }
 
-    // Clamps an admin-configured other_max_length to OTHER_TEXT_HARD_CAP so
-    // validateOtherText() can't expect text longer than capOtherText() allows.
+    // Clamps an admin-configured other_max_length to OTHER_TEXT_HARD_CAP, the most validateOtherText() takes anyway.
     private static function clampOtherMax(int $configured): int
     {
         return $configured > 0 ? min($configured, self::OTHER_TEXT_HARD_CAP) : $configured;
@@ -190,7 +225,7 @@ abstract class BaseField
      * @param string $draw_label Its text while the name is typed.
      * @return string
      */
-    protected static function signatureModeButton(string $type_label, string $draw_label): string
+    protected static function signatureModeButtonHtml(string $type_label, string $draw_label): string
     {
         return '<button type="button" class="fabricator-signature-mode" aria-pressed="false"'
             . ' data-type-label="' . esc_attr($type_label) . '" data-draw-label="' . esc_attr($draw_label) . '">'
@@ -205,7 +240,7 @@ abstract class BaseField
      * @param string $input_label Its label.
      * @return string
      */
-    protected static function typedSignatureInput(string $input_id, string $input_label): string
+    protected static function typedSignatureInputHtml(string $input_id, string $input_label): string
     {
         return '<div class="fabricator-signature-typed-row" hidden>'
             . '<label class="fabricator-label" for="' . esc_attr($input_id) . '">' . esc_html($input_label) . '</label>'
@@ -324,6 +359,27 @@ abstract class BaseField
     }
 
     /**
+     * Whether line breaks and tabs belong in this field's answer (Utils\Text\AnswerText refuses them elsewhere).
+     *
+     * @return bool
+     */
+    public function multilineAnswer(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Whether this field's answer is what the visitor typed, held to Utils\Text\AnswerText; not for values the site or the
+     * browser makes (a post's details, a file entry, a CAPTCHA token).
+     *
+     * @return bool
+     */
+    public function typedAnswer(): bool
+    {
+        return true;
+    }
+
+    /**
      * front.js's reading of a field's "id[key]" inputs: the non-empty values of $keys, trimmed, in this order (the order
      * the field renders them), joined by one space. Keys starting with "_" are internal and never read.
      *
@@ -375,7 +431,7 @@ abstract class BaseField
      * @param array  $config   Field configuration.
      * @param string $field_id Resolved field identifier.
      */
-    public function openTag(array $config, string $field_id): string
+    public function openTagHtml(array $config, string $field_id): string
     {
         return '';
     }
@@ -386,7 +442,7 @@ abstract class BaseField
      *
      * @return string
      */
-    public function closeTag(): string
+    public function closeTagHtml(): string
     {
         return '';
     }
@@ -444,9 +500,21 @@ abstract class BaseField
         return false;
     }
 
-    // Whether this field's value is included in the HMAC integrity seal.
-    // Override to false for values that are a data URI or binary blob (e.g. SignatureField).
-    public function includeValueInSeal(): bool
+    /**
+     * Whether an entry opens ('open') or closes ('close') a titled box around the entries between, or neither ('').
+     * The opening entry's label is the box's title, its value the text under it; PDF and mail both draw it.
+     *
+     * @param array $entry The entry (mapNormalized()).
+     * @return string
+     */
+    public function framePart(array $entry): string
+    {
+        return '';
+    }
+
+    // Whether an entry's value is included in the HMAC integrity seal, given the entry (FieldRegistry::mapSubmission()).
+    // Override to false for values that are a data URI or binary blob (e.g. SignatureField's image).
+    public function includeValueInSeal(array $entry = []): bool
     {
         return true;
     }
@@ -477,21 +545,18 @@ abstract class BaseField
      */
     abstract public function render(array $config, string $field_id, mixed $value = null): string;
 
-    // Guards against extractValue() reading $_POST/$_FILES without a verified nonce; throws loudly
-    // instead of silently accepting unauthenticated input if a future override forgets to check.
-    final protected static function assertRequestNonceVerified(): void
+    /**
+     * The submitted value of this field, from the answers FormProcessor read once the request's nonce was verified.
+     * Override for a different value shape; a field never reads the request itself.
+     *
+     * @param string $field_id The field's id, its input's name.
+     * @param array  $post     The posted answers, unslashed and otherwise as sent: read with answer()/answers().
+     * @param array  $files    The uploaded files' entries, each part sanitized, shaped as $_FILES.
+     * @return mixed
+     */
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        if (!\FabricatorForms\Form\FormProcessor::nonceVerified()) {
-            throw new \RuntimeException('Field value extraction attempted without a verified request nonce.');
-        }
-    }
-
-    // Extracts the submitted value from $_POST/$_FILES; override for a different value shape.
-    public function extractValue(string $field_id): mixed
-    {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified(), which reads FormProcessor's own record of its wp_verify_nonce() result for this request.
-        return isset($_POST[$field_id]) ? sanitize_text_field(wp_unslash($_POST[$field_id])) : '';
+        return self::answer($post[$field_id] ?? null);
     }
 
     /**
@@ -531,7 +596,8 @@ abstract class BaseField
     }
 
     // Client-side validation rules, collected into window.FabricatorValidators.
-    // Required/empty is handled implicitly — only declare FORMAT rules here.
+    // Required/empty is handled implicitly — only declare FORMAT rules here. Each fn returns null when valid, the
+    // error text, or true when it wrote its message at the part that is wrong itself.
     public function getClientValidation(): array
     {
         return [];
@@ -650,7 +716,7 @@ abstract class BaseField
         return $this->baseGeneralEntries();
     }
 
-    // Keys rendered as plain text; anything else is HTML (Utils\HtmlSanitizer::sanitize()). Extend via plainTextConfigKeys().
+    // Keys rendered as plain text; anything else is HTML (Utils\Text\HtmlSanitizer::sanitize()). Extend via plainTextConfigKeys().
     private const PLAIN_TEXT_CONFIG_KEYS = [
         'label', 'placeholder', 'description', 'custom_class', 'autocomplete', 'validation',
     ];
@@ -676,13 +742,13 @@ abstract class BaseField
         return in_array($key, $this->plainTextConfigKeys(), true);
     }
 
-    // Sanitizes a single string config value. Every HTML value follows one rule set (Utils\HtmlSanitizer).
+    // Sanitizes a single string config value. Every HTML value follows one rule set (Utils\Text\HtmlSanitizer).
     public function sanitizeConfigValue(string $key, string $value): string
     {
         if (in_array($key, $this->plainTextConfigKeys(), true)) {
             return \sanitize_text_field($value);
         }
-        return \FabricatorForms\Utils\HtmlSanitizer::sanitize($value);
+        return \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize($value);
     }
 
     /**
@@ -736,6 +802,29 @@ abstract class BaseField
             'type'  => $config['type'] ?? '',
             'value' => $this->map($value, $config),
         ]];
+    }
+
+    /**
+     * $entries with the field's sub-values as `parts` on its own entry, which a marked mail marks one by one. PDF and
+     * seal read `value` only. None when every part is empty: the answer is then "[No entry]".
+     *
+     * @param array                                                 $entries  What mapNormalized() returns.
+     * @param string                                                $field_id The field's id, the key of its entry.
+     * @param array<int, array{key: string, value: string, sep: string}> $parts Key, shown value, separator before it.
+     * @return array
+     */
+    protected static function withMarkerParts(array $entries, string $field_id, array $parts): array
+    {
+        if (!isset($entries[$field_id])) {
+            return $entries;
+        }
+        foreach ($parts as $part) {
+            if ($part['value'] !== '') {
+                $entries[$field_id]['parts'] = array_values($parts);
+                break;
+            }
+        }
+        return $entries;
     }
 
     /**
@@ -807,24 +896,24 @@ abstract class BaseField
      * @param string $inner       Inner HTML content.
      * @param string $extra_class Additional CSS class(es) for the wrapper.
      */
-    protected function wrap(string $field_id, array $config, string $inner, string $extra_class = ''): string
+    protected function wrap(string $field_id, array $config, string $inner_html, string $extra_class = ''): string
     {
-        $label       = esc_html($config['label'] ?? '');
+        $label       = (string) ($config['label'] ?? '');
         $required    = !empty($config['required']);
         $hide_label  = !empty($config['hide_label']);
-        $description = esc_html($config['description'] ?? '');
-        $req_attr    = $required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
-        $req_class   = $required ? ' fabricator-required-field' : '';
-        $desc_html   = $description !== '' ? '<p class="fabricator-field-description">' . $description . '</p>' : '';
+        $description = (string) ($config['description'] ?? '');
+        $req_html    = $required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
+        $desc_html   = $description !== '' ? '<p class="fabricator-field-description">' . esc_html($description) . '</p>' : '';
 
         // A set of controls has no element carrying $field_id for <label for>; it is named via aria-labelledby instead.
         $owns_control = $this->labelsOwnControl($config);
         $label_id     = $field_id . '-label';
         $group_attr   = '';
-        if (!$hide_label && $label !== '') {
+        if ($label !== '') {
+            // A hidden label still names the field for screen readers: only its look is hidden.
             $label_html = $owns_control
-                ? '<label class="fabricator-label" for="' . esc_attr($field_id) . '">' . $label . $req_attr . '</label>'
-                : '<div class="fabricator-label" id="' . esc_attr($label_id) . '">' . $label . $req_attr . '</div>';
+                ? '<label class="fabricator-label' . ($hide_label ? ' fabricator-visually-hidden' : '') . '" for="' . esc_attr($field_id) . '">' . esc_html($label) . $req_html . '</label>'
+                : '<div class="fabricator-label' . ($hide_label ? ' fabricator-visually-hidden' : '') . '" id="' . esc_attr($label_id) . '">' . esc_html($label) . $req_html . '</div>';
             if (!$owns_control) {
                 $group_attr = ' role="group" aria-labelledby="' . esc_attr($label_id) . '"';
             }
@@ -835,19 +924,20 @@ abstract class BaseField
         $client_rules  = $this->getClientValidation();
         $validate_attr = !empty($client_rules) ? ' data-validate="' . esc_attr(\FabricatorForms\Utils\Cast::jsonForAttribute(array_column($client_rules, 'rule'))) . '"' : '';
 
-        // Builder-configured "CSS class(es)" (Appearance section) — admin-supplied, sanitize_text_field()'d
-        // at save time; esc_attr() below is what actually makes embedding it here safe.
+        // Builder-configured "CSS class(es)" (Appearance section): admin-supplied, sanitize_text_field()'d at save time;
+        // esc_attr() is what makes embedding it here safe.
         $custom_class = trim((string)($config['custom_class'] ?? ''));
-        $custom_class_attr = $custom_class !== '' ? ' ' . esc_attr($custom_class) : '';
 
         return '<div class="fabricator-field fabricator-field--' . esc_attr($config['type'] ?? 'text')
-            . $req_class . ' ' . esc_attr($extra_class) . $custom_class_attr . '" data-field-id="' . esc_attr($field_id) . '"'
+            . ($required ? ' fabricator-required-field' : '') . ' ' . esc_attr($extra_class)
+            . ($custom_class !== '' ? ' ' . esc_attr($custom_class) : '') . '" data-field-id="' . esc_attr($field_id) . '"'
             . $validate_attr . $group_attr . '>'
             . $label_html
             . $desc_html
-            . $inner
-            . '<div class="fabricator-field-error" id="' . esc_attr($field_id)
-            . '-error" role="alert" aria-live="polite"></div>'
+            . $inner_html
+            // No live region: the form's message area announces the errors once, and front.js ties this slot to the
+            // field's controls (aria-describedby), which read it out when they get the focus.
+            . '<div class="fabricator-field-error" id="' . esc_attr($field_id) . '-error"></div>'
             . '</div>';
     }
 
@@ -887,16 +977,16 @@ abstract class BaseField
             }
         }
 
-        $html = '';
+        $attributes = '';
         foreach ($attrs as $k => $v) {
             // Only true is a bare attribute. "value equals name" was one too, so a placeholder of "placeholder" (or a
             // value of "value") rendered without its text.
             if ($v === true) {
-                $html .= ' ' . esc_attr($k);
+                $attributes .= ' ' . esc_attr($k);
             } elseif ($v !== '' && $v !== false) {
-                $html .= ' ' . esc_attr($k) . '="' . esc_attr($v) . '"';
+                $attributes .= ' ' . esc_attr($k) . '="' . esc_attr($v) . '"';
             }
         }
-        return $html;
+        return $attributes;
     }
 }

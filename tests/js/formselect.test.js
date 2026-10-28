@@ -48,7 +48,7 @@ test('search, "Select all", bulk delete: only the selections still visible are d
     assert.deepEqual(page.confirms, [fixture.admin.formSelectPage.i18n.bulkDeleteConfirm.replace('%d', '2')]);
     await until(page, () => rowTitles(page).length === 2);
 
-    const deleted = page.requests.filter((r) => r.body && r.body.action === 'fabricator_fsel_delete').map((r) => r.body.id);
+    const deleted = page.requests.filter((r) => r.body && r.body.action === 'fabricator_forms_fsel_delete').map((r) => r.body.id);
     const idsOfVisible = fixture.admin.formSelectPage.fselData
         .filter((s) => ['Contact', 'Contact (archive)'].includes(s.title))
         .map((s) => String(s.id));
@@ -71,7 +71,7 @@ test('a selection the search hides is unticked, so a later bulk action cannot re
 });
 
 test('a refused delete keeps its row and says how many failed', async () => {
-    const page = loadSelections((url, body) => ({ success: body.action !== 'fabricator_fsel_delete' || body.id !== '2' }));
+    const page = loadSelections((url, body) => ({ success: body.action !== 'fabricator_forms_fsel_delete' || body.id !== '2' }));
     const alerts = [];
     page.window.alert = (m) => alerts.push(String(m));
     const doc = page.document;

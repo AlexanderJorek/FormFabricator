@@ -224,6 +224,65 @@ function fabbuildGate(string $name, array $command, string $cwd, array $env = []
 }
 
 /**
+ * The escaping, nonce and sanitizing checks of .phpcs-review.xml, as WordPress.org's reviewers run them: no
+ * phpcs:ignore and no custom sanitizer counts. Fails on any finding but the exceptions tools/build-config.php names, and
+ * on an exception that matches nothing any more.
+ *
+ * @param string $root  Repository root.
+ * @param string $phpcs The phpcs script.
+ */
+function fabbuildReviewGate(string $root, string $phpcs): void
+{
+    $name = 'phpcs (.phpcs-review.xml, as WordPress.org reviews)';
+    fabbuildSay('  ' . $name . ' ... ', '', false);
+    $started    = microtime(true);
+    $config     = require __DIR__ . '/build-config.php';
+    $exceptions = $config['reviewExceptions'];
+    $result     = fabbuildRun([PHP_BINARY, $phpcs, '-q', '--report=json', '--standard=' . $root . '/.phpcs-review.xml'], $root);
+    $report     = json_decode(substr($result['output'], (int) strpos($result['output'], '{')), true);
+    if (!is_array($report) || !is_array($report['files'] ?? null)) {
+        fabbuildSay('FAILED', 'red');
+        fabbuildSay(rtrim($result['output']), 'red');
+        fabbuildFail('Release gate failed: ' . $name . ' (no report).');
+    }
+
+    $used     = [];
+    $findings = [];
+    foreach ($report['files'] as $path => $file) {
+        $rel   = ltrim(str_replace([$root, '\\'], ['', '/'], fabbuildSlashes((string) $path)), '/');
+        $lines = file((string) $path, FILE_IGNORE_NEW_LINES) ?: [];
+        foreach ($file['messages'] ?? [] as $message) {
+            $line    = (int) ($message['line'] ?? 0);
+            $code    = (string) ($lines[$line - 1] ?? '');
+            $allowed = false;
+            foreach ($exceptions as $i => $exception) {
+                if ($exception['file'] === $rel && $exception['sniff'] === ($message['source'] ?? '') && str_contains($code, $exception['code'])) {
+                    $used[$i] = true;
+                    $allowed  = true;
+                }
+            }
+            if (!$allowed) {
+                $findings[] = $rel . ':' . $line . ' ' . ($message['source'] ?? '') . ' - ' . ($message['message'] ?? '');
+            }
+        }
+    }
+    foreach ($exceptions as $i => $exception) {
+        if (!isset($used[$i])) {
+            $findings[] = 'tools/build-config.php reviewExceptions: ' . $exception['file'] . ' ' . $exception['sniff']
+                . ' "' . $exception['code'] . '" matches nothing any more; remove the entry.';
+        }
+    }
+    if ($findings !== []) {
+        fabbuildSay('FAILED', 'red');
+        foreach ($findings as $finding) {
+            fabbuildSay('    ' . $finding, 'red');
+        }
+        fabbuildFail('Release gate failed: ' . $name . ' (' . count($findings) . ' finding(s)).');
+    }
+    fabbuildSay('ok (' . fabbuildDuration($started) . ', ' . count($exceptions) . ' named exception(s))', 'green');
+}
+
+/**
  * The release gates (docs/CONTRIBUTING.md), before anything is staged.
  */
 function fabbuildGates(string $root, bool $skipAudit): void
@@ -254,6 +313,7 @@ function fabbuildGates(string $root, bool $skipAudit): void
     // .phpcs-security.xml: its ERRORS fail the release, as WordPress.org's Plugin Check rejects the same ones. Warnings
     // (-n hides them) stay review material, since the security-audit heuristics flag any dynamic filesystem call.
     fabbuildGate('phpcs (.phpcs-security.xml, errors only)', [PHP_BINARY, $phpcs, '-q', '-n', '--standard=' . $root . '/.phpcs-security.xml'], $root);
+    fabbuildReviewGate($root, $phpcs);
     fabbuildGate('make-pot --check (languages/formfabricator.pot is current)', [PHP_BINARY, $root . '/languages/make-pot.php', '--check'], $root);
 
     // The unit and perf suites. Perf holds the pathological-PDF shapes ("Scanning untrusted PDF bytes"), so a scan that

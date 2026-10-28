@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -131,7 +131,6 @@ class RatingField extends BaseField
         $custom    = !empty($config['icon_source']) && !empty($config['custom_icon_url']);
         $icon_key  = $config['icon_type'] ?? 'star';
         $icons     = self::ICONS[$icon_key] ?? self::ICONS['star'];
-        $req       = !empty($config['required']) ? ' data-required="true"' : '';
         $custom_url = $custom ? esc_url($config['custom_icon_url'], ['http', 'https']) : '';
         // Quoted as a CSS string (not bare url()) — esc_url() leaves ';'/'('/')' valid, which unquoted would let an edit_forms user inject CSS.
         $custom_url_css = $custom_url !== ''
@@ -142,23 +141,20 @@ class RatingField extends BaseField
         // field's own label, so a second group carrying the same name would only be announced twice.
         $inner = '<div class="fabricator-rating-group"'
             . ' data-half="' . ($half ? '1' : '0') . '"'
-            . $req . '>';
+            . (!empty($config['required']) ? ' data-required="true"' : '') . '>';
 
         /* Per star: two click zones (left half, right full) and a filled overlay that JS classes control. */
         for ($i = 1; $i <= $max; $i++) {
             $v_full         = $i;
             $v_half         = $i - 0.5;
-            $checked_full   = ((float)$val === (float)$v_full) ? ' checked' : '';
-            $checked_half   = ((float)$val === (float)$v_half) ? ' checked' : '';
-            $glyph          = esc_html($icons['filled']);
             /* Each radio names the rating it sets: the visible star is an image, so without this a screen reader
                announces an unlabelled choice. */
             // translators: %1$s: the rating this choice sets, %2$s: the highest rating.
-            $aria_full      = esc_attr(sprintf(__('%1$s of %2$s', 'formfabricator'), (string) $v_full, (string) $max));
+            $aria_full      = sprintf(__('%1$s of %2$s', 'formfabricator'), (string) $v_full, (string) $max);
             // translators: %1$s: the rating this choice sets, %2$s: the highest rating.
-            $aria_half      = esc_attr(sprintf(__('%1$s of %2$s', 'formfabricator'), (string) $v_half, (string) $max));
+            $aria_half      = sprintf(__('%1$s of %2$s', 'formfabricator'), (string) $v_half, (string) $max);
 
-            $inner .= '<span class="fabricator-rating-star" data-star="' . $i . '">';
+            $inner .= '<span class="fabricator-rating-star" data-star="' . esc_attr($i) . '">';
 
             if ($custom_url) {
                 /* Custom image: background image tile, filled overlay clips left half */
@@ -170,26 +166,26 @@ class RatingField extends BaseField
                 $inner .= '<span class="fabricator-rating-bg" style="' . esc_attr($base_style) . '"></span>';
                 $inner .= '<span class="fabricator-rating-fill" style="' . esc_attr($fill_style) . '"></span>';
             } else {
-                $inner .= '<span class="fabricator-rating-bg">' . $glyph . '</span>';
-                $inner .= '<span class="fabricator-rating-fill">' . $glyph . '</span>';
+                $inner .= '<span class="fabricator-rating-bg">' . esc_html($icons['filled']) . '</span>';
+                $inner .= '<span class="fabricator-rating-fill">' . esc_html($icons['filled']) . '</span>';
             }
 
             if ($half) {
                 $inner .= '<label class="fabricator-rating-zone fabricator-rating-zone-half"'
-                    . ' title="' . $v_half . '">'
+                    . ' title="' . esc_attr($v_half) . '">'
                     . '<input type="radio" name="' . esc_attr($field_id)
-                    . '" value="' . $v_half . '" aria-label="' . $aria_half . '"' . $checked_half . '>'
+                    . '" value="' . esc_attr($v_half) . '" aria-label="' . esc_attr($aria_half) . '"' . ($val === (float) $v_half ? ' checked' : '') . '>'
                     . '</label>';
                 $inner .= '<label class="fabricator-rating-zone fabricator-rating-zone-full"'
-                    . ' title="' . $v_full . '">'
+                    . ' title="' . esc_attr($v_full) . '">'
                     . '<input type="radio" name="' . esc_attr($field_id)
-                    . '" value="' . $v_full . '" aria-label="' . $aria_full . '"' . $checked_full . '>'
+                    . '" value="' . esc_attr($v_full) . '" aria-label="' . esc_attr($aria_full) . '"' . ($val === (float) $v_full ? ' checked' : '') . '>'
                     . '</label>';
             } else {
                 $inner .= '<label class="fabricator-rating-zone fabricator-rating-zone-full fabricator-rating-zone-full--only"'
-                    . ' title="' . $v_full . '">'
+                    . ' title="' . esc_attr($v_full) . '">'
                     . '<input type="radio" name="' . esc_attr($field_id)
-                    . '" value="' . $v_full . '" aria-label="' . $aria_full . '"' . $checked_full . '>'
+                    . '" value="' . esc_attr($v_full) . '" aria-label="' . esc_attr($aria_full) . '"' . ($val === (float) $v_full ? ' checked' : '') . '>'
                     . '</label>';
             }
 

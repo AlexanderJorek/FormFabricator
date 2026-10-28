@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * The ALTCHA CAPTCHA (CaptchaField with the provider "altcha", Utils\Altcha). The server's challenge is checked against
+ * The ALTCHA CAPTCHA (CaptchaField with the provider "altcha", Utils\Security\Altcha). The server's challenge is checked against
  * ALTCHA's own solver and verifier from the npm package, which must be the very release vendored in vendor/altcha. The
  * field is checked in a whole form: its widget's settings, its translated texts, the required check and the reset after
  * a failed submission. The widget solves in Web Workers, which jsdom lacks, so a test puts in its answer by hand.
@@ -73,7 +73,7 @@ test('ALTCHA\'s own solver finds the answer the server expects, and its own veri
     });
     assert.equal(result.verified, true, JSON.stringify(result));
 
-    // Utils\Altcha::verify() on that answer, posted as the widget posts it: accepted, then refused as used; and refused
+    // Utils\Security\Altcha::verify() on that answer, posted as the widget posts it: accepted, then refused as used; and refused
     // once a parameter of the challenge is changed.
     assert.deepEqual(verdicts, [true, false, false]);
 });
@@ -84,7 +84,7 @@ test('ALTCHA field: the widget posts under the field id, starts on the visitor\'
 
     assert.equal(widget.getAttribute('name'), 'cap');
     assert.equal(widget.getAttribute('auto'), 'onfocus');
-    assert.match(widget.getAttribute('challenge'), /\/admin-ajax\.php\?action=fabricator_altcha_challenge$/);
+    assert.match(widget.getAttribute('challenge'), /\/admin-ajax\.php\?action=fabricator_forms_altcha_challenge$/);
     const config = JSON.parse(widget.getAttribute('configuration'));
     assert.equal(config.humanInteractionSignature, false);
     assert.equal(config.hideFooter, true);

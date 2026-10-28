@@ -8,6 +8,14 @@
 
 /* ── Per-PDF inline progress cards ── */
 
+/* A status code with its title (HTTP 500 "Internal Server Error"), as Utils\Text\HttpStatus names it: a code alone
+   tells an admin nothing, and a response over HTTP/2 has no statusText. */
+function _fabricatorHttpStatusLabel(code) {
+    var status = (window.FabricatorVerifier && window.FabricatorVerifier.httpStatus) || {};
+    var title  = (status.titles || {})[code];
+    return title ? (status.format || 'HTTP %1$d "%2$s"').replace('%1$d', code).replace('%2$s', title) : 'HTTP ' + code;
+}
+
 function _fabricatorCreateProgressCard(name) {
     var card = document.createElement('div');
     card.className = 'fabricator-vpc';
@@ -33,7 +41,7 @@ function _fabricatorCreateProgressCard(name) {
     return card;
 }
 
-/* The card of a file that could not be checked: the same markup as Verificationpage::problemCardHtml(), so a failure
+/* The card of a file that could not be checked: the same markup as VerificationPage::problemCardHtml(), so a failure
    reads alike whether the server or this script met it. Text nodes only. */
 function _fabricatorProblemCard(name, message) {
     var i18n = (window.FabricatorVerifier && window.FabricatorVerifier.i18n) || {};
@@ -73,7 +81,7 @@ function _fabricatorUpdateCard(card, step, pct) {
     if (p) p.textContent = Math.round(shown) + ' %';
 }
 
-/* ── Queue of PDFs to verify, localized once by Verificationpage.php's upload handler. ── */
+/* ── Queue of PDFs to verify, localized once by VerificationPage.php's upload handler. ── */
 window.FABRICATOR_VERIFICATION_QUEUE = window.FabricatorVerifierQueueData || [];
 
 /* Staggers server calls to match the 1-per-5s rate limit; slots reserved by start time, not chained after responses. */
@@ -151,7 +159,7 @@ function _fabricatorKeepAliveStart() {
         var ajaxUrl = window.FabricatorVerifier && window.FabricatorVerifier.ajaxUrl;
         if (!ajaxUrl) { return; }
         var body = new FormData();
-        body.append('action', 'fabricator_verify_progress');
+        body.append('action', 'fabricator_forms_verify_progress');
         body.append('nonce',  (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
         fetch(ajaxUrl, { method: 'POST', body: body, credentials: 'same-origin' }).catch(function () {});
     }, 60000);
@@ -196,7 +204,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
     var i18n = (window.FabricatorVerifier && window.FabricatorVerifier.i18n) || {};
 
     const formData = new FormData();
-    formData.append('action',    'fabricator_verify_push_lines');
+    formData.append('action',    'fabricator_forms_verify_push_lines');
     formData.append('pdf_token', pdfToken);
     formData.append('nonce',     (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
 
@@ -206,7 +214,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
         lastServerPct = 0;
         _pollTimer = setInterval(function () {
             var pf = new FormData();
-            pf.append('action', 'fabricator_verify_progress');
+            pf.append('action', 'fabricator_forms_verify_progress');
             pf.append('token',  pdfToken);
             pf.append('nonce',  (window.FabricatorVerifier && window.FabricatorVerifier.nonce) || '');
             fetch(ajaxUrl, { method: 'POST', body: pf, credentials: 'same-origin' })
@@ -292,7 +300,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
         } catch (_) {
             console.error('[FormFabricator] Non-JSON response (HTTP ' + res.status + ') for', name, '\n', rawText);
             done();
-            _fabricatorFailCard(card, name, (i18n.server_error || 'Server error (HTTP %d)').replace('%d', res.status));
+            _fabricatorFailCard(card, name, (i18n.server_error || 'Server error (%s)').replace('%s', _fabricatorHttpStatusLabel(res.status)));
             return;
         }
 
@@ -300,7 +308,7 @@ window.FABRICATOR_VERIFICATION_PROCESS_PDF = async function processPdf(pdfInfo) 
         done();
 
         if (json.success === true && json.data && typeof json.data.html === 'string') {
-            // Escaped server-side (Verificationpage.php).
+            // Escaped server-side (VerificationPage.php).
             const tmp = document.createElement('div');
             tmp.innerHTML = json.data.html;
             card.parentNode.replaceChild(tmp.firstElementChild || tmp, card);

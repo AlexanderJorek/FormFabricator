@@ -110,7 +110,7 @@ test('direct debit: a required mandate names each missing detail at its own inpu
     field.dataset.required = 'true';
     field.querySelector('[data-debit-part="routing"]').value = '011000015';
 
-    assert.equal(page.window.FabricatorValidators['debit-required'](field), '​');
+    assert.equal(page.window.FabricatorValidators['debit-required'](field), true);
     const message = (part) => field.querySelector('[data-debit-part="' + part + '"]').parentNode.querySelector('.fabricator-field-error').textContent;
     assert.equal(message('routing'), '', 'filled in');
     assert.equal(message('account'), i18n.debit_account_required);

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -80,7 +80,7 @@ class DirectDebitField extends BaseField
 
     /**
      * Adds the label-like keys to the plain-text allowlist; the mandate texts and notes stay excluded since their
-     * schema allows HTML (\FabricatorForms\Utils\HtmlSanitizer::sanitize()).
+     * schema allows HTML (\FabricatorForms\Utils\Text\HtmlSanitizer::sanitize()).
      *
      * @return string[]
      */
@@ -237,14 +237,14 @@ class DirectDebitField extends BaseField
 
         // The same terms mapNormalized() records, so the mail, the PDF and the seal hold what was shown here.
         $terms     = $this->shownTerms($config, $scheme);
-        $sig_label = esc_html(self::configText($config, 'sig_label', __('Signature', 'formfabricator')));
+        $sig_label = self::configText($config, 'sig_label', __('Signature', 'formfabricator'));
         $req_attr  = $required ? ' data-required="true"' : '';
-        $req_mark  = $required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
+        $req_mark_html = $required ? ' <span class="fabricator-required" aria-hidden="true">*</span>' : '';
 
         // A mandate without wording records a signature under empty terms, which is no valid mandate; until the text is
         // entered the field takes no details. The hint is for whoever can fix it, as in CaptchaField::render().
         if (!self::hasWording($terms)) {
-            $message = \FabricatorForms\Plugin::userCan('edit_forms')
+            $message = \FabricatorForms\Capabilities::userCan('edit_forms')
                 ? __("Direct Debit Mandate: enter the mandate text in this field's settings. Until then, visitors cannot give a mandate here.", 'formfabricator')
                 : __('Direct debits cannot be set up with this form at the moment.', 'formfabricator');
             return '<div class="fabricator-field fabricator-field--directdebit" data-field-id="' . esc_attr($field_id) . '">'
@@ -259,14 +259,14 @@ class DirectDebitField extends BaseField
         $html .= '<div class="fabricator-debit-mandate">';
         $html .= '<h3 class="fabricator-debit-title">' . esc_html($terms['title']) . '</h3>';
         if ($terms['text'] !== '') {
-            $html .= '<div class="fabricator-debit-text">' . $terms['text'] . '</div>';
+            $html .= '<div class="fabricator-debit-text">' . wp_kses($terms['text'], \FabricatorForms\Utils\Text\HtmlSanitizer::allowedTags()) . '</div>';
         }
         if ($terms['note'] !== '') {
-            $html .= '<p class="fabricator-debit-note">' . $terms['note'] . '</p>';
+            $html .= '<p class="fabricator-debit-note">' . wp_kses($terms['note'], \FabricatorForms\Utils\Text\HtmlSanitizer::allowedTags()) . '</p>';
         }
 
         foreach (self::parts($config) as $part) {
-            $html .= $this->partInput($scheme, $part, $config, $field_id, $val, $req_mark);
+            $html .= $this->partInputHtml($scheme, $part, $config, $field_id, $val, $req_mark_html);
         }
 
         /* ---- Creditor info: the creditor's lines as set, and the reference as written, or a note when it is generated ---- */
@@ -286,23 +286,23 @@ class DirectDebitField extends BaseField
         }
 
         /* ---- Signature ---- */
-        $canvas_id     = esc_attr($field_id) . '-sig-canvas';
+        $canvas_id     = $field_id . '-sig-canvas';
         $clear_label   = self::configText($config, 'clear_label', __('Clear signature', 'formfabricator'));
         // Clamped: an unbounded height produced a huge canvas, and a signature data URI to match.
         $canvas_height = min(600, max(80, (int)($config['canvas_height'] ?? 200)));
         $stroke_width  = (float)($config['stroke_width'] ?? 2);
         $html .= '<div class="fabricator-debit-signatures">';
         $html .= '<div class="fabricator-debit-sig-block">';
-        $html .= '<div class="fabricator-debit-sig-label">' . $sig_label . $req_mark . '</div>';
+        $html .= '<div class="fabricator-debit-sig-label">' . esc_html($sig_label) . $req_mark_html . '</div>';
         $html .= '<div class="fabricator-signature-wrap"'
             . ' data-field-id="' . esc_attr($field_id) . '-sig"'
             . $req_attr
             . ' data-stroke="' . esc_attr((string)$stroke_width) . '">';
-        $html .= '<canvas id="' . $canvas_id . '" class="fabricator-signature-canvas"'
-            . ' width="400" height="' . $canvas_height . '"'
-            . ' style="height:' . $canvas_height . 'px"'
-            . ' tabindex="0" aria-label="' . $sig_label . '"></canvas>';
-        $html .= self::typedSignatureInput(
+        $html .= '<canvas id="' . esc_attr($canvas_id) . '" class="fabricator-signature-canvas"'
+            . ' width="400" height="' . esc_attr($canvas_height) . '"'
+            . ' style="height:' . absint($canvas_height) . 'px"'
+            . ' tabindex="0" aria-label="' . esc_attr($sig_label) . '"></canvas>';
+        $html .= self::typedSignatureInputHtml(
             $field_id . '-sig-typed',
             self::configText($config, 'typed_name_label', __('Your full name', 'formfabricator'))
         );
@@ -311,7 +311,7 @@ class DirectDebitField extends BaseField
             . ' id="' . esc_attr($field_id) . '-sig-data"'
             . ' class="fabricator-debit-sig-data">';
         $html .= '<div class="fabricator-signature-toolbar">';
-        $reset_icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"'
+        $reset_icon_html = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"'
             . ' aria-hidden="true" focusable="false">'
             . '<path d="M125.7 160H176a16 16 0 0 1 0 32H48a16 16 0 0 1-16-16V48a16 16 0 0 1 32 0v68.7'
             . 'C115.3 45.1 191.6 0 278 0c141.4 0 256 114.6 256 256S419.4 512 278 512'
@@ -319,22 +319,21 @@ class DirectDebitField extends BaseField
             . ' 123.7 0 224-100.3 224-224S401.7 32 278 32c-78.1 0-145.8 39.4-185.3 99.3z"/>'
             . '</svg>';
         $html .= '<button type="button" class="fabricator-signature-clear"'
-            . ' data-canvas="' . $canvas_id . '" title="' . esc_attr($clear_label) . '" aria-label="' . esc_attr($clear_label) . '">'
-            . $reset_icon . '</button>';
+            . ' data-canvas="' . esc_attr($canvas_id) . '" title="' . esc_attr($clear_label) . '" aria-label="' . esc_attr($clear_label) . '">'
+            . $reset_icon_html . '</button>';
         $html .= '<span class="fabricator-signature-hint">' . esc_html(self::configText($config, 'sig_hint', __('Sign here', 'formfabricator'))) . '</span>';
-        $html .= self::signatureModeButton(
+        $html .= self::signatureModeButtonHtml(
             self::configText($config, 'type_sig_label', __('Type your name instead', 'formfabricator')),
             self::configText($config, 'draw_sig_label', __('Draw instead', 'formfabricator'))
         );
         $html .= '</div>';
         $html .= '</div>';
         $html .= '<div class="fabricator-field-error fabricator-debit-sig-error"'
-            . ' id="' . esc_attr($field_id) . '-sig-error" role="alert"></div>';
+            . ' id="' . esc_attr($field_id) . '-sig-error"></div>';
         $html .= '</div>'; /* sig-block */
         $html .= '</div>'; /* signatures */
 
-        $html .= '<div class="fabricator-field-error" id="'
-            . esc_attr($field_id) . '-error" role="alert" aria-live="polite"></div>';
+        $html .= '<div class="fabricator-field-error" id="' . esc_attr($field_id) . '-error"></div>';
         $html .= '</div>'; /* fabricator-debit-mandate */
         $html .= '</div>'; /* fabricator-field */
 
@@ -344,15 +343,15 @@ class DirectDebitField extends BaseField
     /**
      * One account-detail input with its label and error slot, posted as "id[part]".
      *
-     * @param string $scheme   Key of self::SCHEMES.
-     * @param string $part     Sub-input key.
-     * @param array  $config   Field configuration.
-     * @param string $field_id Field identifier.
-     * @param array  $val      Current sub-values.
-     * @param string $req_mark Required marker markup, or ''.
+     * @param string $scheme        Key of self::SCHEMES.
+     * @param string $part          Sub-input key.
+     * @param array  $config        Field configuration.
+     * @param string $field_id      Field identifier.
+     * @param array  $val           Current sub-values.
+     * @param string $req_mark_html Required marker markup, or ''.
      * @return string
      */
-    private function partInput(string $scheme, string $part, array $config, string $field_id, array $val, string $req_mark): string
+    private function partInputHtml(string $scheme, string $part, array $config, string $field_id, array $val, string $req_mark_html): string
     {
         $slug  = str_replace('_', '-', $part);
         $id    = $field_id . '-' . $slug;
@@ -361,33 +360,33 @@ class DirectDebitField extends BaseField
 
         // The BIC is needed only for an IBAN from outside the EEA (validate()): its required mark starts hidden, and
         // DirectDebitField.js shows it once the IBAN typed is from one of those countries.
-        if ($part === 'bic' && $req_mark !== '') {
-            $req_mark = ' <span class="fabricator-required fabricator-debit-bic-mark" aria-hidden="true" style="display:none">*</span>';
+        if ($part === 'bic' && $req_mark_html !== '') {
+            $req_mark_html = ' <span class="fabricator-required fabricator-debit-bic-mark" aria-hidden="true" style="display:none">*</span>';
         }
         $html   = '<div class="fabricator-field-inner">';
-        $html  .= '<label class="fabricator-label" for="' . esc_attr($id) . '">' . esc_html($label) . $req_mark . '</label>';
-        $common = ' id="' . esc_attr($id) . '" name="' . esc_attr($field_id . '[' . $part . ']') . '"'
+        $html  .= '<label class="fabricator-label" for="' . esc_attr($id) . '">' . esc_html($label) . $req_mark_html . '</label>';
+        $common_attrs = ' id="' . esc_attr($id) . '" name="' . esc_attr($field_id . '[' . $part . ']') . '"'
             . ' class="fabricator-input fabricator-debit-' . esc_attr($slug) . '" data-debit-part="' . esc_attr($part) . '"';
         if (self::isDebtorExtra($part)) {
             // Named by its label, which the admin sets: the browser shows the message the server would give.
-            $common .= ' data-required-message="' . esc_attr(self::requiredMessage($part, $config)) . '"';
+            $common_attrs .= ' data-required-message="' . esc_attr(self::requiredMessage($part, $config)) . '"';
         }
         if ($part === 'account_type') {
             $choices = ['' => self::configText($config, 'account_type_placeholder', __('Please choose', 'formfabricator'))] + self::accountTypeLabels($config);
-            $html .= '<select' . $common . '>';
+            $html .= '<select' . $common_attrs . '>';
             foreach ($choices as $choice => $choice_label) {
                 $html .= '<option value="' . esc_attr((string) $choice) . '"' . selected($value, (string) $choice, false) . '>'
                     . esc_html($choice_label) . '</option>';
             }
             $html .= '</select>';
         } else {
-            $html .= '<input type="text"' . $common . $this->partAttributes($scheme, $part, $config)
+            $html .= '<input type="text"' . $common_attrs . $this->partAttributes($scheme, $part, $config)
                 . ' value="' . esc_attr($value) . '">';
         }
         if ($part === 'iban') {
             $html .= '<div class="fabricator-field-hint"></div>';
         }
-        $html .= '<div class="fabricator-field-error" id="' . esc_attr($id) . '-error" role="alert"></div>';
+        $html .= '<div class="fabricator-field-error" id="' . esc_attr($id) . '-error"></div>';
         $html .= '</div>';
         return $html;
     }
@@ -402,7 +401,7 @@ class DirectDebitField extends BaseField
      */
     private function partAttributes(string $scheme, string $part, array $config): string
     {
-        $numeric = ' inputmode="numeric" autocomplete="off" spellcheck="false"';
+        $numeric_attrs = ' inputmode="numeric" autocomplete="off" spellcheck="false"';
         switch ($part) {
             case 'iban':
                 $country_filter = $config['country_filter_mode'] ?? 'off';
@@ -417,11 +416,11 @@ class DirectDebitField extends BaseField
             case 'bic':
                 return ' placeholder="XXXXXXXXXXX" maxlength="11" autocomplete="off"';
             case 'sort_code':
-                return ' placeholder="00-00-00" maxlength="8"' . $numeric;
+                return ' placeholder="00-00-00" maxlength="8"' . $numeric_attrs;
             case 'routing':
-                return ' maxlength="9"' . $numeric;
+                return ' maxlength="9"' . $numeric_attrs;
             case 'account':
-                return ' maxlength="' . ($scheme === 'bacs' ? '8' : '17') . '"' . $numeric;
+                return ' maxlength="' . ($scheme === 'bacs' ? '8' : '17') . '"' . $numeric_attrs;
             case 'street':
                 return ' autocomplete="street-address"';
             case 'postcode':
@@ -440,24 +439,20 @@ class DirectDebitField extends BaseField
      * separate '-sig' key.
      *
      * @param string $field_id The field element ID.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        $raw = isset($_POST[$field_id])
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; map_deep()/capRawArray() sanitizes, WPCS misses the callback form.
-            ? map_deep(self::capRawArray(wp_unslash($_POST[$field_id])), 'sanitize_text_field')
-            : [];
+        $raw = isset($post[$field_id]) ? self::answers(self::capRawArray($post[$field_id])) : [];
         if (!is_array($raw)) {
             return null;
         }
         $out = [];
         foreach (self::ALL_PARTS as $part) {
-            $out[$part] = is_scalar($raw[$part] ?? null) ? sanitize_text_field((string) $raw[$part]) : '';
+            $out[$part] = self::answer($raw[$part] ?? null);
         }
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
-        $out['sig'] = sanitize_text_field(wp_unslash($_POST[$field_id . '-sig'] ?? ''));
+        $out['sig'] = self::answer($post[$field_id . '-sig'] ?? null);
         return $out;
     }
 
@@ -789,8 +784,8 @@ class DirectDebitField extends BaseField
         }
 
         $terms = $this->shownTerms($config, $scheme);
-        $body  = self::plainText($terms['text']);
-        $note  = self::plainText($terms['note']);
+        $body  = \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($terms['text']);
+        $note  = \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($terms['note']);
 
         $entries = [
             $field_id . '_begin' => [
@@ -824,12 +819,11 @@ class DirectDebitField extends BaseField
                 'value' => $part_value !== '' ? $part_value : __('[No entry]', 'formfabricator'),
             ];
         }
-        // The day the mandate was signed, which every mandate names, as the site writes dates: the day it is sent, since
-        // it is signed on the page.
+        // When the mandate was signed, which every mandate names: when it is sent, since it is signed on the page.
         $entries[$field_id . '_date'] = [
             'label' => self::configText($config, 'date_label', __('Date of signing', 'formfabricator')),
             'type'  => 'directdebit',
-            'value' => (string) wp_date((string) get_option('date_format', 'Y-m-d')),
+            'value' => \FabricatorForms\Utils\Text\SigningTime::format(),
         ];
 
         $sig_label = self::configText($config, 'sig_label', __('Signature', 'formfabricator'));
@@ -851,7 +845,7 @@ class DirectDebitField extends BaseField
                 'materialized_files' => $materialized,
             ];
         }
-        // Labelled, since the mail summary leaves unlabelled entries out; the label is the marker, there is no value.
+        // Labelled, so the verification page can name where the mandate ends; mail and PDF close the box instead.
         $entries[$field_id . '_end'] = [
             // translators: %s: the mandate's title, e.g. "SEPA Direct Debit Mandate".
             'label'        => sprintf(__('End of %s', 'formfabricator'), $terms['title']),
@@ -872,16 +866,31 @@ class DirectDebitField extends BaseField
      */
     public function pdfData(array $field): array
     {
-        $part  = $field['mandate_part'] ?? '';
+        $part  = $this->framePart($field);
         $label = is_string($field['label'] ?? null) ? $field['label'] : '';
         $value = is_string($field['value'] ?? null) ? $field['value'] : '';
-        if ($part === 'begin') {
+        if ($part === 'open') {
             return $this->pdf($field)->text(nl2br(esc_html($value)))->unlabeled()->opensFrame($label)->build();
         }
-        if ($part === 'end') {
+        if ($part === 'close') {
             return $this->pdf($field)->text('')->unlabeled()->closesFrame()->build();
         }
         return parent::pdfData($field);
+    }
+
+    /**
+     * The mandate's start entry opens its box, its end entry closes it.
+     *
+     * @param array $entry The entry (mapNormalized()).
+     * @return string
+     */
+    public function framePart(array $entry): string
+    {
+        return match ($entry['mandate_part'] ?? '') {
+            'begin' => 'open',
+            'end'   => 'close',
+            default => '',
+        };
     }
 
     /**
@@ -899,10 +908,10 @@ class DirectDebitField extends BaseField
         $prefix = $sepa ? 'mandate_' : $scheme . '_';
         return [
             'title'       => self::configText($config, $prefix . 'title', self::defaultTitle($scheme)),
-            'text'        => \FabricatorForms\Utils\HtmlSanitizer::sanitize(
+            'text'        => \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize(
                 self::configText($config, $prefix . 'text', $sepa ? $this->defaultMandateText() : '')
             ),
-            'note'        => \FabricatorForms\Utils\HtmlSanitizer::sanitize(
+            'note'        => \FabricatorForms\Utils\Text\HtmlSanitizer::sanitize(
                 self::configText($config, $prefix . 'note', $sepa ? $this->defaultMandateNote() : '')
             ),
             'creditor_id' => self::configText($config, $sepa ? 'creditor_id' : $scheme . '_creditor_id', ''),
@@ -927,8 +936,8 @@ class DirectDebitField extends BaseField
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- a fixed pattern; PHP 8 has no /e modifier.
         $prefix = (string) preg_replace("#[^A-Za-z0-9/?:().,'+ -]#", '', $prefix);
         $prefix = rtrim(substr(trim($prefix), 0, 15), ' -');
-        // The site's date, as the date of signing is written: both name the same day in the record.
-        $unique = wp_date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(5)));
+        // The UTC day, as the date of signing records it (Utils\Text\SigningTime): both name the same day in the record.
+        $unique = wp_date('Ymd', null, new \DateTimeZone('UTC')) . '-' . strtoupper(bin2hex(random_bytes(5)));
         return $prefix !== '' ? $prefix . '-' . $unique : $unique;
     }
 
@@ -1009,7 +1018,7 @@ class DirectDebitField extends BaseField
      */
     private static function hasWording(array $terms): bool
     {
-        return self::plainText($terms['text']) !== '' || self::plainText($terms['note']) !== '';
+        return \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($terms['text']) !== '' || \FabricatorForms\Utils\Text\HtmlSanitizer::plainText($terms['note']) !== '';
     }
 
     /**
@@ -1176,20 +1185,6 @@ class DirectDebitField extends BaseField
             'place'        => __('Place of signing:', 'formfabricator'),
             default        => __('Account holder:', 'formfabricator'),
         };
-    }
-
-    /**
-     * Sanitized HTML as plain text, keeping its paragraphs and line breaks as line breaks.
-     *
-     * @param string $html Sanitized HTML.
-     * @return string
-     */
-    private static function plainText(string $html): string
-    {
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.PregReplace.PregReplaceWeird -- a fixed pattern; PHP 8 has no /e modifier.
-        $text = (string) preg_replace('#<br\s*/?>|</(?:p|div|li|h[1-6])>#i', "\n", $html);
-        $text = html_entity_decode(wp_strip_all_tags($text, false), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        return trim((string) preg_replace("/\n{3,}/", "\n\n", preg_replace("/[ \t]*\n[ \t]*/", "\n", $text)));
     }
 
     /**
@@ -1494,11 +1489,11 @@ class DirectDebitField extends BaseField
      */
     private function defaultMandateText(): string
     {
-        return '<p>' . __(
+        return '<p>' . esc_html__(
             'I hereby authorize the creditor to collect payments from my account by direct debit. At the same time, I instruct my bank to honor the direct debits drawn by the creditor on my account.',
             'formfabricator'
         ) . '</p>'
-            . '<p>' . __(
+            . '<p>' . esc_html__(
                 'If my account does not have sufficient funds, my bank is under no obligation to honor the direct debit. Partial payments will not be made under the direct debit scheme. I bear the costs of the returned direct debit.',
                 'formfabricator'
             ) . '</p>';
@@ -1511,7 +1506,7 @@ class DirectDebitField extends BaseField
      */
     private function defaultMandateNote(): string
     {
-        return '<small>' . __(
+        return '<small>' . esc_html__(
             'Note: I can request a refund of the debited amount within eight weeks, starting from the debit date. The terms agreed with my bank apply.',
             'formfabricator'
         ) . '</small>';

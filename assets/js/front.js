@@ -14,6 +14,12 @@
         });
     }
 
+    /* PHP's trim(), as the server trims an answer (BaseField::answer()); String.prototype.trim() also removes
+       U+FEFF and the Unicode spaces, which the server keeps. */
+    function phpTrim(s) {
+        return s.replace(/^[ \t\n\r\0\x0B]+|[ \t\n\r\0\x0B]+$/g, '');
+    }
+
     /* ── Field-type init functions ───────────────────────────────────────── */
     /* Populated by Assets::frontFieldAssets() from each field's getClientInit(); front.js needs no field-type knowledge. */
 
@@ -22,6 +28,59 @@
     var VALIDATORS = window.FabricatorValidators || {};
 
     /* ── Client-side validation ──────────────────────────────────────────── */
+
+    /* What an answer may hold, as Utils\Text\AnswerText checks it on the server: an answer is recorded as typed or refused,
+       never changed. Refused are control and invisible format characters, line breaks and tabs outside a textarea, and
+       HTML character references, which a page or email shows as the character they name. */
+    /* The zero-width non-joiner and joiner are typed (a Persian keyboard, emoji such as a family) and reorder nothing. */
+    var REFUSED_CHAR = /[\p{Cc}\p{Zl}\p{Zp}]|(?![\u200C\u200D])\p{Cf}/u;
+    var CHAR_REFERENCE = /&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);/g;
+
+    function codePoint(ch) {
+        var hex = ch.codePointAt(0).toString(16).toUpperCase();
+        return 'U+' + ('0000' + hex).slice(-Math.max(4, hex.length));
+    }
+
+    /* Whether a character reference names a character (html_entity_decode() changes it), read by the browser's own
+       HTML parser in a textarea, where tags stay text. */
+    function namesCharacter(ref) {
+        var t = document.createElement('textarea');
+        t.innerHTML = ref;
+        return t.value !== ref;
+    }
+
+    function answerProblem(value, multiline, i18n) {
+        var text = phpTrim(value);
+        if (text === '') return '';
+        var checked = multiline ? text.replace(/[\r\n\t]/g, '') : text;
+        var m = REFUSED_CHAR.exec(checked);
+        if (m) {
+            if (!multiline && /[\r\n\t]/.test(m[0])) {
+                return i18n.answer_one_line || 'This answer can\'t hold line breaks or tabs. Please write it on one line.';
+            }
+            return (i18n.answer_invisible || 'This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it.')
+                .replace('%s', codePoint(m[0]));
+        }
+        var refs = text.match(CHAR_REFERENCE) || [];
+        for (var i = 0; i < refs.length; i++) {
+            if (namesCharacter(refs[i])) {
+                return i18n.answer_reference || 'This answer contains an HTML character reference (such as "&amp;"). Please write the character itself.';
+            }
+        }
+        return '';
+    }
+
+    /* The first problem among the field's typed inputs (text boxes and textareas; not a hidden input, a choice or a
+       file), or ''. Field types whose answers aren't typed (BaseField::typedAnswer()) are skipped by the caller. */
+    function fieldAnswerProblem(fieldEl, i18n) {
+        var inputs = fieldEl.querySelectorAll('textarea, input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="number"], input[type="search"]');
+        for (var i = 0; i < inputs.length; i++) {
+            if (inputs[i].disabled) continue;
+            var problem = answerProblem(inputs[i].value || '', inputs[i].tagName === 'TEXTAREA', i18n);
+            if (problem) return problem;
+        }
+        return '';
+    }
 
     function validatePage(scope) {
         var i18n        = (window.FabricatorForms && window.FabricatorForms.i18n) || {};
@@ -60,6 +119,7 @@
         }
 
         var skipTypes      = window.FabricatorSkipValidation || [];
+        var untypedTypes   = window.FabricatorUntypedAnswers || [];
         var ignoreRequired = !!window.FabricatorIgnoreRequired;
         scope.querySelectorAll('.fabricator-field').forEach(function (fieldEl) {
             var type = (fieldEl.className.match(/fabricator-field--(\S+)/) || [])[1] || '';
@@ -92,14 +152,29 @@
                 });
             }
 
-            /* 3 — Format/validity check (only when field has content) */
+            /* 3 — What the answer holds: the server refuses the same (Utils\Text\AnswerText) */
+            if (untypedTypes.indexOf(type) === -1) {
+                var problem = fieldAnswerProblem(fieldEl, i18n);
+                if (problem) {
+                    hasInvalid = true;
+                    markError(fieldEl, problem);
+                    return;
+                }
+            }
+
+            /* 4 — Format/validity check (only when field has content) */
             if (!empty) {
                 var rules = [];
                 try { rules = JSON.parse(fieldEl.dataset.validate || '[]'); } catch (_) {}
                 rules.forEach(function (rule) {
                     if (!VALIDATORS[rule]) return;
+                    /* null: valid; a text: the message for the field; true: invalid, the rule wrote its message at the
+                       part that is wrong (a mandate's IBAN) and the field's own slot stays empty. */
                     var err = VALIDATORS[rule](fieldEl);
-                    if (err) {
+                    if (err === true) {
+                        hasInvalid = true;
+                        if (!firstError) firstError = fieldEl;
+                    } else if (err) {
                         hasInvalid = true;
                         markError(fieldEl, err);
                     }
@@ -133,6 +208,157 @@
         if (!msgBox) return;
         var top = msgBox.getBoundingClientRect().top + window.pageYOffset - 20;
         window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
+
+    /* ── Errors for screen readers and the keyboard ───────────────────────── */
+    /* A field's error slots are no live regions: the form's message area announces the errors once, with a link to each
+       field, and the cursor goes to the first. Each control is tied to the field's description and to the slots that
+       concern it (aria-describedby), and is aria-invalid while one of them holds a message, so a screen reader reads the
+       error when the control gets the focus. */
+    var ERROR_SLOTS = '.fabricator-field-error, .fabricator-signature-place-error, .fabricator-upload-error';
+    var CONTROLS    = 'input:not([type="hidden"]), select, textarea';
+    var ariaIds     = 0;
+
+    /* Elements of this field, not of a field nested in it (a group's children). */
+    function ownedBy(fieldEl, selector) {
+        return Array.prototype.filter.call(fieldEl.querySelectorAll(selector), function (el) {
+            return el.closest('.fabricator-field') === fieldEl;
+        });
+    }
+
+    function idOf(el, kind) {
+        if (!el.id) el.id = 'fabricator-' + kind + '-' + (++ariaIds);
+        return el.id;
+    }
+
+    function hasMessage(slot) {
+        return slot.textContent.trim() !== '';
+    }
+
+    function syncFieldAria(fieldEl) {
+        var desc  = ownedBy(fieldEl, '.fabricator-field-description')[0];
+        var slots = ownedBy(fieldEl, ERROR_SLOTS);
+        ownedBy(fieldEl, CONTROLS).forEach(function (control) {
+            /* The ids the markup gave it come first and stay. */
+            if (control.dataset.fabricatorDescribedby === undefined) {
+                control.dataset.fabricatorDescribedby = control.getAttribute('aria-describedby') || '';
+            }
+            var ids = control.dataset.fabricatorDescribedby.split(/\s+/).filter(Boolean);
+            if (desc) ids.push(idOf(desc, 'description'));
+            var invalid = false;
+            slots.forEach(function (slot) {
+                /* A part's slot (a mandate's IBAN, an address's street) concerns that part; the field's, all of it. */
+                if (!slot.parentNode.contains(control)) return;
+                ids.push(idOf(slot, 'error'));
+                if (hasMessage(slot)) invalid = true;
+            });
+            ids = ids.filter(function (id, i) { return ids.indexOf(id) === i; });
+            if (ids.length) {
+                control.setAttribute('aria-describedby', ids.join(' '));
+            } else {
+                control.removeAttribute('aria-describedby');
+            }
+            if (invalid) {
+                control.setAttribute('aria-invalid', 'true');
+            } else {
+                control.removeAttribute('aria-invalid');
+            }
+        });
+    }
+
+    /* Messages reach the slots from validatePage(), the server's answer and the field scripts (a mandate checks its IBAN
+       when the visitor leaves it), so the slots are watched rather than each writer asked to keep the attributes. */
+    function initErrorAria(root) {
+        root.querySelectorAll('.fabricator-form').forEach(function (form) {
+            if (form.dataset.fabricatorAriaInit) return;
+            form.dataset.fabricatorAriaInit = '1';
+            form.querySelectorAll('.fabricator-field').forEach(syncFieldAria);
+            if (typeof MutationObserver !== 'function') return;
+            new MutationObserver(function (records) {
+                var fields = [];
+                records.forEach(function (record) {
+                    var el   = record.target.nodeType === 1 ? record.target : record.target.parentNode;
+                    var slot = el && el.closest && el.closest(ERROR_SLOTS);
+                    var fieldEl = slot && slot.closest('.fabricator-field');
+                    if (fieldEl && fields.indexOf(fieldEl) === -1) fields.push(fieldEl);
+                });
+                fields.forEach(syncFieldAria);
+            }).observe(form, { childList: true, characterData: true, subtree: true });
+        });
+    }
+
+    /* The fields in scope with an error, in page order. */
+    function fieldsWithErrors(scope) {
+        return Array.prototype.filter.call(scope.querySelectorAll('.fabricator-field'), function (fieldEl) {
+            return ownedBy(fieldEl, ERROR_SLOTS).some(hasMessage);
+        });
+    }
+
+    /* The field's name as its label gives it, without the required mark. */
+    function fieldName(fieldEl) {
+        var label = ownedBy(fieldEl, '.fabricator-label')[0];
+        var name  = '';
+        if (label) {
+            var copy = label.cloneNode(true);
+            copy.querySelectorAll('.fabricator-required').forEach(function (mark) { mark.remove(); });
+            name = copy.textContent.trim();
+        }
+        if (!name) {
+            var control = ownedBy(fieldEl, CONTROLS)[0];
+            name = (control && control.getAttribute('aria-label')) || '';
+        }
+        var i18n = (window.FabricatorForms && window.FabricatorForms.i18n) || {};
+        return name || i18n.unnamed_field || 'Unnamed field';
+    }
+
+    /* Shows the field (on its page, in view) and puts the cursor in it: in its first control with an error, else its
+       first control, else on the field itself (a drawing pad). */
+    function focusField(fieldEl) {
+        if (!fieldEl) return;
+        scrollToField(fieldEl);
+        var controls = ownedBy(fieldEl, CONTROLS).filter(function (c) { return !c.disabled; });
+        var target   = controls.filter(function (c) { return c.getAttribute('aria-invalid') === 'true'; })[0] || controls[0];
+        if (!target) {
+            if (!fieldEl.hasAttribute('tabindex')) fieldEl.setAttribute('tabindex', '-1');
+            target = fieldEl;
+        }
+        target.focus({ preventScroll: true });
+    }
+
+    /* After a check failed in scope: the message area names the fields with an error, each a link to it, and the cursor
+       goes to the first. The message area is the form's one live region, so this is read out once, not once a field. */
+    function reportErrors(form, scope, message) {
+        var fields = fieldsWithErrors(scope);
+        fields.forEach(syncFieldAria);
+        var wrap   = form.closest('.fabricator-form-wrap');
+        var msgBox = wrap && wrap.querySelector('.fabricator-form-messages');
+        if (msgBox && message) {
+            msgBox.className   = 'fabricator-form-messages error';
+            msgBox.textContent = message;
+            if (fields.length) {
+                var list = document.createElement('ul');
+                fields.forEach(function (fieldEl) {
+                    var control = ownedBy(fieldEl, CONTROLS)[0];
+                    var link    = document.createElement('a');
+                    link.href        = '#' + (control ? idOf(control, 'control') : idOf(fieldEl, 'field'));
+                    link.textContent = fieldName(fieldEl);
+                    link.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        focusField(fieldEl);
+                    });
+                    var item = document.createElement('li');
+                    item.appendChild(link);
+                    list.appendChild(item);
+                });
+                msgBox.appendChild(list);
+            }
+            msgBox.style.display = '';
+        }
+        if (fields.length) {
+            focusField(fields[0]);
+        } else {
+            scrollToMessages(msgBox);
+        }
     }
 
     /* ── Multi-page navigation ────────────────────────────────────────────── */
@@ -221,6 +447,14 @@
                 requestAnimationFrame(tick);
             }
 
+            /* A page the visitor asked for: the cursor goes to its top, so the keyboard and a screen reader carry on there
+               instead of on the button that is now hidden. */
+            function goToPage(idx) {
+                showPage(idx, true);
+                if (!pages[idx].hasAttribute('tabindex')) pages[idx].setAttribute('tabindex', '-1');
+                pages[idx].focus({ preventScroll: true });
+            }
+
             function currentIdx() {
                 return pages.findIndex(function (p) {
                     return p.classList.contains('fabricator-page-active');
@@ -244,20 +478,20 @@
                     var idx    = currentIdx();
                     var result = validatePage(pages[idx]);
                     if (!result.valid) {
-                        scrollToField(result.firstError);
+                        focusField(result.firstError);
                         return;
                     }
-                    if (idx < pages.length - 1) showPage(idx + 1, true);
+                    if (idx < pages.length - 1) goToPage(idx + 1);
                 }
                 if (e.target.classList.contains('fabricator-btn-prev')) {
                     var idx2 = currentIdx();
-                    if (idx2 > 0) showPage(idx2 - 1, true);
+                    if (idx2 > 0) goToPage(idx2 - 1);
                 }
                 var gotoEl = e.target.closest('[data-fabricator-goto-page]');
                 if (gotoEl) {
                     var gotoIdx = parseInt(gotoEl.getAttribute('data-fabricator-goto-page'), 10);
                     if (!isNaN(gotoIdx) && gotoIdx >= 0 && gotoIdx <= furthest && gotoIdx !== currentIdx()) {
-                        showPage(gotoIdx, true);
+                        goToPage(gotoIdx);
                     }
                 }
             });
@@ -278,40 +512,9 @@
             /* The conditional elements hidden by the pass being decided; see applyAll(). */
             var hiddenNow = new Set();
 
-            /* The server compares values after sanitize_text_field() (or the textarea variant), so this mirrors
-               WordPress's _sanitize_text_fields() step by step, checked in condition-parity.test.js. */
-            function phpTrim(s) {
-                return s.replace(/^[ \t\n\r\0\x0B]+|[ \t\n\r\0\x0B]+$/g, '');
-            }
-            function escLikeWp(s) {
-                return s.replace(/&(?![A-Za-z][A-Za-z0-9]*;|#[0-9]+;|#x[0-9A-Fa-f]+;)/g, '&amp;')
-                    .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-            }
-            function sanitizeLikeWp(value, keepNewlines) {
-                var s = String(value);
-                if (s.indexOf('<') !== -1) {
-                    s = s.replace(/<[^>]*?((?=<)|>|$)/g, function (m) { return m.indexOf('>') === -1 ? escLikeWp(m) : m; });
-                    s = s.replace(/<(script|style)[^>]*?>[\s\S]*?<\/\1>/gi, '');
-                    s = s.replace(/<!--[\s\S]*?-->/g, '').replace(/<(?![\s<])[^>]*>/g, '');
-                    s = s.split('<\n').join('&lt;\n');
-                }
-                if (!keepNewlines) {
-                    s = s.replace(/[\r\n\t ]+/g, ' ');
-                }
-                s = phpTrim(s);
-                var found = false;
-                var octet;
-                while ((octet = /%[a-f0-9]{2}/i.exec(s)) !== null) {
-                    s = s.split(octet[0]).join('');
-                    found = true;
-                }
-                if (found) {
-                    s = phpTrim(s.replace(/ +/g, ' '));
-                }
-                return s;
-            }
+            /* The server compares answers as typed, trimmed (phpTrim()). */
             function readValue(el) {
-                return sanitizeLikeWp(el.value || '', el.tagName === 'TEXTAREA');
+                return phpTrim(String(el.value || ''));
             }
 
             /* Inside a conditional element the current pass hides: read as absent (BaseField::hiddenConditionValue()). */
@@ -389,7 +592,7 @@
                     case 'contains':     return rv !== '' && (isArr
                         ? val.some(function (v) { return v.toLowerCase().indexOf(rv) !== -1; })
                         : str.indexOf(rv) !== -1);
-                    /* Empty value = half-configured rule: unsatisfied, matching FormProcessor::evalConditionRule(). */
+                    /* Empty value = half-configured rule: unsatisfied, matching ConditionRule::holds(). */
                     case 'not_contains': return rv !== '' && (isArr
                         ? val.every(function (v) { return v.toLowerCase().indexOf(rv) === -1; })
                         : str.indexOf(rv) === -1);
@@ -399,7 +602,7 @@
                        which is another way client and server disagreed on whether a field is visible. */
                     case 'greater':      { var a = asNumber(str), b = asNumber(rv); return a !== null && b !== null && a > b; }
                     case 'less':         { var a2 = asNumber(str), b2 = asNumber(rv); return a2 !== null && b2 !== null && a2 < b2; }
-                    /* Unsatisfied, like FormProcessor::evalConditionRule(): "true" showed a field the server then treated as hidden and dropped. */
+                    /* Unsatisfied, like ConditionRule::holds(): "true" showed a field the server then treated as hidden and dropped. */
                     default:             return false;
                 }
             }
@@ -475,12 +678,7 @@
                         : vr.hasRequired
                             ? (i18n.validation_required || 'Please fill in all required fields.')
                             : (i18n.validation_invalid || 'Please enter valid data.');
-                    if (msgBox) {
-                        msgBox.className    = 'fabricator-form-messages error';
-                        msgBox.textContent  = msg;
-                        msgBox.style.display = '';
-                    }
-                    scrollToField(vr.firstError);
+                    reportErrors(form, form, msg);
                     return;
                 }
 
@@ -603,31 +801,18 @@
                         var errMsg = (res.data && res.data.message)
                             || i18n.error_server
                             || 'Server error. Please try again.';
-                        if (msgBox) {
-                            msgBox.className    = 'fabricator-form-messages error';
-                            msgBox.textContent  = errMsg;
-                            msgBox.style.display = '';
-                        }
 
-                        /* Show per-field server errors; without one to show, the message itself is brought into view. */
+                        /* Per-field server errors go to their fields; the message names them, or stands alone. */
                         var fieldErrors = res.data && res.data.errors;
-                        var firstErrEl  = null;
                         if (fieldErrors) {
                             /* A later copy of the same form on the page carries an id suffix (FormRenderer::uniqueIds()). */
                             var idSuffix = form.dataset.fabricatorIdSuffix || '';
                             Object.keys(fieldErrors).forEach(function (fid) {
                                 var errEl = form.querySelector('#' + CSS.escape(fid + '-error' + idSuffix));
-                                if (errEl) {
-                                    errEl.textContent = fieldErrors[fid];
-                                    if (!firstErrEl) firstErrEl = errEl.closest('.fabricator-field');
-                                }
+                                if (errEl) errEl.textContent = fieldErrors[fid];
                             });
                         }
-                        if (firstErrEl) {
-                            scrollToField(firstErrEl);
-                        } else {
-                            scrollToMessages(msgBox);
-                        }
+                        reportErrors(form, form, errMsg);
                     }
                     })
                     .catch(function () {
@@ -743,6 +928,7 @@
         initConditions(root);
         initForms(root);
         initCaptchaGates(root);
+        initErrorAria(root);
     }
 
     /* Scoped to the new wrapper, never document: boots only what arrived, instead of re-running every step over the whole page. */
@@ -833,6 +1019,7 @@
     if (window.__FABRICATOR_TEST__) {
         window.FabricatorTestHooks = {
             validatePage:               validatePage,
+            reportErrors:               reportErrors,
             initConditions:             initConditions,
             showCaptchaBlockedNotice:   showCaptchaBlockedNotice,
             resetFormsOnBfcacheRestore: resetFormsOnBfcacheRestore,

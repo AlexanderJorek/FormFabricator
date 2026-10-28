@@ -2,13 +2,13 @@
 
 namespace FabricatorForms\Tests\Unit\PDF;
 
-use FabricatorForms\Admin\Verificationpage;
+use FabricatorForms\Admin\VerificationPage;
 use FabricatorForms\PDF\PdfUtils;
 use FabricatorForms\Tests\Support\Reflect;
 use FabricatorForms\Tests\Support\TestCase;
 
 /**
- * Verificationpage::comparableText() and repairSpacing(): a field's text from the PDF matches its sealed value when they
+ * VerificationPage::comparableText() and repairSpacing(): a field's text from the PDF matches its sealed value when they
  * differ in spaces only. pdfparser loses a space where a line wraps and gains one where the text switches to a
  * fallback font, and Unicode normalization sorts combining marks differently on either side of a lost space.
  */
@@ -30,7 +30,7 @@ final class RepairSpacingTest extends TestCase
     #[\PHPUnit\Framework\Attributes\DataProvider('cases')]
     public function testOnlySpacesMayDiffer(string $pdf, string $sealed, ?string $expected): void
     {
-        self::assertSame($expected, Reflect::call(Verificationpage::class, 'repairSpacing', $pdf, $sealed));
+        self::assertSame($expected, Reflect::call(VerificationPage::class, 'repairSpacing', $pdf, $sealed));
     }
 
     public function testASpaceCarryingMarksLostAtALineWrapStillMatches(): void
@@ -42,9 +42,9 @@ final class RepairSpacingTest extends TestCase
         // marks as one cluster (U+0336 and U+0335 before U+0317 and U+0316); with it, as two.
         $sealed = "r\u{0336}\u{0317} \u{0335}\u{0316}i";
         $pdf    = "r\u{0336}\u{0317}\u{0335}\u{0316}i";
-        $read   = static fn(string $s): string => Reflect::call(Verificationpage::class, 'comparableText', PdfUtils::normalizeText($s));
+        $read   = static fn(string $s): string => Reflect::call(VerificationPage::class, 'comparableText', PdfUtils::normalizeText($s));
 
-        self::assertNull(Reflect::call(Verificationpage::class, 'repairSpacing', PdfUtils::normalizeText($pdf), PdfUtils::normalizeText($sealed)), 'respacing alone fails');
+        self::assertNull(Reflect::call(VerificationPage::class, 'repairSpacing', PdfUtils::normalizeText($pdf), PdfUtils::normalizeText($sealed)), 'respacing alone fails');
         self::assertSame($read($sealed), $read($pdf));
         self::assertNotSame($read($sealed), $read("r\u{0336}\u{0317}\u{0335}\u{0316}x"), 'a changed letter still differs');
     }

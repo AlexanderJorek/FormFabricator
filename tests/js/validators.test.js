@@ -112,7 +112,7 @@ test('website-url', () => {
     // As WebsiteField::validate(): invisible characters are refused, also a non-breaking space at the end.
     const url = (v) => check('website-url', '<input type="url" data-validate-url="1">', (el) => { el.querySelector('input').value = v; });
     assert.equal(url('https://müller.de/über'), null);
-    for (const v of ['https://exa‮lpmoc.de', 'https://exa​mple.de', 'https://example.de ']) {
+    for (const v of ['https://exa\u202Elpmoc.de', 'https://exa\u200Bmple.de', 'https://example.de\u00A0']) {
         assert.equal(url(v), i18n.website_invalid_url, JSON.stringify(v));
     }
 });
@@ -147,11 +147,11 @@ test('debit-bic', () => {
 });
 
 test('debit-bic: a wrong BIC is flagged at the BIC input itself', () => {
-    // The direct debit rules write their message into the sub-field's own error slot and return a zero-width space: the
-    // field counts as invalid without a second, field-level message.
+    // The direct debit rules write their message into the sub-field's own error slot and return true: the field counts
+    // as invalid without a second, field-level message.
     let el;
     const r = check('debit-bic', '<div><input class="fabricator-debit-bic" value="INVALID"><span class="fabricator-field-error"></span></div>', (e) => { el = e; });
-    assert.equal(r, '​');
+    assert.equal(r, true);
     assert.equal(el.querySelector('.fabricator-field-error').textContent, i18n.debit_bic_invalid);
 });
 
@@ -160,6 +160,6 @@ test('debit-required', () => {
     const sepa = (iban, bic, holder) => part('iban', iban) + part('bic', bic) + part('holder', holder);
     const required = (el) => { el.dataset.required = 'true'; };
     assert.equal(check('debit-required', part('iban', '')), null, 'not required');
-    assert.equal(typeof check('debit-required', sepa('', 'COBADEFF', 'Max'), required), 'string', 'IBAN missing');
+    assert.equal(check('debit-required', sepa('', 'COBADEFF', 'Max'), required), true, 'IBAN missing: invalid, the message at the IBAN');
     assert.equal(check('debit-required', sepa('DE89370400440532013000', 'COBADEFF', 'Max Muster'), required), null);
 });

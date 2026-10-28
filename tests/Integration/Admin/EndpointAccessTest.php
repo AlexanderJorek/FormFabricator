@@ -10,7 +10,7 @@ use FabricatorForms\Tests\Integration\AjaxTestCase;
  * a user granted one permission reaches exactly its endpoints, a Subscriber none.
  *
  * Calls carry no valid nonce, so nothing changes: a refused user stops at the capability check ("Forbidden"), an
- * allowed one at the nonce check, in Utils\AjaxGuard's order.
+ * allowed one at the nonce check, in Utils\Security\AjaxGuard's order.
  *
  * A new wp_ajax_fabricator_* action fails testEveryActionIsListed() until it is added to ACTIONS with its permission.
  */
@@ -28,31 +28,31 @@ final class EndpointAccessTest extends AjaxTestCase
         'fabricator_forms_bulk_duplicate'     => 'edit_forms',
         'fabricator_forms_export'             => 'edit_forms',
         'fabricator_forms_import'             => 'edit_forms',
-        'fabricator_fsel_save'                => 'edit_forms',
-        'fabricator_fsel_delete'              => 'edit_forms',
-        'fabricator_save_general_settings'    => 'settings',
+        'fabricator_forms_fsel_save'                => 'edit_forms',
+        'fabricator_forms_fsel_delete'              => 'edit_forms',
+        'fabricator_forms_save_general_settings'    => 'settings',
         'fabricator_forms_unlock_settings'    => 'settings',
         'fabricator_forms_factory_reset'      => 'admin',
         'fabricator_forms_rotate_key'         => 'admin',
-        'fabricator_setup_keep_default'       => 'admin',
-        'fabricator_setup_get_master_key'     => 'admin',
-        'fabricator_upgrade_get_master_key'   => 'admin',
-        'fabricator_setup_confirm_secure'     => 'admin',
-        'fabricator_setup_reset_choice'       => 'admin',
-        'fabricator_add_legacy_key'           => 'admin',
-        'fabricator_peek_key_download'        => 'admin',
-        'fabricator_confirm_key_download'     => 'admin',
-        'fabricator_save_access_settings'     => 'admin',
-        'fabricator_access_user_search'       => 'admin',
+        'fabricator_forms_setup_keep_default'       => 'admin',
+        'fabricator_forms_setup_get_master_key'     => 'admin',
+        'fabricator_forms_upgrade_get_master_key'   => 'admin',
+        'fabricator_forms_setup_confirm_secure'     => 'admin',
+        'fabricator_forms_setup_reset_choice'       => 'admin',
+        'fabricator_forms_add_legacy_key'           => 'admin',
+        'fabricator_forms_peek_key_download'        => 'admin',
+        'fabricator_forms_confirm_key_download'     => 'admin',
+        'fabricator_forms_save_access_settings'     => 'admin',
+        'fabricator_forms_access_user_search'       => 'admin',
         'fabricator_forms_pdf_preview'        => 'edit_pdf_layout',
-        'fabricator_save_pdf_layout'          => 'edit_pdf_layout',
+        'fabricator_forms_save_pdf_layout'          => 'edit_pdf_layout',
         'fabricator_forms_unlock_pdf_layout'  => 'edit_pdf_layout',
-        'fabricator_verify_push_lines'        => 'use_verifier',
-        'fabricator_verify_progress'          => 'use_verifier',
+        'fabricator_forms_verify_push_lines'        => 'use_verifier',
+        'fabricator_forms_verify_progress'          => 'use_verifier',
     ];
 
     /** Actions a logged-out visitor uses on purpose: the form submission, its token and an ALTCHA field's challenge. */
-    private const PUBLIC_ACTIONS = ['fabricator_forms_submit', 'fabricator_forms_get_token', 'fabricator_altcha_challenge'];
+    private const PUBLIC_ACTIONS = ['fabricator_forms_submit', 'fabricator_forms_get_token', 'fabricator_forms_altcha_challenge'];
 
     private const PERMISSIONS = ['view_forms', 'edit_forms', 'use_verifier', 'edit_pdf_layout', 'settings'];
 
@@ -67,7 +67,8 @@ final class EndpointAccessTest extends AjaxTestCase
         Admin\FormSelectList::init();
         Admin\FormSettings::init();
         Admin\PDFLayoutEditor::init();
-        Admin\Verificationpage::register();
+        Admin\VerificationPage::register();
+        \FabricatorForms\Utils\Storage\AdminLock::init();
     }
 
     // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- overrides WP_UnitTestCase's snake_case fixture method.
@@ -129,7 +130,7 @@ final class EndpointAccessTest extends AjaxTestCase
             'form selections' => [[Admin\FormSelectList::class, 'render'], 'edit_forms'],
             'settings'        => [[Admin\FormSettings::class, 'renderSettingsPage'], 'settings'],
             'PDF layout'      => [[Admin\PDFLayoutEditor::class, 'render'], 'edit_pdf_layout'],
-            'PDF verifier'    => [[Admin\Verificationpage::class, 'render'], 'use_verifier'],
+            'PDF verifier'    => [[Admin\VerificationPage::class, 'render'], 'use_verifier'],
         ];
         foreach ($this->profiles() as $profile => [$user, $holds]) {
             foreach ($screens as $screen => [$callback, $needs]) {
@@ -152,7 +153,7 @@ final class EndpointAccessTest extends AjaxTestCase
         $handlers = [
             'settings post'   => [[Admin\FormSettings::class, 'handleSettingsPost'], 'settings', 'fabricator_settings_nonce', 'fabricator_forms_settings'],
             'PDF layout post' => [[Admin\PDFLayoutEditor::class, 'handleLayoutPost'], 'edit_pdf_layout', 'fabricator_pdf_layout_nonce', 'fabricator_pdf_layout'],
-            'verifier upload' => [[Admin\Verificationpage::class, 'handleUploadPost'], 'use_verifier', 'fabricator_verifier_nonce', 'fabricator_verifier_upload'],
+            'verifier upload' => [[Admin\VerificationPage::class, 'handleUploadPost'], 'use_verifier', 'fabricator_verifier_nonce', 'fabricator_verifier_upload'],
         ];
         $_SERVER['REQUEST_METHOD'] = 'POST';
         $trap = static function (string $location): string {

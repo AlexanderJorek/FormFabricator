@@ -80,7 +80,7 @@ final class UninstallTest extends TestCase
     private function plantData(): void
     {
         global $wpdb;
-        $form = FormModel::save(['title' => 'To be removed', 'fields' => [], 'notifications' => [], 'settings' => []], 0, true);
+        $form = FormModel::save(['title' => 'To be removed', 'fields' => [], 'notifications' => [], 'settings' => []], 0);
         self::assertIsInt($form);
         foreach (self::OPTIONS as $option) {
             update_option($option, 'x');
@@ -96,7 +96,7 @@ final class UninstallTest extends TestCase
         wp_schedule_event(time() + 3600, 'hourly', 'fabricator_rl_sweep_expired');
         wp_schedule_single_event(time() + 600, 'fabricator_verifier_sweep_expired');
         // Attachment copies a killed request left in the site's folder, and its ensure() transient.
-        $left = \FabricatorForms\Utils\PrivateDir::ensure() . '/mail/' . bin2hex(random_bytes(16));
+        $left = \FabricatorForms\Utils\Storage\PrivateDir::ensure() . '/mail/' . bin2hex(random_bytes(16));
         mkdir($left . '/f1', 0700, true);
         file_put_contents($left . '/f1/passport.jpg', 'x');
     }
@@ -116,6 +116,6 @@ final class UninstallTest extends TestCase
         self::assertFalse(wp_next_scheduled('fabricator_rl_sweep_expired'), "$where: hourly sweep unscheduled");
         self::assertFalse(wp_next_scheduled('fabricator_verifier_sweep_expired'), "$where: one-off event unscheduled");
         clearstatcache();
-        self::assertDirectoryDoesNotExist(\FabricatorForms\Utils\PrivateDir::base(), "$where: the plugin's folder in the uploads directory");
+        self::assertDirectoryDoesNotExist(\FabricatorForms\Utils\Storage\PrivateDir::base(), "$where: the plugin's folder in the uploads directory");
     }
 }

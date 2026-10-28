@@ -2,7 +2,7 @@
 
 namespace FabricatorForms\Tests\Integration\Admin;
 
-use FabricatorForms\Plugin;
+use FabricatorForms\Admin\Notices;
 use FabricatorForms\Tests\Integration\TestCase;
 
 /**
@@ -19,7 +19,7 @@ final class UploadsProbeTest extends TestCase
         parent::set_up();
         wp_set_current_user(self::factory()->user->create(['role' => 'administrator']));
         delete_transient(self::TRANSIENT);
-        wp_clear_scheduled_hook(Plugin::UPLOADS_PROBE_HOOK);
+        wp_clear_scheduled_hook(Notices::UPLOADS_PROBE_HOOK);
     }
 
     // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- overrides WP_UnitTestCase's snake_case fixture method.
@@ -34,7 +34,7 @@ final class UploadsProbeTest extends TestCase
     {
         $_SERVER['SERVER_SOFTWARE'] = 'nginx/1.25.3';
         self::assertStringContainsString('reads neither .htaccess nor web.config', $this->notice());
-        self::assertNotFalse(wp_next_scheduled(Plugin::UPLOADS_PROBE_HOOK), 'the probe is queued, not run inline');
+        self::assertNotFalse(wp_next_scheduled(Notices::UPLOADS_PROBE_HOOK), 'the probe is queued, not run inline');
 
         $_SERVER['SERVER_SOFTWARE'] = 'Apache/2.4.58';
         self::assertSame('', $this->notice(), 'plain Apache honours .htaccess');
@@ -46,7 +46,7 @@ final class UploadsProbeTest extends TestCase
         $_SERVER['SERVER_SOFTWARE'] = 'Apache/2.4.58';
         $this->answer(static fn(string $url): array => self::response(200, self::probeFileContent($url)));
 
-        Plugin::runUploadsProbe();
+        Notices::runUploadsProbe();
 
         self::assertSame('exposed', get_transient(self::TRANSIENT));
         self::assertEqualsWithDelta(DAY_IN_SECONDS, $this->transientLifetime(), 5);
@@ -61,7 +61,7 @@ final class UploadsProbeTest extends TestCase
         $_SERVER['SERVER_SOFTWARE'] = 'nginx/1.25.3';
         $this->answer(static fn(): array => self::response(403, 'Forbidden'));
 
-        Plugin::runUploadsProbe();
+        Notices::runUploadsProbe();
 
         self::assertSame('protected', get_transient(self::TRANSIENT));
         self::assertEqualsWithDelta(DAY_IN_SECONDS, $this->transientLifetime(), 5);
@@ -87,18 +87,18 @@ final class UploadsProbeTest extends TestCase
         $_SERVER['SERVER_SOFTWARE'] = 'Apache/2.4.58';
         $this->answer($answer);
 
-        Plugin::runUploadsProbe();
+        Notices::runUploadsProbe();
 
         self::assertSame('', get_transient(self::TRANSIENT));
         self::assertEqualsWithDelta(HOUR_IN_SECONDS, $this->transientLifetime(), 5);
         self::assertSame('', $this->notice(), 'unknown, so the server name decides: Apache is fine');
-        self::assertFalse(wp_next_scheduled(Plugin::UPLOADS_PROBE_HOOK), 'the cached answer is used, no new probe queued');
+        self::assertFalse(wp_next_scheduled(Notices::UPLOADS_PROBE_HOOK), 'the cached answer is used, no new probe queued');
     }
 
     public function testTheProbeFileIsRemovedAfterwards(): void
     {
         $this->answer(static fn(string $url): array => self::response(200, self::probeFileContent($url)));
-        Plugin::runUploadsProbe();
+        Notices::runUploadsProbe();
 
         self::assertSame([], glob(wp_upload_dir()['basedir'] . '/formfabricator/probe-*.txt') ?: []);
     }
@@ -106,7 +106,7 @@ final class UploadsProbeTest extends TestCase
     public function testAnotherUsersViewAndADismissalHideTheNotice(): void
     {
         $this->answer(static fn(string $url): array => self::response(200, self::probeFileContent($url)));
-        Plugin::runUploadsProbe();
+        Notices::runUploadsProbe();
         self::assertNotSame('', $this->notice());
 
         update_user_meta(get_current_user_id(), 'fabricator_uploads_notice_dismissed', time() + DAY_IN_SECONDS);
@@ -120,7 +120,7 @@ final class UploadsProbeTest extends TestCase
     {
         // Shown on every admin screen, and back every 30 days, it read as a nag (WordPress.org guideline 11).
         $this->answer(static fn(string $url): array => self::response(200, self::probeFileContent($url)));
-        Plugin::runUploadsProbe();
+        Notices::runUploadsProbe();
         self::assertNotSame('', $this->notice('toplevel_page_fabricator-forms'), "this plugin's screens");
         self::assertNotSame('', $this->notice('plugins'), 'the Plugins list');
         self::assertSame('', $this->notice('dashboard'));
@@ -159,7 +159,7 @@ final class UploadsProbeTest extends TestCase
     {
         set_current_screen($screen);
         ob_start();
-        Plugin::maybeWarnUnprotectedUploads();
+        Notices::maybeWarnUnprotectedUploads();
         return (string) ob_get_clean();
     }
 

@@ -346,6 +346,7 @@
                             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                             body: new URLSearchParams({
                                 action: 'fabricator_forms_bulk_delete',
+                                bulk_nonce: pageData.bulkNonce || '',
                                 ids: JSON.stringify(ids),
                                 nonces: JSON.stringify(nonces)
                             })
@@ -380,6 +381,7 @@
                             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                             body: new URLSearchParams({
                                 action: 'fabricator_forms_bulk_duplicate',
+                                bulk_nonce: pageData.bulkNonce || '',
                                 ids: JSON.stringify(ids),
                                 nonces: JSON.stringify(dupNonces)
                             })

@@ -17,6 +17,14 @@
     var I18N = pageData.i18n || {};
     var DATA = pageData.data || {};
 
+    /* A status code with its title (HTTP 500 "Internal Server Error"), as Utils\Text\HttpStatus names it: a code alone
+       tells an admin nothing, and a response over HTTP/2 has no statusText. */
+    function httpStatusLabel(code) {
+        var status = DATA.httpStatus || {};
+        var title  = (status.titles || {})[code];
+        return title ? (status.format || 'HTTP %1$d "%2$s"').replace('%1$d', code).replace('%2$s', title) : 'HTTP ' + code;
+    }
+
 (function () {
     /* Mirrors the Settings → Feldausgabe option so the browser preview
        matches what the actual mPDF template (layout.php) renders. */
@@ -55,8 +63,8 @@
         
     var pageOfTpl = I18N.pageOfPage;
 
-    /* Auto-dismiss save notice: wait 5 s, then fade out over 2 s */
-    var notice = document.querySelector('.fabricator-settings-notice');
+    /* Auto-dismiss save notice: wait 5 s, then fade out over 2 s. Not the edit lock's, which stays while it holds. */
+    var notice = document.querySelector('.fabricator-settings-notice:not(#fabricator-lock-notice)');
     if (notice) {
         setTimeout(function () {
             notice.style.opacity = '0';
@@ -404,7 +412,7 @@
             var fd = new FormData();
             fd.append('action', 'fabricator_forms_pdf_preview');
             fd.append('nonce',  DATA.nonce);
-            fd.append('settings', JSON.stringify(collectSettings()));
+            fd.append('settings', b64JsonEncode(collectSettings()));
             fetch(DATA.ajaxUrl, {method:'POST', body:fd})
                 .then(function(r){
                     return r.text().then(function(text){
@@ -414,11 +422,7 @@
                         } catch (e) {
                             /* Not JSON (a PHP error, wp_die()): shown, not reported as a network error. */
                             console.error('PDF preview: non-JSON response (HTTP ' + r.status + ')', text);
-                            throw new Error(
-                                
-                                I18N.unexpectedResponse
-                                    .replace('%d', r.status)
-                            );
+                            throw new Error(I18N.unexpectedResponse.replace('%s', httpStatusLabel(r.status)));
                         }
                         return resp;
                     });
@@ -1204,7 +1208,8 @@
     var form = document.getElementById('fabricator-pdf-layout-form');
     if (!form) return;
     function showNotice(msg, isError) {
-        var existing = document.querySelector('.fabricator-settings-notice');
+        /* The previous save's notice goes; the edit lock's stays. */
+        var existing = document.querySelector('.fabricator-settings-notice:not(#fabricator-lock-notice)');
         if (existing) existing.remove();
         var n = document.createElement('div');
         n.className = 'fabricator-settings-notice fabricator-settings-notice--'
@@ -1231,7 +1236,11 @@
         var origHtml = btn ? btn.innerHTML : '';
         if (btn) { btn.disabled = true; fabIconThenText(btn, '<span class="fabricator-spinner"></span> ', I18N.saving); }
         var fd = new FormData(form);
-        fd.set('action', 'fabricator_save_pdf_layout');
+        fd.set('action', 'fabricator_forms_save_pdf_layout');
+        var hbInput = document.getElementById('fabricator-header-layout-input');
+        var hbValue = { rows: 8, elements: [] };
+        if (hbInput && hbInput.value) { try { hbValue = JSON.parse(hbInput.value); } catch (e) {} }
+        fd.set('header_layout', b64JsonEncode(hbValue));
         requestAnimationFrame(function(){ requestAnimationFrame(function(){
         fetch(DATA.ajaxUrl, {method:'POST', body:fd})
             .then(function(r){
@@ -1242,7 +1251,7 @@
                     } catch (e) {
                         /* Not JSON (a PHP error, wp_die()): shown, not reported as a network error. */
                         console.error('PDF layout save: non-JSON response (HTTP ' + r.status + ')', text);
-                        throw new Error(I18N.unexpectedResponse.replace('%d', r.status));
+                        throw new Error(I18N.unexpectedResponse.replace('%s', httpStatusLabel(r.status)));
                     }
                     return data;
                 });
@@ -1279,3 +1288,9 @@
 }());
 
 }());
+
+/* JSON sent base64-encoded, so the server's sanitize_text_field() reads an opaque text and no markup in the header's
+   texts is stripped. btoa() takes Latin1 only; encodeURIComponent+unescape turns UTF-8 into such bytes first. */
+function b64JsonEncode(value) {
+    return btoa(unescape(encodeURIComponent(JSON.stringify(value))));
+}

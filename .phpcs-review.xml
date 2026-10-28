@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<ruleset name="FormFabricator-Review">
+    <description>
+        The checks WordPress.org's plugin reviewers run on the shipped code: output escaping, nonce verification and
+        input sanitizing, the way their scanner reads them. It honours no phpcs:ignore comment and knows no custom
+        sanitizer, so an input or an echo has to be checked, sanitized or escaped where it is read or printed, in a
+        form the sniff recognises. Plugin Check and .phpcs-security.xml honour both and pass code the reviewers reject.
+
+        A release gate: zero findings. Usage: vendor/bin/phpcs --standard=.phpcs-review.xml
+    </description>
+
+    <!-- What the package ships. -->
+    <file>formfabricator.php</file>
+    <file>uninstall.php</file>
+    <file>includes</file>
+
+    <arg name="ignore-annotations"/>
+
+    <rule ref="WordPress.Security.EscapeOutput"/>
+    <rule ref="WordPress.Security.NonceVerification"/>
+    <rule ref="WordPress.Security.ValidatedSanitizedInput"/>
+
+    <!-- What the reviewers' own scanner reports beyond those sniffs: late escaping in the function that fits the context,
+         input read as sanitize_*(wp_unslash(...)) in place, nonce checks no path can skip. -->
+    <rule ref="./tools/phpcs/FormFabricatorReview"/>
+</ruleset>

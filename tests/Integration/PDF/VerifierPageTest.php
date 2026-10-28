@@ -2,14 +2,14 @@
 
 namespace FabricatorForms\Tests\Integration\PDF;
 
-use FabricatorForms\Admin\Verificationpage;
+use FabricatorForms\Admin\VerificationPage;
 use FabricatorForms\Fields\FieldRegistry;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\PDF\Generator;
 use FabricatorForms\PDF\HashSeal;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
 use FabricatorForms\Tests\Support\Overrides;
-use FabricatorForms\Utils\MemoryBudget;
+use FabricatorForms\Utils\Security\MemoryBudget;
 use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
@@ -33,7 +33,7 @@ final class VerifierPageTest extends AjaxTestCase
         }
         // The plugin loads the admin classes only when is_admin(), which the test bootstrap is not; hook them as
         // admin-ajax.php would.
-        Verificationpage::register();
+        VerificationPage::register();
     }
 
     // phpcs:ignore PSR1.Methods.CamelCapsMethodName.NotCamelCaps -- overrides WP_UnitTestCase's snake_case fixture method.
@@ -93,7 +93,7 @@ final class VerifierPageTest extends AjaxTestCase
             throw new \RuntimeException($location);
         });
         try {
-            Verificationpage::handleUploadPost();
+            VerificationPage::handleUploadPost();
         } catch (\RuntimeException $e) {
             // the Post/Redirect/Get answer
         } finally {
@@ -125,10 +125,10 @@ final class VerifierPageTest extends AjaxTestCase
             throw new \RuntimeException($location);
         });
         try {
-            Verificationpage::handleUploadPost();
+            VerificationPage::handleUploadPost();
             self::fail('the upload ends in a redirect (Post/Redirect/Get)');
         } catch (\RuntimeException $e) {
-            self::assertStringContainsString('page=fabricator-pdf-verification', $e->getMessage());
+            self::assertStringContainsString('page=fabricator-forms-pdf-verification', $e->getMessage());
         }
         $batch = get_transient('fabricator_vbatch_' . get_current_user_id());
         $token = $batch['queue'][0]['token'];
@@ -138,7 +138,7 @@ final class VerifierPageTest extends AjaxTestCase
         $imageDir = wp_upload_dir()['basedir'] . '/formfabricator/verimages/*';
         $before   = glob($imageDir) ?: [];
 
-        $r = $this->ajax('fabricator_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $token, 'visualLines' => '[]']);
+        $r = $this->ajax('fabricator_forms_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $token, 'visualLines' => '[]']);
 
         self::assertTrue($r['success'], $r['raw']);
         self::assertStringContainsString('data:image/png;base64,', $r['data']['html'], 'the signature image was taken out of the PDF for the report');
@@ -165,7 +165,7 @@ final class VerifierPageTest extends AjaxTestCase
         $other = MemoryBudget::reserve(480 * 1048576, 600, true);
         self::assertIsString($other);
 
-        $r = $this->ajax('fabricator_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $this->storedCopy()]);
+        $r = $this->ajax('fabricator_forms_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $this->storedCopy()]);
 
         self::assertFalse($r['success']);
         self::assertSame('Server busy verifying other PDFs right now.', $r['data']['message']);
@@ -178,7 +178,7 @@ final class VerifierPageTest extends AjaxTestCase
     {
         self::setBudget(64);
 
-        $r = $this->ajax('fabricator_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $this->storedCopy()]);
+        $r = $this->ajax('fabricator_forms_verify_push_lines', ['nonce' => wp_create_nonce('fabricator_verifier_nonce'), 'pdf_token' => $this->storedCopy()]);
 
         self::assertFalse($r['success']);
         self::assertSame('too_large', $r['data']['code']);
@@ -215,7 +215,7 @@ final class VerifierPageTest extends AjaxTestCase
             ['id' => 'name', 'type' => 'text', 'label' => 'Name'],
             ['id' => 'sig', 'type' => 'signature', 'label' => 'Signature'],
         ];
-        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0, true);
+        $form = FormModel::save(['title' => 'Order', 'fields' => $fields, 'notifications' => [], 'settings' => []], 0);
         self::assertIsInt($form);
         $im = imagecreatetruecolor(40, 20);
         imagefill($im, 0, 0, (int) imagecolorallocate($im, 255, 255, 255));
@@ -261,20 +261,17 @@ final class VerifierPageTest extends AjaxTestCase
     }
 
     /**
-     * Runs the verifier's check on $bytes as the AJAX action does for a stored upload, and returns what it printed.
+     * Runs the verifier's check on $bytes as the AJAX action does for a stored upload, and returns its report.
      */
     private function check(string $bytes, string $name): string
     {
         $path = get_temp_dir() . wp_generate_password(8, false) . '-' . $name;
         file_put_contents($path, $bytes);
-        ob_start();
         try {
-            Verificationpage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
+            return VerificationPage::handleUpload(['name' => $name, 'tmp_name' => $path, 'size' => strlen($bytes), 'error' => UPLOAD_ERR_OK]);
         } finally {
-            $html = (string) ob_get_clean();
             unlink($path);
         }
-        return $html;
     }
 
     /**

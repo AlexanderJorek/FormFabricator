@@ -10,5 +10,6 @@ function (fieldEl) {
         ? ((_i18n && _i18n.debit_bacs_account_invalid) || 'Please enter a valid account number (8 digits).')
         : ((_i18n && _i18n.debit_ach_account_invalid) || 'Please enter a valid account number (4 to 17 digits).');
     if (err && !err.textContent) err.textContent = msg;
-    return '​';
+    // Invalid, its message already at the part (validatePage() then writes none of its own).
+    return true;
 }

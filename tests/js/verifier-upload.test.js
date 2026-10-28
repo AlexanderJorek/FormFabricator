@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * The verifier page's upload overlay (assets/js/admin-verification.js) on the page Verificationpage::render() prints
+ * The verifier page's upload overlay (assets/js/admin-verification.js) on the page VerificationPage::render() prints
  * before any upload, TESTING.md §5: while the PDFs upload, it covers the content area beside the admin menu, from the
  * area's top edge (or the window's, once scrolled past it) to the bottom of the window, above everything on the page.
  * jsdom has no layout, so #wpcontent's box is set by the test.
