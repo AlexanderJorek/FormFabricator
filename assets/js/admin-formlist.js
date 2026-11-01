@@ -487,12 +487,91 @@
                 .then(function(r) { return r.json(); });
             }
 
-            /* One line per notification: "• Name: a@example.com, {email-1}". Plain text for confirm(), never markup. */
-            function describeRecipients(list) {
-                return (list || []).map(function(n) {
-                    var addresses = (n.recipients || []).join(', ') || ffi18n.importNoAddress;
-                    return '• ' + (n.name || ffi18n.importUnnamed) + ': ' + addresses;
-                }).join('\n');
+            /* The import confirmation: per notification, where it would send submissions (FormList::notificationRecipients()):
+               To, Cc and Bcc, under each routing rule's condition and the fallback, and Reply-To. Everything here comes
+               from the pasted string, so it is set as text, never as markup. */
+            var importModal   = document.getElementById('fabricator-import-modal');
+            var importConfirm = document.getElementById('fabricator-import-confirm');
+            var importCancel  = document.getElementById('fabricator-import-cancel');
+            var importResolve = null;
+
+            function el(tag, cls, text) {
+                var node = document.createElement(tag);
+                if (cls) node.className = cls;
+                if (text !== undefined) node.textContent = text;
+                return node;
+            }
+
+            function addressLine(parent, label, addresses) {
+                if (!addresses || !addresses.length) return;
+                var line = el('div', 'fabricator-import-line');
+                line.appendChild(el('span', 'fabricator-import-kind', label + ':'));
+                line.appendChild(document.createTextNode(' ' + addresses.join(', ')));
+                parent.appendChild(line);
+            }
+
+            function renderNotification(n) {
+                var box   = el('div', 'fabricator-import-notif' + (n.enabled ? '' : ' fabricator-import-notif--off'));
+                var title = el('div', 'fabricator-import-name', n.name || ffi18n.importUnnamed);
+                if (!n.enabled) {
+                    title.appendChild(el('span', 'fabricator-import-off', ffi18n.importOff));
+                }
+                box.appendChild(title);
+                if (n.routing) {
+                    box.appendChild(el('div', 'fabricator-import-note', ffi18n.importRouting));
+                }
+                (n.groups || []).forEach(function(g) {
+                    var group = el('div', 'fabricator-import-group');
+                    if (g.when) {
+                        group.appendChild(el('div', 'fabricator-import-when', g.when));
+                    }
+                    var any = (g.to || []).length + (g.cc || []).length + (g.bcc || []).length > 0;
+                    addressLine(group, ffi18n.importTo, (g.to || []).length ? g.to : (any ? [] : [ffi18n.importNoAddress]));
+                    addressLine(group, ffi18n.importCc, g.cc);
+                    addressLine(group, ffi18n.importBcc, g.bcc);
+                    box.appendChild(group);
+                });
+                addressLine(box, ffi18n.importReplyTo, n.reply_to);
+                return box;
+            }
+
+            function closeImportModal(answer) {
+                importModal.hidden = true;
+                document.removeEventListener('keydown', importKeys);
+                if (importResolve) { importResolve(answer); importResolve = null; }
+                if (importSubmit) importSubmit.focus();
+            }
+
+            function importKeys(e) {
+                if (e.key === 'Escape') closeImportModal(false);
+            }
+
+            function showImportModal(data) {
+                return new Promise(function(resolve) {
+                    /* Function replacement: a title containing $& or $' would otherwise be expanded by String.replace. */
+                    document.getElementById('fabricator-import-title').textContent =
+                        ffi18n.importTitle.replace('%s', function () { return data.title || ''; });
+                    document.getElementById('fabricator-import-lead').textContent = ffi18n.importLead;
+                    var list = document.getElementById('fabricator-import-recipients');
+                    list.textContent = '';
+                    var notifications = data.notifications || [];
+                    if (!notifications.length) {
+                        list.appendChild(el('p', 'fabricator-import-note', ffi18n.importNoRecipients));
+                    }
+                    notifications.forEach(function(n) { list.appendChild(renderNotification(n)); });
+                    importResolve = resolve;
+                    importModal.hidden = false;
+                    document.addEventListener('keydown', importKeys);
+                    importCancel.focus();
+                });
+            }
+
+            if (importConfirm) importConfirm.addEventListener('click', function() { closeImportModal(true); });
+            if (importCancel) importCancel.addEventListener('click', function() { closeImportModal(false); });
+            if (importModal) {
+                importModal.addEventListener('click', function(e) {
+                    if (e.target === importModal) closeImportModal(false);
+                });
             }
 
             function doImport() {
@@ -505,14 +584,9 @@
                     if (!preview.success || !preview.data) {
                         return preview;
                     }
-                    var list = describeRecipients(preview.data.recipients);
-                    /* Function replacement: a title containing $& or $' would otherwise be expanded by String.replace. */
-                    var msg  = ffi18n.importConfirm.replace('%s', function () { return preview.data.title || ''; })
-                        + '\n\n' + (list || ffi18n.importNoRecipients);
-                    if (!window.confirm(msg)) {
-                        return null;
-                    }
-                    return postImport(str, false);
+                    return showImportModal(preview.data).then(function(ok) {
+                        return ok ? postImport(str, false) : null;
+                    });
                 })
                 .then(function(data) {
                     importSubmit.disabled = false;

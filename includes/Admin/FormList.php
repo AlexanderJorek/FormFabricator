@@ -134,10 +134,19 @@ class FormList
             'error'              => __('Error', 'formfabricator'),
             'importError'        => __('Import error', 'formfabricator'),
             // translators: %s is replaced client-side with the imported form's title.
-            'importConfirm'      => __('Import the form "%s"? Its notifications send submissions to:', 'formfabricator'),
+            'importTitle'        => __('Import the form "%s"?', 'formfabricator'),
+            'importLead'         => __('Check where its notifications would send submissions:', 'formfabricator'),
             'importNoRecipients' => __('(no notification recipients)', 'formfabricator'),
             'importUnnamed'      => __('Unnamed notification', 'formfabricator'),
             'importNoAddress'    => __('no address', 'formfabricator'),
+            'importOff'          => __('switched off', 'formfabricator'),
+            'importRouting'      => __('Sent by rules: the first rule that applies decides.', 'formfabricator'),
+            'importTo'           => __('To', 'formfabricator'),
+            'importCc'           => __('Cc', 'formfabricator'),
+            'importBcc'          => __('Bcc', 'formfabricator'),
+            'importReplyTo'      => __('Reply-To', 'formfabricator'),
+            'importButton'       => __('Import', 'formfabricator'),
+            'cancel'             => __('Cancel', 'formfabricator'),
             'copied'             => __('Copied!', 'formfabricator'),
             'copyShortcode'      => __('Copy shortcode', 'formfabricator'),
             'copy'               => __('Copy', 'formfabricator'),
@@ -249,6 +258,19 @@ class FormList
                         </button>
                         <button class="button fabricator-list-btn" id="fabricator-export-close"><?php esc_html_e('Close', 'formfabricator'); ?></button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Import confirmation: where the imported form's notifications would send submissions (admin-formlist.js) -->
+        <div id="fabricator-import-modal" class="fabricator-modal-backdrop" hidden>
+            <div class="fabricator-modal fabricator-modal--wide" role="dialog" aria-modal="true" aria-labelledby="fabricator-import-title">
+                <h3 class="fabricator-modal-title" id="fabricator-import-title"></h3>
+                <p class="fabricator-modal-hint" id="fabricator-import-lead"></p>
+                <div class="fabricator-import-recipients" id="fabricator-import-recipients"></div>
+                <div class="fabricator-modal-actions">
+                    <button class="button fabricator-list-btn" id="fabricator-import-cancel"><?php esc_html_e('Cancel', 'formfabricator'); ?></button>
+                    <button class="button button-primary fabricator-list-btn" id="fabricator-import-confirm"><?php esc_html_e('Import', 'formfabricator'); ?></button>
                 </div>
             </div>
         </div>
@@ -584,9 +606,9 @@ class FormList
         if (!empty($_POST['preview'])) {
             wp_send_json_success(
                 [
-                'preview'    => true,
-                'title'      => $title,
-                'recipients' => self::notificationRecipients($notifications),
+                'preview'       => true,
+                'title'         => $title,
+                'notifications' => self::notificationRecipients($notifications, $clean_fields),
                 ]
             );
         }
@@ -610,40 +632,124 @@ class FormList
     }
 
     /**
-     * Every address-bearing value per notification (To/Cc/Bcc/Reply-To, routing rules and fallback), for the import confirmation.
+     * Where each imported notification would send submissions, for the import confirmation: in single mode one group
+     * (To, Cc, Bcc), in routing mode one group per rule, named by its condition, and the fallback, as MailSender picks
+     * them (the first rule that applies decides; single mode's To, Cc and Bcc then go unused). Reply-To applies in both.
+     * An address taken from a field ({email}) is named by the field. Every address the notification holds is listed.
      *
      * @param array $notifications Sanitized notifications.
-     * @return array<int, array{name: string, enabled: bool, recipients: string[]}>
+     * @param array $fields        Sanitized fields, for the labels rules and placeholders name.
+     * @return array<int, array{name: string, enabled: bool, routing: bool, groups: array<int, array{when: string,
+     *     to: string[], cc: string[], bcc: string[]}>, reply_to: string[]}>
      */
-    private static function notificationRecipients(array $notifications): array
+    private static function notificationRecipients(array $notifications, array $fields): array
     {
-        $out = [];
-        foreach ($notifications as $notif) {
-            $values = [
-                $notif['to'] ?? '', $notif['cc'] ?? '', $notif['bcc'] ?? '', $notif['reply_to'] ?? '',
-                $notif['routing_fallback'] ?? '', $notif['routing_fallback_cc'] ?? '', $notif['routing_fallback_bcc'] ?? '',
-            ];
-            foreach ((array) ($notif['routing_rules'] ?? []) as $rule) {
-                $values[] = $rule['email'] ?? '';
-                $values[] = $rule['cc'] ?? '';
-                $values[] = $rule['bcc'] ?? '';
-            }
-            $addresses = [];
-            foreach ($values as $value) {
-                foreach (preg_split('/[;,]+/', (string) $value) ?: [] as $part) {
-                    $part = trim($part);
-                    if ($part !== '' && !in_array($part, $addresses, true)) {
-                        $addresses[] = $part;
-                    }
+        $labels    = self::fieldLabels($fields);
+        $addresses = static function (mixed $value) use ($labels): array {
+            $out = [];
+            foreach (preg_split('/[;,]+/', is_string($value) ? $value : '') ?: [] as $part) {
+                $part = trim($part);
+                if ($part === '') {
+                    continue;
+                }
+                if (preg_match('/^\{([^{}]+)\}$/', $part, $m) === 1 && isset($labels[$m[1]])) {
+                    // translators: %s: the label of the form field whose answer is used as an email address.
+                    $part = sprintf(__('the address entered in "%s"', 'formfabricator'), $labels[$m[1]]);
+                }
+                if (!in_array($part, $out, true)) {
+                    $out[] = $part;
                 }
             }
+            return $out;
+        };
+        $group = static fn(string $when, mixed $to, mixed $cc, mixed $bcc): array => [
+            'when' => $when,
+            'to'   => $addresses($to),
+            'cc'   => $addresses($cc),
+            'bcc'  => $addresses($bcc),
+        ];
+
+        $out = [];
+        foreach ($notifications as $notif) {
+            $routing = ($notif['recipient_mode'] ?? 'single') === 'routing';
+            $groups  = [];
+            if ($routing) {
+                foreach ((array) ($notif['routing_rules'] ?? []) as $rule) {
+                    if (is_array($rule)) {
+                        $groups[] = $group(self::ruleText($rule, $labels), $rule['email'] ?? '', $rule['cc'] ?? '', $rule['bcc'] ?? '');
+                    }
+                }
+                $groups[] = $group(
+                    __('If no rule applies', 'formfabricator'),
+                    $notif['routing_fallback'] ?? '',
+                    $notif['routing_fallback_cc'] ?? '',
+                    $notif['routing_fallback_bcc'] ?? ''
+                );
+            } else {
+                $groups[] = $group('', $notif['to'] ?? '', $notif['cc'] ?? '', $notif['bcc'] ?? '');
+            }
             $out[] = [
-                'name'       => (string) ($notif['name'] ?? ''),
-                'enabled'    => !empty($notif['enabled']),
-                'recipients' => $addresses,
+                'name'     => (string) ($notif['name'] ?? ''),
+                'enabled'  => !empty($notif['enabled']),
+                'routing'  => $routing,
+                'groups'   => $groups,
+                'reply_to' => $addresses($notif['reply_to'] ?? ''),
             ];
         }
         return $out;
+    }
+
+    /**
+     * A routing rule's condition as a sentence: If "Department" is equal to "Sales".
+     *
+     * @param array                 $rule   The rule: field_id, operator, value.
+     * @param array<string, string> $labels Field labels by id (fieldLabels()).
+     * @return string
+     */
+    private static function ruleText(array $rule, array $labels): string
+    {
+        $field_id  = is_string($rule['field_id'] ?? null) ? $rule['field_id'] : '';
+        $field     = $labels[$field_id] ?? $field_id;
+        $operators = [
+            'equals'       => __('is equal to', 'formfabricator'),
+            'not_equals'   => __('is not equal to', 'formfabricator'),
+            'contains'     => __('contains', 'formfabricator'),
+            'not_contains' => __('does not contain', 'formfabricator'),
+            'empty'        => __('is empty', 'formfabricator'),
+            'not_empty'    => __('is not empty', 'formfabricator'),
+            'greater'      => __('is greater than', 'formfabricator'),
+            'less'         => __('is less than', 'formfabricator'),
+        ];
+        $operator = is_string($rule['operator'] ?? null) ? $rule['operator'] : 'equals';
+        $op_text  = $operators[$operator] ?? $operator;
+        if ($operator === 'empty' || $operator === 'not_empty') {
+            // translators: %1$s: a form field's label, %2$s: a comparison such as "is empty".
+            return sprintf(__('If "%1$s" %2$s', 'formfabricator'), $field, $op_text);
+        }
+        // translators: %1$s: a form field's label, %2$s: a comparison such as "is equal to", %3$s: the value compared with.
+        return sprintf(__('If "%1$s" %2$s "%3$s"', 'formfabricator'), $field, $op_text, is_scalar($rule['value'] ?? null) ? (string) $rule['value'] : '');
+    }
+
+    /**
+     * Every field's label by its id, group children included; a field without a label goes by its id.
+     *
+     * @param array $fields Sanitized fields.
+     * @return array<string, string>
+     */
+    private static function fieldLabels(array $fields): array
+    {
+        $labels = [];
+        foreach ($fields as $field) {
+            if (!is_array($field) || !is_string($field['id'] ?? null)) {
+                continue;
+            }
+            $label                 = is_string($field['label'] ?? null) ? trim($field['label']) : '';
+            $labels[$field['id']] = $label !== '' ? $label : $field['id'];
+            if (is_array($field['children'] ?? null)) {
+                $labels += self::fieldLabels($field['children']);
+            }
+        }
+        return $labels;
     }
 
     /**

@@ -230,6 +230,31 @@ test('the HTML block\'s rich-text editor: typed and bold text saved, kept after 
     expect(mail.message).not.toMatch(/<style|fabricator-editor-preview/);
 });
 
+/** Whether leaving the page now would warn about unsaved changes (the builder's beforeunload handler objects). */
+const warnsOnLeave = (page) => page.evaluate(() => {
+    const e = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(e);
+    return e.defaultPrevented;
+});
+
+test('looking at a notification\'s settings, even clicking into its empty body, changes nothing; typing does', async ({ page }) => {
+    // Firefox puts a line break into an empty editable body once it takes the focus: no edit, nothing to save.
+    const { id } = wp({ do: 'form', title: uniqueName('Look'), fields: [TEXT('name')], notifications: [notification({ body: '' })] });
+    await openEditor(page, id);
+    await page.locator('[data-tab="fabricator-notifications-panel"]').click();
+    await page.locator('#fabricator-notif-list .fabricator-field-row').first().click();
+    for (const tab of ['sender', 'recipient', 'content']) {
+        await page.locator('#fabricator-notif-modal [data-nstab="' + tab + '"]').click();
+    }
+    const body = page.frameLocator('#fabricator-nstab-content iframe').locator('body');
+    await body.click();
+    await page.waitForTimeout(500);
+    expect(await warnsOnLeave(page), 'looked at only').toBe(false);
+
+    await page.keyboard.type('Hi');
+    await expect.poll(() => warnsOnLeave(page), { message: 'typed into the body' }).toBe(true);
+});
+
 test('a notification\'s body typed in its rich-text editor, without touching the toolbar, is saved', async ({ page }) => {
     // WebKit runs no event listener in the editor's sandboxed document: typing alone must still save.
     const { id } = wp({ do: 'form', title: uniqueName('Body'), fields: [TEXT('name')], notifications: [notification()] });

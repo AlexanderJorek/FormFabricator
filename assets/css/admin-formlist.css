@@ -134,3 +134,58 @@
         min-width: 0 !important;
     }
 }
+
+/* Import confirmation: where the imported form's notifications would send submissions. */
+.fabricator-import-recipients {
+    max-height: 50vh;
+    overflow-y: auto;
+    margin: 0 0 16px;
+}
+.fabricator-import-notif {
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+}
+.fabricator-import-notif--off {
+    opacity: .75;
+}
+.fabricator-import-name {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+.fabricator-import-off {
+    font-weight: 400;
+    color: #646970;
+    margin-left: 8px;
+}
+.fabricator-import-off::before {
+    content: "(";
+}
+.fabricator-import-off::after {
+    content: ")";
+}
+.fabricator-import-note {
+    color: #646970;
+    font-size: 12px;
+    margin: 0 0 6px;
+}
+.fabricator-import-group {
+    margin-top: 6px;
+}
+.fabricator-import-group + .fabricator-import-group {
+    border-top: 1px dashed #dcdcde;
+    padding-top: 6px;
+}
+.fabricator-import-when {
+    font-style: italic;
+    margin-bottom: 2px;
+}
+.fabricator-import-line {
+    overflow-wrap: anywhere;
+}
+.fabricator-import-kind {
+    color: #646970;
+    display: inline-block;
+    min-width: 70px;
+}

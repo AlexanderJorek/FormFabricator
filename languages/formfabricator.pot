@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-28T09:31:27+00:00\n"
+"POT-Creation-Date: 2026-10-31T16:29:51+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: FormFabricator languages/make-pot.php\n"
 "X-Domain: formfabricator\n"
@@ -77,7 +77,9 @@ msgid "Add user…"
 msgstr ""
 
 #: includes/Admin/AccessSettings.php:99
-#: includes/Admin/FormList.php:261
+#: includes/Admin/FormList.php:149
+#: includes/Admin/FormList.php:272
+#: includes/Admin/FormList.php:283
 #: includes/Admin/FormSelectList.php:235
 #: includes/Admin/FormSettings.php:618
 #: includes/Admin/PDFLayoutEditor.php:579
@@ -110,7 +112,7 @@ msgid "List"
 msgstr ""
 
 #: includes/Admin/AccessSettings.php:175
-#: includes/Admin/FormList.php:159
+#: includes/Admin/FormList.php:168
 #: includes/Plugin.php:255
 msgid "Forms"
 msgstr ""
@@ -274,7 +276,7 @@ msgid "Could not build the preview — one of the fields may contain content the
 msgstr ""
 
 #: includes/Admin/FormEditor.php:354
-#: includes/Admin/FormList.php:514
+#: includes/Admin/FormList.php:536
 #: includes/Form/FormModel.php:169
 #: includes/Form/FormModel.php:214
 #: includes/Form/FormProcessor.php:102
@@ -449,34 +451,42 @@ msgid "Positive integers"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:831
+#: includes/Admin/FormList.php:714
 msgid "is equal to"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:832
+#: includes/Admin/FormList.php:715
 msgid "is not equal to"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:833
+#: includes/Admin/FormList.php:716
 msgid "contains"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:834
+#: includes/Admin/FormList.php:717
 msgid "does not contain"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:835
+#: includes/Admin/FormList.php:718
 msgid "is empty"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:836
+#: includes/Admin/FormList.php:719
 msgid "is not empty"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:837
+#: includes/Admin/FormList.php:720
 msgid "is greater than"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:838
+#: includes/Admin/FormList.php:721
 msgid "is less than"
 msgstr ""
 
@@ -500,14 +510,14 @@ msgstr ""
 
 #: includes/Admin/FormEditor.php:846
 #: includes/Admin/FormEditor.php:866
-#: includes/Admin/FormList.php:357
+#: includes/Admin/FormList.php:379
 #: includes/Admin/FormSelectList.php:284
 msgid "Edit"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:847
-#: includes/Admin/FormList.php:176
-#: includes/Admin/FormList.php:369
+#: includes/Admin/FormList.php:185
+#: includes/Admin/FormList.php:391
 msgid "Duplicate"
 msgstr ""
 
@@ -1506,7 +1516,7 @@ msgid "Form List"
 msgstr ""
 
 #: includes/Admin/FormList.php:127
-#: includes/Admin/FormList.php:259
+#: includes/Admin/FormList.php:281
 msgid "Really delete form?"
 msgstr ""
 
@@ -1517,7 +1527,7 @@ msgid "Really delete the selected forms (%d)?"
 msgstr ""
 
 #: includes/Admin/FormList.php:130
-#: includes/Admin/FormList.php:172
+#: includes/Admin/FormList.php:181
 #: includes/Admin/FormSelectList.php:113
 msgid "Choose action"
 msgstr ""
@@ -1541,99 +1551,132 @@ msgstr ""
 #. translators: %s is replaced client-side with the imported form's title.
 #: includes/Admin/FormList.php:137
 #, php-format
-msgid "Import the form \"%s\"? Its notifications send submissions to:"
+msgid "Import the form \"%s\"?"
 msgstr ""
 
 #: includes/Admin/FormList.php:138
-msgid "(no notification recipients)"
+msgid "Check where its notifications would send submissions:"
 msgstr ""
 
 #: includes/Admin/FormList.php:139
-msgid "Unnamed notification"
+msgid "(no notification recipients)"
 msgstr ""
 
 #: includes/Admin/FormList.php:140
-msgid "no address"
+msgid "Unnamed notification"
 msgstr ""
 
 #: includes/Admin/FormList.php:141
+msgid "no address"
+msgstr ""
+
+#: includes/Admin/FormList.php:142
+msgid "switched off"
+msgstr ""
+
+#: includes/Admin/FormList.php:143
+msgid "Sent by rules: the first rule that applies decides."
+msgstr ""
+
+#: includes/Admin/FormList.php:144
+msgid "To"
+msgstr ""
+
+#: includes/Admin/FormList.php:145
+msgid "Cc"
+msgstr ""
+
+#: includes/Admin/FormList.php:146
+msgid "Bcc"
+msgstr ""
+
+#: includes/Admin/FormList.php:147
+msgid "Reply-To"
+msgstr ""
+
+#: includes/Admin/FormList.php:148
+#: includes/Admin/FormList.php:273
+msgid "Import"
+msgstr ""
+
+#: includes/Admin/FormList.php:150
 #: includes/Admin/FormSettings.php:566
 msgid "Copied!"
 msgstr ""
 
-#: includes/Admin/FormList.php:142
-#: includes/Admin/FormList.php:364
+#: includes/Admin/FormList.php:151
+#: includes/Admin/FormList.php:386
 #: includes/Admin/FormSelectList.php:291
 msgid "Copy shortcode"
 msgstr ""
 
-#: includes/Admin/FormList.php:143
-#: includes/Admin/FormList.php:248
+#: includes/Admin/FormList.php:152
+#: includes/Admin/FormList.php:257
 msgid "Copy"
 msgstr ""
 
-#: includes/Admin/FormList.php:166
+#: includes/Admin/FormList.php:175
 #: includes/Admin/FormSelectList.php:107
 msgid "Select all"
 msgstr ""
 
-#: includes/Admin/FormList.php:180
-#: includes/Admin/FormList.php:262
-#: includes/Admin/FormList.php:381
+#: includes/Admin/FormList.php:189
+#: includes/Admin/FormList.php:284
+#: includes/Admin/FormList.php:403
 #: includes/Admin/FormSelectList.php:117
 #: includes/Admin/FormSelectList.php:236
 #: includes/Admin/FormSelectList.php:297
 msgid "Delete"
 msgstr ""
 
-#: includes/Admin/FormList.php:184
+#: includes/Admin/FormList.php:193
 #: includes/Admin/FormSelectList.php:122
 #: includes/Admin/PDFLayoutEditor.php:581
 msgid "Apply"
 msgstr ""
 
-#: includes/Admin/FormList.php:190
+#: includes/Admin/FormList.php:199
 msgid "Search forms…"
 msgstr ""
 
-#: includes/Admin/FormList.php:196
+#: includes/Admin/FormList.php:205
 msgid "Paste export string…"
 msgstr ""
 
-#: includes/Admin/FormList.php:203
+#: includes/Admin/FormList.php:212
 msgid "+ New Form"
 msgstr ""
 
-#: includes/Admin/FormList.php:209
+#: includes/Admin/FormList.php:218
 msgid "No forms yet"
 msgstr ""
 
-#: includes/Admin/FormList.php:210
+#: includes/Admin/FormList.php:219
 msgid "Create your first form and embed it via shortcode on any page."
 msgstr ""
 
-#: includes/Admin/FormList.php:212
+#: includes/Admin/FormList.php:221
 msgid "+ Create First Form"
 msgstr ""
 
-#: includes/Admin/FormList.php:222
+#: includes/Admin/FormList.php:231
 #: includes/Admin/FormSelectList.php:510
 msgid "No forms found."
 msgstr ""
 
-#: includes/Admin/FormList.php:230
+#: includes/Admin/FormList.php:239
 msgid "Export form"
 msgstr ""
 
-#: includes/Admin/FormList.php:234
+#: includes/Admin/FormList.php:243
 msgid "Exporting…"
 msgstr ""
 
-#: includes/Admin/FormList.php:243
+#: includes/Admin/FormList.php:252
 msgid "Copy this string. It contains all fields, notifications and settings."
 msgstr ""
 
-#: includes/Admin/FormList.php:250
+#: includes/Admin/FormList.php:259
 #: includes/Admin/FormSettings.php:569
 #: includes/Admin/PDFLayoutEditor.php:552
 #: includes/Admin/SealKeySettings.php:549
@@ -1641,65 +1684,87 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
-#: includes/Admin/FormList.php:283
-#: includes/Admin/FormList.php:287
-#: includes/Admin/FormList.php:401
-#: includes/Admin/FormList.php:405
-#: includes/Admin/FormList.php:428
-#: includes/Admin/FormList.php:468
-#: includes/Admin/FormList.php:509
-#: includes/Admin/FormList.php:540
+#: includes/Admin/FormList.php:305
+#: includes/Admin/FormList.php:309
+#: includes/Admin/FormList.php:423
+#: includes/Admin/FormList.php:427
+#: includes/Admin/FormList.php:450
+#: includes/Admin/FormList.php:490
+#: includes/Admin/FormList.php:531
+#: includes/Admin/FormList.php:562
 msgid "Nonce verification failed."
 msgstr ""
 
-#: includes/Admin/FormList.php:291
+#: includes/Admin/FormList.php:313
 msgid "The form could not be deleted."
 msgstr ""
 
-#: includes/Admin/FormList.php:293
+#: includes/Admin/FormList.php:315
 msgid "Form deleted."
 msgstr ""
 
 #. translators: %d: number of fields in the form.
-#: includes/Admin/FormList.php:350
+#: includes/Admin/FormList.php:372
 #, php-format
 msgid "%d Field"
 msgid_plural "%d Fields"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/Admin/FormList.php:360
+#: includes/Admin/FormList.php:382
 #: includes/Admin/FormSelectList.php:287
 msgid "More actions"
 msgstr ""
 
-#: includes/Admin/FormList.php:375
+#: includes/Admin/FormList.php:397
 msgid "Export"
 msgstr ""
 
-#: includes/Admin/FormList.php:414
+#: includes/Admin/FormList.php:436
 msgid "Form duplicated."
 msgstr ""
 
-#: includes/Admin/FormList.php:433
-#: includes/Admin/FormList.php:473
+#: includes/Admin/FormList.php:455
+#: includes/Admin/FormList.php:495
 msgid "Invalid data."
 msgstr ""
 
-#: includes/Admin/FormList.php:544
+#: includes/Admin/FormList.php:566
 msgid "No import string provided."
 msgstr ""
 
-#: includes/Admin/FormList.php:550
+#: includes/Admin/FormList.php:572
 msgid "Invalid import string."
 msgstr ""
 
-#: includes/Admin/FormList.php:560
+#: includes/Admin/FormList.php:582
 msgid "Decompression failed."
 msgstr ""
 
-#: includes/Admin/FormList.php:568
+#: includes/Admin/FormList.php:590
 msgid "Unknown format."
+msgstr ""
+
+#. translators: %s: the label of the form field whose answer is used as an email address.
+#: includes/Admin/FormList.php:657
+#, php-format
+msgid "the address entered in \"%s\""
+msgstr ""
+
+#: includes/Admin/FormList.php:683
+msgid "If no rule applies"
+msgstr ""
+
+#. translators: %1$s: a form field's label, %2$s: a comparison such as "is empty".
+#: includes/Admin/FormList.php:727
+#, php-format
+msgid "If \"%1$s\" %2$s"
+msgstr ""
+
+#. translators: %1$s: a form field's label, %2$s: a comparison such as "is equal to", %3$s: the value compared with.
+#: includes/Admin/FormList.php:730
+#, php-format
+msgid "If \"%1$s\" %2$s \"%3$s\""
 msgstr ""
 
 #: includes/Admin/FormSelectList.php:69

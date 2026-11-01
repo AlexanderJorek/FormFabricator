@@ -76,40 +76,89 @@ test('a row the search hides is unticked, so a later bulk action cannot reach it
     assert.equal(doc.getElementById('fabricator-bulk-count').textContent, '1 selected');
 });
 
-test('import: the confirmation shows the title literally and every recipient before anything is imported', async () => {
-    const title = 'Offer $& $1 $\' $` for you';
-    const recipients = [
-        { name: 'Admin', enabled: true, recipients: ['owner@example.org', 'cc@example.org', '{email}'] },
-        { name: '', enabled: false, recipients: [] },
-    ];
-    const page = loadList((url, body) => {
-        return body.preview === '1'
-            ? { success: true, data: { preview: true, title, recipients } }
-            : { success: true, data: { new_id: 99, html: '<div class="fabricator-form-row" data-title="offer"></div>' } };
-    });
-    type(page, page.document.getElementById('fabricator-import-input'), 'eJxLTEoGAAJNASc');
+const I18N = fixture.admin.formListPage.i18n;
 
+/** The preview the server sends: a plain notification, a switched-off one, and one routed by rules. */
+const NOTIFICATIONS = [
+    {
+        name: 'Admin', enabled: true, routing: false, reply_to: ['the address entered in "Email"'],
+        groups: [{ when: '', to: ['owner@example.org'], cc: ['cc@example.org'], bcc: [] }],
+    },
+    { name: '', enabled: false, routing: false, reply_to: [], groups: [{ when: '', to: [], cc: [], bcc: [] }] },
+    {
+        name: 'Routed <b>x</b>', enabled: true, routing: true, reply_to: [],
+        groups: [
+            { when: 'If "Department" is equal to "sales"', to: ['sales@example.org'], cc: [], bcc: ['audit@example.org'] },
+            { when: 'If no rule applies', to: ['office@example.org'], cc: [], bcc: [] },
+        ],
+    },
+];
+
+/** The import dialog as the admin reads it: title, then one block per notification, line by line. */
+function importDialog(page) {
+    const modal = page.document.getElementById('fabricator-import-modal');
+    return {
+        open: !modal.hidden,
+        title: page.document.getElementById('fabricator-import-title').textContent,
+        notifications: Array.from(modal.querySelectorAll('.fabricator-import-notif')).map((n) => n.innerText || n.textContent),
+        blocks: Array.from(modal.querySelectorAll('.fabricator-import-notif')),
+    };
+}
+
+async function startImport(page) {
+    type(page, page.document.getElementById('fabricator-import-input'), 'eJxLTEoGAAJNASc');
     page.document.getElementById('fabricator-import-submit').click();
     await settle(page);
+}
 
-    assert.equal(page.confirms.length, 1);
-    const shown = page.confirms[0];
-    assert.ok(shown.includes('"' + title + '"'), 'the title as typed, no $& expanded: ' + shown);
-    assert.ok(shown.includes('• Admin: owner@example.org, cc@example.org, {email}'));
-    assert.ok(shown.includes('• Unnamed notification: no address'));
-    const sent = page.requests.map((r) => r.body.preview);
-    assert.deepEqual(sent, ['1', ''], 'previewed first, imported after the confirmation');
+test('import: a dialog of its own shows the title literally and every recipient, conditioned ones under their rule', async () => {
+    const title = 'Offer $& $1 $\' $` for you';
+    const page = loadList((url, body) => {
+        return body.preview === '1'
+            ? { success: true, data: { preview: true, title, notifications: NOTIFICATIONS } }
+            : { success: true, data: { new_id: 99, html: '<div class="fabricator-form-row" data-title="offer"></div>' } };
+    });
+    await startImport(page);
+
+    const dialog = importDialog(page);
+    assert.equal(dialog.open, true);
+    assert.deepEqual(page.confirms, [], 'no browser prompt');
+    assert.equal(dialog.title, I18N.importTitle.replace('%s', () => title), 'the title as typed, no $& expanded');
+    const [admin, off, routed] = dialog.blocks.map((b) => b.textContent);
+    assert.ok(admin.includes(I18N.importTo + ': owner@example.org') && admin.includes(I18N.importCc + ': cc@example.org'), admin);
+    assert.ok(admin.includes(I18N.importReplyTo + ': the address entered in "Email"'), admin);
+    assert.ok(off.includes(I18N.importUnnamed) && off.includes(I18N.importOff) && off.includes(I18N.importNoAddress), off);
+    assert.ok(routed.includes(I18N.importRouting), routed);
+    assert.ok(routed.includes('If "Department" is equal to "sales"' + I18N.importTo + ': sales@example.org'), routed);
+    assert.ok(routed.includes(I18N.importBcc + ': audit@example.org'), 'a rule\'s Bcc is listed too: ' + routed);
+    assert.ok(routed.includes('If no rule applies' + I18N.importTo + ': office@example.org'), routed);
+    assert.equal(dialog.blocks[2].querySelector('b'), null, 'a name holding markup stays text');
+    assert.equal(page.document.activeElement.id, 'fabricator-import-cancel', 'the cursor starts on Cancel');
+    assert.deepEqual(page.requests.map((r) => r.body.preview), ['1'], 'nothing imported while the dialog is open');
+
+    page.document.getElementById('fabricator-import-confirm').click();
+    await settle(page);
+
+    assert.equal(importDialog(page).open, false);
+    assert.deepEqual(page.requests.map((r) => r.body.preview), ['1', ''], 'imported after the confirmation');
     assert.ok(rowTitles(page).includes('offer'), 'the imported form is listed at once');
 });
 
-test('import: declining the confirmation imports nothing', async () => {
-    const page = loadList(() => ({ success: true, data: { preview: true, title: 'X', recipients: [] } }));
-    page.window.confirm = () => false;
-    type(page, page.document.getElementById('fabricator-import-input'), 'eJxLTEoGAAJNASc');
+test('import: Cancel, Escape or a click beside the dialog imports nothing', async () => {
+    for (const close of [
+        (page) => page.document.getElementById('fabricator-import-cancel').click(),
+        (page) => page.document.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'Escape' })),
+        (page) => page.document.getElementById('fabricator-import-modal').click(),
+    ]) {
+        const page = loadList(() => ({ success: true, data: { preview: true, title: 'X', notifications: [] } }));
+        await startImport(page);
+        assert.equal(importDialog(page).open, true);
 
-    page.document.getElementById('fabricator-import-submit').click();
-    await settle(page);
+        close(page);
+        await settle(page);
 
-    assert.equal(page.requests.length, 1, 'only the preview');
-    assert.equal(rowTitles(page).length, 4);
+        assert.equal(importDialog(page).open, false);
+        assert.equal(page.requests.length, 1, 'only the preview');
+        assert.equal(rowTitles(page).length, 4);
+    }
 });

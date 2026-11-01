@@ -1070,11 +1070,29 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
     row.appendChild(iframe);
     parent.appendChild(row);
 
-    function emitChange() {
-        var out = (opts && opts.fragmentOnly)
+    function serialize() {
+        return (opts && opts.fragmentOnly)
             ? sanitizeRichDocFragment(iframe.contentDocument)
             : sanitizeRichDoc(iframe.contentDocument);
-        onChange(out);
+    }
+
+    /* The content as anyone reading the saved HTML sees it: a <br> that ends a block or the body draws nothing.
+       Firefox puts one into an empty body or block when the editor takes the focus, which is no edit. */
+    function asShown(html) {
+        return html.replace(/<br\s*\/?>(\s*<\/(?:body|p|div|li|td|th|h[1-6]|blockquote)>)/gi, '$1');
+    }
+
+    /* What onChange() last got, or what the editor held once loaded. Only a change to that is an edit: the browser
+       also changes the document on its own (focus, spellcheck, its editing markup), and those changes would mark the
+       form unsaved although nothing anyone sees changed. */
+    var reported = null;
+
+    function emitChange() {
+        var out = serialize();
+        if (reported === null || asShown(out) !== asShown(reported)) {
+            reported = out;
+            onChange(out);
+        }
         resize();
     }
 
@@ -1153,6 +1171,8 @@ function spRichTextEditor(parent, key, label, value, onChange, opts) {
             img.addEventListener('error', resize);
         });
 
+        reported = serialize();
+
         /* WebKit runs no event listener in a sandboxed document without allow-scripts, so the input listener above
            misses edits there; a MutationObserver sees them in every browser. Set up last, so the scaffolding is no edit. */
         if (window.MutationObserver) {
@@ -1192,6 +1212,8 @@ function cleanRichDoc(doc) {
         if (!el.getAttribute('style')) { el.removeAttribute('style'); }
     });
     doc.querySelectorAll('script').forEach(function (el) { el.remove(); });
+    // Firefox's own editing markup: a placeholder line break and _moz_* attributes, never the author's.
+    doc.querySelectorAll('br[type="_moz"]').forEach(function (el) { el.remove(); });
     doc.querySelectorAll(
         'style.darkreader, link.darkreader, meta[name="darkreader"], .darkreader--fallback'
     ).forEach(function (el) { el.remove(); });
@@ -1199,7 +1221,7 @@ function cleanRichDoc(doc) {
         Array.prototype.slice.call(el.attributes).forEach(function (attr) {
             var name = attr.name.toLowerCase();
             var val  = attr.value || '';
-            if (/^on/.test(name) || name.indexOf('data-darkreader') === 0) {
+            if (/^on/.test(name) || name.indexOf('data-darkreader') === 0 || name.indexOf('_moz') === 0) {
                 el.removeAttribute(attr.name);
             } else if (['href', 'src', 'xlink:href', 'action', 'formaction'].indexOf(name) !== -1 && isUnsafeUrl(val, true)) {
                 el.removeAttribute(attr.name);

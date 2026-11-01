@@ -1529,12 +1529,6 @@ msgstr "%d ausgewählt"
 msgid "Import error"
 msgstr "Importfehler"
 
-#. translators: %s is replaced client-side with the imported form's title.
-#: includes/Admin/FormList.php:137
-#, php-format
-msgid "Import the form \"%s\"? Its notifications send submissions to:"
-msgstr "Formular „%s“ importieren? Seine Benachrichtigungen senden Übermittlungen an:"
-
 #: includes/Admin/FormList.php:138
 msgid "(no notification recipients)"
 msgstr "(keine Benachrichtigungsempfänger)"
@@ -6305,3 +6299,42 @@ msgstr "Feldbezeichnung beim Platzhalter eines einzelnen Felds anzeigen"
 
 msgid "A single field's placeholder in the message, such as {name}, then shows the field's label above its answer, as the list of all fields does. Off, it shows the answer alone, to use within a sentence."
 msgstr "Der Platzhalter eines einzelnen Felds in der Nachricht, etwa {name}, zeigt dann die Feldbezeichnung über der Antwort, wie die Liste aller Felder. Ausgeschaltet zeigt er nur die Antwort, zum Einsetzen in einen Satz."
+
+msgid "Import the form \"%s\"?"
+msgstr "Formular „%s“ importieren?"
+
+msgid "Check where its notifications would send submissions:"
+msgstr "Prüfen Sie, wohin seine Benachrichtigungen Einsendungen schicken würden:"
+
+msgid "Sent by rules: the first rule that applies decides."
+msgstr "Versand nach Regeln: Die erste zutreffende Regel entscheidet."
+
+msgid "If no rule applies"
+msgstr "Wenn keine Regel zutrifft"
+
+msgid "If \"%1$s\" %2$s"
+msgstr "Wenn „%1$s“ %2$s"
+
+msgid "If \"%1$s\" %2$s \"%3$s\""
+msgstr "Wenn „%1$s“ %2$s „%3$s“"
+
+msgid "the address entered in \"%s\""
+msgstr "die in „%s“ eingegebene Adresse"
+
+msgid "switched off"
+msgstr "ausgeschaltet"
+
+msgid "To"
+msgstr "An"
+
+msgid "Cc"
+msgstr "Cc"
+
+msgid "Bcc"
+msgstr "Bcc"
+
+msgid "Reply-To"
+msgstr "Antwort an"
+
+msgid "Import"
+msgstr "Importieren"
