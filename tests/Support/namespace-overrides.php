@@ -65,7 +65,7 @@ namespace FabricatorForms\PDF {
     }
 }
 
-namespace FabricatorForms\Utils {
+namespace FabricatorForms\Utils\Storage {
 
     use FabricatorForms\Tests\Support\Overrides;
 

@@ -1,0 +1,520 @@
+/*!
+ * FormFabricator — PDF Layout admin page styles
+ * @copyright 2026 Alexander Jorek
+ * @license   GPL-3.0-or-later
+ */
+
+/* Loaded after admin.css, which holds what every admin screen shares. */
+
+.fabricator-placeholder-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 6px;
+}
+
+.fabricator-placeholder-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-family: monospace;
+    background: color-mix(in srgb, var(--fabricator-admin-accent) 8%, #fff);
+    color: var(--fabricator-text);
+    border: 1px solid color-mix(in srgb, var(--fabricator-admin-accent) 30%, #fff);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+    line-height: 1.4;
+}
+
+/* ── PDF Layout Editor ─────────────────────────────────────────────────── */
+.fabricator-pdf-editor-wrap {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    gap: 24px;
+    align-items: start;
+    margin-top: 8px;
+}
+
+.fabricator-pdf-settings-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: sticky;
+    top: 32px; /* clears WP adminbar so the sticky panel doesn't slide under it */
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    padding-right: 4px;
+    padding-bottom: 0;
+}
+
+/* A4 preview */
+.fabricator-pdf-preview-panel {
+    position: sticky;
+    top: 32px; /* clears WP adminbar, same as settings panel */
+    height: calc(100vh - 120px);
+    display: flex;
+    flex-direction: column;
+}
+
+/* PDF layout, desktop: the page fits the viewport, the editor takes the height left over (notices and banners
+   included), and each panel scrolls inside it. "not all and (max-width: 1440px)" is the exact complement of the
+   responsive block below; min-width: 1441px would miss fractional widths under zoom. */
+@media not all and (max-width: 1440px) {
+    .fabricator-list-page .fabricator-list-wrap.wrap.fabricator-pdf-layout-wrap {
+        height: calc(100vh - 32px) !important;   /* WP adminbar */
+        overflow: hidden !important;
+        padding-bottom: 20px !important;
+    }
+
+    .fabricator-pdf-layout-wrap #fabricator-pdf-layout-form {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .fabricator-pdf-layout-wrap .fabricator-pdf-editor-wrap {
+        flex: 1;
+        min-height: 0;
+        grid-template-rows: minmax(0, 1fr);
+        align-items: stretch;
+    }
+
+    /* min-height: 0 lets a grid item be shorter than its content and scroll; the default (auto) sizes
+       it to its content, which would overflow the row and bring the page scrollbar back. */
+    .fabricator-pdf-layout-wrap .fabricator-pdf-settings-panel {
+        position: static;
+        max-height: none;
+        min-height: 0;
+    }
+
+    .fabricator-pdf-layout-wrap .fabricator-pdf-preview-panel {
+        position: static;
+        height: auto;
+        min-height: 0;
+    }
+}
+
+.fabricator-preview-stage {
+    background: color-mix(in srgb, var(--fabricator-admin-accent) 8%, #e8e9ea);
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    overflow-y: auto;
+    flex: 1 1 0;
+    min-height: 0;
+    --tw-ring-color: color-mix(in srgb, var(--fabricator-admin-accent) 30%, transparent);
+}
+
+.fabricator-a4-paper {
+    background: #fff;
+    width: 100%;
+    max-width: 992px; /* A4 at 120 dpi = 210 mm × (120/25.4) — matches mPDF internal rendering width */
+    height: 1402px; /* A4 at 120 dpi = 297 mm × (120/25.4) */
+    box-shadow: 0 4px 24px rgba(0,0,0,.18);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative; /* anchors the per-page footer overlay */
+}
+
+/* Margins grid */
+.fabricator-margins-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 16px;
+}
+
+/* Section sortable */
+.fabricator-sections-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fabricator-section-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border: 1px solid var(--fabricator-border-light);
+    border-radius: 6px;
+    padding: 8px 12px;
+    transition: background .1s, border-color .1s;
+}
+
+.fabricator-section-item.fabricator-section-hidden {
+    opacity: .45;
+}
+
+.fabricator-section-item.fabricator-section-hidden span {
+    text-decoration: line-through;
+}
+
+.fabricator-section-item span {
+    flex: 1;
+    font-size: 13px;
+    color: var(--fabricator-text);
+}
+
+.fabricator-section-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    color: #72777c;
+    border-radius: 4px;
+    line-height: 1;
+}
+
+.fabricator-section-toggle:hover {
+    color: var(--fabricator-admin-accent);
+    background: #f0f6ff;
+}
+
+.fabricator-pdf-editor-wrap[hidden] { display: none !important; }
+
+/* Desktop: inner is a transparent pass-through; stage scrolls the paper */
+.fabricator-preview-stage-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+}
+
+/* ── Header Builder Modal ─────────────────────────────────────── */
+.fabricator-hb-modal               { position:fixed; inset:0; z-index:99000; display:flex; align-items:center; justify-content:center; }
+.fabricator-hb-modal[hidden]       { display:none !important; }
+.fabricator-hb-overlay             { position:absolute; inset:0; background:rgba(0,0,0,.55); }
+
+.fabricator-hb-dialog {
+    position:relative; z-index:1; background:#fff; border-radius:8px;
+    width:min(96vw, 1120px); height:92vh;
+    display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,.3);
+}
+.fabricator-hb-dialog-head {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 18px; border-bottom:1px solid var(--fabricator-border-lighter);
+    font-weight:600; font-size:14px; flex-shrink:0; gap:12px;
+}
+.fabricator-hb-dialog-head-close {
+    background:none; border:none; cursor:pointer; font-size:20px;
+    color:var(--fabricator-text-secondary); line-height:1; padding:0 4px;
+}
+.fabricator-hb-dialog-head-close:hover { color:var(--fabricator-danger); }
+
+.fabricator-hb-toolbar {
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    padding:8px 16px; border-bottom:1px solid var(--fabricator-border-lighter); background:#f9f9f9; flex-shrink:0;
+}
+
+.fabricator-hb-toolbar label { font-size:12px; color:var(--fabricator-text-alt); display:flex; align-items:center; gap:5px; }
+.fabricator-hb-toolbar .button-primary { background:var(--fabricator-admin-accent) !important; border-color:var(--fabricator-admin-accent) !important; color:var(--fabricator-accent-text, #fff) !important; }
+.fabricator-hb-toolbar .button-primary:hover { background:color-mix(in srgb, var(--fabricator-admin-accent) 85%, #000) !important; border-color:color-mix(in srgb, var(--fabricator-admin-accent) 85%, #000) !important; }
+.fabricator-hb-toolbar .button:not(.button-primary):hover { border-color:var(--fabricator-admin-accent) !important; color:var(--fabricator-admin-accent-fg, var(--fabricator-admin-accent)) !important; box-shadow:0 0 0 1px var(--fabricator-admin-accent) !important; }
+.fabricator-hb-toolbar .button:not(.button-primary):focus { border-color:var(--fabricator-admin-accent) !important; box-shadow:0 0 0 1px var(--fabricator-admin-accent) !important; outline:none !important; }
+.fabricator-hb-dialog .button-primary { background:var(--fabricator-admin-accent) !important; border-color:var(--fabricator-admin-accent) !important; color:var(--fabricator-accent-text, #fff) !important; }
+.fabricator-hb-dialog .button-primary:hover { background:color-mix(in srgb, var(--fabricator-admin-accent) 85%, #000) !important; border-color:color-mix(in srgb, var(--fabricator-admin-accent) 85%, #000) !important; }
+.fabricator-hb-dialog .button:not(.button-primary):hover { border-color:var(--fabricator-admin-accent) !important; color:var(--fabricator-admin-accent-fg, var(--fabricator-admin-accent)) !important; box-shadow:0 0 0 1px var(--fabricator-admin-accent) !important; }
+.fabricator-hb-dialog .button:not(.button-primary):focus { border-color:var(--fabricator-admin-accent) !important; box-shadow:0 0 0 1px var(--fabricator-admin-accent) !important; outline:none !important; }
+
+.fabricator-hb-toolbar input[type="number"] {
+    width:52px; border:1px solid var(--fabricator-border); border-radius:3px; padding:3px 6px; font-size:12px;
+}
+
+.fabricator-hb-body               { display:flex; flex:1; min-height:0; overflow:hidden; }
+.fabricator-hb-canvas-wrap        { overflow:auto; flex:1; padding:24px; background:color-mix(in srgb, var(--fabricator-admin-accent) 8%, #e8e9ea); display:flex; justify-content:center; align-items:flex-start; min-height:0; }
+.fabricator-hb-canvas {
+    position:relative; background-color:#fff; flex-shrink:0;
+    background-image:linear-gradient(to right,rgba(0,0,0,.07) 1px,transparent 1px),
+                     linear-gradient(to bottom,rgba(0,0,0,.07) 1px,transparent 1px);
+    background-size:15px 15px;
+    box-shadow:0 2px 16px rgba(0,0,0,.15);
+}
+
+.fabricator-hb-el {
+    position:absolute; box-sizing:border-box;
+    border:1.5px dashed color-mix(in srgb, var(--fabricator-admin-accent) 50%, transparent); cursor:move; user-select:none;
+}
+.fabricator-hb-el--selected        { border:2px solid var(--fabricator-admin-accent); z-index:20; }
+.fabricator-hb-el-inner            { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+.fabricator-hb-el-label {
+    position:absolute; top:-17px; left:-2px; font-size:10px; background:var(--fabricator-admin-accent); color:var(--fabricator-accent-text, #fff);
+    padding:1px 6px; border-radius:2px 2px 0 0; white-space:nowrap; pointer-events:none; display:none;
+}
+.fabricator-hb-el--selected .fabricator-hb-el-label { display:block; }
+
+.fabricator-hb-handle {
+    position:absolute; width:10px; height:10px;
+    background:var(--fabricator-admin-accent); border:2px solid #fff; border-radius:2px; z-index:21;
+}
+
+.fabricator-hb-props {
+    width:270px; flex-shrink:0; border-left:1px solid var(--fabricator-border-lighter);
+    overflow-y:auto; padding:14px 16px; background:#fff;
+    display:flex; flex-direction:column; gap:10px;
+}
+
+.fabricator-hb-prop-group          { display:flex; flex-direction:column; gap:3px; }
+.fabricator-hb-prop-group > span   { font-size:11px; font-weight:600; color:var(--fabricator-text-alt); }
+.fabricator-hb-prop-group input[type="text"],
+.fabricator-hb-prop-group input[type="number"],
+.fabricator-hb-prop-group select,
+.fabricator-hb-prop-group textarea {
+    border:1px solid var(--fabricator-border); border-radius:3px; padding:6px 8px;
+    font-size:13px; color:var(--fabricator-text); background:#fff; width:100%; box-sizing:border-box;
+}
+.fabricator-hb-prop-group input[type="number"] { font-size:14px; padding:6px 4px; }
+.fabricator-hb-prop-group textarea  { resize:vertical; min-height:80px; font-family:monospace; font-size:11px; }
+.fabricator-hb-prop-row2            { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+
+.fabricator-hb-card {
+    border: 1px solid var(--fabricator-border-light);
+    border-radius: 4px;
+    background: #f9f9f9;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fabricator-hb-card .fabricator-hb-prop-row2 { gap: 8px; }
+.fabricator-hb-card .fabricator-hb-fmt-toolbar { background: transparent; border: none; padding: 0; }
+.fabricator-hb-card--image { gap: 6px; }
+.fabricator-hb-card--image .fabricator-hb-img-preview { margin: 0; }
+
+/* Delete button — no default outline */
+#hb-delete-btn {
+    border-color: var(--fabricator-danger) !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+#hb-delete-btn:hover { background: var(--fabricator-danger) !important; color: #fff !important; }
+.fabricator-hb-empty                { color:#aaa; font-size:12px; font-style:italic; text-align:center; padding:24px 0; }
+
+.fabricator-hb-fmt-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--fabricator-bg-subtle);
+    border: 1px solid var(--fabricator-border);
+    border-radius: 4px;
+    padding: 3px 4px;
+    flex-wrap: wrap;
+    row-gap: 4px;
+}
+
+.fabricator-hb-tb-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: var(--fabricator-text-alt);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .1s, color .1s;
+}
+
+.fabricator-hb-tb-btn:hover {
+    background: var(--fabricator-border-lighter);
+    color: var(--fabricator-text);
+}
+.fabricator-hb-tb-btn--active:hover {
+    background: color-mix(in srgb, var(--fabricator-admin-accent) 82%, #000);
+    border-color: color-mix(in srgb, var(--fabricator-admin-accent) 82%, #000);
+    color: var(--fabricator-accent-text, #fff);
+}
+.fabricator-hb-tb-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--fabricator-border);
+    margin: 0 3px;
+    flex-shrink: 0;
+}
+
+.fabricator-hb-tb-color {
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 3px;
+    padding: 1px 2px;
+    cursor: pointer;
+    background: none;
+    flex-shrink: 0;
+}
+
+/* Split button (U + ▾) */
+.fabricator-hb-tb-split {
+    position: relative;
+    display: flex;
+}
+.fabricator-hb-tb-split .fabricator-hb-tb-btn:first-child {
+    border-radius: 3px 0 0 3px;
+}
+.fabricator-hb-tb-chevron {
+    border-radius: 0 3px 3px 0 !important;
+    border-left: 1px solid var(--fabricator-border) !important;
+    padding: 0 4px !important;
+    min-width: 0 !important;
+}
+.fabricator-hb-tb-chevron i {
+    font-size: 8px;
+    pointer-events: none;
+}
+
+/* Underline style dropdown */
+.fabricator-hb-ul-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 9999;
+    background: #fff;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12);
+    padding: 4px 0;
+    min-width: 148px;
+}
+
+.fabricator-hb-ul-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--fabricator-text);
+    text-align: left;
+}
+
+.fabricator-hb-ul-menu button:hover {
+    background: #f0f6fc;
+}
+
+/* Underline preview lines inside menu */
+.fabricator-hb-ul-prev {
+    display: inline-block;
+    width: 32px;
+    height: 0;
+    border-bottom-width: 2px;
+    border-bottom-color: var(--fabricator-text);
+    flex-shrink: 0;
+    margin-bottom: 1px;
+}
+
+.fabricator-hb-ul-solid  { border-bottom-style: solid; }
+.fabricator-hb-ul-double { border-bottom-style: double; border-bottom-width: 3px; }
+.fabricator-hb-ul-dotted { border-bottom-style: dotted; }
+.fabricator-hb-ul-dashed { border-bottom-style: dashed; }
+
+/* Contenteditable title editor */
+.fabricator-hb-prop-group--editor {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.fabricator-hb-title-editor {
+    min-height: 48px;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 3px;
+    padding: 6px 8px;
+    background: #fff;
+    line-height: 1.4;
+    outline: none;
+    word-break: break-word;
+}
+
+.fabricator-hb-title-editor:focus {
+    border-color: var(--fabricator-admin-accent);
+    box-shadow: 0 0 0 1px var(--fabricator-admin-accent);
+}
+
+/* Font-size select */
+.fabricator-hb-tb-size-sel {
+    height: 26px;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 3px;
+    padding: 0 4px;
+    font-size: 12px;
+    color: var(--fabricator-text);
+    background: #fff;
+    cursor: pointer;
+    max-width: 68px;
+}
+
+.fabricator-hb-dialog-footer {
+    display:flex; justify-content:flex-end; gap:8px;
+    padding:10px 18px; border-top:1px solid var(--fabricator-border-lighter); flex-shrink:0;
+}
+
+.fabricator-section-edit-btn {
+    background:none; border:none; cursor:pointer;
+    color:var(--fabricator-admin-accent); padding:2px 5px; font-size:13px; line-height:1; border-radius:3px;
+}
+.fabricator-section-edit-btn:hover { background:#f0f6ff; }
+.fabricator-hb-img-picker { display:flex; flex-direction:column; gap:8px; }
+.fabricator-hb-img-picker-title { margin:0 0 4px; font-weight:600; font-size:13px; }
+.fabricator-hb-img-picker-sep { display:flex; align-items:center; gap:8px; color:#aaa; font-size:11px; }
+.fabricator-hb-img-picker-sep::before,
+.fabricator-hb-img-picker-sep::after { content:''; flex:1; border-top:1px solid var(--fabricator-border-lighter); }
+.fabricator-hb-img-preview { min-height:48px; display:flex; align-items:center; }
+.fabricator-card-hint { margin:0 0 10px; font-size:13px; color:#555; }
+.fabricator-hb-open-btn { width:100%; justify-content:center; }
+
+@media (max-width: 1440px) {
+    /* Clip PDF editor overflow at its own grid wrapper — not the list-wrap,
+       because overflow on the list-wrap breaks position:sticky on the title pill */
+    .fabricator-pdf-editor-wrap {
+        overflow-x: hidden;
+        grid-template-columns: 1fr !important;
+    }
+
+    .fabricator-pdf-settings-panel {
+        position: static !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+    }
+
+    .fabricator-pdf-preview-panel {
+        position: static !important;
+        height: auto !important;
+    }
+
+    /* Stage fills grid column naturally; JS measures it and zooms paper inside */
+    .fabricator-preview-stage {
+        flex: none !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        padding: 10px !important;
+    }
+
+    /* Inner contains zoomed papers; overflow:hidden clips any sub-pixel overhang */
+    .fabricator-preview-stage-inner {
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    /* zoom is set via JS inline style; clear CSS transform so they don't stack */
+    .fabricator-a4-paper {
+        transform: none !important;
+        transform-origin: unset !important;
+        flex-shrink: 0;
+    }
+}

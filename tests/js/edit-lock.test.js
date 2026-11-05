@@ -47,9 +47,9 @@ const pages = [
     {
         name: 'Settings',
         html: () => fixture.admin.settings,
-        global: 'FabricatorSettingsLock',
+        global: 'FabricatorAdminLock',
         data: () => fixture.admin.settingsLock,
-        file: 'admin-settings-lock.js',
+        file: 'admin-lock.js',
         sendKey: 'fabricator_settings_lock',
         sent: 1,
         conflictKey: 'fabricator_settings_lock_conflict',
@@ -58,9 +58,9 @@ const pages = [
     {
         name: 'PDF Layout',
         html: () => fixture.admin.pdfLayout,
-        global: 'FabricatorPdfLayoutLock',
+        global: 'FabricatorAdminLock',
         data: () => fixture.admin.pdfLayoutLock,
-        file: 'admin-pdflayout-lock.js',
+        file: 'admin-lock.js',
         sendKey: 'fabricator_pdf_layout_lock',
         sent: 1,
         conflictKey: 'fabricator_pdf_layout_lock_conflict',

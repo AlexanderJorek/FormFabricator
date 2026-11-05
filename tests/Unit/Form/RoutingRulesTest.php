@@ -3,6 +3,7 @@
 namespace FabricatorForms\Tests\Unit\Form;
 
 use Brain\Monkey\Functions;
+use FabricatorForms\Form\ConditionRule;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\Form\MailSender;
 use FabricatorForms\Tests\Support\Reflect;
@@ -65,21 +66,20 @@ final class RoutingRulesTest extends TestCase
             'equals ignores case on umlauts'          => ['Ärzte', 'equals', 'ärzte', 'x', true],
             'contains'                                => ['Hauptstr. 1', 'contains', 'haupt', 'Hauptstr. 1', true],
             'contains with an empty rule value never' => ['Berlin', 'contains', '', 'Berlin', false],
+            'an unknown operator never matches'       => ['Berlin', 'matches', 'Berlin', 'Berlin', false],
         ];
     }
 
     #[DataProvider('rules')]
     public function testRuleMatches(string $display, string $operator, string $value, mixed $raw, bool $expected): void
     {
-        self::assertSame($expected, Reflect::call(MailSender::class, 'ruleMatches', $display, $operator, $value, $raw));
+        self::assertSame($expected, ConditionRule::routes($display, $operator, $value, $raw));
     }
 
     public function testAMultiChoiceAnswerEqualsEachOptionChosen(): void
     {
         // Compared as the joined text "Eins, Zwei", a rule for "eins" stopped matching once a second box was ticked.
-        $match = static fn(string $op, string $option): bool => Reflect::call(
-            MailSender::class,
-            'ruleMatches',
+        $match = static fn(string $op, string $option): bool => ConditionRule::routes(
             'Eins, Zwei',
             $op,
             ucfirst($option),
@@ -96,15 +96,15 @@ final class RoutingRulesTest extends TestCase
     public function testWithoutASubmittedValueTheDisplayTextDecides(): void
     {
         // A third party firing the submission action with three arguments passes no raw values.
-        self::assertTrue(Reflect::call(MailSender::class, 'valueIsEmpty', '', null));
-        self::assertFalse(Reflect::call(MailSender::class, 'valueIsEmpty', self::NO_ENTRY, null));
+        self::assertTrue(Reflect::call(ConditionRule::class, 'valueIsEmpty', '', null));
+        self::assertFalse(Reflect::call(ConditionRule::class, 'valueIsEmpty', self::NO_ENTRY, null));
     }
 
     public function testNumbersAreReadOutOfFormattedAmounts(): void
     {
-        self::assertSame(1234.56, Reflect::call(MailSender::class, 'numericValue', '1.234,56 €', null));
-        self::assertSame(12.5, Reflect::call(MailSender::class, 'numericValue', '12,50 €', '12.50'), 'submitted value preferred');
-        self::assertNull(Reflect::call(MailSender::class, 'numericValue', 'not a number', null));
+        self::assertSame(1234.56, Reflect::call(ConditionRule::class, 'numericValue', '1.234,56 €', null));
+        self::assertSame(12.5, Reflect::call(ConditionRule::class, 'numericValue', '12,50 €', '12.50'), 'submitted value preferred');
+        self::assertNull(Reflect::call(ConditionRule::class, 'numericValue', 'not a number', null));
     }
 
     public function testOptionLabelsAreFoundInsideGroups(): void

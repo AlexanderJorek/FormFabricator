@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -205,8 +205,6 @@ class DateField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        $req      = !empty($config['required']) ? ' required aria-required="true"' : '';
-        $prefill  = !empty($config['prefill_today']) ? ' data-prefill-today="true"' : '';
         $picker   = !empty($config['show_picker']);
         $key      = self::formatKey($config);
         $label    = self::formatLabel($key);
@@ -222,7 +220,8 @@ class DateField extends BaseField
             // Not always a birthdate; "bday" would wrongly signal browsers to autofill one here.
             . ' autocomplete="off"'
             . ' value="' . esc_attr((string)($value ?? '')) . '"'
-            . $prefill . $req . '>';
+            . (!empty($config['prefill_today']) ? ' data-prefill-today="true"' : '')
+            . (!empty($config['required']) ? ' required aria-required="true"' : '') . '>';
 
         if ($picker) {
             $inner .= '<button type="button" class="fabricator-date-cal-btn" data-for="' . esc_attr($field_id) . '"'

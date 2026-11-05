@@ -19,7 +19,7 @@ final class PluginBootTest extends TestCase
 
     public function testTheSuggestedPrivacyTextIsCopyableAndMentionsRecaptchaOnlyWhenUsed(): void
     {
-        $html = static fn(): string => (string) (new \ReflectionMethod(\FabricatorForms\Plugin::class, 'privacyPolicyHtml'))->invoke(null);
+        $html = static fn(): string => (string) (new \ReflectionMethod(\FabricatorForms\Admin\PrivacyPolicy::class, 'html'))->invoke(null);
 
         // Core's "Copy suggested policy text" drops .privacy-policy-tutorial: only the headings were copied.
         self::assertStringNotContainsString('privacy-policy-tutorial', $html());

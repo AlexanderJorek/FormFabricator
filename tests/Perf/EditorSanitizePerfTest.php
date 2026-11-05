@@ -2,7 +2,7 @@
 
 namespace FabricatorForms\Tests\Perf;
 
-use FabricatorForms\Admin\FormEditor;
+use FabricatorForms\Utils\Text\EmailBodySanitizer;
 use FabricatorForms\Tests\Support\Measure;
 use FabricatorForms\Tests\Support\PerfTestCase;
 use FabricatorForms\Tests\Support\Reflect;
@@ -16,7 +16,7 @@ final class EditorSanitizePerfTest extends PerfTestCase
     public function testUnclosedOpenersAreStrippedInLinearTime(): void
     {
         $build = static fn(int $n): string => str_repeat('<iframe src=x> text ', $n);
-        $strip = static fn(string $html): string => Reflect::call(FormEditor::class, 'stripElements', $html, ['iframe', 'object']);
+        $strip = static fn(string $html): string => Reflect::call(EmailBodySanitizer::class, 'stripElements', $html, ['iframe', 'object']);
 
         self::assertSame('', $strip('<iframe src=x>'), 'an unclosed opener is removed to its ">"');
         $r = Measure::settledGrowthExponent(1.5, $build, $strip, 2000, 0.05, 200000);

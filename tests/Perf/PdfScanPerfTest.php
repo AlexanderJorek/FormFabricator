@@ -2,7 +2,7 @@
 
 namespace FabricatorForms\Tests\Perf;
 
-use FabricatorForms\Admin\Verificationpage;
+use FabricatorForms\Admin\VerificationPage;
 use FabricatorForms\PDF\PdfUtils;
 use FabricatorForms\Tests\Support\Measure;
 use FabricatorForms\Tests\Support\PdfFixtures;
@@ -24,7 +24,7 @@ final class PdfScanPerfTest extends PerfTestCase
     {
         parent::setUp();
         // Compiling the verifier's 4,500-line class costs ~12 MB; done here, it never lands inside a measured peak.
-        class_exists(Verificationpage::class);
+        class_exists(VerificationPage::class);
     }
 
     // ---- stream scans ----
@@ -198,13 +198,13 @@ final class PdfScanPerfTest extends PerfTestCase
     {
         $tiny = self::tinyObjects(PdfUtils::MAX_OBJECTS);
         $walk = Measure::run(static function () use ($tiny): void {
-            foreach (Reflect::call(Verificationpage::class, 'scanObjectBodies', $tiny) as $unused) {
+            foreach (Reflect::call(VerificationPage::class, 'scanObjectBodies', $tiny) as $unused) {
             }
         });
         self::assertLessThan(self::MB, $walk['peak'], 'object walk');
 
         \Brain\Monkey\Functions\when('__')->returnArg(1); // the overflow marker is a translated label
-        $types = Measure::run(static fn() => Reflect::call(Verificationpage::class, 'distinctTypeNames', $tiny));
+        $types = Measure::run(static fn() => Reflect::call(VerificationPage::class, 'distinctTypeNames', $tiny));
         self::assertCount(257, $types['result']);
         self::assertLessThan(self::MB, $types['peak'], 'type names');
     }
@@ -231,7 +231,7 @@ final class PdfScanPerfTest extends PerfTestCase
                     file_put_contents($path, PdfFixtures::build([1 => PdfFixtures::stream('/Filter /FlateDecode', gzcompress(str_repeat("\x00-\x01\x02", $n)))]));
                     return $path;
                 },
-                static fn($path) => Reflect::call(Verificationpage::class, 'rawPdfHasSeal', $path),
+                static fn($path) => Reflect::call(VerificationPage::class, 'rawPdfHasSeal', $path),
                 250000,
                 8000000
             );
@@ -285,7 +285,7 @@ final class PdfScanPerfTest extends PerfTestCase
         $unclosed = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("<< /Annots [ 7 0 R >>\n", $n);
         $closed   = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("<< /Annots [ 7 0 R ] >>\n", $n);
         $collect  = static fn($pdf) => Reflect::call(
-            Verificationpage::class,
+            VerificationPage::class,
             'collectAnnotations',
             $pdf,
             PdfUtils::objectDefinitionIndex($pdf),
@@ -323,7 +323,7 @@ final class PdfScanPerfTest extends PerfTestCase
         };
         $no_break = static fn(int $n): string => "%PDF-1.4\n" . str_repeat('<< /Subtype /Image >>stream ', $n);
         $unclosed = static fn(int $n): string => "%PDF-1.4\n" . str_repeat("1 0 obj\n<< /Subtype /Image >>\nstream\n", $n);
-        $types    = static fn($pdf) => Reflect::call(Verificationpage::class, 'distinctTypeNames', $pdf);
+        $types    = static fn($pdf) => Reflect::call(VerificationPage::class, 'distinctTypeNames', $pdf);
         foreach ([$wrong_length, $no_break, $unclosed] as $build) {
             $this->assertLinear($build, static fn($pdf) => PdfUtils::countOutsideImageData($pdf, '%%EOF'), 5000);
             $this->assertLinear($build, $types, 5000);

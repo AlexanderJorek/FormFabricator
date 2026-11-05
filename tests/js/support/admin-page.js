@@ -83,7 +83,9 @@ async function loadBuilder(form = {}, server) {
     const html = fixture.admin.editor.replace(/data-form='[^']*'/, "data-form='" + attr(JSON.stringify(data)) + "'");
     const page = adminWindow(html, server);
     page.window.FabricatorBuilderI18n = JSON.parse(JSON.stringify(fixture.admin.builderI18n));
-    page.window.eval(script('admin-builder.js'));
+    // The builder's parts first, as WordPress loads them: admin-builder.js runs them at the end of its script.
+    ['admin-builder-controls.js', 'admin-builder-notifications.js', 'admin-builder-submit.js', 'admin-builder.js']
+        .forEach((file) => page.window.eval(script(file)));
     await settle(page);
     return page;
 }

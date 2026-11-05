@@ -34,7 +34,13 @@ final class FieldStubs
         Functions\when('sanitize_text_field')->alias(static fn($s) => is_array($s) || is_object($s) ? '' : trim(strip_tags((string) $s)));
         Functions\when('sanitize_textarea_field')->alias(static fn($s) => is_array($s) ? '' : (string) $s);
         Functions\when('sanitize_hex_color')->alias(static fn($c) => preg_match('/^#[0-9a-f]{3,6}$/i', (string) $c) ? $c : null);
-        Functions\when('wp_kses')->alias(static fn($s) => strip_tags((string) $s, '<p><a><b><i><strong><em><br><span><div><ul><ol><li>'));
+        // Keeps the common text tags (wp_kses_allowed_html() is stubbed empty, and the post context holds them) and the
+        // tags an allowlist names, as wp_kses() does; attributes are not filtered here.
+        Functions\when('wp_kses')->alias(static fn($s, $allowed = []) => strip_tags(
+            (string) $s,
+            '<p><a><b><i><strong><em><br><span><div><ul><ol><li>'
+                . (is_array($allowed) ? implode('', array_map(static fn($tag) => '<' . $tag . '>', array_keys($allowed))) : '')
+        ));
         Functions\when('wp_kses_post')->alias(static fn($s) => (string) $s);
         Functions\when('wp_kses_allowed_html')->justReturn([]);
         Functions\when('wp_strip_all_tags')->alias(static fn($s) => strip_tags((string) $s));
@@ -72,7 +78,9 @@ final class FieldStubs
         Functions\when('get_bloginfo')->justReturn('');
         Functions\when('number_format_i18n')->alias(static fn($n, $d = 0) => number_format((float) $n, (int) $d));
         Functions\when('current_time')->alias(static fn() => date('Y-m-d'));
-        Functions\when('wp_date')->alias(static fn($f, $t = null) => date($f, $t ?? time()));
+        Functions\when('wp_date')->alias(static fn($f, $t = null, $tz = null) => $tz instanceof \DateTimeZone
+            ? (new \DateTimeImmutable('@' . ($t ?? time())))->setTimezone($tz)->format($f)
+            : date($f, $t ?? time()));
         Functions\when('wp_upload_dir')->alias(static fn() => ['basedir' => sys_get_temp_dir(), 'baseurl' => 'https://example.test/u']);
         Functions\when('wp_max_upload_size')->justReturn(64 * 1048576);
         Functions\when('wp_convert_hr_to_bytes')->alias(static fn($v) => (int) $v * 1048576);

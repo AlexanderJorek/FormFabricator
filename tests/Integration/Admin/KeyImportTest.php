@@ -43,6 +43,6 @@ final class KeyImportTest extends AjaxTestCase
      */
     private function import(array $file): array
     {
-        return $this->ajax('fabricator_add_legacy_key', ['key_json' => wp_json_encode($file), 'nonce' => wp_create_nonce('fabricator_add_legacy_key')]);
+        return $this->ajax('fabricator_forms_add_legacy_key', ['key_json' => wp_json_encode($file), 'nonce' => wp_create_nonce('fabricator_forms_add_legacy_key')]);
     }
 }

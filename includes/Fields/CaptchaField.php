@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -25,7 +25,7 @@ defined('ABSPATH') || exit;
 
 /**
  * CAPTCHA field, by one of two providers chosen per field: ALTCHA, a proof-of-work check this site hosts and verifies
- * itself (Utils\Altcha, vendor/altcha), or Google reCAPTCHA v2, which loads only after a click.
+ * itself (Utils\Security\Altcha, vendor/altcha), or Google reCAPTCHA v2, which loads only after a click.
  */
 class CaptchaField extends BaseField
 {
@@ -86,7 +86,7 @@ class CaptchaField extends BaseField
         $site_key = get_option('fabricator_forms_recaptcha_site_key', '');
         if ($site_key === '') {
             // The setup hint only for whoever can fix it. The form stays blocked: skipping the check would invite spam.
-            $message = \FabricatorForms\Plugin::userCan('settings')
+            $message = \FabricatorForms\Capabilities::userCan('settings')
                 ? __('reCAPTCHA: Please enter the site key in the plugin settings.', 'formfabricator')
                 : __('This form cannot be sent at the moment. Please try again later.', 'formfabricator');
             return '<div class="fabricator-field fabricator-field--captcha">'
@@ -132,7 +132,7 @@ class CaptchaField extends BaseField
             'waitAlert'            => __('Verifying… please wait.', 'formfabricator'),
         ];
         $inner = '<altcha-widget'
-            . ' challenge="' . esc_url(admin_url('admin-ajax.php?action=fabricator_altcha_challenge')) . '"'
+            . ' challenge="' . esc_url(admin_url('admin-ajax.php?action=fabricator_forms_altcha_challenge')) . '"'
             . ' name="' . esc_attr($field_id) . '"'
             . ' language="fabricator"'
             // Starts solving as soon as the visitor works on the form, so the check is usually done before they reach it.
@@ -160,20 +160,16 @@ class CaptchaField extends BaseField
      * which its widget always posts as 'g-recaptcha-response'. No reCAPTCHA field posts anything under its own id.
      *
      * @param string $field_id The field's id.
+     * @param array  $post     The posted answers (BaseField::extractValue()).
+     * @param array  $files    The uploaded files' entries (BaseField::extractValue()).
      * @return string
      */
-    public function extractValue(string $field_id): mixed
+    public function extractValue(string $field_id, array $post, array $files = []): mixed
     {
-        self::assertRequestNonceVerified();
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        if (isset($_POST[$field_id])) {
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-            return sanitize_text_field(wp_unslash($_POST[$field_id]));
+        if (isset($post[$field_id])) {
+            return is_string($post[$field_id]) ? sanitize_text_field($post[$field_id]) : '';
         }
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above via assertRequestNonceVerified().
-        $has_response = isset($_POST['g-recaptcha-response']);
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce is verified once in FormProcessor::handle() before field extraction runs.
-        return $has_response ? sanitize_text_field(wp_unslash($_POST['g-recaptcha-response'])) : '';
+        return is_string($post['g-recaptcha-response'] ?? null) ? sanitize_text_field($post['g-recaptcha-response']) : '';
     }
 
     /**
@@ -197,7 +193,7 @@ class CaptchaField extends BaseField
     public function validate(mixed $value, array $config): bool|string
     {
         if (self::provider($config) === 'altcha') {
-            return is_string($value) && $value !== '' && \FabricatorForms\Utils\Altcha::verify($value)
+            return is_string($value) && $value !== '' && \FabricatorForms\Utils\Security\Altcha::verify($value)
                 ? true
                 : __('Please confirm the CAPTCHA.', 'formfabricator');
         }
@@ -259,7 +255,7 @@ class CaptchaField extends BaseField
             \FabricatorForms\fabricator_log(
                 'FabricatorForms CaptchaField: reCAPTCHA hostname mismatch — allowed "'
                 . implode(', ', $allowed_hosts) . '", got "' . $reported_host . '". If this site is '
-                . 'reachable on a hostname not listed, add it via the fabricator_recaptcha_allowed_hosts filter.'
+                . 'reachable on a hostname not listed, add it via the fabricator_forms_recaptcha_allowed_hosts filter.'
             );
             return __('Please confirm the CAPTCHA.', 'formfabricator');
         }
@@ -286,7 +282,7 @@ class CaptchaField extends BaseField
          * @param string[] $hosts Default: the home_url() host plus its apex/www counterpart.
          */
         // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- already lowercase/underscored.
-        $filtered = apply_filters('fabricator_recaptcha_allowed_hosts', $hosts);
+        $filtered = apply_filters('fabricator_forms_recaptcha_allowed_hosts', $hosts);
 
         if (!is_array($filtered)) {
             return $hosts;
@@ -371,5 +367,15 @@ class CaptchaField extends BaseField
                 ),
             ],
         ];
+    }
+
+    /**
+     * The CAPTCHA's answer is a token, checked as such (BaseField::typedAnswer()).
+     *
+     * @return bool
+     */
+    public function typedAnswer(): bool
+    {
+        return false;
     }
 }

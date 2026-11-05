@@ -131,3 +131,30 @@ test('direct debit: a mandate signed by typing the name is complete, in the brow
     assert.equal(accepts, extras.typed_sig_ok);
     assert.equal(extras.typed_sig_ok, true);
 });
+
+test('a signature with a text above it asks for the place of signing once signed, in the browser as on the server', () => {
+    const page = padPage(fixture.forms['signature with place']);
+    const field = page.document.querySelector('.fabricator-field--signature');
+    const texts = field.querySelector('.fabricator-signature-texts');
+    assert.ok(field.classList.contains('fabricator-signature--boxed'), 'boxed like the mandate');
+    assert.equal(texts.querySelector('.fabricator-signature-title').textContent, 'Order confirmation');
+    assert.equal(texts.querySelector('.fabricator-signature-text').textContent.trim(), 'I confirm the details above.');
+
+    const place = field.querySelector('.fabricator-signature-place');
+    assert.equal(place.name, 'sign-place', 'a key of its own: the field\'s own input stays the pad\'s, which conditions read');
+    const check = () => page.window.FabricatorValidators['signature-place'](field);
+    const placeError = field.querySelector('.fabricator-signature-place-error');
+
+    assert.equal(check(), null, 'not signed: nothing asked');
+    const wrap = field.querySelector('.fabricator-signature-wrap');
+    wrap.querySelector('.fabricator-signature-mode').click();
+    typeName(page, wrap, 'Ada Lovelace');
+    assert.notEqual(check(), null, 'signed without a place: refused');
+    assert.equal(placeError.textContent, 'Signed in is a required field.', 'named by the label, as the server words it');
+    assert.equal(field.querySelector('.fabricator-field-error').textContent, '', 'the field\'s own message stays below the pad');
+
+    place.value = '  Berlin ';
+    assert.equal(check(), null);
+    assert.equal(placeError.textContent, '', 'cleared once the place is there');
+    assert.deepEqual(page.errors, []);
+});

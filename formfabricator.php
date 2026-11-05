@@ -4,7 +4,7 @@
  * Plugin Name:       FormFabricator
  * Plugin URI:        https://github.com/AlexanderJorek/FormFabricator
  * Description:       Custom drag-and-drop form builder with PDF generation and email delivery.
- * Version:           1.1.0
+ * Version:           1.1.1
  * Requires at least: 6.5
  * Requires PHP:      8.1
  * Author:            Alexander Jorek
@@ -19,7 +19,7 @@ defined('ABSPATH') || exit;
 
 define('FABRICATOR_FORMS_PATH', plugin_dir_path(__FILE__));
 define('FABRICATOR_FORMS_URL', plugin_dir_url(__FILE__));
-define('FABRICATOR_FORMS_VERSION', '1.1.0');
+define('FABRICATOR_FORMS_VERSION', '1.1.1');
 
 $fabricator_composer_autoload = FABRICATOR_FORMS_PATH . 'vendor/autoload.php';
 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- the plugin's own file.
@@ -36,14 +36,14 @@ if (!file_exists($fabricator_composer_autoload)) {
             . '</p></div>';
         }
     );
-    // Bail out — without the autoloader, Plugin.php's Composer-vendored deps would fatal.
+    // Bail out — without the autoloader, the plugin's classes and its Composer-vendored deps would fatal.
     return;
 }
 include_once $fabricator_composer_autoload;
 
-// Composer's autoloader finds the plugin's own classes too (PSR-4, FabricatorForms\ => includes/). Plugin.php is
-// required explicitly because it also defines fabricator_log(), a function no autoloader finds.
-require_once FABRICATOR_FORMS_PATH . 'includes/Plugin.php';
+// Composer's autoloader finds the plugin's own classes too (PSR-4, FabricatorForms\ => includes/). functions.php is
+// required explicitly: it defines fabricator_log(), a function no autoloader finds.
+require_once FABRICATOR_FORMS_PATH . 'includes/functions.php';
 
 // No load_plugin_textdomain(): core loads the translation itself, and calling it here triggers _doing_it_wrong().
 add_action(

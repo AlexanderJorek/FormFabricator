@@ -1,0 +1,896 @@
+/*!
+ * FormFabricator — Settings admin page styles
+ * @copyright 2026 Alexander Jorek
+ * @license   GPL-3.0-or-later
+ */
+
+/* Loaded after admin.css, which holds what every admin screen shares. */
+
+/* ── Factory-reset modal ── */
+.fabricator-reset-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .55);
+    z-index: 99999;
+    align-items: center;
+    justify-content: center;
+}
+
+.fabricator-reset-overlay:not([hidden]) {
+    display: flex;
+}
+.fabricator-settings-topbar-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Tile grid */
+.fabricator-settings-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px 20px;
+    align-items: stretch;
+}
+
+/* Section divider — spans all columns */
+.fabricator-settings-section-header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--fabricator-text-secondary);
+    padding: 4px 0 2px;
+    border-bottom: 1px solid rgba(0,0,0,.08);
+    margin-top: 8px;
+}
+
+.fabricator-settings-section-header:first-child {
+    margin-top: 0;
+}
+.fabricator-settings-section-header i {
+    font-size: 10px;
+}
+
+.fabricator-card-radio-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+.fabricator-card-radio {
+    display: block;
+    text-align: left;
+    padding: 16px;
+    border: 2px solid var(--fabricator-border-light);
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .15s ease;
+}
+
+.fabricator-card-radio:hover {
+    border-color: var(--fabricator-admin-accent);
+}
+
+.fabricator-card-radio:has(input:checked) {
+    border-color: var(--fabricator-admin-accent);
+}
+.fabricator-card-radio input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.fabricator-card-radio-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.fabricator-card-radio-head i {
+    font-size: 15px;
+    color: var(--fabricator-text-muted);
+}
+.fabricator-card-radio-head strong {
+    font-size: 13px;
+    color: var(--fabricator-text);
+}
+.fabricator-card-radio-desc {
+    display: block;
+    font-size: 12px;
+    color: var(--fabricator-text-alt);
+    line-height: 1.4;
+}
+
+/* ── Security tile ── */
+.fabricator-security-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fabricator-security-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    background: var(--fabricator-bg-subtle);
+    border: 1px solid var(--fabricator-border-light);
+    border-radius: 6px;
+    padding: 12px 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .15s, background .15s;
+}
+
+.fabricator-security-action-btn:hover {
+    background: #f0f6fc;
+    border-color: var(--fabricator-admin-accent);
+}
+.fabricator-security-action-btn--danger:hover {
+    background: #fdf2f2;
+    border-color: var(--fabricator-danger-dark);
+}
+.fabricator-security-action-icon {
+    flex-shrink: 0;
+    width: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.fabricator-security-action-icon--danger {
+    color: var(--fabricator-danger-dark);
+}
+.fabricator-security-action-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.fabricator-security-action-body strong {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fabricator-text);
+    line-height: 1.3;
+}
+.fabricator-security-action-body span {
+    font-size: 11px;
+    color: var(--fabricator-text-secondary);
+}
+
+.fabricator-security-action-arrow {
+    flex-shrink: 0;
+    color: var(--fabricator-text-tertiary);
+    font-size: 11px;
+}
+
+.fabricator-privacy-text-modal {
+    max-width: 620px;
+}
+.fabricator-privacy-text-disclaimer {
+    margin-top: 8px !important;
+}
+.fabricator-privacy-text-modal .fabricator-settings-field {
+    margin-top: 12px;
+}
+
+.fabricator-settings-field--inline {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 10px !important;
+}
+.fabricator-settings-field--inline label {
+    flex-shrink: 0;
+}
+
+.fabricator-combobox {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+}
+
+.fabricator-combobox-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px 30px 5px 10px;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+    background: #fff;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.fabricator-combobox-input:focus {
+    outline: 2px solid var(--fabricator-admin-accent);
+    outline-offset: 0;
+    border-color: var(--fabricator-admin-accent);
+    cursor: text;
+}
+
+.fabricator-combobox-arrow {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: var(--fabricator-text-muted);
+    pointer-events: none;
+}
+
+.fabricator-combobox-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 10;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: #fff;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .14);
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.fabricator-combobox-option {
+    padding: 6px 8px;
+    font-size: 13px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.fabricator-combobox-option:hover {
+    background: var(--fabricator-bg-subtler);
+}
+.fabricator-combobox-option.is-selected {
+    background: var(--fabricator-admin-accent);
+    color: #fff;
+}
+
+.fabricator-privacy-text-box {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 4px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--fabricator-text);
+    background: var(--fabricator-bg-subtle);
+    resize: vertical;
+}
+
+.fabricator-reset-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.fabricator-reset-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #fef2f2;
+    color: var(--fabricator-danger-dark);
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.fabricator-reset-subtitle {
+    margin: 0 !important;
+    font-size: 12px !important;
+    color: var(--fabricator-text-muted) !important;
+}
+
+.fabricator-reset-lead {
+    margin: 0 0 8px !important;
+    font-size: 13px;
+    font-weight: 600;
+    color: #3c434a;
+}
+
+.fabricator-reset-list {
+    margin: 0 0 16px 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--fabricator-bg-subtler);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.fabricator-reset-list li {
+    padding: 8px 12px;
+    color: #3c434a;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--fabricator-bg-subtler);
+}
+
+.fabricator-reset-list li:last-child {
+    border-bottom: none;
+}
+.fabricator-reset-list li i {
+    width: 14px;
+    color: var(--fabricator-danger-dark);
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.fabricator-reset-key-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 12px;
+    color: var(--fabricator-admin-accent);
+    margin-bottom: 16px;
+}
+
+.fabricator-reset-key-notice i {
+    flex-shrink: 0;
+}
+
+.fabricator-reset-check-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 20px;
+    cursor: pointer;
+    background: var(--fabricator-bg-subtle);
+    transition: border-color .15s, background .15s;
+    outline: none;
+}
+
+.fabricator-reset-check-wrap:hover {
+    border-color: var(--fabricator-danger-dark);
+    background: #fef9f9;
+}
+.fabricator-reset-check-wrap:has(input:checked) {
+    background: #fef2f2;
+}
+
+.fabricator-reset-check-wrap input[type="checkbox"] {
+    flex-shrink: 0;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    width: 15px !important;
+    height: 15px !important;
+    border: 2px solid #adb5bd !important;
+    border-radius: 3px !important;
+    background: #fff !important;
+    cursor: pointer;
+    position: relative;
+    outline: none !important;
+    box-shadow: none !important;
+    transition: background .15s, border-color .15s;
+}
+
+.fabricator-reset-check-wrap input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--fabricator-danger-dark) !important;
+    outline-offset: 2px;
+}
+
+.fabricator-reset-check-wrap input[type="checkbox"]:checked {
+    background: var(--fabricator-danger-dark) !important;
+    border-color: var(--fabricator-danger-dark) !important;
+}
+.fabricator-reset-check-wrap input[type="checkbox"]:checked::before {
+    float: none !important;
+    display: block !important;
+    margin: -4px 0 0 -5px !important;
+}
+.fabricator-reset-check-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.fabricator-reset-check-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fabricator-text);
+    line-height: 1.4;
+}
+.fabricator-reset-check-desc {
+    font-size: 12px;
+    color: var(--fabricator-text-muted);
+    line-height: 1.4;
+}
+
+.fabricator-reset-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#fabricator-reset-cancel.button {
+    background: #00a32a !important;
+    border: none !important;
+    color: #fff !important;
+    box-shadow: none !important;
+    border-radius: 6px !important;
+}
+
+#fabricator-reset-cancel.button:hover {
+    background: #007a1f !important;
+    color: #fff !important;
+}
+
+.fabricator-reset-confirm {
+    background: var(--fabricator-danger-dark) !important;
+    border: none !important;
+    color: #fff !important;
+    min-width: 160px;
+    border-radius: 6px !important;
+    transition: opacity .15s;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.fabricator-reset-confirm:focus,
+.fabricator-reset-confirm:focus-visible {
+    outline: none !important;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--fabricator-danger-dark) !important;
+}
+.fabricator-reset-confirm:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+}
+
+/* ── Legacy-key import modal ── */
+#fabricator-legacy-key-json:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 1px var(--fabricator-admin-accent) !important;
+    border-color: var(--fabricator-admin-accent) !important;
+}
+
+.fabricator-legacy-import-modal input[type="radio"] {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    width: 15px !important;
+    height: 15px !important;
+    border: 2px solid #adb5bd !important;
+    border-radius: 50% !important;
+    background: #fff !important;
+    position: relative;
+    flex-shrink: 0;
+    cursor: pointer;
+    outline: none !important;
+    box-shadow: none !important;
+    transition: border-color .15s;
+}
+
+.fabricator-legacy-import-modal input[type="radio"]:checked {
+    border-color: var(--fabricator-admin-accent) !important;
+    background: #fff !important;
+}
+.fabricator-legacy-import-modal input[type="radio"]:checked::before {
+    content: '' !important;
+    position: absolute !important;
+    inset: 2px !important;
+    border-radius: 50% !important;
+    background: var(--fabricator-admin-accent) !important;
+    float: none !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+}
+
+/* ── User-access modal ── */
+.fabricator-access-modal {
+    max-width: 660px;
+}
+.fabricator-access-modal h2 {
+    color: var(--fabricator-text);
+}
+
+.fabricator-access-section-title {
+    margin: 14px 0 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fabricator-text);
+}
+
+.fabricator-access-scroll {
+    overflow-x: auto;
+}
+
+.fabricator-access-table {
+    width: 100%;
+    border-collapse: collapse;
+    white-space: nowrap;
+}
+
+.fabricator-access-th {
+    padding: 4px 10px 4px 0;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--fabricator-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 2px solid var(--fabricator-border-light);
+    text-align: left;
+}
+
+.fabricator-access-th--name {
+    width: 160px;
+    min-width: 160px;
+    max-width: 160px;
+}
+.fabricator-access-th--cap {
+    text-align: center;
+    padding-right: 0;
+    min-width: 72px;
+}
+
+.fabricator-access-row td {
+    border-bottom: 1px solid var(--fabricator-bg-subtler);
+}
+.fabricator-access-row:last-child td {
+    border-bottom: none;
+}
+
+.fabricator-access-td {
+    padding: 6px 0;
+    font-size: 13px;
+}
+.fabricator-access-td--name {
+    width: 160px;
+    min-width: 160px;
+    max-width: 160px;
+    padding-right: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fabricator-access-td--cap {
+    text-align: center;
+}
+
+.fabricator-access-cb {
+    width: 15px !important;
+    height: 15px !important;
+    cursor: pointer;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    border: 2px solid #adb5bd !important;
+    border-radius: 3px !important;
+    background: #fff !important;
+    position: relative;
+    vertical-align: middle;
+    outline: none !important;
+    box-shadow: none !important;
+    transition: background .15s, border-color .15s;
+}
+
+.fabricator-access-cb:checked {
+    background: var(--fabricator-admin-accent) !important;
+    border-color: var(--fabricator-admin-accent) !important;
+    color: transparent !important;
+}
+
+/* Re-center the dashicon checkmark glyph WP core draws via ::before — its default
+   float/margin assumes the native 16px WP checkbox box, not this custom-styled one */
+.fabricator-access-cb:checked::before {
+    float: none !important;
+    display: block !important;
+    margin: -4px 0 0 -5px !important;
+}
+.fabricator-access-cb:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+/* Keyboard focus stays visible (WCAG 2.4.7); only the ring on mouse click is suppressed above. */
+.fabricator-access-cb:focus-visible {
+    outline: 2px solid var(--fabricator-admin-accent) !important;
+    outline-offset: 2px;
+}
+
+.fabricator-access-always {
+    color: #50a050;
+    font-size: 12px;
+}
+
+.fabricator-access-empty {
+    text-align: center;
+    font-size: 12px;
+    color: var(--fabricator-text-muted);
+    padding: 12px 0;
+    border: 1px dashed var(--fabricator-border-light);
+    border-radius: 4px;
+}
+
+.fabricator-access-name-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font-size: 13px;
+    color: #3c434a;
+    cursor: pointer;
+    text-decoration: underline dotted var(--fabricator-text-tertiary);
+    text-underline-offset: 2px;
+}
+
+.fabricator-access-name-btn:hover {
+    color: var(--fabricator-danger-dark);
+    text-decoration-color: var(--fabricator-danger-dark);
+}
+
+.fabricator-access-search-section {
+    margin: 10px 0 0;
+    padding: 0;
+}
+.fabricator-access-search-input {
+    display: block;
+    width: 100%;
+    height: 32px;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 6px;
+    padding: 0 10px;
+    margin: 0;
+    font-size: 13px;
+    background: #fff;
+    box-sizing: border-box;
+    color: var(--fabricator-text);
+}
+
+.fabricator-access-search-input:focus {
+    outline: none;
+    border-color: var(--fabricator-admin-accent);
+    box-shadow: 0 0 0 1px var(--fabricator-admin-accent);
+}
+
+/* position:fixed so modal overflow:hidden doesn't clip it */
+.fabricator-access-dropdown {
+    position: fixed;
+    background: #fff;
+    border: 1px solid var(--fabricator-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 100001;
+}
+
+.fabricator-access-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--fabricator-text);
+}
+
+.fabricator-access-dropdown-item:hover {
+    background: #f0f6fc;
+}
+
+.fabricator-access-inline-add {
+    background: none;
+    border: 1px solid var(--fabricator-admin-accent);
+    border-radius: 3px;
+    color: var(--fabricator-admin-accent);
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.fabricator-access-inline-add:hover {
+    background: var(--fabricator-admin-accent);
+    color: var(--fabricator-accent-text, #fff);
+}
+
+/* Access modal flex layout so users section scrolls */
+#fabricator-access-content {
+    flex: 1;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#fabricator-access-users-scroll {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* Sticky thead inside scrollable containers */
+#fabricator-access-users-scroll .fabricator-access-table thead th {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
+}
+
+/* The PDF verifier's detail, summary and verdict styles are defined once, in admin-verification.css. */
+
+.fabricator-key-master-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 16px;
+    font-size: 12px;
+}
+.fabricator-key-master-table thead th {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--fabricator-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 4px 10px 4px 0;
+    border-bottom: 2px solid var(--fabricator-border-light);
+    text-align: left;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
+}
+
+.fabricator-key-master-table thead th:nth-child(2),
+.fabricator-key-master-table thead th:nth-child(3),
+.fabricator-key-master-table thead th:nth-child(4),
+.fabricator-key-master-table tbody .fabricator-key-data-row td:nth-child(2),
+.fabricator-key-master-table tbody .fabricator-key-data-row td:nth-child(3),
+.fabricator-key-master-table tbody .fabricator-key-data-row td:nth-child(4) {
+    text-align: center;
+}
+
+.fabricator-key-uuid-row td {
+    padding: 6px 8px;
+    background: var(--fabricator-bg-subtle);
+    border-top: 2px solid var(--fabricator-border);
+    border-left: 1px solid var(--fabricator-border-light);
+    border-right: 1px solid var(--fabricator-border-light);
+}
+
+.fabricator-key-uuid-row:first-child td {
+    border-top: 1px solid var(--fabricator-border-light);
+}
+
+.fabricator-key-data-row td {
+    border-bottom: 1px solid var(--fabricator-border-light);
+    padding: 5px 10px 5px 0;
+    color: var(--fabricator-text);
+    vertical-align: middle;
+}
+.fabricator-key-data-row td:first-child { border-left: 1px solid var(--fabricator-border-light); }
+.fabricator-key-data-row td:last-child  { border-right: 1px solid var(--fabricator-border-light); padding-right: 8px; }
+
+.fabricator-key-uuid-lbl {
+    font-size: 10px;
+    color: var(--fabricator-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-right: 6px;
+}
+
+.fabricator-key-uuid-code {
+    font-size: 11px;
+    font-family: monospace;
+    letter-spacing: .03em;
+    color: var(--fabricator-text);
+    background: var(--fabricator-bg-subtler);
+    border: 1px solid var(--fabricator-border);
+    border-radius: 3px;
+    padding: 1px 5px;
+}
+
+.fabricator-key-card-badges {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+}
+
+.fabricator-key-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* ACTIVE is the key in use now; distinct from --rotated, which marks a retired key that was
+   never compromised. Both being green would make the current key indistinguishable. */
+.fabricator-key-badge--active   { background: var(--fabricator-admin-accent); color: #fff; }
+.fabricator-key-badge--rotated  { background: var(--fabricator-pass-bg); color: var(--fabricator-pass-fg); }
+.fabricator-key-badge--compromised { background: var(--fabricator-fail-bg); color: var(--fabricator-fail-fg); }
+.fabricator-key-rotate-fields { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--fabricator-border-lighter); }
+
+.fabricator-key-view-title {
+    color: #1a56db !important;
+}
+
+.fabricator-key-view-scroll {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.fabricator-key-fp-cell {
+    font-size: 12px;
+    font-family: monospace;
+    letter-spacing: .08em;
+    color: var(--fabricator-text);
+    background: var(--fabricator-bg-subtler);
+    border: 1px solid var(--fabricator-border);
+    border-radius: 3px;
+    padding: 1px 5px;
+}
+
+.fabricator-key-uuid-cell {
+    font-size: 11px;
+    letter-spacing: .03em;
+    color: var(--fabricator-text-alt);
+}
+
+.fabricator-key-dl-info {
+    background: var(--fabricator-bg-subtle);
+    border: 1px solid var(--fabricator-border-light);
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin: 14px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.fabricator-key-badge--legacy {
+    background: #1a56db;
+    color: #fff;
+}
+
+.fabricator-key-compromised-hint {
+    color: var(--fabricator-danger-dark) !important;
+    margin-bottom: 12px !important;
+}
+
+@media (max-width: 782px) {
+    .fabricator-settings-tiles {
+        grid-template-columns: 1fr !important;
+    }
+    .fabricator-settings-section-header {
+        grid-column: 1 !important;
+    }
+}
+
+@media (max-width: 1440px) {
+    .fabricator-settings-topbar-actions {
+        flex-wrap: wrap;
+    }
+}
+
+/* Column headers whose one-word label is explained by a title tooltip. */
+.fabricator-access-th--help {
+    cursor: help;
+    text-decoration: underline dotted currentColor;
+    text-underline-offset: 3px;
+}

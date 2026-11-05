@@ -99,11 +99,12 @@ final class PdfLayoutSaveTest extends AjaxTestCase
      */
     private function saveHeaderImage(string $src): array
     {
-        return $this->ajax('fabricator_save_pdf_layout', [
+        return $this->ajax('fabricator_forms_save_pdf_layout', [
             'fabricator_pdf_layout_nonce' => wp_create_nonce('fabricator_pdf_layout'),
-            'header_layout_json'          => wp_json_encode(['rows' => 8, 'elements' => [
+            // As admin-pdflayout.js sends it: base64-encoded JSON.
+            'header_layout'               => base64_encode((string) wp_json_encode(['rows' => 8, 'elements' => [
                 ['id' => 'e1', 'type' => 'image', 'src' => $src, 'x' => 0, 'y' => 0, 'w' => 10, 'h' => 4],
-            ]]),
+            ]])),
         ]);
     }
 
@@ -125,7 +126,7 @@ final class PdfLayoutSaveTest extends AjaxTestCase
      */
     private function save(string $hidden): array
     {
-        $r = $this->ajax('fabricator_save_pdf_layout', [
+        $r = $this->ajax('fabricator_forms_save_pdf_layout', [
             'fabricator_pdf_layout_nonce' => wp_create_nonce('fabricator_pdf_layout'),
             'section_hidden'              => $hidden,
         ]);

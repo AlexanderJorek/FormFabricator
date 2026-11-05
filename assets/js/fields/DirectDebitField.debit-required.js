@@ -48,5 +48,6 @@ function (fieldEl) {
         if (sigErr && !sigErr.textContent) sigErr.textContent = (_i18n && _i18n.debit_sig_required) || 'Please sign.';
         missing = true;
     }
-    return missing ? '​' : null;
+    // Invalid, each message already at its part (validatePage() then writes none of its own).
+    return missing ? true : null;
 }

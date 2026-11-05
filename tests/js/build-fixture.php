@@ -6,11 +6,11 @@
  * - localization: Assets::frontLocalization(), the window.FabricatorForms object.
  * - globals:      Assets::frontFieldAssets()['globals'], every field's validators, empty checks and inits.
  * - conditionFixtures: real FormRenderer markup, one field per type conditioned directly and through a group.
- * - parity:       FormProcessor::evalConditionRule()'s answer for every value × rule value × operator, so the JS
+ * - parity:       ConditionRule::holds()'s answer for every value × rule value × operator, so the JS
  *                 suite can check front.js decides each one the same way the server does.
  * - cascades:     chained conditions as real FormRenderer markup, with the values posted and the ids
  *                 FormProcessor::resolveVisibility() hides, so the JS suite can check the whole cascade.
- * - altcha:       a Utils\Altcha challenge, its answer and the server's verdicts on it, for ALTCHA's own solver and
+ * - altcha:       a Utils\Security\Altcha challenge, its answer and the server's verdicts on it, for ALTCHA's own solver and
  *                 verifier to check against.
  * - debit:        each direct debit scheme's real markup, with typed account details and whether
  *                 DirectDebitField::validate() accepts each one, so the JS suite can check the browser's rules agree.
@@ -20,6 +20,7 @@
  */
 
 use Brain\Monkey;
+use FabricatorForms\Form\ConditionRule;
 use FabricatorForms\Form\FormProcessor;
 use FabricatorForms\Form\FormRenderer;
 use FabricatorForms\Tests\Support\FieldStubs;
@@ -43,40 +44,31 @@ $arrayRules = ['Ja', 'ÄRZTE', '', '10', '1', '5', '-3', '0'];
 $operators  = ['equals', 'not_equals', 'contains', 'not_contains', 'empty', 'not_empty', 'greater', 'less'];
 
 /**
- * WordPress's real sanitize_text_field() / sanitize_textarea_field() on each string (tests/js/wp-sanitize.php, run in a
- * process of its own), as [text, textarea] pairs.
+ * Each string as the server reads it from a submission: the real TextField's and TextareaField's extractValue(), as
+ * [text, textarea] pairs. Answers are recorded as typed, trimmed.
  *
  * @param string[] $strings
  * @return array<int, array{0: string, 1: string}>
  */
-$wpSanitize = static function (array $strings): array {
-    $proc = proc_open([PHP_BINARY, __DIR__ . '/wp-sanitize.php'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w']], $pipes);
-    if (!is_resource($proc)) {
-        fwrite(STDERR, "build-fixture: cannot run wp-sanitize.php\n");
-        exit(1);
+$serverReads = static function (array $strings): array {
+    $text     = \FabricatorForms\Fields\FieldRegistry::get('text');
+    $textarea = \FabricatorForms\Fields\FieldRegistry::get('textarea');
+    $out      = [];
+    foreach ($strings as $s) {
+        $out[] = [$text->extractValue('t', ['t' => $s]), $textarea->extractValue('t', ['t' => $s])];
     }
-    fwrite($pipes[0], json_encode(array_values($strings), JSON_THROW_ON_ERROR));
-    fclose($pipes[0]);
-    $out = (string) stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    if (proc_close($proc) !== 0) {
-        fwrite(STDERR, "build-fixture: wp-sanitize.php failed\n");
-        exit(1);
-    }
-    return json_decode($out, true, 512, JSON_THROW_ON_ERROR);
+    return $out;
 };
 
-// What the server's rule sees is the submitted text after sanitize_text_field() (extractValue()); front.js mirrors that.
-$sanitizedValues = array_combine($values, array_column($wpSanitize($values), 0));
-$decide = static fn(string $op, string $ruleValue, mixed $submitted): bool => Reflect::call(
-    FormProcessor::class,
-    'evalConditionRule',
+// What the server's rule sees is the submitted text as extractValue() reads it; front.js reads it the same way.
+$sanitizedValues = array_combine($values, array_column($serverReads($values), 0));
+$decide = static fn(string $op, string $ruleValue, mixed $submitted): bool => ConditionRule::holds(
     ['field_id' => 'f', 'operator' => $op, 'value' => $ruleValue],
     ['f' => is_array($submitted) ? $submitted : $sanitizedValues[$submitted]]
 );
 
-// front.js's sanitizeLikeWp() against the real functions, on the inputs where they do most: tags, a lone "<", %xx
-// octets, entities, tabs and runs of spaces, non-breaking spaces, and line breaks (kept only by the textarea version).
+// front.js's reading against the server's, on inputs a sanitizer would change: tags, a lone "<", %xx octets, entities,
+// tabs and runs of spaces, non-breaking spaces, and line breaks.
 $sanitizeCorpus = [
     '  Ada   Lovelace ', "tab\there", 'a<b>bold</b>c', 'x < y', 'a < b > c', '1 <2', '<script>alert(1)</script>ok',
     '<!-- note -->text', '<style>p{}</style>styled', '100%20off', '%41%42', '50% of 10%ab', 'fish &amp; chips',
@@ -84,8 +76,26 @@ $sanitizeCorpus = [
     '<p>para</p><p>two</p>', 'a<br>b', '<a href="x">link</a> & more', '5 < 6 and 7 > 3',
 ];
 $sanitizePairs = [];
-foreach ($wpSanitize($sanitizeCorpus) as $i => [$asText, $asTextarea]) {
+foreach ($serverReads($sanitizeCorpus) as $i => [$asText, $asTextarea]) {
     $sanitizePairs[] = [$sanitizeCorpus[$i], $asText, $asTextarea];
+}
+
+// What an answer may hold: Utils\Text\AnswerText's verdict on each string, as a one-line and as a multi-line answer, for
+// front.js's answerProblem(). A text input can't hold a line break, so those are checked as a textarea only.
+$answerCorpus = [
+    'Ada Lovelace', '  Ada  ', 'a<b and c>d', '20%AB', 'AT&T R&D', 'Tom & Jerry;', '&foo;', '&amp', 'x&nbsp',
+    'Smith &amp; Co', 'caf&#233;', '&#x41;', '&copy; 2026', '&AMP;', "Ada\u{200B}Lovelace", "Ada\u{00AD}", "\u{FEFF}x",
+    "\u{202E}abc", "a\u{2066}b", "a\u{061C}b", "a\u{200E}b", "tab\there", "a\u{0007}b", "a\u{007F}b", "a\u{0085}b",
+    "a\u{2028}b", "a\u{2029}b", "\u{0645}\u{06CC}\u{200C}\u{062E}\u{0648}\u{0627}\u{0647}\u{0645}",
+    "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}", "a\u{200B}\u{200D}b", "line1\nline2", "line1\r\nline2", "a\u{00A0}b", 'ünïcödé ΣΊΣΥΦΟΣ 漢字 🎀', "e\u{0301}",
+];
+$answerCases = [];
+foreach ($answerCorpus as $typed) {
+    $answerCases[] = [
+        $typed,
+        \FabricatorForms\Utils\Text\AnswerText::problem(trim($typed), false) === null,
+        \FabricatorForms\Utils\Text\AnswerText::problem(trim($typed), true) === null,
+    ];
 }
 
 $scalar = [];
@@ -306,9 +316,7 @@ foreach ($compositeCases as $name => [$field, $dom, $posted]) {
     $equalsValue = is_array($read) ? (string) ($read[0] ?? '') : (string) $read;
     $decisions   = [];
     foreach ([['equals', $equalsValue], ['empty', ''], ['greater', '0'], ['less', '1']] as [$op, $ruleValue]) {
-        $decisions[] = [$op, $ruleValue, Reflect::call(
-            FormProcessor::class,
-            'evalConditionRule',
+        $decisions[] = [$op, $ruleValue, ConditionRule::holds(
             ['field_id' => $field['id'], 'operator' => $op, 'value' => $ruleValue],
             [$field['id'] => $read]
         )];
@@ -349,11 +357,10 @@ $debitTyped = [
         'account' => ['1234', '12345678901234567', '12-34', '123', '123456789012345678', 'abcd', '1234 5678'],
     ],
 ];
-// What counts as "untouched" for an optional mandate: one detail holding only this, after WordPress's real
-// sanitize_text_field() as a submission would pass it. A hyphen or a non-breaking space is something typed; a space or
-// a tab is nothing.
+// What counts as "untouched" for an optional mandate: one detail holding only this, as the server reads it
+// (extractValue()). A hyphen or a non-breaking space is something typed; a space or a tab is nothing.
 $untouchedTyped     = ['', ' ', "\t", '-', ' - ', "\u{00A0}", 'x'];
-$untouchedSanitized = array_combine($untouchedTyped, array_column($wpSanitize($untouchedTyped), 0));
+$untouchedSanitized = array_combine($untouchedTyped, array_column($serverReads($untouchedTyped), 0));
 $debit = [];
 $debitField = \FabricatorForms\Fields\FieldRegistry::get('directdebit');
 foreach ($debitTyped as $scheme => $parts) {
@@ -456,6 +463,12 @@ $formCases  = [
         ['id' => 'name', 'type' => 'text', 'label' => 'Name', 'required' => true],
         ['id' => 'email', 'type' => 'email', 'label' => 'Email'],
     ], []],
+    // Errors for screen readers: a description to tie in, a hidden label that still names its field.
+    'accessible errors' => [[
+        ['id' => 'name', 'type' => 'text', 'label' => 'Name', 'required' => true, 'description' => 'As on your ID card.'],
+        ['id' => 'email', 'type' => 'email', 'label' => 'Email', 'hide_label' => true, 'required' => true],
+        ['id' => 'msg', 'type' => 'textarea', 'label' => 'Message'],
+    ], []],
     'callback' => [[
         ['id' => 'email', 'type' => 'email', 'label' => 'Email', 'required' => true],
         ['id' => 'phone', 'type' => 'text', 'label' => 'Phone'],
@@ -469,6 +482,10 @@ $formCases  = [
         ['id' => 'cap', 'type' => 'captcha', 'label' => 'CAPTCHA', 'provider' => 'altcha', 'required' => true],
     ], []],
     'rating' => [[['id' => 'stars', 'type' => 'rating', 'label' => 'Stars', 'required' => true]], []],
+    'signature with place' => [[[
+        'id' => 'sign', 'type' => 'signature', 'label' => 'Signature', 'signing_place' => true, 'place_label' => 'Signed in:',
+        'signature_title' => 'Order confirmation', 'signature_text' => '<p>I confirm the details above.</p>',
+    ]], []],
     'name with salutation' => [[[
         'id' => 'who', 'type' => 'name', 'label' => 'Name', 'expanded' => true,
         'prefix_enabled' => true, 'prefix_required' => true, 'fname_enabled' => true, 'lname_enabled' => true,
@@ -500,6 +517,10 @@ $forms['contact and callback'] = FormRenderer::render(0, [], $contactFields) . F
 // data-palette, and the strings admin-builder.js reads from window.FabricatorBuilderI18n. Tests put their own form into
 // data-form. Last, since it makes the visitor an administrator.
 Brain\Monkey\Functions\when('get_current_user_id')->justReturn(1);
+// A few of WordPress's status titles (Utils\Text\HttpStatus translates the common error ones itself).
+Brain\Monkey\Functions\when('get_status_header_desc')->alias(
+    static fn($code): string => [200 => 'OK', 301 => 'Moved Permanently', 418 => "I'm a teapot"][(int) $code] ?? ''
+);
 Brain\Monkey\Functions\when('user_can')->justReturn(true);
 Brain\Monkey\Functions\when('current_user_can')->justReturn(true);
 Brain\Monkey\Functions\when('esc_html_e')->alias(static function (string $s): void {
@@ -557,9 +578,11 @@ Brain\Monkey\Functions\when('wp_roles')->justReturn($GLOBALS['wp_roles']);
 Brain\Monkey\Functions\when('translate_user_role')->returnArg(1);
 ob_start();
 \FabricatorForms\Admin\FormSettings::renderSettingsPage();
-$admin['settings']     = (string) ob_get_clean();
-$admin['settingsPage'] = $localized['FabricatorSettingsPage'] ?? null;
-$admin['settingsLock'] = $localized['FabricatorSettingsLock'] ?? null;
+$admin['settings']       = (string) ob_get_clean();
+$admin['settingsPage']   = $localized['FabricatorSettingsPage'] ?? null;
+$admin['settingsKeys']   = $localized['FabricatorSealKeys'] ?? null;
+$admin['settingsAccess'] = $localized['FabricatorAccessSettings'] ?? null;
+$admin['settingsLock']   = $localized['FabricatorAdminLock'] ?? null;
 
 // FormFabricator → Form Selection (FormSelectList::render()) with four saved selections, and its localized object.
 $formSelects = array_map(
@@ -577,11 +600,13 @@ ob_start();
 $admin['formSelect']     = (string) ob_get_clean();
 $admin['formSelectPage'] = $localized['FabricatorFormSelectPage'] ?? null;
 
-// FormFabricator → PDF Verification (Verificationpage::render()) before any upload.
+// FormFabricator → PDF Verification (VerificationPage::render()) before any upload.
 Brain\Monkey\Functions\when('get_transient')->justReturn(false);
 ob_start();
-\FabricatorForms\Admin\Verificationpage::render();
+\FabricatorForms\Admin\VerificationPage::render();
 $admin['verifier'] = (string) ob_get_clean();
+// How the verifier names an HTTP status (window.FabricatorVerifier.httpStatus, localized by Assets::enqueueAdmin()).
+$admin['httpStatus'] = \FabricatorForms\Utils\Text\HttpStatus::forScript();
 
 // FormFabricator → PDF Layout (PDFLayoutEditor::render()) with the default layout, and the objects it localizes. The
 // preview's dates are fixed, as wp_date() would write them for the site.
@@ -589,23 +614,23 @@ foreach (['wp_enqueue_media', 'wp_enqueue_script'] as $noop) {
     Brain\Monkey\Functions\when($noop)->justReturn(null);
 }
 Brain\Monkey\Functions\when('wp_date')->alias(static fn(string $format): string => match ($format) {
-    \FabricatorForms\PDF\Generator::METADATA_DATE_FORMAT => '2026-10-07 09:30:00 +02:00',
-    default                                               => '7 October 2026',
+    'H:i:s' => '07:30:00',
+    default => '7 October 2026',
 });
 ob_start();
 \FabricatorForms\Admin\PDFLayoutEditor::render();
 $admin['pdfLayout']     = (string) ob_get_clean();
 $admin['pdfLayoutPage'] = $localized['FabricatorPdfLayoutPage'] ?? null;
-$admin['pdfLayoutLock'] = $localized['FabricatorPdfLayoutLock'] ?? null;
+$admin['pdfLayoutLock'] = $localized['FabricatorAdminLock'] ?? null;
 
 // ALTCHA: a challenge with a small answer, that answer, and the server's verdicts on it (accepted, refused as used,
 // refused when tampered). The JS suite checks ALTCHA's own solver and verifier agree.
 \FabricatorForms\Tests\Support\FakeWordPress::install();
 Brain\Monkey\Functions\when('wp_salt')->justReturn('altcha-fixture-salt');
 Brain\Monkey\Functions\when('get_current_blog_id')->justReturn(1);
-$altchaChallenge = Reflect::call(\FabricatorForms\Utils\Altcha::class, 'challengeFor', 37);
+$altchaChallenge = Reflect::call(\FabricatorForms\Utils\Security\Altcha::class, 'challengeFor', 37);
 $altchaKey       = Reflect::call(
-    \FabricatorForms\Utils\Altcha::class,
+    \FabricatorForms\Utils\Security\Altcha::class,
     'deriveKey',
     (string) hex2bin($altchaChallenge['parameters']['nonce']),
     (string) hex2bin($altchaChallenge['parameters']['salt']),
@@ -620,14 +645,14 @@ $altchaChanged['parameters']['expiresAt'] += 3600;
 $altcha = [
     'challenge' => $altchaChallenge,
     'secrets'   => [
-        'challenge' => Reflect::call(\FabricatorForms\Utils\Altcha::class, 'secret', 'challenge'),
-        'key'       => Reflect::call(\FabricatorForms\Utils\Altcha::class, 'secret', 'key'),
+        'challenge' => Reflect::call(\FabricatorForms\Utils\Security\Altcha::class, 'secret', 'challenge'),
+        'key'       => Reflect::call(\FabricatorForms\Utils\Security\Altcha::class, 'secret', 'key'),
     ],
     'solution'  => ['counter' => 37, 'derivedKey' => bin2hex($altchaKey)],
     'verdicts'  => [
-        \FabricatorForms\Utils\Altcha::verify($altchaPayload($altchaChallenge)),
-        \FabricatorForms\Utils\Altcha::verify($altchaPayload($altchaChallenge)),
-        \FabricatorForms\Utils\Altcha::verify($altchaPayload($altchaChanged)),
+        \FabricatorForms\Utils\Security\Altcha::verify($altchaPayload($altchaChallenge)),
+        \FabricatorForms\Utils\Security\Altcha::verify($altchaPayload($altchaChallenge)),
+        \FabricatorForms\Utils\Security\Altcha::verify($altchaPayload($altchaChanged)),
     ],
 ];
 
@@ -642,6 +667,7 @@ $fixture = [
     'cascades'          => $cascades,
     'composites'        => $composites,
     'sanitize'          => $sanitizePairs,
+    'answerText'        => $answerCases,
     'debit'             => $debit,
     'debitExtras'       => $debitExtras,
     'signature'         => $signature,

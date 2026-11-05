@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -39,13 +39,66 @@ class GroupField extends BaseField
     }
 
     /**
-     * Excludes the group header from the {all_fields} email block.
+     * The group's only entries of its own are its box's start and end (show as box), which the mail draws as the box;
+     * its children list under their own types.
      *
      * @return bool
      */
     public function includeInEmailSummary(): bool
     {
-        return false;
+        return true;
+    }
+
+    /**
+     * Whether the group is shown as a box: on the page, and around its children in the PDF and the mail.
+     *
+     * @param array $config Field configuration.
+     * @return bool
+     */
+    private static function boxed(array $config): bool
+    {
+        return !empty($config['boxed']);
+    }
+
+    /**
+     * The box's title: the group's label, unless it is hidden.
+     *
+     * @param array $config Field configuration.
+     * @return string
+     */
+    private static function boxTitle(array $config): string
+    {
+        return empty($config['hide_label']) ? trim((string) ($config['label'] ?? '')) : '';
+    }
+
+    /**
+     * A boxed group's start entry opens its box, its end entry closes it.
+     *
+     * @param array $entry The entry (mapNormalized()).
+     * @return string
+     */
+    public function framePart(array $entry): string
+    {
+        return match ($entry['group_part'] ?? '') {
+            'begin' => 'open',
+            'end'   => 'close',
+            default => '',
+        };
+    }
+
+    /**
+     * A boxed group's start and end: a titled box around the children, with empty cells, as nothing was answered.
+     *
+     * @param array $field Normalized entry from mapNormalized().
+     * @return array PDF render descriptor.
+     */
+    public function pdfData(array $field): array
+    {
+        if ($this->framePart($field) === 'open') {
+            $title = is_string($field['label'] ?? null) ? $field['label'] : '';
+            return $this->pdf($field)->text('')->unlabeled()->opensFrame($title)->build();
+        }
+        return $this->pdf($field)->text('')->unlabeled()->closesFrame()->build();
     }
 
     /**
@@ -92,12 +145,34 @@ class GroupField extends BaseField
             }
 
             $entries = $handler->mapNormalized($child_id, $child_label, $value[$child_id] ?? null, $child_cfg, $context);
-            foreach ($entries as $key => $entry) {
+            foreach (\FabricatorForms\Fields\FieldRegistry::withHiddenLabel($entries, $child_cfg) as $key => $entry) {
                 $mapped[$key] = $entry;
             }
         }
 
-        return $mapped;
+        // Shown as a box: its children between a start and an end, which mail and PDF draw as a titled box. No box
+        // around nothing, when every child was hidden.
+        if (!self::boxed($config) || $mapped === []) {
+            return $mapped;
+        }
+        $title = self::boxTitle($config);
+        return [
+            $field_id . '_begin' => [
+                'label'      => $title,
+                'type'       => 'group',
+                'value'      => '',
+                'group_part' => 'begin',
+            ],
+        ] + $mapped + [
+            // Labelled, so the verification page can name where the group ends; mail and PDF close the box instead.
+            $field_id . '_end' => [
+                // translators: %s: the group's label.
+                'label'      => sprintf(__('End of %s', 'formfabricator'), $title !== '' ? $title : $label),
+                'type'       => 'group',
+                'value'      => '',
+                'group_part' => 'end',
+            ],
+        ];
     }
 
     public function getType(): string
@@ -147,13 +222,20 @@ class GroupField extends BaseField
      * @param string $field_id Unique field identifier.
      * @return string Opening HTML tag.
      */
-    public function openTag(array $config, string $field_id): string
+    public function openTagHtml(array $config, string $field_id): string
     {
         $desc = $config['description'] ?? '';
         $desc_html = $desc !== ''
             ? '<p class="fabricator-field-description">' . esc_html($desc) . '</p>'
             : '';
-        return '<div class="fabricator-field-group" data-field-id="' . esc_attr($field_id) . '">'
+        if (!self::boxed($config)) {
+            return '<div class="fabricator-field-group" data-field-id="' . esc_attr($field_id) . '">'
+                . $desc_html;
+        }
+        // Boxed like the direct debit mandate, headed by the label as the mandate is by its title.
+        $title = self::boxTitle($config);
+        return '<div class="fabricator-field-group fabricator-field-group--boxed" data-field-id="' . esc_attr($field_id) . '">'
+            . ($title !== '' ? '<h3 class="fabricator-group-title">' . esc_html($title) . '</h3>' : '')
             . $desc_html;
     }
 
@@ -175,13 +257,13 @@ class GroupField extends BaseField
      *
      * @return string Closing HTML tag.
      */
-    public function closeTag(): string
+    public function closeTagHtml(): string
     {
         return '</div>';
     }
 
     /**
-     * Fallback only: FormRenderer uses openTag() and closeTag() to place the children.
+     * Fallback only: FormRenderer uses openTagHtml() and closeTagHtml() to place the children.
      *
      * @param array  $config   Field configuration.
      * @param string $field_id Unique field identifier.
@@ -190,7 +272,7 @@ class GroupField extends BaseField
      */
     public function render(array $config, string $field_id, mixed $value = null): string
     {
-        return $this->openTag($config, $field_id) . $this->closeTag();
+        return $this->openTagHtml($config, $field_id) . $this->closeTagHtml();
     }
 
     /**
@@ -203,6 +285,7 @@ class GroupField extends BaseField
         return [
             'label'       => __('Field group', 'formfabricator'),
             'description' => '',
+            'boxed'       => false,
             'required'    => false,
             'children'    => [],
             'conditions'  => ['action' => 'show', 'match' => 'all', 'rules' => []],
@@ -221,6 +304,12 @@ class GroupField extends BaseField
                 'key'   => 'description',
                 'type'  => 'text',
                 'label' => __('Description', 'formfabricator'),
+            ],
+            [
+                'key'   => 'boxed',
+                'type'  => 'checkbox',
+                'label' => __('Show as box', 'formfabricator'),
+                'hint'  => __('A box around the group\'s fields, headed by its label, on the page, in the PDF and in the email, like the direct debit mandate.', 'formfabricator'),
             ],
         ];
     }

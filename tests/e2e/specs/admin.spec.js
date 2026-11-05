@@ -17,7 +17,7 @@ const SCREENS = {
     'form selections': '/wp-admin/admin.php?page=fabricator-forms-select',
     'settings': '/wp-admin/admin.php?page=fabricator-forms-settings',
     'PDF layout': '/wp-admin/admin.php?page=fabricator-forms-pdf-layout',
-    'PDF verification': '/wp-admin/admin.php?page=fabricator-pdf-verification',
+    'PDF verification': '/wp-admin/admin.php?page=fabricator-forms-pdf-verification',
 };
 
 for (const [name, url] of Object.entries(SCREENS)) {
@@ -148,7 +148,7 @@ test.describe('the PDF verifier\'s upload', () => {
     test('after a verification, reloading and going back send no upload again', async ({ page }) => {
         await page.goto(SCREENS['PDF verification']);
         await upload(page);
-        await page.waitForURL((u) => u.searchParams.get('page') === 'fabricator-pdf-verification');
+        await page.waitForURL((u) => u.searchParams.get('page') === 'fabricator-forms-pdf-verification');
         await expect(page.locator('.fabricator-pdf-result, .fabricator-pdf-problem, #fabricator-pdf-verification-results > *').first()).toBeVisible();
 
         const posts = [];

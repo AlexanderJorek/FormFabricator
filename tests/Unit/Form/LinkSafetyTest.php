@@ -3,7 +3,7 @@
 namespace FabricatorForms\Tests\Unit\Form;
 
 use Brain\Monkey\Functions;
-use FabricatorForms\Utils\HtmlSanitizer;
+use FabricatorForms\Utils\Text\HtmlSanitizer;
 use FabricatorForms\Form\MailSender;
 use FabricatorForms\Tests\Support\Reflect;
 use FabricatorForms\Tests\Support\TestCase;

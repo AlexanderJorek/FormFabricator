@@ -308,10 +308,21 @@ final class FormEditorServerTest extends AjaxTestCase
         $payload = [
             'v' => 2,
             't' => 'Offer $& $1 for $\'you\'',
-            'f' => [['id' => 'email', 'type' => 'email', 'label' => 'Email']],
+            'f' => [
+                ['id' => 'email', 'type' => 'email', 'label' => 'Email'],
+                ['id' => 'dept', 'type' => 'select', 'label' => 'Department', 'options' => [['label' => 'Sales', 'value' => 'sales']]],
+            ],
             'n' => [
                 self::notification(['to' => 'owner@example.org', 'cc' => 'cc@example.org', 'bcc' => 'hidden@example.net', 'reply_to' => '{email}']),
                 self::notification(['slug' => 'off', 'enabled' => false, 'to' => 'dormant@example.com']),
+                self::notification([
+                    'slug' => 'routed', 'recipient_mode' => 'routing', 'to' => 'unused@example.org',
+                    'routing_rules' => [
+                        ['field_id' => 'dept', 'operator' => 'equals', 'value' => 'sales', 'email' => 'sales@example.org', 'cc' => 'boss@example.org'],
+                        ['field_id' => 'email', 'operator' => 'empty', 'value' => '', 'email' => 'nomail@example.org'],
+                    ],
+                    'routing_fallback' => 'office@example.org, {email}',
+                ]),
             ],
         ];
         $string = rtrim(strtr(base64_encode((string) gzdeflate((string) wp_json_encode($payload), 9)), '+/', '-_'), '=');
@@ -320,11 +331,25 @@ final class FormEditorServerTest extends AjaxTestCase
 
         self::assertTrue($preview['success'], wp_json_encode($preview));
         self::assertSame('Offer $& $1 for $\'you\'', $preview['data']['title'], 'the title as it is, for the page to show literally');
-        $all = array_merge(...array_column($preview['data']['recipients'], 'recipients'));
-        foreach (['owner@example.org', 'cc@example.org', 'hidden@example.net', '{email}', 'dormant@example.com'] as $address) {
-            self::assertContains($address, $all, "$address is shown before importing");
-        }
-        self::assertSame([true, false], array_column($preview['data']['recipients'], 'enabled'));
+        [$single, $off, $routed] = $preview['data']['notifications'];
+        self::assertSame(
+            [['when' => '', 'to' => ['owner@example.org'], 'cc' => ['cc@example.org'], 'bcc' => ['hidden@example.net']]],
+            $single['groups']
+        );
+        self::assertSame(['the address entered in "Email"'], $single['reply_to'], 'a field\'s address named by its field');
+        self::assertFalse($off['enabled']);
+        self::assertSame(['dormant@example.com'], $off['groups'][0]['to'], 'a switched-off notification is listed too');
+
+        // Routing: each rule under its condition, then the fallback; single mode's To goes unused there.
+        self::assertTrue($routed['routing']);
+        self::assertSame(
+            [
+                ['when' => 'If "Department" is equal to "sales"', 'to' => ['sales@example.org'], 'cc' => ['boss@example.org'], 'bcc' => []],
+                ['when' => 'If "Email" is empty', 'to' => ['nomail@example.org'], 'cc' => [], 'bcc' => []],
+                ['when' => 'If no rule applies', 'to' => ['office@example.org', 'the address entered in "Email"'], 'cc' => [], 'bcc' => []],
+            ],
+            $routed['groups']
+        );
         self::assertCount(0, FormModel::getAll(), 'a preview imports nothing');
     }
 

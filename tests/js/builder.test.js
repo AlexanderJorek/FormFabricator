@@ -95,11 +95,12 @@ async function warnsAfterNotificationEdit(edit) {
     return wouldWarnOnLeave(page);
 }
 
-test("the unsaved-changes warning follows a notification's recipients, subject and attachments", async () => {
+test("the unsaved-changes warning follows a notification's recipients, subject, attachments and markers", async () => {
     const edits = {
         recipients: (page) => type(page, page.document.getElementById('fabricator-sp-notif-cc'), 'cc@example.org'),
         subject: (page) => type(page, page.document.getElementById('fabricator-sp-notif-subject'), 'Changed'),
         attachments: (page) => page.document.getElementById('fabricator-sp-notif-pdf').click(),
+        markers: (page) => page.document.getElementById('fabricator-sp-notif-markers').click(),
     };
     for (const [what, edit] of Object.entries(edits)) {
         assert.equal(await warnsAfterNotificationEdit(edit), true, what + ': warns after the edit');
@@ -133,6 +134,32 @@ test('the notification body is saved without the editor\'s own styling', async (
     assert.doesNotMatch(body, /fabricator-editor-preview-style|overflow-x|font-family:-apple-system/);
 });
 
+test('a notification saves whether it adds automation markers', async () => {
+    const page = await loadBuilder({ fields: [TEXT('name')], notifications: [NOTIFICATION] });
+    openNotification(page);
+    await settle(page);
+    const box = page.document.getElementById('fabricator-sp-notif-markers');
+    assert.equal(box.checked, false, 'off unless asked for');
+
+    box.click();
+    const saved = await saveAndRead(page);
+
+    assert.equal(saved.notifications[0].automation_markers, true);
+});
+
+test('a notification saves whether a single field\'s placeholder shows the field label', async () => {
+    const page = await loadBuilder({ fields: [TEXT('name')], notifications: [NOTIFICATION] });
+    openNotification(page);
+    await settle(page);
+    const box = page.document.getElementById('fabricator-sp-notif-placeholder-labels');
+    assert.equal(box.checked, false, 'off unless asked for: the answer alone');
+
+    box.click();
+    const saved = await saveAndRead(page);
+
+    assert.equal(saved.notifications[0].placeholder_labels, true);
+});
+
 test('editing the submit button condition warns on leaving', async () => {
     const page = await loadBuilder({ fields: [TEXT('code')], notifications: [NOTIFICATION] });
     page.document.getElementById('fabricator-submit-preview-bar').querySelector('button, [class*="edit"], div').click();
@@ -145,6 +172,23 @@ test('editing the submit button condition warns on leaving', async () => {
     type(page, input, input.value + ' now');
 
     assert.equal(wouldWarnOnLeave(page), true);
+});
+
+test('a group and a field inside it show the "has conditions" icon after their label, as other rows do', async () => {
+    const when = { action: 'show', match: 'all', rules: [{ field_id: 'email', operator: 'equals', value: 'x' }] };
+    const page = await loadBuilder({
+        fields: [
+            { id: 'email', type: 'email', label: 'Email' },
+            { id: 'g', type: 'group', label: 'Group', conditions: when, children: [TEXT('inner', { conditions: when }), TEXT('plain')] },
+        ],
+    });
+
+    const badge = (sel) => page.document.querySelector(sel + ' .fabricator-cond-badge');
+    assert.ok(badge('.fabricator-group-row-hdr .fabricator-row-label'), "the group's header");
+    const children = page.document.querySelectorAll('.fabricator-child-row .fabricator-child-row-label');
+    assert.ok(children[0].querySelector('.fabricator-cond-badge'), 'the field with conditions inside the group');
+    assert.equal(children[1].querySelector('.fabricator-cond-badge'), null, 'not the one without');
+    assert.equal(badge('.fabricator-field-row[data-idx="0"] .fabricator-row-label'), null, 'nor a top-level row without');
 });
 
 test('renaming a field id carries its conditions, routing rules and submit condition along', async () => {

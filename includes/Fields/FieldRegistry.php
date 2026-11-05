@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -284,11 +284,28 @@ class FieldRegistry
                 $field_cfg,
                 $context
             );
-            foreach ($entries as $key => $entry) {
+            foreach (self::withHiddenLabel($entries, $field_cfg) as $key => $entry) {
                 $mapped[$key] = $entry;
             }
         }
 
         return $mapped;
+    }
+
+    /**
+     * Marks a field's own entry when its "Hide label" is on, so mail and PDF show the answer without it. The label stays
+     * in the entry for the seal and the verification page. Entries the field adds under their own labels keep them.
+     *
+     * @param array $entries What the field's mapNormalized() returned.
+     * @param array $config  The field's configuration.
+     * @return array
+     */
+    public static function withHiddenLabel(array $entries, array $config): array
+    {
+        $field_id = (string) ($config['id'] ?? '');
+        if (!empty($config['hide_label']) && is_array($entries[$field_id] ?? null)) {
+            $entries[$field_id]['label_hidden'] = true;
+        }
+        return $entries;
     }
 }

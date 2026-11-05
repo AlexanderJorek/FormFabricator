@@ -48,7 +48,7 @@ final class ActivationTest extends TestCase
         self::assertDirectoryDoesNotExist($left_pdf, 'a PDF folder left by a killed request, with mPDF files in it');
         self::assertDirectoryDoesNotExist($left_mail, 'attachment copies left by a killed request');
         self::assertFileExists($fresh . '/f1/passport.jpg', 'a submission may still be sending it');
-        \FabricatorForms\Utils\PrivateDir::removeTree($fresh);
+        \FabricatorForms\Utils\Storage\PrivateDir::removeTree($fresh);
     }
 
     public function testRemovingASubmissionFolderRemovesALinkInItButNeverWhatItPointsTo(): void
@@ -58,8 +58,8 @@ final class ActivationTest extends TestCase
         file_put_contents($outside . '/keep.txt', 'x');
         $left = self::submissionFolder('mail', time() - 20 * MINUTE_IN_SECONDS);
         if (!@symlink($outside, $left . '/link')) {
-            \FabricatorForms\Utils\PrivateDir::removeTree($left);
-            \FabricatorForms\Utils\PrivateDir::removeTree($outside);
+            \FabricatorForms\Utils\Storage\PrivateDir::removeTree($left);
+            \FabricatorForms\Utils\Storage\PrivateDir::removeTree($outside);
             self::markTestSkipped('This system does not let PHP create links (Windows without the privilege).');
         }
         touch($left, time() - 20 * MINUTE_IN_SECONDS);
@@ -69,7 +69,7 @@ final class ActivationTest extends TestCase
 
         self::assertDirectoryDoesNotExist($left);
         self::assertFileExists($outside . '/keep.txt');
-        \FabricatorForms\Utils\PrivateDir::removeTree($outside);
+        \FabricatorForms\Utils\Storage\PrivateDir::removeTree($outside);
     }
 
     /**
@@ -78,7 +78,7 @@ final class ActivationTest extends TestCase
      */
     private static function submissionFolder(string $type, int $mtime): string
     {
-        $dir = \FabricatorForms\Utils\PrivateDir::ensure() . '/' . $type . '/' . bin2hex(random_bytes(16));
+        $dir = \FabricatorForms\Utils\Storage\PrivateDir::ensure() . '/' . $type . '/' . bin2hex(random_bytes(16));
         $sub = $type === 'pdf' ? '/mpdf/ttfontdata' : '/f1';
         mkdir($dir . $sub, 0700, true);
         file_put_contents($dir . $sub . ($type === 'pdf' ? '/dejavusans.mtx.json' : '/passport.jpg'), 'x');

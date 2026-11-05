@@ -105,3 +105,25 @@
     outline: 2px solid var(--fabricator-accent, #2271b1) !important;
     outline-offset: 2px;
 }
+/* A signature with a text above it: boxed like the direct debit mandate, with its title, text and fine print. */
+.fabricator-signature--boxed {
+    border: 1px solid var(--fabricator-border);
+    border-radius: var(--fabricator-radius);
+    padding: 24px;
+    margin-bottom: 24px;
+    background: var(--fabricator-bg);
+}
+.fabricator-signature-title { font-size: 16px; font-weight: 700; margin: 0 0 14px; color: var(--fabricator-text); }
+.fabricator-signature-text { font-size: 14px; line-height: 1.65; color: var(--fabricator-text); margin-bottom: 10px; }
+.fabricator-signature-note { font-size: 12px; color: var(--fabricator-text-muted); margin-bottom: 20px; line-height: 1.55; }
+.fabricator-signature-place-row { margin-top: 14px; }
+/* Styled as a field's error; a class of its own, so front.js keeps the field's message below the pad. */
+.fabricator-signature-place-error {
+    font-size: 12px;
+    color: var(--fabricator-error);
+    margin-top: 4px;
+    line-height: 1.4;
+}
+.fabricator-signature-place-error:empty {
+    display: none;
+}

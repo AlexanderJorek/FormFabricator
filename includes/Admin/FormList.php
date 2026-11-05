@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -55,8 +55,9 @@ class FormList
      */
     public static function bodyClass(string $classes): string
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin body-class check, no data written.
-        if (isset($_GET['page']) && $_GET['page'] === 'fabricator-forms') {
+        // The admin page being shown, as WordPress resolved it from the request.
+        global $plugin_page;
+        if ($plugin_page === 'fabricator-forms') {
             $classes .= ' fabricator-list-page';
         }
         return $classes;
@@ -88,7 +89,7 @@ class FormList
         add_menu_page(
             __('FormFabricator Form List', 'formfabricator'),
             __('FormFabricator', 'formfabricator'),
-            \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
+            \FabricatorForms\Capabilities::ACCESS_CAP_PREFIX . 'view_forms',
             'fabricator-forms',
             [self::class, 'render'],
             // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- builds a data: URI for inline display; the alternative is writing an HTTP-reachable file. Not obfuscation.
@@ -101,7 +102,7 @@ class FormList
             'fabricator-forms',
             __('FormFabricator Form List', 'formfabricator'),
             __('Form List', 'formfabricator'),
-            \FabricatorForms\Plugin::ACCESS_CAP_PREFIX . 'view_forms',
+            \FabricatorForms\Capabilities::ACCESS_CAP_PREFIX . 'view_forms',
             'fabricator-forms',
             [self::class, 'render']
         );
@@ -114,7 +115,7 @@ class FormList
      */
     public static function render(): void
     {
-        if (!\FabricatorForms\Plugin::userCan('view_forms')) {
+        if (!\FabricatorForms\Capabilities::userCan('view_forms')) {
             wp_die(esc_html__('Permission denied.', 'formfabricator'));
         }
 
@@ -133,10 +134,19 @@ class FormList
             'error'              => __('Error', 'formfabricator'),
             'importError'        => __('Import error', 'formfabricator'),
             // translators: %s is replaced client-side with the imported form's title.
-            'importConfirm'      => __('Import the form "%s"? Its notifications send submissions to:', 'formfabricator'),
+            'importTitle'        => __('Import the form "%s"?', 'formfabricator'),
+            'importLead'         => __('Check where its notifications would send submissions:', 'formfabricator'),
             'importNoRecipients' => __('(no notification recipients)', 'formfabricator'),
             'importUnnamed'      => __('Unnamed notification', 'formfabricator'),
             'importNoAddress'    => __('no address', 'formfabricator'),
+            'importOff'          => __('switched off', 'formfabricator'),
+            'importRouting'      => __('Sent by rules: the first rule that applies decides.', 'formfabricator'),
+            'importTo'           => __('To', 'formfabricator'),
+            'importCc'           => __('Cc', 'formfabricator'),
+            'importBcc'          => __('Bcc', 'formfabricator'),
+            'importReplyTo'      => __('Reply-To', 'formfabricator'),
+            'importButton'       => __('Import', 'formfabricator'),
+            'cancel'             => __('Cancel', 'formfabricator'),
             'copied'             => __('Copied!', 'formfabricator'),
             'copyShortcode'      => __('Copy shortcode', 'formfabricator'),
             'copy'               => __('Copy', 'formfabricator'),
@@ -147,6 +157,7 @@ class FormList
             [
             'i18n'        => $list_i18n,
             'importNonce' => wp_create_nonce('fabricator_forms_import'),
+            'bulkNonce'   => wp_create_nonce('fabricator_forms_bulk'),
             ]
         );
         ?>
@@ -159,8 +170,7 @@ class FormList
 
             <div class="fabricator-list-toolbar" id="fabricator-list-toolbar">
                     <!-- Left: select-all + bulk actions -->
-                    <?php $noForms = empty($forms) ? ' hidden' : ''; ?>
-                    <div class="fabricator-toolbar-left" id="fabricator-toolbar-left"<?php echo esc_attr($noForms); ?>>
+                    <div class="fabricator-toolbar-left" id="fabricator-toolbar-left"<?php echo empty($forms) ? ' hidden' : ''; ?>>
                         <label class="fabricator-select-all-wrap">
                             <input type="checkbox" id="fabricator-select-all" title="<?php echo esc_attr__('Select all', 'formfabricator'); ?>">
                         </label>
@@ -184,7 +194,7 @@ class FormList
                         </div>
                     </div>
                     <!-- Center: search -->
-                    <div class="fabricator-toolbar-center" id="fabricator-toolbar-center"<?php echo esc_attr($noForms); ?>>
+                    <div class="fabricator-toolbar-center" id="fabricator-toolbar-center"<?php echo empty($forms) ? ' hidden' : ''; ?>>
                         <input type="search" id="fabricator-form-search"
                                placeholder="<?php echo esc_attr__('Search forms…', 'formfabricator'); ?>" autocomplete="off">
                     </div>
@@ -215,8 +225,7 @@ class FormList
             <?php // Always rendered, only hidden while empty: an imported or duplicated form is inserted here without a reload. ?>
             <div class="fabricator-form-list" id="fabricator-form-list"<?php echo empty($forms) ? ' hidden' : ''; ?>>
                 <?php foreach ($forms as $form) : ?>
-                    <?php // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- renderRow() escapes every dynamic value itself; one template for the page and the AJAX-inserted rows. ?>
-                    <?php echo self::renderRow($form); ?>
+                    <?php echo wp_kses(self::renderRow($form), self::rowAllowedHtml()); ?>
                 <?php endforeach; ?>
                 <div class="fabricator-no-results" id="fabricator-no-results" hidden>
                     <?php esc_html_e('No forms found.', 'formfabricator'); ?>
@@ -253,6 +262,19 @@ class FormList
             </div>
         </div>
 
+        <!-- Import confirmation: where the imported form's notifications would send submissions (admin-formlist.js) -->
+        <div id="fabricator-import-modal" class="fabricator-modal-backdrop" hidden>
+            <div class="fabricator-modal fabricator-modal--wide" role="dialog" aria-modal="true" aria-labelledby="fabricator-import-title">
+                <h3 class="fabricator-modal-title" id="fabricator-import-title"></h3>
+                <p class="fabricator-modal-hint" id="fabricator-import-lead"></p>
+                <div class="fabricator-import-recipients" id="fabricator-import-recipients"></div>
+                <div class="fabricator-modal-actions">
+                    <button class="button fabricator-list-btn" id="fabricator-import-cancel"><?php esc_html_e('Cancel', 'formfabricator'); ?></button>
+                    <button class="button button-primary fabricator-list-btn" id="fabricator-import-confirm"><?php esc_html_e('Import', 'formfabricator'); ?></button>
+                </div>
+            </div>
+        </div>
+
         <!-- Delete confirmation modal -->
         <div id="fabricator-delete-modal" class="fabricator-modal-backdrop" hidden>
             <div class="fabricator-modal">
@@ -277,16 +299,39 @@ class FormList
     {
         // wp_send_json_error() terminates the request via wp_die(), so execution
         // never falls through past a failed check below (no explicit return needed).
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
-        if (!$form_id || !check_ajax_referer('fabricator_forms_delete_' . $form_id, 'nonce', false)) {
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
+        // Each form has a nonce of its own, so the id is read inside the check.
+        if (!isset($_POST['form_id']) || check_ajax_referer('fabricator_forms_delete_' . absint(wp_unslash($_POST['form_id'])), 'nonce', false) === false) {
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
+        }
+        $form_id = absint(wp_unslash($_POST['form_id']));
+        if (!$form_id) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
         // Reported as it happened: a form that is not ours, or a failed delete, is not "deleted".
-        if (!FormModel::delete($form_id, true)) {
+        if (!FormModel::delete($form_id)) {
             wp_send_json_error(['message' => __('The form could not be deleted.', 'formfabricator')], 400);
         }
         wp_send_json_success(['message' => __('Form deleted.', 'formfabricator')]);
+    }
+
+    /**
+     * The markup a form-list row holds (renderRow()), for wp_kses().
+     *
+     * @return array<string, array<string, bool>>
+     */
+    private static function rowAllowedHtml(): array
+    {
+        return [
+            'div'    => ['class' => true, 'data-*' => true, 'hidden' => true],
+            'label'  => ['class' => true],
+            'input'  => ['type' => true, 'class' => true, 'value' => true, 'data-*' => true],
+            'i'      => ['class' => true],
+            'a'      => ['href' => true, 'class' => true],
+            'span'   => ['class' => true],
+            'code'   => ['class' => true],
+            'button' => ['class' => true, 'title' => true, 'data-*' => true],
+        ];
     }
 
     /**
@@ -297,11 +342,12 @@ class FormList
      */
     private static function renderRow(\FabricatorForms\Form\FormModel $form): string
     {
+        // Printed through wp_kses() with rowAllowedHtml(): a tag or attribute added here is added there too.
         $edit_url  = admin_url('admin.php?page=fabricator-forms-editor&form_id=' . $form->id);
         $shortcode = '[fabricator_form id="' . $form->id . '"]';
         $count     = count($form->fields);
         // Nonces only for users who may act; each handler re-checks the capability too.
-        $can_edit  = \FabricatorForms\Plugin::userCan('edit_forms');
+        $can_edit  = \FabricatorForms\Capabilities::userCan('edit_forms');
         $del_nonce = $can_edit ? wp_create_nonce('fabricator_forms_delete_' . $form->id) : '';
         $dup_nonce = $can_edit ? wp_create_nonce('fabricator_forms_duplicate_' . $form->id) : '';
         $exp_nonce = $can_edit ? wp_create_nonce('fabricator_forms_export_' . $form->id) : '';
@@ -371,12 +417,16 @@ class FormList
      */
     public static function ajaxDuplicate(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
-        if (!$form_id || !check_ajax_referer('fabricator_forms_duplicate_' . $form_id, 'nonce', false)) {
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
+        // Each form has a nonce of its own, so the id is read inside the check.
+        if (!isset($_POST['form_id']) || check_ajax_referer('fabricator_forms_duplicate_' . absint(wp_unslash($_POST['form_id'])), 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
-        $result = FormModel::duplicate($form_id, true);
+        $form_id = absint(wp_unslash($_POST['form_id']));
+        if (!$form_id) {
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
+        }
+        $result = FormModel::duplicate($form_id);
         if (is_wp_error($result)) {
             wp_send_json_error(['message' => $result->get_error_message()], 500);
         }
@@ -394,30 +444,33 @@ class FormList
      */
     public static function ajaxBulkDelete(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
-        $ids    = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['ids'] ?? '[]'), '[]')), true);
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
-        $nonces = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['nonces'] ?? '[]'), '[]')), true);
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
+        // One nonce for the bulk action first; each form's own nonce still decides below whether that form is touched.
+        if (check_ajax_referer('fabricator_forms_bulk', 'bulk_nonce', false) === false) {
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
+        }
+        $ids    = isset($_POST['ids']) ? json_decode(sanitize_text_field(wp_unslash($_POST['ids'])), true) : [];
+        $nonces = isset($_POST['nonces']) ? json_decode(sanitize_text_field(wp_unslash($_POST['nonces'])), true) : [];
         if (!is_array($ids) || !is_array($nonces)) {
             wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')], 400);
         }
-        $ids     = array_slice((array)$ids, 0, 200, true);
-        $nonces  = array_slice((array)$nonces, 0, 200, true);
+        // Positionally paired (same index, same form), each value sanitized as what it is.
+        $form_ids    = [];
+        $form_nonces = [];
+        foreach (array_slice($ids, 0, 200, true) as $i => $id) {
+            $form_ids[$i]    = is_scalar($id) ? absint($id) : 0;
+            $form_nonces[$i] = is_string($nonces[$i] ?? null) ? sanitize_key($nonces[$i]) : '';
+        }
         $deleted = [];
-        // $ids and $nonces are positionally paired (same index = same form) rather
-        // than keyed by id, since each row has its own per-id delete nonce.
-        foreach ($ids as $i => $raw_id) {
-            if (!is_scalar($raw_id)) {
+        foreach ($form_ids as $i => $form_id) {
+            if (!$form_id) {
                 continue;
             }
-            $form_id = (int)$raw_id;
-            $nonce   = sanitize_key($nonces[$i] ?? '');
-            if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_delete_' . $form_id)) {
+            if (!wp_verify_nonce($form_nonces[$i], 'fabricator_forms_delete_' . $form_id)) {
                 continue;
             }
             // Only what was deleted: the page removes exactly these rows.
-            if (FormModel::delete($form_id, true)) {
+            if (FormModel::delete($form_id)) {
                 $deleted[] = $form_id;
             }
         }
@@ -431,27 +484,32 @@ class FormList
      */
     public static function ajaxBulkDuplicate(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
-        $ids    = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['ids'] ?? '[]'), '[]')), true);
-        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Cast::stringOrDefault() sits before the sanitizer; sniff can't see past it without customSanitizingFunctions.
-        $nonces = json_decode(sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault(wp_unslash($_POST['nonces'] ?? '[]'), '[]')), true);
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
+        // One nonce for the bulk action first; each form's own nonce still decides below whether that form is touched.
+        if (check_ajax_referer('fabricator_forms_bulk', 'bulk_nonce', false) === false) {
+            wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
+        }
+        $ids    = isset($_POST['ids']) ? json_decode(sanitize_text_field(wp_unslash($_POST['ids'])), true) : [];
+        $nonces = isset($_POST['nonces']) ? json_decode(sanitize_text_field(wp_unslash($_POST['nonces'])), true) : [];
         if (!is_array($ids) || !is_array($nonces)) {
             wp_send_json_error(['message' => __('Invalid data.', 'formfabricator')], 400);
         }
-        $ids     = array_slice((array)$ids, 0, 200, true);
-        $nonces  = array_slice((array)$nonces, 0, 200, true);
+        // Positionally paired (same index, same form), each value sanitized as what it is.
+        $form_ids    = [];
+        $form_nonces = [];
+        foreach (array_slice($ids, 0, 200, true) as $i => $id) {
+            $form_ids[$i]    = is_scalar($id) ? absint($id) : 0;
+            $form_nonces[$i] = is_string($nonces[$i] ?? null) ? sanitize_key($nonces[$i]) : '';
+        }
         $created = [];
-        foreach ($ids as $i => $raw_id) {
-            if (!is_scalar($raw_id)) {
+        foreach ($form_ids as $i => $form_id) {
+            if (!$form_id) {
                 continue;
             }
-            $form_id = (int)$raw_id;
-            $nonce   = sanitize_key($nonces[$i] ?? '');
-            if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_duplicate_' . $form_id)) {
+            if (!wp_verify_nonce($form_nonces[$i], 'fabricator_forms_duplicate_' . $form_id)) {
                 continue;
             }
-            $result = FormModel::duplicate($form_id, true);
+            $result = FormModel::duplicate($form_id);
             if (!is_wp_error($result)) {
                 $created[] = $result;
             }
@@ -467,12 +525,12 @@ class FormList
     public static function ajaxExport(): void
     {
         // edit_forms: the export carries notification addresses view-only users never see.
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
-        $nonce   = sanitize_key($_POST['nonce'] ?? '');
-        if (!$form_id || !wp_verify_nonce($nonce, 'fabricator_forms_export_' . $form_id)) {
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
+        // Each form has a nonce of its own, so the id is read inside the check.
+        if (!isset($_POST['form_id']) || check_ajax_referer('fabricator_forms_export_' . absint(wp_unslash($_POST['form_id'])), 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
+        $form_id = absint(wp_unslash($_POST['form_id']));
         $form = FormModel::get($form_id);
         if (!$form) {
             wp_send_json_error(['message' => __('Form not found.', 'formfabricator')], 404);
@@ -499,12 +557,11 @@ class FormList
      */
     public static function ajaxImport(): void
     {
-        \FabricatorForms\Utils\AjaxGuard::capability('edit_forms');
-        $nonce = sanitize_key($_POST['nonce'] ?? '');
-        if (!wp_verify_nonce($nonce, 'fabricator_forms_import')) {
+        \FabricatorForms\Utils\Security\AjaxGuard::capability('edit_forms');
+        if (check_ajax_referer('fabricator_forms_import', 'nonce', false) === false) {
             wp_send_json_error(['message' => __('Nonce verification failed.', 'formfabricator')], 403);
         }
-        $raw = sanitize_text_field(wp_unslash($_POST['string'] ?? ''));
+        $raw = isset($_POST['string']) ? sanitize_text_field(wp_unslash($_POST['string'])) : '';
         if ($raw === '') {
             wp_send_json_error(['message' => __('No import string provided.', 'formfabricator')], 400);
         }
@@ -536,11 +593,11 @@ class FormList
         // Route imported content through the same sanitizers as ajaxSave() — it's untrusted input.
         $payload_title = $payload['t'];
         $title         = sanitize_text_field(is_string($payload_title) ? $payload_title : '');
-        $clean_fields  = \FabricatorForms\Admin\FormEditor::sanitizeFields($fields);
-        $notifications = \FabricatorForms\Admin\FormEditor::sanitizeNotifications(
+        $clean_fields  = \FabricatorForms\Form\FormSanitizer::sanitizeFields($fields);
+        $notifications = \FabricatorForms\Form\FormSanitizer::sanitizeNotifications(
             is_array($payload['n'] ?? null) ? $payload['n'] : []
         );
-        $id_error = \FabricatorForms\Admin\FormEditor::fieldIdError($clean_fields);
+        $id_error = \FabricatorForms\Form\FormSanitizer::fieldIdError($clean_fields);
         if ($id_error !== '') {
             wp_send_json_error(['message' => $id_error], 422);
         }
@@ -549,9 +606,9 @@ class FormList
         if (!empty($_POST['preview'])) {
             wp_send_json_success(
                 [
-                'preview'    => true,
-                'title'      => $title,
-                'recipients' => self::notificationRecipients($notifications),
+                'preview'       => true,
+                'title'         => $title,
+                'notifications' => self::notificationRecipients($notifications, $clean_fields),
                 ]
             );
         }
@@ -560,12 +617,11 @@ class FormList
             'title'         => $title,
             'fields'        => $clean_fields,
             'notifications' => $notifications,
-            'settings'      => \FabricatorForms\Admin\FormEditor::sanitizeSettings(
+            'settings'      => \FabricatorForms\Form\FormSanitizer::sanitizeSettings(
                 is_array($payload['s'] ?? null) ? $payload['s'] : []
             ),
             ],
-            0,
-            true
+            0
         );
         if (is_wp_error($result)) {
             wp_send_json_error(['message' => $result->get_error_message()], 500);
@@ -576,40 +632,124 @@ class FormList
     }
 
     /**
-     * Every address-bearing value per notification (To/Cc/Bcc/Reply-To, routing rules and fallback), for the import confirmation.
+     * Where each imported notification would send submissions, for the import confirmation: in single mode one group
+     * (To, Cc, Bcc), in routing mode one group per rule, named by its condition, and the fallback, as MailSender picks
+     * them (the first rule that applies decides; single mode's To, Cc and Bcc then go unused). Reply-To applies in both.
+     * An address taken from a field ({email}) is named by the field. Every address the notification holds is listed.
      *
      * @param array $notifications Sanitized notifications.
-     * @return array<int, array{name: string, enabled: bool, recipients: string[]}>
+     * @param array $fields        Sanitized fields, for the labels rules and placeholders name.
+     * @return array<int, array{name: string, enabled: bool, routing: bool, groups: array<int, array{when: string,
+     *     to: string[], cc: string[], bcc: string[]}>, reply_to: string[]}>
      */
-    private static function notificationRecipients(array $notifications): array
+    private static function notificationRecipients(array $notifications, array $fields): array
     {
-        $out = [];
-        foreach ($notifications as $notif) {
-            $values = [
-                $notif['to'] ?? '', $notif['cc'] ?? '', $notif['bcc'] ?? '', $notif['reply_to'] ?? '',
-                $notif['routing_fallback'] ?? '', $notif['routing_fallback_cc'] ?? '', $notif['routing_fallback_bcc'] ?? '',
-            ];
-            foreach ((array) ($notif['routing_rules'] ?? []) as $rule) {
-                $values[] = $rule['email'] ?? '';
-                $values[] = $rule['cc'] ?? '';
-                $values[] = $rule['bcc'] ?? '';
-            }
-            $addresses = [];
-            foreach ($values as $value) {
-                foreach (preg_split('/[;,]+/', (string) $value) ?: [] as $part) {
-                    $part = trim($part);
-                    if ($part !== '' && !in_array($part, $addresses, true)) {
-                        $addresses[] = $part;
-                    }
+        $labels    = self::fieldLabels($fields);
+        $addresses = static function (mixed $value) use ($labels): array {
+            $out = [];
+            foreach (preg_split('/[;,]+/', is_string($value) ? $value : '') ?: [] as $part) {
+                $part = trim($part);
+                if ($part === '') {
+                    continue;
+                }
+                if (preg_match('/^\{([^{}]+)\}$/', $part, $m) === 1 && isset($labels[$m[1]])) {
+                    // translators: %s: the label of the form field whose answer is used as an email address.
+                    $part = sprintf(__('the address entered in "%s"', 'formfabricator'), $labels[$m[1]]);
+                }
+                if (!in_array($part, $out, true)) {
+                    $out[] = $part;
                 }
             }
+            return $out;
+        };
+        $group = static fn(string $when, mixed $to, mixed $cc, mixed $bcc): array => [
+            'when' => $when,
+            'to'   => $addresses($to),
+            'cc'   => $addresses($cc),
+            'bcc'  => $addresses($bcc),
+        ];
+
+        $out = [];
+        foreach ($notifications as $notif) {
+            $routing = ($notif['recipient_mode'] ?? 'single') === 'routing';
+            $groups  = [];
+            if ($routing) {
+                foreach ((array) ($notif['routing_rules'] ?? []) as $rule) {
+                    if (is_array($rule)) {
+                        $groups[] = $group(self::ruleText($rule, $labels), $rule['email'] ?? '', $rule['cc'] ?? '', $rule['bcc'] ?? '');
+                    }
+                }
+                $groups[] = $group(
+                    __('If no rule applies', 'formfabricator'),
+                    $notif['routing_fallback'] ?? '',
+                    $notif['routing_fallback_cc'] ?? '',
+                    $notif['routing_fallback_bcc'] ?? ''
+                );
+            } else {
+                $groups[] = $group('', $notif['to'] ?? '', $notif['cc'] ?? '', $notif['bcc'] ?? '');
+            }
             $out[] = [
-                'name'       => (string) ($notif['name'] ?? ''),
-                'enabled'    => !empty($notif['enabled']),
-                'recipients' => $addresses,
+                'name'     => (string) ($notif['name'] ?? ''),
+                'enabled'  => !empty($notif['enabled']),
+                'routing'  => $routing,
+                'groups'   => $groups,
+                'reply_to' => $addresses($notif['reply_to'] ?? ''),
             ];
         }
         return $out;
+    }
+
+    /**
+     * A routing rule's condition as a sentence: If "Department" is equal to "Sales".
+     *
+     * @param array                 $rule   The rule: field_id, operator, value.
+     * @param array<string, string> $labels Field labels by id (fieldLabels()).
+     * @return string
+     */
+    private static function ruleText(array $rule, array $labels): string
+    {
+        $field_id  = is_string($rule['field_id'] ?? null) ? $rule['field_id'] : '';
+        $field     = $labels[$field_id] ?? $field_id;
+        $operators = [
+            'equals'       => __('is equal to', 'formfabricator'),
+            'not_equals'   => __('is not equal to', 'formfabricator'),
+            'contains'     => __('contains', 'formfabricator'),
+            'not_contains' => __('does not contain', 'formfabricator'),
+            'empty'        => __('is empty', 'formfabricator'),
+            'not_empty'    => __('is not empty', 'formfabricator'),
+            'greater'      => __('is greater than', 'formfabricator'),
+            'less'         => __('is less than', 'formfabricator'),
+        ];
+        $operator = is_string($rule['operator'] ?? null) ? $rule['operator'] : 'equals';
+        $op_text  = $operators[$operator] ?? $operator;
+        if ($operator === 'empty' || $operator === 'not_empty') {
+            // translators: %1$s: a form field's label, %2$s: a comparison such as "is empty".
+            return sprintf(__('If "%1$s" %2$s', 'formfabricator'), $field, $op_text);
+        }
+        // translators: %1$s: a form field's label, %2$s: a comparison such as "is equal to", %3$s: the value compared with.
+        return sprintf(__('If "%1$s" %2$s "%3$s"', 'formfabricator'), $field, $op_text, is_scalar($rule['value'] ?? null) ? (string) $rule['value'] : '');
+    }
+
+    /**
+     * Every field's label by its id, group children included; a field without a label goes by its id.
+     *
+     * @param array $fields Sanitized fields.
+     * @return array<string, string>
+     */
+    private static function fieldLabels(array $fields): array
+    {
+        $labels = [];
+        foreach ($fields as $field) {
+            if (!is_array($field) || !is_string($field['id'] ?? null)) {
+                continue;
+            }
+            $label                 = is_string($field['label'] ?? null) ? trim($field['label']) : '';
+            $labels[$field['id']] = $label !== '' ? $label : $field['id'];
+            if (is_array($field['children'] ?? null)) {
+                $labels += self::fieldLabels($field['children']);
+            }
+        }
+        return $labels;
     }
 
     /**

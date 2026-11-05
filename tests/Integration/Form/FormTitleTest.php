@@ -30,14 +30,14 @@ final class FormTitleTest extends TestCase
 
     public function testATitleWithAnAmpersandIsStoredAsTyped(): void
     {
-        $form = FormModel::save(['title' => 'Q&A <b>night</b>', 'fields' => [], 'notifications' => [], 'settings' => []], 0, true);
+        $form = FormModel::save(['title' => 'Q&A <b>night</b>', 'fields' => [], 'notifications' => [], 'settings' => []], 0);
 
         self::assertIsInt($form);
         self::assertSame('Q&A night', get_post($form)->post_title, 'tags gone as before, "&" kept');
         self::assertSame('Q&A night', FormModel::get($form)->title);
         self::assertNotFalse(has_filter('title_save_pre', 'wp_filter_kses'), 'kses is back for every other post');
 
-        $again = FormModel::save(['title' => 'Q&A again', 'fields' => [], 'notifications' => [], 'settings' => []], $form, true);
+        $again = FormModel::save(['title' => 'Q&A again', 'fields' => [], 'notifications' => [], 'settings' => []], $form);
         self::assertSame($form, $again);
         self::assertSame('Q&A again', get_post($form)->post_title, 'on an update too');
     }

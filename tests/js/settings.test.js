@@ -1,8 +1,8 @@
 'use strict';
 
 /*
- * FormFabricator → Settings (assets/js/admin-settings.js) on the page FormSettings::renderSettingsPage() prints, with
- * the object it localizes (fixture.admin): each save carries the snapshot its page holds, and a successful save makes
+ * FormFabricator → Settings (assets/js/admin-settings.js, admin-settings-keys.js and admin-settings-access.js) on the
+ * page FormSettings::renderSettingsPage() prints, with the objects they are localized with (fixture.admin): each save carries the snapshot its page holds, and a successful save makes
  * the server's new snapshot the page's baseline, so saving twice without a reload works (TESTING.md §3). The
  * server's refusal of a stale snapshot is SettingsSaveTest's.
  */
@@ -37,9 +37,11 @@ function jqueryStub(page, server) {
 function loadSettings(server) {
     const page = adminWindow(fixture.admin.settings, server);
     page.window.FabricatorSettingsPage = JSON.parse(JSON.stringify(fixture.admin.settingsPage));
+    page.window.FabricatorSealKeys = JSON.parse(JSON.stringify(fixture.admin.settingsKeys));
+    page.window.FabricatorAccessSettings = JSON.parse(JSON.stringify(fixture.admin.settingsAccess));
     page.window.ajaxurl = 'https://example.test/wp-admin/admin-ajax.php';
     page.window.jQuery = jqueryStub(page, server);
-    page.window.eval(script('admin-settings.js'));
+    ['admin-settings.js', 'admin-settings-keys.js', 'admin-settings-access.js'].forEach((file) => page.window.eval(script(file)));
     return page;
 }
 
@@ -52,7 +54,7 @@ test('general settings: a second save without reloading carries the snapshot the
     assert.match(loaded, /^[0-9a-f]{32}$/, 'the page carries the snapshot it was rendered with');
 
     // The script sends after two animation frames; wait until this save was sent and answered (the button is back).
-    const sentSaves = () => page.requests.filter((r) => r.body && r.body.action === 'fabricator_save_general_settings').length;
+    const sentSaves = () => page.requests.filter((r) => r.body && r.body.action === 'fabricator_forms_save_general_settings').length;
     const save = async () => {
         const before = sentSaves();
         form.dispatchEvent(new page.window.Event('submit', { cancelable: true }));
@@ -61,9 +63,13 @@ test('general settings: a second save without reloading carries the snapshot the
     await save();
     await save();
 
-    const sent = page.requests.filter((r) => r.body && r.body.action === 'fabricator_save_general_settings').map((r) => r.body.fabricator_settings_snapshot);
+    const sent = page.requests.filter((r) => r.body && r.body.action === 'fabricator_forms_save_general_settings').map((r) => r.body.fabricator_settings_snapshot);
     assert.deepEqual(sent, [loaded, 'after-save-1']);
-    assert.match(page.document.querySelector('.fabricator-settings-notice').textContent, /Settings saved\./);
+    // One save notice, the second save's in place of the first; the edit lock's notice beside it stays.
+    const saveNotices = page.document.querySelectorAll('.fabricator-settings-notice:not(#fabricator-lock-notice)');
+    assert.equal(saveNotices.length, 1);
+    assert.match(saveNotices[0].textContent, /Settings saved\./);
+    assert.notEqual(page.document.getElementById('fabricator-lock-notice'), null);
 });
 
 test('general settings: a save refused as changed elsewhere says so and keeps the old baseline', async () => {
@@ -78,15 +84,16 @@ test('general settings: a save refused as changed elsewhere says so and keeps th
 
     assert.match(shown().textContent, /changed elsewhere/);
     assert.equal(form.querySelector('[name="fabricator_settings_snapshot"]').value, loaded);
+    assert.notEqual(page.document.getElementById('fabricator-lock-notice'), null, "the edit lock's notice stays");
 });
 
 test('access matrix: a second save in the same tab carries the snapshot the first one returned', async () => {
     let round = 0;
-    const page = loadSettings((url, body) => (body.action === 'fabricator_save_access_settings'
+    const page = loadSettings((url, body) => (body.action === 'fabricator_forms_save_access_settings'
         ? { success: true, data: { snapshot: 'access-' + (++round) } }
         : { success: true, data: {} }));
     const doc = page.document;
-    const loaded = page.window.FabricatorSettingsPage.data.accessSnapshot;
+    const loaded = page.window.FabricatorAccessSettings.data.accessSnapshot;
 
     for (let i = 0; i < 2; i++) {
         doc.getElementById('fabricator-access-tile-btn').click();
@@ -95,7 +102,7 @@ test('access matrix: a second save in the same tab carries the snapshot the firs
         assert.equal(doc.getElementById('fabricator-access-overlay').hidden, true, 'saved and closed');
     }
 
-    const sent = page.requests.filter((r) => r.body && r.body.action === 'fabricator_save_access_settings').map((r) => r.body.snapshot);
+    const sent = page.requests.filter((r) => r.body && r.body.action === 'fabricator_forms_save_access_settings').map((r) => r.body.snapshot);
     assert.deepEqual(sent, [loaded || '', 'access-1']);
 });
 
@@ -113,7 +120,7 @@ test('access matrix: a save refused as changed elsewhere shows the server\'s mes
 });
 
 test('rotating the key: "The old master key is lost" is sent only when ticked', async () => {
-    // The checkbox as FormSettings prints it while the configured master key does not open the stored keys
+    // The checkbox as SealKeySettings prints it while the configured master key does not open the stored keys
     // (SealKeyCardTest checks the server prints it then, and what it accepts with and without it).
     const rotations = [];
     const page = loadSettings((url, body) => {

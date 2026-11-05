@@ -17,7 +17,7 @@ jobs:
     name: phpcs, security sniffs, .pot
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.3'
@@ -40,7 +40,7 @@ jobs:
         # 8.1 is the plugin's minimum. The perf suite needs memory_reset_peak_usage() (8.2+) and skips itself on 8.1.
         php: ['8.1', '8.2', '8.3', '8.4']
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ matrix.php }}
@@ -75,7 +75,7 @@ jobs:
       WP_TESTS_DB_HOST: 127.0.0.1:3306
       WP_MULTISITE: ${{ matrix.site == 'multisite' && '1' || '0' }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ matrix.php }}
@@ -93,14 +93,14 @@ jobs:
       matrix:
         node: ['22', '24']
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # PHP writes the fixture the JS suite runs against (tests/js/build-fixture.php).
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.3'
           extensions: gd, fileinfo, mbstring
           coverage: none
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -110,7 +110,9 @@ jobs:
 
   e2e:
     name: E2E (Chromium, Firefox, WebKit)
-    runs-on: ubuntu-latest
+    # Pinned: Playwright builds its WebKit for named Ubuntu releases, and the one ubuntu-latest moved to (26.04) has
+    # none yet, so WebKit can't start there (libicudata.so.74 missing). Move on once a Playwright release supports it.
+    runs-on: ubuntu-24.04
     # A stalled step fails the job instead of holding the runner for GitHub's six-hour limit.
     timeout-minutes: 40
     services:
@@ -128,13 +130,13 @@ jobs:
     env:
       WP_TESTS_DB_HOST: 127.0.0.1:3306
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.3'
           extensions: gd, fileinfo, mbstring, openssl, zlib, mysqli, intl
           coverage: none
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: npm

@@ -56,7 +56,7 @@ switch ($command['do']) {
             'fields'        => $with_defaults((array) ($command['fields'] ?? [])),
             'notifications' => (array) ($command['notifications'] ?? []),
             'settings'      => (array) ($command['settings'] ?? []),
-        ], 0, true);
+        ], 0);
         is_wp_error($id) && $fail($id->get_error_message());
         $result = ['id' => $id];
         break;

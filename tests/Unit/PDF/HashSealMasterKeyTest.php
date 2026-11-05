@@ -44,7 +44,7 @@ final class HashSealMasterKeyTest extends TestCase
             self::assertNotSame('', $e->getMessage());
         }
 
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
 
         $history = get_option(self::HISTORY);
         $last    = end($history);
@@ -95,7 +95,7 @@ final class HashSealMasterKeyTest extends TestCase
         $payload = ['key_id' => HashSeal::getCurrentKeyId(), 'n' => 1];
         $hmac    = HashSeal::generate($payload);
 
-        HashSeal::rotateKey(true, true); // retired as compromised: re-encrypted for its history entry
+        HashSeal::rotateKey(true); // retired as compromised: re-encrypted for its history entry
         self::assertSame(['valid' => true, 'key_status' => 'initial', 'compromised' => true], HashSeal::verify($payload, $hmac));
 
         $history = get_option(self::HISTORY);
@@ -117,7 +117,7 @@ final class HashSealMasterKeyTest extends TestCase
         $old_row = $this->wp->options[self::KEY_OPTION];
         $payload = ['key_id' => HashSeal::getCurrentKeyId(), 'n' => 1];
         $forged  = HashSeal::generate($payload);
-        HashSeal::rotateKey(true, true);
+        HashSeal::rotateKey(true);
 
         $this->wp->options[self::KEY_OPTION] = $old_row;
         self::assertSame(['valid' => true, 'key_status' => 'initial', 'compromised' => true], HashSeal::verify($payload, $forged));
@@ -130,7 +130,7 @@ final class HashSealMasterKeyTest extends TestCase
             self::assertNotSame('', $e->getMessage());
         }
 
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
         self::assertCount(1, get_option(self::HISTORY), 'the key keeps its one history entry, flags included');
         self::assertSame(unserialize($old_row), get_option('fabricator_forms_seal_key_damaged')[0]['value'], 'the copy is set aside');
         self::assertSame('', HashSeal::activeKeyProblem());
@@ -149,7 +149,7 @@ final class HashSealMasterKeyTest extends TestCase
 
         self::assertSame('wrong-master-key', HashSeal::activeKeyProblem());
         try {
-            HashSeal::rotateKey(false, true);
+            HashSeal::rotateKey(false);
             self::fail('rotation must refuse under another master key');
         } catch (\RuntimeException $e) {
             self::assertSame(HashSeal::WRONG_MASTER_KEY, $e->getCode());
@@ -158,10 +158,10 @@ final class HashSealMasterKeyTest extends TestCase
         self::assertFalse(get_option(self::HISTORY));
 
         // The admin confirms B is gone for good: the key is moved as stored, and A becomes the master key.
-        HashSeal::rotateKey(false, true, true);
+        HashSeal::rotateKey(false, true);
         self::assertSame('u-b', get_option(self::HISTORY)[0]['uuid']);
         self::assertSame('', HashSeal::activeKeyProblem());
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
         self::assertCount(2, get_option(self::HISTORY));
     }
 
@@ -172,7 +172,7 @@ final class HashSealMasterKeyTest extends TestCase
         $this->wp->options[self::KEY_OPTION] = serialize(json_encode(['uuid' => 'u-damaged', 'key' => $foreign]));
 
         self::assertSame('undecryptable', HashSeal::activeKeyProblem());
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
         self::assertSame($foreign, get_option(self::HISTORY)[0]['key']);
     }
 
@@ -197,7 +197,7 @@ final class HashSealMasterKeyTest extends TestCase
         self::assertStringStartsWith('enc::', json_decode(get_option(self::KEY_OPTION), true)['key']);
         self::assertSame('', HashSeal::activeKeyProblem());
 
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
         self::assertStringStartsWith('enc::', json_decode(get_option(self::KEY_OPTION), true)['key']);
         $payload = ['key_id' => HashSeal::getCurrentKeyId(), 'w' => 1];
         self::assertTrue(HashSeal::verify($payload, HashSeal::generate($payload))['valid']);
@@ -221,7 +221,7 @@ final class HashSealMasterKeyTest extends TestCase
         $planted = ['key_id' => 'u-planted', 'z' => 3];
         self::assertFalse(HashSeal::verify($planted, hash_hmac('sha256', (string) json_encode($planted), $plain))['valid']);
 
-        HashSeal::rotateKey(false, true);
+        HashSeal::rotateKey(false);
 
         $history = get_option(self::HISTORY);
         $last    = end($history);

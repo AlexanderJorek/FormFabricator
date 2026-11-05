@@ -1,1 +1,13 @@
 .fabricator-field-group { margin: 8px 0 var(--fabricator-gap); }
+/* Show as box: the direct debit mandate's box, headed by the group's label as the mandate is by its title. */
+.fabricator-field-group--boxed {
+    border: 1px solid var(--fabricator-border);
+    border-radius: var(--fabricator-radius);
+    padding: 24px;
+    margin-bottom: 24px;
+    background: var(--fabricator-bg);
+}
+.fabricator-group-title { font-size: 16px; font-weight: 700; margin: 0 0 14px; color: var(--fabricator-text); }
+@media (max-width: 600px) {
+    .fabricator-field-group--boxed { padding: 16px; }
+}

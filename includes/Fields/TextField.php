@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -65,10 +65,10 @@ class TextField extends BaseField
         $attrs      = $this->inputAttrs($config, $field_id, 'text', ['value' => (string)($value ?? '')]);
         $configured = (int)($config['limit_max'] ?? 0);
         if (($config['limit_type'] ?? 'chars') === 'chars') {
-            $attrs .= ' maxlength="' . self::clampTextMax($configured) . '"';
+            $attrs .= ' maxlength="' . esc_attr(self::clampTextMax($configured)) . '"';
         }
         if ($configured > 0 && ($config['limit_type'] ?? 'chars') === 'words') {
-            $attrs .= ' data-word-limit="' . $configured . '"';
+            $attrs .= ' data-word-limit="' . esc_attr($configured) . '"';
         }
         return $this->wrap($field_id, $config, '<input' . $attrs . '>');
     }

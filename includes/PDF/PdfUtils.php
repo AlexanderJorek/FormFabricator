@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -49,7 +49,7 @@ class PdfUtils
      */
     public static function maxSafePixels(): int
     {
-        return self::safePixelsFor(\FabricatorForms\Utils\MemoryBudget::phpMemoryLimitBytes());
+        return self::safePixelsFor(\FabricatorForms\Utils\Security\MemoryBudget::phpMemoryLimitBytes());
     }
 
     /**
@@ -94,11 +94,11 @@ class PdfUtils
      */
     public static function imagePixelLimit(): int
     {
-        $own    = \FabricatorForms\Utils\MemoryBudget::canRaiseLimit()
+        $own    = \FabricatorForms\Utils\Security\MemoryBudget::canRaiseLimit()
             ? self::safePixelsFor(-1)
             : self::maxSafePixels();
-        $budget = \FabricatorForms\Utils\MemoryBudget::budgetBytes();
-        $files  = \FabricatorForms\Utils\MemoryBudget::estimateBytes(1024 * 1024);
+        $budget = \FabricatorForms\Utils\Security\MemoryBudget::budgetBytes();
+        $files  = \FabricatorForms\Utils\Security\MemoryBudget::estimateBytes(1024 * 1024);
         return min(
             $own,
             intdiv($budget, self::memoryLimitFor(1)),

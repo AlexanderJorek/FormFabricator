@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.0
+ * @version   1.1.1
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -83,7 +83,7 @@ class Assets
             $vars[] = '--fabricator-border-input: ' . $border;
         }
         if (!empty($vars)) {
-            \wp_add_inline_style('fabricator-forms-front', ':root { ' . implode('; ', $vars) . '; }');
+            \wp_add_inline_style('fabricator-forms-front', ':root { ' . wp_strip_all_tags(implode('; ', $vars)) . '; }');
         }
 
         \wp_enqueue_script(
@@ -99,10 +99,10 @@ class Assets
         $assets = self::frontFieldAssets();
         // Built entirely from this plugin's own field-class string literals (never request input).
         if ($assets['css'] !== '') {
-            \wp_add_inline_style('fabricator-forms-front', $assets['css']);
+            \wp_add_inline_style('fabricator-forms-front', wp_strip_all_tags($assets['css']));
         }
         foreach ($assets['globals'] as $name => $literal) {
-            \wp_add_inline_script('fabricator-forms-front', 'window.' . $name . '=' . $literal . ';', 'before');
+            \wp_add_inline_script('fabricator-forms-front', 'window.' . esc_js($name) . '=' . $literal . ';', 'before');
         }
 
         /* Form-select shortcode assets — enqueued here when detectable so they reach <head>;
@@ -137,6 +137,13 @@ class Assets
                 'validation_both'         => __('Please fill in all required fields and correct the invalid entries.', 'formfabricator'),
                 'validation_required'     => __('Please fill in all required fields.', 'formfabricator'),
                 'validation_invalid'      => __('Please enter valid data.', 'formfabricator'),
+                // The name of a field without a label, in the list of fields with an error
+                'unnamed_field'           => __('Unnamed field', 'formfabricator'),
+                // What an answer may hold (the same wording as Utils\Text\AnswerText)
+                'answer_one_line'         => __('This answer can\'t hold line breaks or tabs. Please write it on one line.', 'formfabricator'),
+                // translators: %s: the character's code point, e.g. "U+200B" (substituted client-side).
+                'answer_invisible'        => __('This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it.', 'formfabricator'),
+                'answer_reference'        => __('This answer contains an HTML character reference (such as "&amp;"). Please write the character itself.', 'formfabricator'),
                 'thank_you'               => __('Thank you!', 'formfabricator'),
                 // CAPTCHA
                 'recaptcha_blocked'       => __('Could not load CAPTCHA. Please disable content blockers for this site or try another browser.', 'formfabricator'),
@@ -236,6 +243,7 @@ class Assets
         $seenRules   = [];
         $inits       = [];
         $skip        = [];
+        $untyped     = [];
 
         foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
             $handler = new $class();
@@ -267,6 +275,10 @@ class Assets
             if ($handler->skipValidation()) {
                 $skip[] = wp_json_encode($type);
             }
+
+            if (!$handler->typedAnswer()) {
+                $untyped[] = wp_json_encode($type);
+            }
         }
 
         $globals = [];
@@ -281,6 +293,10 @@ class Assets
         }
         if (!empty($skip)) {
             $globals['FabricatorSkipValidation'] = '[' . implode(',', $skip) . ']';
+        }
+        if (!empty($untyped)) {
+            // The types front.js leaves to their own checks: their answers aren't typed text (BaseField::typedAnswer()).
+            $globals['FabricatorUntypedAnswers'] = '[' . implode(',', $untyped) . ']';
         }
 
         return ['css' => implode("\n", $fieldCss), 'globals' => $globals];
@@ -336,6 +352,42 @@ class Assets
     }
 
     /**
+     * The admin screens with a stylesheet of their own, after admin.css (what every screen shares): the end of the
+     * screen's hook suffix => its file in assets/css/. The verification page's is enqueued with its scripts.
+     *
+     * @var array<string, string>
+     */
+    private const SCREEN_STYLES = [
+        'fabricator-forms'            => 'admin-formlist.css',
+        'fabricator-forms-editor'     => 'admin-builder.css',
+        'fabricator-forms-select'     => 'admin-formselect.css',
+        'fabricator-forms-settings'   => 'admin-settings.css',
+        'fabricator-forms-pdf-layout' => 'admin-pdflayout.css',
+    ];
+
+    /**
+     * Enqueues the current admin screen's own stylesheet, if it has one, after admin.css.
+     *
+     * @param string $hook Current admin page hook suffix.
+     * @return void
+     */
+    private static function enqueueScreenStyle(string $hook): void
+    {
+        foreach (self::SCREEN_STYLES as $screen => $file) {
+            // The ending, not a substring: every screen's suffix contains "fabricator-forms".
+            if (str_ends_with($hook, $screen)) {
+                \wp_enqueue_style(
+                    'fabricator-forms-admin-screen',
+                    FABRICATOR_FORMS_URL . 'assets/css/' . $file,
+                    ['fabricator-forms-admin'],
+                    FABRICATOR_FORMS_VERSION
+                );
+                return;
+            }
+        }
+    }
+
+    /**
      * Enqueues admin CSS and JS for FormFabricator admin pages.
      *
      * @param string $hook Current admin page hook suffix.
@@ -353,14 +405,25 @@ class Assets
                 FABRICATOR_FORMS_VERSION
             );
             self::addAdminCssVars();
+            self::enqueueScreenStyle($hook);
 
             \wp_enqueue_style('wp-color-picker');
             \wp_enqueue_script('wp-color-picker');
 
+            // The builder's parts load first: admin-builder.js runs them at the end of its own script.
+            foreach (['controls', 'notifications', 'submit'] as $part) {
+                \wp_register_script(
+                    'fabricator-forms-builder-' . $part,
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-builder-' . $part . '.js',
+                    [],
+                    FABRICATOR_FORMS_VERSION,
+                    true
+                );
+            }
             \wp_enqueue_script(
                 'fabricator-forms-builder',
                 FABRICATOR_FORMS_URL . 'assets/js/admin-builder.js',
-                [],
+                ['fabricator-forms-builder-controls', 'fabricator-forms-builder-notifications', 'fabricator-forms-builder-submit'],
                 FABRICATOR_FORMS_VERSION,
                 true
             );
@@ -391,6 +454,7 @@ class Assets
                 FABRICATOR_FORMS_VERSION
             );
             self::addAdminCssVars();
+            self::enqueueScreenStyle($hook);
             if (str_ends_with($hook, 'fabricator-forms')) {
                 \wp_enqueue_script(
                     'fabricator-forms-editor-canvas',
@@ -438,8 +502,8 @@ class Assets
                     true
                 );
                 \wp_enqueue_script(
-                    'fabricator-forms-settings-lock',
-                    FABRICATOR_FORMS_URL . 'assets/js/admin-settings-lock.js',
+                    'fabricator-forms-admin-lock',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-lock.js',
                     ['jquery'],
                     FABRICATOR_FORMS_VERSION,
                     true
@@ -448,6 +512,20 @@ class Assets
                     'fabricator-forms-admin-settings',
                     FABRICATOR_FORMS_URL . 'assets/js/admin-settings.js',
                     ['jquery', 'wp-color-picker'],
+                    FABRICATOR_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'fabricator-forms-admin-settings-keys',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-settings-keys.js',
+                    [],
+                    FABRICATOR_FORMS_VERSION,
+                    true
+                );
+                \wp_enqueue_script(
+                    'fabricator-forms-admin-settings-access',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-settings-access.js',
+                    ['jquery'],
                     FABRICATOR_FORMS_VERSION,
                     true
                 );
@@ -461,8 +539,8 @@ class Assets
                     true
                 );
                 \wp_enqueue_script(
-                    'fabricator-forms-pdflayout-lock',
-                    FABRICATOR_FORMS_URL . 'assets/js/admin-pdflayout-lock.js',
+                    'fabricator-forms-admin-lock',
+                    FABRICATOR_FORMS_URL . 'assets/js/admin-lock.js',
                     ['jquery'],
                     FABRICATOR_FORMS_VERSION,
                     true
@@ -474,19 +552,19 @@ class Assets
                     FABRICATOR_FORMS_VERSION,
                     true
                 );
-                $fn = 'window.fabricatorPdfUpdatePreview';
-                $cb = 'if(' . $fn . ')setTimeout(' . $fn . ',0);';
-                $picker_js = 'jQuery(function($){'
-                    . '$(".fabricator-iris-input").wpColorPicker({'
-                    . 'change:function(){' . $cb . '},'
-                    . 'clear:function(){' . $cb . '}'
-                    . '});});';
-                \wp_add_inline_script('wp-color-picker', $picker_js);
+                \wp_add_inline_script(
+                    'wp-color-picker',
+                    'jQuery(function($){'
+                        . '$(".fabricator-iris-input").wpColorPicker({'
+                        . 'change:function(){if(window.fabricatorPdfUpdatePreview)setTimeout(window.fabricatorPdfUpdatePreview,0);},'
+                        . 'clear:function(){if(window.fabricatorPdfUpdatePreview)setTimeout(window.fabricatorPdfUpdatePreview,0);}'
+                        . '});});'
+                );
             }
         }
 
         /* Verification page */
-        if (str_contains($hook, 'fabricator-pdf-verification')) {
+        if (str_contains($hook, 'fabricator-forms-pdf-verification')) {
             \wp_enqueue_style(
                 'fabricator-forms-admin',
                 FABRICATOR_FORMS_URL . 'assets/css/admin.css',
@@ -543,13 +621,14 @@ class Assets
                     'server_busy_retry' => __('Server busy — retrying in %1$ds…', 'formfabricator'),
                     'processing'       => __('Processing response…', 'formfabricator'),
                     'done'             => __('Done', 'formfabricator'),
-                    // translators: %d: HTTP status code (substituted client-side).
-                    'server_error'     => __('Server error (HTTP %d)', 'formfabricator'),
+                    // translators: %s: HTTP status code and its title, e.g. HTTP 500 "Internal Server Error" (substituted client-side).
+                    'server_error'     => __('Server error (%s)', 'formfabricator'),
                     'network_error'    => __('Network error', 'formfabricator'),
                     'unknown_error'    => __('Unknown server error', 'formfabricator'),
-                    // The pill of a file that could not be checked, as Verificationpage::problemCardHtml() writes it.
+                    // The pill of a file that could not be checked, as VerificationPage::problemCardHtml() writes it.
                     'error_pill'       => __('Error', 'formfabricator'),
                 ],
+                'httpStatus'  => \FabricatorForms\Utils\Text\HttpStatus::forScript(),
                 ]
             );
         }
@@ -589,18 +668,17 @@ class Assets
         $hb = hexdec(substr($hover, 5, 2));
         $hover_lum = (0.299 * $hr + 0.587 * $hg + 0.114 * $hb) / 255;
         $hover_fg  = $hover_lum > 0.55 ? '#1d2327' : $hover;
-        // Read by admin-editor-canvas.js, as the accent is: 'static' draws the particle background as a still picture.
-        $particles = \get_option('fabricator_forms_particles', 'animated') === 'static' ? 'static' : 'animated';
 
         \wp_add_inline_style(
             'fabricator-forms-admin',
-            ':root { --fabricator-admin-accent: ' . $admin_accent
-                . '; --fabricator-admin-accent--rgb: ' . $r . ',' . $g . ',' . $b
-                . '; --fabricator-hover-color: ' . $hover
-                . '; --fabricator-hover-color-fg: ' . $hover_fg
-                . '; --fabricator-accent-text: ' . $accent_text
-                . '; --fabricator-admin-accent-fg: ' . $accent_fg
-                . '; --fabricator-particles: ' . $particles . '; }'
+            ':root { --fabricator-admin-accent: ' . sanitize_hex_color($admin_accent)
+                . '; --fabricator-admin-accent--rgb: ' . absint($r) . ',' . absint($g) . ',' . absint($b)
+                . '; --fabricator-hover-color: ' . sanitize_hex_color($hover)
+                . '; --fabricator-hover-color-fg: ' . sanitize_hex_color($hover_fg)
+                . '; --fabricator-accent-text: ' . sanitize_hex_color($accent_text)
+                . '; --fabricator-admin-accent-fg: ' . sanitize_hex_color($accent_fg)
+                // Read by admin-editor-canvas.js, as the accent is: 'static' draws the particle background as a still picture.
+                . '; --fabricator-particles: ' . (\get_option('fabricator_forms_particles', 'animated') === 'static' ? 'static' : 'animated') . '; }'
         );
     }
 

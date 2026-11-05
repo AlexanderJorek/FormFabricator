@@ -29,7 +29,7 @@ define('FABRICATOR_FORMS_VERSION', '0.0.0-test');
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-// fabricator_log() lives in Plugin.php beside the Plugin class; loading the file defines both and runs no hooks.
-require_once dirname(__DIR__) . '/includes/Plugin.php';
+// fabricator_log() and fabricator_log_file(): functions, which the autoloader can't find.
+require_once dirname(__DIR__) . '/includes/functions.php';
 
 require_once __DIR__ . '/Support/namespace-overrides.php';

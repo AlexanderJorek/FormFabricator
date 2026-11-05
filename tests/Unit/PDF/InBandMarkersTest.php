@@ -2,7 +2,7 @@
 
 namespace FabricatorForms\Tests\Unit\PDF;
 
-use FabricatorForms\Admin\Verificationpage;
+use FabricatorForms\Admin\VerificationPage;
 use FabricatorForms\PDF\PdfUtils;
 use FabricatorForms\Tests\Support\Reflect;
 use FabricatorForms\Tests\Support\TestCase;
@@ -57,7 +57,7 @@ final class InBandMarkersTest extends TestCase
         self::assertSame(1, PdfUtils::countOutsideImageData($pdf, '---BEGIN-SEAL---'), 'the content stream, not the image');
         self::assertSame(2, substr_count($pdf, '%%EOF'), 'what the raw count saw');
 
-        $types = array_column(Reflect::call(Verificationpage::class, 'distinctTypeNames', $pdf), 1);
+        $types = array_column(Reflect::call(VerificationPage::class, 'distinctTypeNames', $pdf), 1);
         self::assertSame(['XObject', 'Catalog'], $types, 'no "/Type /Evil" from inside the image');
     }
 
@@ -83,7 +83,7 @@ final class InBandMarkersTest extends TestCase
         self::assertStringContainsString('/Pages 2 0 R', PdfUtils::definitionFromIndex($index, $pdf, '1')['body']);
         self::assertStringContainsString('/Pages 2 0 R', PdfUtils::lastObjectDefinition($pdf, '1')['body']);
 
-        $walked = iterator_to_array(Reflect::call(Verificationpage::class, 'scanObjectBodies', $pdf), false);
+        $walked = iterator_to_array(Reflect::call(VerificationPage::class, 'scanObjectBodies', $pdf), false);
         self::assertSame(['1 0', '2 0', '3 0'], array_column($walked, 0));
     }
 

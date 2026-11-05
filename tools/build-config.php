@@ -10,7 +10,8 @@
  *     nestedExclude: string[],
  *     handVendored: array<int, array{path: string, npm: string, licenses: string[]}>,
  *     keepFonts: string[],
- *     vendorExclude: string[]
+ *     vendorExclude: string[],
+ *     reviewExceptions: array<int, array{file: string, sniff: string, code: string, reason: string}>
  * }
  */
 
@@ -18,21 +19,16 @@ return [
     // Entries of the repository root that never reach the package: dev tooling, docs, tests, local state.
     'exclude' => [
         '.git', '.claude', '.vscode', '.gitignore', '.gitattributes', '.github', '.phpcs.xml', '.phpcs-security.xml',
+        '.phpcs-review.xml',
         'build', 'node_modules', 'vendor', 'tools', 'docs', 'tests', 'build.cmd', 'build.sh', 'CLAUDE.md',
         'package.json', 'package-lock.json',
     ],
 
-    // Dev-only files inside shipped folders. The example field is a template that is never loaded, and WordPress.org
-    // asks plugins not to ship unreachable code.
+    // Dev-only files inside shipped folders: the translation tools, kept beside the files they write. Other dev-only
+    // files live in docs/ or tools/, which never ship.
     'nestedExclude' => [
-        'includes/PDF/templates/HEADER-RENDERING.md',
         'languages/compile-mo.php',
         'languages/make-pot.php',
-        'includes/Fields/_ExampleField.php',
-        'assets/js/fabricator-perf-debug.js',
-        'assets/js/fields/ExampleField.clientInitClickHandler.js',
-        'assets/js/fields/ExampleField.clientValidationZip.js',
-        'assets/css/fields/ExampleField.stylesComposite.css',
     ],
 
     // npm packages placed by hand (Composer doesn't manage them), each pinned by the SHA-256 list in its VERSION file.
@@ -71,5 +67,67 @@ return [
         'vendor/mpdf/mpdf/phpunit.xml',
         'vendor/mpdf/mpdf/ruleset.xml',
         'vendor/mpdf/psr-log-aware-trait/.gitignore',
+    ],
+
+    // The .phpcs-review.xml findings the release accepts (file, sniff, a piece of the line), each with the reason the
+    // reviewers get. Any other finding fails the build, as does an entry that matches nothing.
+    'reviewExceptions' => [
+        [
+            'file'   => 'includes/Plugin.php',
+            'sniff'  => 'WordPress.Security.NonceVerification.Missing',
+            'code'   => "\$_POST['form_id']",
+            'reason' => 'Plugin::ajaxGetToken() is the anonymous endpoint that hands a visitor the form nonce right '
+                . 'before a submission, so pages cached for days still send. It cannot check a nonce before issuing one. '
+                . 'It reads one integer (absint), writes nothing, and answers only for a form that exists; the '
+                . 'submission it prepares is checked by nonce, signed token and rate limit.',
+        ],
+        [
+            'file'   => 'includes/Admin/FormEditor.php',
+            'sniff'  => 'WordPress.Security.NonceVerification.Recommended',
+            'code'   => "\$_GET['form_id']",
+            'reason' => 'FormEditor::render() reads which form to open from its link (admin.php?page=fabricator-forms-'
+                . 'editor&form_id=…), as WordPress\'s own post.php?post= does: a page load that only displays, gated by '
+                . 'the edit_forms capability; the value is absint()ed, and every save carries its own nonce.',
+        ],
+        [
+            'file'   => 'includes/Plugin.php',
+            'sniff'  => 'FormFabricatorReview.Security.NonceShape.HandlerWithoutNonce',
+            'code'   => "'ajaxGetToken'",
+            'reason' => 'The registration of Plugin::ajaxGetToken(), the endpoint that issues the form nonce (see above).',
+        ],
+        [
+            'file'   => 'includes/Utils/Assets.php',
+            'sniff'  => 'FormFabricatorReview.Security.LateEscape.InlineAssetNotEscaped',
+            'code'   => '$literal',
+            'reason' => 'Assets::ensureFrontAssets() adds the field types\' validation and setup functions to front.js with '
+                . 'wp_add_inline_script(). Each is JavaScript code read from the plugin\'s own assets/js/fields/ files, '
+                . 'never from input or the database, keyed by wp_json_encode()d field types; code has no escaping '
+                . 'function, and esc_js() would turn it into a string.',
+        ],
+        [
+            'file'   => 'includes/PDF/templates/layout.php',
+            'sniff'  => 'FormFabricatorReview.Security.LateEscape.BuiltWrongContext',
+            'code'   => 'esc_attr($img_path)',
+            'reason' => 'The PDF template\'s header image: mPDF reads a local file, the path get_attached_file() gives for '
+                . 'a Media Library attachment, never a URL or input; esc_url() would rewrite the path (a Windows drive '
+                . 'letter, backslashes), so esc_attr() escapes it for the attribute. This markup goes to mPDF, not a browser.',
+        ],
+        [
+            'file'   => 'includes/PDF/templates/layout.php',
+            'sniff'  => 'FormFabricatorReview.Security.LateEscape.BuiltWrongContext',
+            'code'   => 'esc_attr($fabricator_logo_path)',
+            'reason' => 'The PDF template\'s logo, as the header image above.',
+        ],
+        [
+            'file'   => 'includes/Form/FormProcessor.php',
+            'sniff'  => 'FormFabricatorReview.Security.RequestInput.NotSanitizedInPlace',
+            'code'   => 'wp_unslash($_POST)',
+            'reason' => 'FormProcessor::handle() reads a form submission\'s answers unsanitized, after its nonce check, so each is '
+                . 'recorded as the visitor typed it: a sanitizer would change it ("a<b and c>d" to "ad", "20%AB" to "20"), '
+                . 'and a changed answer is a different statement (a direct debit mandate\'s account holder, a signed '
+                . 'declaration). Each answer is validated at its field instead (Utils\\Text\\AnswerText refuses invalid UTF-8, '
+                . 'control and invisible characters; each field checks its own format), never stored, and escaped wherever '
+                . 'it is shown: in the email, the PDF and the verification page.',
+        ],
     ],
 ];

@@ -5,7 +5,7 @@ namespace FabricatorForms\Tests\Unit\Utils;
 use FabricatorForms\Tests\Support\FakeWordPress;
 use FabricatorForms\Tests\Support\PdfFixtures;
 use FabricatorForms\Tests\Support\TestCase;
-use FabricatorForms\Utils\VerifierCleanup;
+use FabricatorForms\Utils\Storage\VerifierCleanup;
 
 /**
  * Uploaded verification PDFs and the images taken from them leave the protected temp folder about 10 minutes after

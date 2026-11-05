@@ -7,6 +7,7 @@ use FabricatorForms\Admin\FormSettings;
 use FabricatorForms\Admin\PDFLayoutEditor;
 use FabricatorForms\Form\FormModel;
 use FabricatorForms\Tests\Integration\AjaxTestCase;
+use FabricatorForms\Utils\Storage\AdminLock;
 
 /**
  * Two admins on the same screen (TESTING.md §2, §6): the second one is told who is editing, the notice clears once the
@@ -27,6 +28,7 @@ final class EditLockTest extends AjaxTestCase
         FormEditor::init();
         PDFLayoutEditor::init();
         FormSettings::init();
+        AdminLock::init();
         $this->first  = self::factory()->user->create(['role' => 'administrator', 'display_name' => 'Ada First']);
         $this->second = self::factory()->user->create(['role' => 'administrator', 'display_name' => 'Bob Second']);
     }
@@ -104,7 +106,6 @@ final class EditLockTest extends AjaxTestCase
         $save   = static fn(string $title) => FormModel::save(
             ['title' => $title, 'fields' => $model->fields, 'notifications' => $model->notifications, 'settings' => $model->settings],
             $form,
-            true,
             $loaded
         );
 
@@ -135,7 +136,6 @@ final class EditLockTest extends AjaxTestCase
         $save   = static fn(string $title, string $snapshot) => FormModel::save(
             ['title' => $title, 'fields' => $model->fields, 'notifications' => $model->notifications, 'settings' => $model->settings],
             $form,
-            true,
             $snapshot
         );
 
@@ -167,7 +167,7 @@ final class EditLockTest extends AjaxTestCase
     {
         wp_set_current_user($this->first);
         $snapshot = md5((string) wp_json_encode(get_option('fabricator_forms_pdf_layout', [])));
-        $save = fn(string $color): array => $this->ajax('fabricator_save_pdf_layout', [
+        $save = fn(string $color): array => $this->ajax('fabricator_forms_save_pdf_layout', [
             'fabricator_pdf_layout_nonce'    => wp_create_nonce('fabricator_pdf_layout'),
             'fabricator_pdf_layout_snapshot' => $snapshot,
             'accent_color'                   => $color,

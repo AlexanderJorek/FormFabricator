@@ -2,7 +2,7 @@
 
 namespace FabricatorForms\Tests\Unit\PDF;
 
-use FabricatorForms\Admin\Verificationpage;
+use FabricatorForms\Admin\VerificationPage;
 use FabricatorForms\PDF\PdfUtils;
 use FabricatorForms\Tests\Support\PdfFixtures;
 use FabricatorForms\Tests\Support\Reflect;
@@ -79,7 +79,7 @@ final class SealBlocksTest extends TestCase
 
     public function testAnUnreadableFileHasNoSeal(): void
     {
-        self::assertFalse(Reflect::call(Verificationpage::class, 'rawPdfHasSeal', sys_get_temp_dir() . '/fabricator-missing-' . bin2hex(random_bytes(4)) . '.pdf'));
+        self::assertFalse(Reflect::call(VerificationPage::class, 'rawPdfHasSeal', sys_get_temp_dir() . '/fabricator-missing-' . bin2hex(random_bytes(4)) . '.pdf'));
     }
 
     private static function utf16(string $ascii): string
@@ -99,6 +99,6 @@ final class SealBlocksTest extends TestCase
         }
         $path = $this->dir . '/doc-' . bin2hex(random_bytes(3)) . '.pdf';
         file_put_contents($path, $pdf);
-        return Reflect::call(Verificationpage::class, 'rawPdfHasSeal', $path);
+        return Reflect::call(VerificationPage::class, 'rawPdfHasSeal', $path);
     }
 }
