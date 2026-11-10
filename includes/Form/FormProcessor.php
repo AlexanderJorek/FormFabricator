@@ -807,7 +807,7 @@ class FormProcessor
                 return sprintf(
                     /* translators: %s: the character's code point, e.g. "U+1F600". */
                     __('This answer contains a character the PDF can\'t show (%s). Please leave it out or write it differently.', 'formfabricator'),
-                    sprintf('U+%04X', mb_ord($char, 'UTF-8'))
+                    sprintf('U+%04X', \FabricatorForms\Utils\Text\CodePoint::of($char))
                 );
             }
         }

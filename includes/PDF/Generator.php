@@ -767,7 +767,7 @@ class Generator
             return null;
         }
         foreach (mb_str_split($text, 1, 'UTF-8') as $char) {
-            $code = (int) mb_ord($char, 'UTF-8');
+            $code = \FabricatorForms\Utils\Text\CodePoint::of($char);
             if ($code > 0x7F && $glyphs($code) === 0) {
                 return $char;
             }
@@ -844,7 +844,7 @@ class Generator
             if ($where !== 0) {
                 return $as;
             }
-            $char = mb_chr($cp, 'UTF-8');
+            $char = \FabricatorForms\Utils\Text\CodePoint::char($cp);
             if (!is_string($char)) {
                 return self::MISSING_GLYPH;
             }
@@ -852,7 +852,7 @@ class Generator
                 ?? (class_exists('Normalizer') ? \Normalizer::normalize($char, \Normalizer::NFKC) : false);
             if (is_string($plain) && $plain !== $char && $plain !== '') {
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
-                $codes = array_map(static fn(string $c): int => (int) mb_ord($c, 'UTF-8'), mb_str_split($plain, 1, 'UTF-8'));
+                $codes = array_map(static fn(string $c): int => \FabricatorForms\Utils\Text\CodePoint::of($c), mb_str_split($plain, 1, 'UTF-8'));
                 // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
                 $where = array_map($glyphs, $codes);
                 if (!in_array(0, $where, true)) {
@@ -871,7 +871,7 @@ class Generator
         // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.CallbackFunctions.WarnCallbackFunctions -- a fixed callback (a closure or a function name), never input.
         $out = $out === null ? null : preg_replace_callback(
             '/[^\x00-\x7F]/u',
-            static fn(array $m): string => $replace((int) mb_ord($m[0], 'UTF-8'), $m[0]),
+            static fn(array $m): string => $replace(\FabricatorForms\Utils\Text\CodePoint::of($m[0]), $m[0]),
             $out
         );
         // Invalid UTF-8 fails under /u; such text is left as it was.

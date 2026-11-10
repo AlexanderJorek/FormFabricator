@@ -68,7 +68,7 @@ final class AnswerText
             return sprintf(
                 /* translators: %s: the character's code point, e.g. "U+200B". */
                 __('This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it.', 'formfabricator'),
-                sprintf('U+%04X', mb_ord($m[0], 'UTF-8'))
+                sprintf('U+%04X', CodePoint::of($m[0]))
             );
         }
         // sanitize_textarea_field() removes what reads as a tag ("<b>…>") and writes a lone "<" as "&lt;"; ">" goes with
