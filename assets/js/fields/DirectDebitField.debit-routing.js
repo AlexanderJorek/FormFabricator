@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['debit-routing'] = function (fieldEl) {
     // Mirrors DirectDebitField::routingNumberValid(): nine digits, a Federal Reserve prefix and the 3-7-1 check digit.
     var inp = fieldEl.querySelector('.fabricator-debit-routing');
     if (!inp || !inp.value.trim()) return null;
@@ -18,4 +19,4 @@ function (fieldEl) {
     if (err && !err.textContent) err.textContent = (_i18n && _i18n.debit_routing_invalid) || 'Please enter a valid routing number.';
     // Invalid, its message already at the part (validatePage() then writes none of its own).
     return true;
-}
+};

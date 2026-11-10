@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  */
 
@@ -42,17 +42,6 @@ function fabricator_ajax_verify_push_lines(): void
 
     // The page is still working through its batch: keep this user's waiting copies.
     \FabricatorForms\Utils\Storage\VerifierCleanup::refreshPending();
-
-    /* ---- Hard limits for heavy PDF parsing, raised only after the auth checks (the soft budget aborts first) ---- */
-    // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.IniSet.Risky -- resource-limit raise for heavy PDF parsing of uploaded files; scans are linear and the parse-time budget bounds the rest.
-    if (ini_set('pcre.backtrack_limit', '268435456') === false) {
-        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_push_lines: the host refused raising pcre.backtrack_limit; large PDFs may fail to parse.');
-    }
-    // 900 s: handleUpload()'s soft budget tops out at 600 s and is checked inside the long loops, so this only stops a
-    // single call that never returns.
-    if (function_exists('set_time_limit')) {
-        set_time_limit(900); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- hard ceiling; see comment above.
-    }
 
     /* ---- Rate limit: bounds self-DoS from repeated raised-limit requests ---- */
     $rl_key = 'verify_' . get_current_user_id();
@@ -178,6 +167,20 @@ function fabricator_ajax_verify_push_lines(): void
     // Not restored: this handler always ends the request via wp_send_json_*().
     \FabricatorForms\Utils\Security\MemoryBudget::raiseTo($fabricator_mem_estimate);
 
+    /* ---- Hard limits for the PDF parsing below, raised only now and restored once the report is sanitized ---- */
+    // The soft budget aborts first; these only stop a parse that never returns.
+    $fabricator_prev_backtrack = ini_get('pcre.backtrack_limit');
+    // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.IniSet.Risky -- resource-limit raise for heavy PDF parsing of uploaded files; scans are linear and the parse-time budget bounds the rest.
+    $fabricator_raised_backtrack = ini_set('pcre.backtrack_limit', '268435456') !== false;
+    if (!$fabricator_raised_backtrack) {
+        \FabricatorForms\fabricator_log('FabricatorForms fabricator_forms_verify_push_lines: the host refused raising pcre.backtrack_limit; large PDFs may fail to parse.');
+    }
+    // 900 s: handleUpload()'s soft budget tops out at 600 s and is checked inside the long loops, so this only stops a
+    // single call that never returns.
+    if (function_exists('set_time_limit')) {
+        set_time_limit(900); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- hard ceiling; see comment above.
+    }
+
     // A small file can unpack to far more than its size (CWE-409): reserve what its streams inflate to, plus slack,
     // before anything is unpacked. The reader stays within that allowance (GuardedRawDataParser).
     // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: the copy in the plugin's folder, checked above.
@@ -242,6 +245,12 @@ function fabricator_ajax_verify_push_lines(): void
             VerificationPage::reportInternalFailure('the report was sanitized to nothing (raw length ' . strlen($raw_html) . ')'),
             true
         );
+    }
+
+    // The parsing is done: what runs after it doesn't need the raised setting.
+    if ($fabricator_raised_backtrack && is_string($fabricator_prev_backtrack)) {
+        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.IniSet.Risky -- restoring the setting raised above.
+        ini_set('pcre.backtrack_limit', $fabricator_prev_backtrack);
     }
 
     delete_transient('fabricator_vp_' . $pdf_token);

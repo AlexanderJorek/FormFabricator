@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -29,13 +29,13 @@ defined('ABSPATH') || exit;
 class NumberField extends BaseField
 {
     /**
-     * Returns field-specific CSS styles.
+     * The field's stylesheet, relative to the plugin folder.
      *
      * @return string
      */
-    public function getStyles(): string
+    public function styleAsset(): string
     {
-        return self::readFieldAsset('assets/css/fields/NumberField.css');
+        return 'assets/css/fields/NumberField.css';
     }
 
     /**
@@ -182,7 +182,7 @@ class NumberField extends BaseField
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'number-range', 'fn' => self::readFieldAsset('assets/js/fields/NumberField.number-range.js')]];
+        return [['rule' => 'number-range', 'asset' => 'assets/js/fields/NumberField.number-range.js']];
     }
 
     /**

@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['debit-bic'] = function (fieldEl) {
     var bic = fieldEl.querySelector('.fabricator-debit-bic');
     if (!bic || !bic.value.trim()) return null;
     var bicErr = bic.parentNode.querySelector('.fabricator-field-error');
@@ -7,4 +8,4 @@ function (fieldEl) {
     if (bicErr && !bicErr.textContent) bicErr.textContent = (_i18nB && _i18nB.debit_bic_invalid) || 'Please enter a valid BIC.';
     // Invalid, its message already at the part (validatePage() then writes none of its own).
     return true;
-}
+};

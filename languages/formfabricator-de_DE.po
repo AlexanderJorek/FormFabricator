@@ -6338,3 +6338,15 @@ msgstr "Antwort an"
 
 msgid "Import"
 msgstr "Importieren"
+
+#: includes/Utils/Assets.php:153
+#: includes/Utils/Text/AnswerText.php:77
+msgid "This answer can't hold \"<\" or \">\". Please write it without them."
+msgstr "Diese Antwort darf weder „<“ noch „>“ enthalten. Bitte schreiben Sie sie ohne diese Zeichen."
+
+#. translators: %s: the letters in the answer that read as a character code, e.g. "%20".
+#: includes/Utils/Assets.php:155
+#: includes/Utils/Text/AnswerText.php:83
+#, php-format
+msgid "This answer contains \"%s\", which would be read as a character code. Please put a space after the percent sign."
+msgstr "Diese Antwort enthält „%s“, was als Zeichencode gelesen würde. Bitte setzen Sie ein Leerzeichen hinter das Prozentzeichen."

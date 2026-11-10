@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -60,7 +60,18 @@ class WebsiteField extends BaseField
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'website-url', 'fn' => self::readFieldAsset('assets/js/fields/WebsiteField.website-url.js')]];
+        return [['rule' => 'website-url', 'asset' => 'assets/js/fields/WebsiteField.website-url.js']];
+    }
+
+    /**
+     * The field's setup script, relative to the plugin folder: it registers window.FabricatorFieldInits['website'],
+     * which writes a pasted address's percent codes for non-ASCII characters back as the characters.
+     *
+     * @return string
+     */
+    public function clientInitAsset(): string
+    {
+        return 'assets/js/fields/WebsiteField.js';
     }
 
     /**

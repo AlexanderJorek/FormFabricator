@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -73,37 +73,39 @@ class Assets
 
         /* Only override CSS variables when the user has explicitly saved a value.
            If no option exists yet, front.css defaults apply (or the theme wins). */
-        $accent = \get_option('fabricator_forms_accent_color', false);
-        $border = \get_option('fabricator_forms_border_color', false);
-        $vars   = [];
-        if ($accent && preg_match('/^#[0-9a-fA-F]{6}$/', $accent)) {
-            $vars[] = '--fabricator-accent: ' . $accent;
+        $accent = (string) \get_option('fabricator_forms_accent_color', '');
+        $border = (string) \get_option('fabricator_forms_border_color', '');
+        $accent = preg_match('/^#[0-9a-fA-F]{6}$/', $accent) ? $accent : '';
+        $border = preg_match('/^#[0-9a-fA-F]{6}$/', $border) ? $border : '';
+        if ($accent !== '' || $border !== '') {
+            \wp_add_inline_style(
+                'fabricator-forms-front',
+                ':root {'
+                . ($accent !== '' ? ' --fabricator-accent: ' . sanitize_hex_color($accent) . ';' : '')
+                . ($border !== '' ? ' --fabricator-border-input: ' . sanitize_hex_color($border) . ';' : '')
+                . ' }'
+            );
         }
-        if ($border && preg_match('/^#[0-9a-fA-F]{6}$/', $border)) {
-            $vars[] = '--fabricator-border-input: ' . $border;
+
+        // Every field type's stylesheet and scripts, as files of their own; front.js runs after the scripts, which
+        // register the field types' functions it reads.
+        $assets = self::frontFieldAssets();
+        foreach ($assets['styles'] as $handle => $path) {
+            \wp_enqueue_style($handle, FABRICATOR_FORMS_URL . $path, ['fabricator-forms-front'], FABRICATOR_FORMS_VERSION);
         }
-        if (!empty($vars)) {
-            \wp_add_inline_style('fabricator-forms-front', ':root { ' . wp_strip_all_tags(implode('; ', $vars)) . '; }');
+        foreach ($assets['scripts'] as $handle => $path) {
+            \wp_register_script($handle, FABRICATOR_FORMS_URL . $path, [], FABRICATOR_FORMS_VERSION, true);
         }
 
         \wp_enqueue_script(
             'fabricator-forms-front',
             FABRICATOR_FORMS_URL . 'assets/js/front.js',
-            [],
+            array_keys($assets['scripts']),
             FABRICATOR_FORMS_VERSION,
             true
         );
 
         \wp_localize_script('fabricator-forms-front', 'FabricatorForms', self::frontLocalization());
-
-        $assets = self::frontFieldAssets();
-        // Built entirely from this plugin's own field-class string literals (never request input).
-        if ($assets['css'] !== '') {
-            \wp_add_inline_style('fabricator-forms-front', wp_strip_all_tags($assets['css']));
-        }
-        foreach ($assets['globals'] as $name => $literal) {
-            \wp_add_inline_script('fabricator-forms-front', 'window.' . esc_js($name) . '=' . $literal . ';', 'before');
-        }
 
         /* Form-select shortcode assets — enqueued here when detectable so they reach <head>;
            FormSelectList::shortcode() calls ensureFormSelectAssets() as the same fallback. */
@@ -121,8 +123,13 @@ class Assets
      */
     public static function frontLocalization(): array
     {
+        $assets = self::frontFieldAssets();
         return [
             'ajaxUrl'      => \admin_url('admin-ajax.php'),
+            // The field types whose answers aren't validated (layout) or aren't typed text (BaseField::typedAnswer()),
+            // which front.js leaves to their own checks.
+            'skipValidation' => $assets['skip'],
+            'untypedAnswers' => $assets['untyped'],
             // Single source of truth for per-country IBAN length lives in DirectDebitField::IBAN_LEN;
             // localized here rather than duplicated in DirectDebitField.js.
             'ibanLen'      => \FabricatorForms\Fields\DirectDebitField::IBAN_LEN,
@@ -143,6 +150,9 @@ class Assets
                 'answer_one_line'         => __('This answer can\'t hold line breaks or tabs. Please write it on one line.', 'formfabricator'),
                 // translators: %s: the character's code point, e.g. "U+200B" (substituted client-side).
                 'answer_invisible'        => __('This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it.', 'formfabricator'),
+                'answer_angle'            => __('This answer can\'t hold "<" or ">". Please write it without them.', 'formfabricator'),
+                // translators: %s: the letters in the answer that read as a character code, e.g. "%20" (substituted client-side).
+                'answer_percent'          => __('This answer contains "%s", which would be read as a character code. Please put a space after the percent sign.', 'formfabricator'),
                 'answer_reference'        => __('This answer contains an HTML character reference (such as "&amp;"). Please write the character itself.', 'formfabricator'),
                 'thank_you'               => __('Thank you!', 'formfabricator'),
                 // CAPTCHA
@@ -228,78 +238,55 @@ class Assets
     }
 
     /**
-     * Every field type's CSS and client-side JS, as ensureFrontAssets() inlines it into a page with a form.
+     * Every field type's stylesheet and scripts, and the field types front.js treats apart, as a page with a form gets
+     * them. The one place they are collected: ensureFrontAssets(), the builder's preview and the JS tests use it.
      *
-     * 'globals' maps each window.* name to its JS literal, in the order front.js expects, omitting empty ones. Public
-     * so the JS tests run against exactly this output.
+     * 'styles' and 'scripts' map a handle to the file's path relative to the plugin folder, in registry order. Each
+     * script registers its function in a window global (BaseField::clientInitAsset() and the others); a validation
+     * rule two field types declare is loaded once, from the first.
      *
-     * @return array{css: string, globals: array<string, string>}
+     * @return array{styles: array<string, string>, scripts: array<string, string>, skip: list<string>, untyped: list<string>}
      */
     public static function frontFieldAssets(): array
     {
-        $fieldCss    = [];
-        $emptyChecks = [];
-        $pairs       = [];
-        $seenRules   = [];
-        $inits       = [];
-        $skip        = [];
-        $untyped     = [];
+        $styles    = [];
+        $scripts   = [];
+        $seenRules = [];
+        $skip      = [];
+        $untyped   = [];
+        $script    = static function (string $path) use (&$scripts): void {
+            if ($path !== '') {
+                // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses a field's own asset path, no file access.
+                $scripts['fabricator-forms-' . strtolower(str_replace('.', '-', basename($path, '.js')))] = $path;
+            }
+        };
 
         foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
             $handler = new $class();
 
-            $css = trim($handler->getStyles());
+            $css = $handler->styleAsset();
             if ($css !== '') {
-                $fieldCss[] = $css;
+                $styles['fabricator-forms-field-' . $type] = $css;
             }
-
-            $entry = $handler->getClientEmptyCheck();
-            if (!empty($entry['fn'])) {
-                $emptyChecks[] = wp_json_encode($type) . ':' . trim($entry['fn']);
-            }
-
-            foreach ($handler->getClientValidation() as $vEntry) {
-                $rule = $vEntry['rule'] ?? '';
-                $fn   = $vEntry['fn']   ?? '';
-                if ($rule !== '' && $fn !== '' && !isset($seenRules[$rule])) {
-                    $seenRules[$rule] = true;
-                    $pairs[]          = wp_json_encode($rule) . ':' . trim($fn);
+            $script($handler->clientEmptyCheckAsset());
+            foreach ($handler->getClientValidation() as $rule) {
+                $name = $rule['rule'] ?? '';
+                if ($name !== '' && !isset($seenRules[$name])) {
+                    $seenRules[$name] = true;
+                    $script($rule['asset'] ?? '');
                 }
             }
-
-            $fn = $handler->getClientInit();
-            if ($fn !== '') {
-                $inits[] = wp_json_encode($type) . ':' . trim($fn);
-            }
+            $script($handler->clientInitAsset());
 
             if ($handler->skipValidation()) {
-                $skip[] = wp_json_encode($type);
+                $skip[] = (string) $type;
             }
-
             if (!$handler->typedAnswer()) {
-                $untyped[] = wp_json_encode($type);
+                $untyped[] = (string) $type;
             }
         }
 
-        $globals = [];
-        if (!empty($emptyChecks)) {
-            $globals['FabricatorEmptyChecks'] = '{' . implode(',', $emptyChecks) . '}';
-        }
-        if (!empty($pairs)) {
-            $globals['FabricatorValidators'] = '{' . implode(',', $pairs) . '}';
-        }
-        if (!empty($inits)) {
-            $globals['FabricatorFieldInits'] = '{' . implode(',', $inits) . '}';
-        }
-        if (!empty($skip)) {
-            $globals['FabricatorSkipValidation'] = '[' . implode(',', $skip) . ']';
-        }
-        if (!empty($untyped)) {
-            // The types front.js leaves to their own checks: their answers aren't typed text (BaseField::typedAnswer()).
-            $globals['FabricatorUntypedAnswers'] = '[' . implode(',', $untyped) . ']';
-        }
-
-        return ['css' => implode("\n", $fieldCss), 'globals' => $globals];
+        return ['styles' => $styles, 'scripts' => $scripts, 'skip' => $skip, 'untyped' => $untyped];
     }
 
     /**

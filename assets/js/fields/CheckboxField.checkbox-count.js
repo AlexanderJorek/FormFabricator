@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['checkbox-count'] = function (fieldEl) {
     var group = fieldEl.querySelector('.fabricator-checkbox-group');
     if (!group) return null;
     var min = parseInt(group.dataset.minSelections || '0', 10);
@@ -9,4 +10,4 @@ function (fieldEl) {
     if (min > 0 && cnt < min) return group.dataset.minMessage || ('Please select at least ' + min + ' options.');
     if (max > 0 && cnt > max) return group.dataset.maxMessage || ('Please select at most ' + max + ' options.');
     return null;
-}
+};

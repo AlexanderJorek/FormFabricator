@@ -149,12 +149,14 @@ final class SubmissionTest extends AjaxTestCase
     {
         // TESTING.md §3: a resubmission via the back button or a cached page is refused as a duplicate.
         $form  = $this->createForm(self::FIELDS, [self::notification()]);
-        $token = SingleUseToken::issue($form);
+        $token = SingleUseToken::issue();
 
         self::assertTrue($this->submit($form, ['name' => 'Ada'], $token)['success']);
         $again = $this->submit($form, ['name' => 'Ada'], $token);
         self::assertFalse($again['success']);
         self::assertStringContainsString('already been received', $again['data']['message']);
+        $other = $this->createForm(self::FIELDS, [self::notification()]);
+        self::assertFalse($this->submit($other, ['name' => 'Ada'], $token)['success'], 'nor on another form');
         self::assertTrue($this->submit($form, ['name' => 'Bob'])['success'], 'another visitor with a fresh token is not affected');
         self::assertCount(2, self::sentMail());
     }
@@ -164,7 +166,6 @@ final class SubmissionTest extends AjaxTestCase
         $form = $this->createForm(self::FIELDS, [self::notification()]);
 
         self::assertFalse($this->submit($form, ['name' => 'Ada'], 'not-a-token')['success']);
-        self::assertFalse($this->submit($form, ['name' => 'Ada'], SingleUseToken::issue($form + 1))['success'], 'a token for another form');
         self::assertFalse($this->submit($form, ['name' => 'Ada'], null, 'badnonce')['success']);
         self::assertSame([], self::sentMail());
     }
@@ -284,7 +285,7 @@ final class SubmissionTest extends AjaxTestCase
     {
         // TESTING.md §3: a mail failure gives the visitor an error, not a false "Thank you", and the retry works.
         $form  = $this->createForm(self::FIELDS, [self::notification()]);
-        $token = SingleUseToken::issue($form);
+        $token = SingleUseToken::issue();
         add_filter('pre_wp_mail', '__return_false');
 
         $r = $this->submit($form, ['name' => 'Ada'], $token);

@@ -91,6 +91,21 @@ test('an answer is refused in the browser exactly where the server refuses it', 
     assert.deepEqual(disagreements, []);
 });
 
+test('a refused answer in a part of an expanded Name or Address is reported at that part', () => {
+    for (const [name, part] of [['name, expanded', 'n[fname]'], ['address, expanded', 'a[city]']]) {
+        const composite = fixture.composites.find((c) => c.name === name);
+        const scope = fragment(page, composite.html);
+        scope.querySelector('[name="' + part + '"]').value = 'a < b';
+        const r = validatePage(scope);
+        assert.equal(r.hasInvalid, true, name);
+        const slots = Array.from(scope.querySelectorAll('.fabricator-field-error'));
+        const own = scope.querySelector('[name="' + part + '"]').parentNode.querySelector('.fabricator-field-error');
+        assert.equal(own.textContent, fixture.localization.i18n.answer_angle, name + ': at the part');
+        // Other parts may say they are required; the refusal stands only at its part.
+        assert.equal(slots.filter((s) => s.textContent === own.textContent).length, 1, name + ': nowhere else');
+    }
+});
+
 test('a rule that wrote its message at the part makes the field invalid and writes nothing of its own', () => {
     const scope = fragment(page, field('directdebit', { validate: ['debit-bic'] },
         '<div><input class="fabricator-debit-bic" value="INVALID"><div class="fabricator-field-error"></div></div>'));

@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['date'] = function (root) {
     /* Part order and separator per format key, as DateField::FORMATS. */
     var FORMATS = { dmy: ['dmy', '.'], mdy: ['mdy', '/'], ymd: ['ymd', '-'] };
     function formatDate(inp, y, m, d) {
@@ -40,4 +41,4 @@ function (root) {
             }
         }
     });
-}
+};

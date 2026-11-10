@@ -1,10 +1,13 @@
 'use strict';
 
-/* The globals Assets::frontFieldAssets() hands front.js, and the test hooks front.js exports. */
+/* The field scripts Assets::frontFieldAssets() enqueues before front.js, and the test hooks front.js exports. */
 
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadPage } = require('./support/page');
+const { fixture, loadPage, ROOT } = require('./support/page');
 
 test('front.js boots on an empty page without a script error', () => {
     const page = loadPage();
@@ -12,11 +15,31 @@ test('front.js boots on an empty page without a script error', () => {
 });
 
 test('layout-only field types skip validation', () => {
-    const skip = loadPage().window.FabricatorSkipValidation;
+    const skip = loadPage().window.FabricatorForms.skipValidation;
     assert.ok(Array.isArray(skip));
     for (const type of ['html', 'pagebreak', 'page-header']) {
-        assert.ok(skip.includes(type), type + ' is not in FabricatorSkipValidation');
+        assert.ok(skip.includes(type), type + ' is not in FabricatorForms.skipValidation');
     }
+});
+
+test('each field script registers exactly the function its field type declares', () => {
+    assert.ok(fixture.fieldScripts.length > 0);
+    for (const { type, global, key, asset } of fixture.fieldScripts) {
+        // Alone, as the browser runs it: a file of its own that touches nothing but its own key.
+        const window = {};
+        vm.runInNewContext(fs.readFileSync(path.join(ROOT, asset), 'utf8'), { window }, { filename: asset });
+        assert.deepEqual(Object.keys(window), [global], type + ': ' + asset);
+        assert.deepEqual(Object.keys(window[global]), [key], type + ': ' + asset);
+        assert.equal(typeof window[global][key], 'function', type + ': ' + asset);
+    }
+});
+
+test('every field script is enqueued, and only field scripts', () => {
+    const declared = new Set(fixture.fieldScripts.map((s) => s.asset));
+    const enqueued = new Set(Object.values(fixture.fieldAssets.scripts));
+    assert.deepEqual([...enqueued].sort(), [...declared].sort());
+    const files = fs.readdirSync(path.join(ROOT, 'assets', 'js', 'fields')).filter((f) => f.endsWith('.js'));
+    assert.deepEqual(files.map((f) => 'assets/js/fields/' + f).sort(), [...enqueued].sort(), 'a file no field declares');
 });
 
 test('every validation rule a field declares is a function', () => {

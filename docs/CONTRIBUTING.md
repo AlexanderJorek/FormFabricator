@@ -66,7 +66,8 @@ The short version. Each point links to its full explanation.
 8. **Comments explain what and why, never history.** → [Comments](#comments)
 9. **Inputs and output pass where they are read and printed, without `phpcs:ignore`.** WordPress.org's reviewers
    honour no ignore comment and no custom helper. → [Request input and output](#request-input-and-output)
-10. **An answer is recorded as typed, or refused.** Nothing in it is removed or replaced. →
+10. **An answer is recorded as typed, or refused.** Nothing in it is removed or replaced, so the browser refuses what
+    the server's sanitizer would change. →
     [Answers are recorded as typed](#answers-are-recorded-as-typed)
 
 ---
@@ -161,16 +162,27 @@ refused at its field, in the browser first (front.js `answerProblem()`) and agai
   zero-width non-joiner and joiner (U+200C, U+200D) pass: they are typed and reorder nothing. A Persian keyboard
   writes the non-joiner; an emoji such as the family is man, U+200D, woman, U+200D, girl;
 - line breaks and tabs outside a multi-line answer (`multilineAnswer()`, a textarea);
+- what WordPress's sanitizer would change: `<`, `>`, and `%` followed by two hex digits (`%20`, `%AB`). The server
+  reads every posted value through `sanitize_textarea_field()` (see below), which removes what reads as a tag, writes
+  a lone `<` as `&lt;` and drops a percent code. `>` alone survives it, but goes with `<` so the rule is one a visitor
+  can remember. A `%` on its own (`50%`, `50 % off`, `100%ige`) is kept. An address pasted into a Website field
+  spells its non-ASCII characters as percent codes (`M%C3%BCnchen`); `WebsiteField.js` writes them back as the
+  characters, visibly in the field, and leaves codes for ASCII characters (`%2F`, `%20`) to be refused;
 - HTML character references (`&amp;`, `&#65;`): `esc_html()` leaves a reference as it is, so a page or an email would
   show the character it names instead of what was typed;
 - while the form makes a PDF, a character no shipped font draws (`Generator::undrawableCharacter()`): the PDF would
   show a stand-in. The browser can't know the fonts, so only the server checks this, and only once the CAPTCHA
   passed: reading the fonts loads mPDF and its metrics (about 1 s and 26 MB the first time in a request).
 
-Everything else, `<` and `%` included, is kept, and escaped wherever it is shown. WordPress's sanitizers would change
-it, so `FormProcessor::handle()` reads the answers unsanitized: a named review exception. Values a visitor's answer is
-compared with (an option's value, a rule's value) are saved as the plain text the browser posts
-(`FormSanitizer::answerText()`): `sanitize_text_field()` alone writes a lone `<` as `&lt;`.
+Everything else, `&` and quotes included, is kept, and escaped wherever it is shown.
+
+`FormProcessor::handle()` reads the answers with `map_deep(wp_unslash($_POST), 'sanitize_textarea_field')`, the form
+WordPress.org's review asks for. That is safe because the sanitizer leaves alone every answer `AnswerText` accepts
+(`AnswersAsTypedTest` checks it on random text), and front.js refuses the rest before sending: a visitor's answer is
+refused, never changed. Only a request that skips front.js can have an answer changed instead. Values a visitor's
+answer is compared with (an option's value, a rule's value) are saved as the plain text the browser posts
+(`FormSanitizer::answerText()`: `sanitize_text_field()` writes `&` as `&amp;`), without `<`, `>` and percent codes,
+which no posted value can hold unchanged.
 
 **When something was signed or agreed to** is recorded one way (`Utils\Text\SigningTime`): the date in the site's date
 format, then the time, both in UTC, from the server's clock when the form is sent. A site format that leaves out the
@@ -458,15 +470,20 @@ inside them. **This is an absolute rule, not a style preference.**
 
 Instead:
 
-- **Field CSS/JS goes in its own file.** That covers `getStyles()`, `getClientInit()`, and any `fn` string inside
-  `getClientValidation()` / `getClientEmptyCheck()`.
+- **Field CSS/JS goes in its own file, and is never inlined.** A field names its files by path:
+  `styleAsset()`, `clientInitAsset()`, `clientEmptyCheckAsset()` and the `asset` of each `getClientValidation()` rule.
+  `Assets::frontFieldAssets()` collects them, and the page enqueues them as files: WordPress.org's review accepts no
+  escaping function for CSS or JS code, so no field code reaches `wp_add_inline_style()`/`wp_add_inline_script()`,
+  not even a one-line function.
   - Location: `assets/css/fields/` or `assets/js/fields/`.
   - Name: after the class, e.g. `UploadField.css`.
   - Several assets for one class (multiple validation rules, an empty-check function): add the rule or purpose as a
     suffix, e.g. `DirectDebitField.iban.js`, `DirectDebitField.debit-bic.js`.
-  - Load it with `BaseField::readFieldAsset()`.
+  - A script registers one function, under the key its field declares, in the global front.js reads:
+    `window.FabricatorFieldInits[type]`, `FabricatorEmptyChecks[type]` or `FabricatorValidators[rule]`
+    (`window.X = window.X || {};` first). `registry.test.js` checks each file registers exactly that, and that every
+    file in `assets/js/fields/` is declared by a field.
   - Bonus: real syntax highlighting and linting instead of a PHP string.
-- **Only a short, genuinely one-line JS/CSS literal** may stay inline as a plain PHP string.
 - **Other multi-line text that must live in PHP** (such as `SecureDir::WEB_CONFIG`) is built from concatenated strings.
 
 ### Request input and output
@@ -483,9 +500,9 @@ WPCS recognises. `.phpcs-review.xml` runs exactly that, and the release fails on
   around `wp_unslash()`. A type guard goes in the condition (`is_string($_POST[k] ?? null)`), never between sanitizer
   and input. An array is read with `map_deep(wp_unslash(…), 'sanitize_…')`; JSON that may hold markup is sent
   base64-encoded and read as `base64_decode(sanitize_text_field(wp_unslash(…)))`, then sanitized value by value.
-- **A field never reads the request.** `FormProcessor::handle()` verifies the nonce, reads `$_POST` once with
-  `wp_unslash()` and no sanitizer (a named review exception: answers are recorded as typed and checked at their field,
-  see [Answers are recorded as typed](#answers-are-recorded-as-typed)) and the file entries part by part, and hands
+- **A field never reads the request.** `FormProcessor::handle()` verifies the nonce, reads `$_POST` once through
+  `map_deep(wp_unslash(…), 'sanitize_textarea_field')` (which changes no answer the browser lets through, see
+  [Answers are recorded as typed](#answers-are-recorded-as-typed)) and the file entries part by part, and hands
   both to every `extractValue($field_id, $post, $files)`, which reads its value with `answer()`/`answers()` (a value
   the site or the browser makes, such as a CAPTCHA token, with its sanitizer) and never unslashes again.
 - **Output** is escaped as it is printed. Markup built elsewhere is printed through `wp_kses()` with an allowlist of its
@@ -530,17 +547,14 @@ These are known, accepted trade-offs.
 **Form selections.** A form selection (`FormSelectList`) renders every listed form (up to 200) on each page view and
 shows one at a time. Switching is instant and the page stays cacheable.
 
-**Inlined field assets.** `Assets::enqueueFront()` inlines every field type's CSS and JS into any page that renders a
-form, whether or not the form uses those fields.
+**Every field type's files on every form page.** `Assets::ensureFrontAssets()` enqueues every field type's
+stylesheet and scripts (about 20 and 40 small files) on any page that renders a form, whether or not the form uses
+those fields.
 
-- Cost: 88 KB measured (24 KB across 22 CSS files, 64 KB across 29 JS files), re-sent with every page view because it
-  is inline and so not cached.
-- Why the JS can't simply be enqueued: the per-field JS files are function-expression fragments assembled into
-  `window.FabricatorFieldInits` / `FabricatorValidators` / `FabricatorEmptyChecks`. They can't become standalone
-  scripts without changing how field scripts reach the browser.
-- Why the CSS can't be split off alone: styles could then arrive after `wp_head` in widget, block-template and
-  page-builder placements.
-- Reopen this only with a plan that covers those placements.
+- They are cached like any file, and the page needs to know nothing about its forms' fields, so every placement works
+  alike: the stylesheets depend on front.css and the scripts come before front.js, so they print wherever those do
+  (in the head when the shortcode is found in the post, else in the footer: widgets, block templates, page builders).
+- Loading only the types a page's forms use would need each placement to find its forms before `wp_head`.
 
 ---
 
@@ -665,8 +679,9 @@ Tests in `tests/js/`, run with Node's built-in `node:test` and jsdom. Dev-only; 
 `Assets::frontLocalization()`, `Assets::frontFieldAssets()` and real `FormRenderer` markup. Each test then loads the
 real `assets/js/front.js` into a fresh jsdom page.
 
-`Assets::frontFieldAssets()` is the **one** place the per-field JS is assembled. Production and the test fixture both
-call it. Don't rebuild the globals anywhere else.
+`Assets::frontFieldAssets()` is the **one** list of the field files. Production, the builder's preview and the test
+fixture all use it, and `support/page.js` runs its scripts before front.js, as a page does. Don't list them anywhere
+else.
 
 A test that needs the server's answer to what a script produced at test time runs PHP itself:
 `builder-conditions.test.js` hands the form the builder saved to `tests/js/render-form.php`, which runs the save's

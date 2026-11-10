@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['checkbox'] = function (root) {
     /* Shows the "Other" text input while its box is ticked. */
     root.querySelectorAll('.fabricator-checkbox-group input[value="__other__"]').forEach(function (inp) {
         /* Idempotent: front.js re-runs field inits after every successful submit. */
@@ -15,4 +16,4 @@ function (root) {
         var ownerForm = inp.closest('form');
         if (ownerForm) ownerForm.addEventListener('fabricator:reset', sync);
     });
-}
+};

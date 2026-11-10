@@ -69,14 +69,13 @@ final class DatabaseHelpersTest extends TestCase
         self::assertTrue(SingleUseToken::claim('it_claim', 60), 'a released claim can be retried');
     }
 
-    public function testAnIssuedTokenIsBoundToItsFormAndItsSignature(): void
+    public function testAnIssuedTokenIsBoundToItsSignatureAndAge(): void
     {
-        $token = SingleUseToken::issue(7);
-        self::assertTrue(SingleUseToken::verifyIssued($token, 7));
-        self::assertFalse(SingleUseToken::verifyIssued($token, 8), 'another form');
-        self::assertFalse(SingleUseToken::verifyIssued(substr($token, 0, -1) . (substr($token, -1) === '0' ? '1' : '0'), 7), 'tampered signature');
+        $token = SingleUseToken::issue();
+        self::assertTrue(SingleUseToken::verifyIssued($token));
+        self::assertFalse(SingleUseToken::verifyIssued(substr($token, 0, -1) . (substr($token, -1) === '0' ? '1' : '0')), 'tampered signature');
         [$id, , $mac] = explode('.', $token);
-        self::assertFalse(SingleUseToken::verifyIssued($id . '.' . (time() - SingleUseToken::ISSUED_MAX_AGE - 1) . '.' . $mac, 7), 'expired');
+        self::assertFalse(SingleUseToken::verifyIssued($id . '.' . (time() - SingleUseToken::ISSUED_MAX_AGE - 1) . '.' . $mac), 'expired');
         self::assertSame(0, self::rowsLike('fabricator_su_'), 'issuing writes nothing');
     }
 

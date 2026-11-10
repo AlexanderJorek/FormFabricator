@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['date-format'] = function (fieldEl) {
     var inp = fieldEl.querySelector('.fabricator-date-text');
     if (!inp || !inp.value.trim()) return null;
     var v = inp.value.trim();
@@ -20,4 +21,4 @@ function (fieldEl) {
     if (dt.getFullYear() !== parts.y || dt.getMonth() !== parts.m - 1 || dt.getDate() !== parts.d)
         return (_i18n && _i18n.date_invalid_date) || 'Please enter a valid date.';
     return null;
-}
+};

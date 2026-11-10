@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['rating'] = function (root) {
     root.querySelectorAll('.fabricator-rating-group').forEach(function (group) {
         /* Idempotent: front.js re-runs field inits after every successful submit. */
         if (group._fabricatorRatingInited) return;
@@ -40,4 +41,4 @@ function (root) {
         if (ownerForm) ownerForm.addEventListener('fabricator:reset', restoreChecked);
         restoreChecked();
     });
-}
+};

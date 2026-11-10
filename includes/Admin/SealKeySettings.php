@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -953,15 +953,12 @@ class SealKeySettings
         if (!function_exists('opcache_invalidate')) {
             return;
         }
-        // wp-config.php can live one directory above ABSPATH — same resolution wp-load.php itself uses.
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- wp-config.php, looked up where wp-load.php looks.
-        $wp_config_path = file_exists(\ABSPATH . 'wp-config.php')
-            ? \ABSPATH . 'wp-config.php'
-            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- wp-config.php, looked up where wp-load.php looks.
-            : dirname(\ABSPATH) . '/wp-config.php';
-        // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- wp-config.php, looked up where wp-load.php looks.
-        if (file_exists($wp_config_path)) {
-            opcache_invalidate($wp_config_path, true);
+        // The wp-config.php this request loaded, wherever the site keeps it: PHP lists every file it included.
+        foreach (get_included_files() as $included) {
+            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- basename() only parses the name of a file PHP already loaded, no file access.
+            if (basename($included) === 'wp-config.php') {
+                opcache_invalidate($included, true);
+            }
         }
     }
 

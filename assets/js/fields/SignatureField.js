@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['signature'] = function (root) {
     function initSignature(wrap) {
         if (wrap._fabricatorCanvasInited) return;
         wrap._fabricatorCanvasInited = true;
@@ -162,4 +163,4 @@ function (root) {
         }
     }
     (root || document).querySelectorAll('.fabricator-signature-wrap').forEach(initSignature);
-}
+};

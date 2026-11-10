@@ -1,9 +1,9 @@
 'use strict';
 
 /*
- * A fresh jsdom page running the real assets/js/front.js, with exactly the globals a WordPress page gets:
- * window.FabricatorForms from Assets::frontLocalization() and the window.Fabricator* field globals from
- * Assets::frontFieldAssets(), read from the fixture tests/js/build-fixture.php writes (`npm test` runs it first).
+ * A fresh jsdom page running the real assets/js/front.js as a WordPress page does: window.FabricatorForms from
+ * Assets::frontLocalization(), then every field script Assets::frontFieldAssets() enqueues, then front.js, read from
+ * the fixture tests/js/build-fixture.php writes (`npm test` runs it first).
  *
  * window.__FABRICATOR_TEST__ makes front.js export its internals as window.FabricatorTestHooks.
  */
@@ -21,6 +21,7 @@ if (!fs.existsSync(FIXTURE_PATH)) {
 
 const fixture = JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf8'));
 const frontJs = fs.readFileSync(path.join(ROOT, 'assets', 'js', 'front.js'), 'utf8');
+const fieldJs = Object.values(fixture.fieldAssets.scripts).map((file) => fs.readFileSync(path.join(ROOT, file), 'utf8'));
 
 /* CSSOM "serialize an identifier" — every browser has CSS.escape(), jsdom does not, and front.js uses it to look up
    a field by name. https://drafts.csswg.org/cssom/#serialize-an-identifier */
@@ -72,8 +73,8 @@ function loadPage(bodyHtml = '') {
     }
     w.__FABRICATOR_TEST__ = true;
     w.FabricatorForms = JSON.parse(JSON.stringify(fixture.localization));
-    for (const [name, literal] of Object.entries(fixture.globals)) {
-        w.eval('window.' + name + '=' + literal + ';');
+    for (const code of fieldJs) {
+        w.eval(code);
     }
     w.eval(frontJs);
     return { window: w, document: w.document, hooks: w.FabricatorTestHooks || {}, errors };
@@ -88,4 +89,4 @@ function fragment(page, html) {
     return el;
 }
 
-module.exports = { fixture, loadPage, fragment, cssEscape };
+module.exports = { fixture, loadPage, fragment, cssEscape, ROOT };

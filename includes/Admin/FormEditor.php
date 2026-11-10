@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -357,16 +357,11 @@ class FormEditor
         /* Exactly what a page with a form gets (Assets::frontFieldAssets() and the front-end localization), except
            ajaxUrl: the preview never submits. */
         $front_assets = \FabricatorForms\Utils\Assets::frontFieldAssets();
-        $field_css    = [$front_assets['css']];
 
         $css_url = \FABRICATOR_FORMS_URL . 'assets/css/front.css';
 
         $localization            = \FabricatorForms\Utils\Assets::frontLocalization();
         $localization['ajaxUrl'] = '';
-        $globals                 = 'window.FabricatorForms=' . \wp_json_encode($localization) . ';';
-        foreach ($front_assets['globals'] as $global_name => $literal) {
-            $globals .= 'window.' . $global_name . '=' . $literal . ';';
-        }
 
         $toolbar_html = '<div id="fabricator-preview-toolbar">'
             . '<div class="fpt-row">'
@@ -400,7 +395,10 @@ class FormEditor
             \FabricatorForms\Utils\Assets::FONT_AWESOME_VERSION
         );
         $preview_styles->add('fabricator-preview-front', $css_url, [], FABRICATOR_FORMS_VERSION);
-        $preview_styles->add_inline_style('fabricator-preview-front', implode("\n", $field_css) . "\n" . $base_css);
+        $preview_styles->add_inline_style('fabricator-preview-front', $base_css);
+        foreach ($front_assets['styles'] as $handle => $path) {
+            $preview_styles->add($handle, FABRICATOR_FORMS_URL . $path, ['fabricator-preview-front'], FABRICATOR_FORMS_VERSION);
+        }
         $preview_styles->add(
             'fabricator-preview-toolbar',
             FABRICATOR_FORMS_URL . 'assets/css/admin-preview-toolbar.css',
@@ -408,14 +406,19 @@ class FormEditor
             FABRICATOR_FORMS_VERSION
         );
         ob_start();
-        $preview_styles->do_items(['fabricator-preview-fontawesome', 'fabricator-preview-front', 'fabricator-preview-toolbar']);
+        $preview_styles->do_items(
+            array_merge(['fabricator-preview-fontawesome', 'fabricator-preview-front'], array_keys($front_assets['styles']), ['fabricator-preview-toolbar'])
+        );
         $styles_html = (string) ob_get_clean();
 
         $preview_scripts = new \WP_Scripts();
+        foreach ($front_assets['scripts'] as $handle => $path) {
+            $preview_scripts->add($handle, FABRICATOR_FORMS_URL . $path, [], FABRICATOR_FORMS_VERSION);
+        }
         $preview_scripts->add(
             'fabricator-preview-front',
             FABRICATOR_FORMS_URL . 'assets/js/front.js',
-            [],
+            array_keys($front_assets['scripts']),
             FABRICATOR_FORMS_VERSION
         );
         $preview_scripts->add(
@@ -424,7 +427,7 @@ class FormEditor
             ['fabricator-preview-front'],
             FABRICATOR_FORMS_VERSION
         );
-        $preview_scripts->add_inline_script('fabricator-preview-front', $globals, 'before');
+        $preview_scripts->localize('fabricator-preview-front', 'FabricatorForms', $localization);
         ob_start();
         $preview_scripts->do_items(['fabricator-preview-front', 'fabricator-preview-toolbar']);
         $scripts_html = (string) ob_get_clean();
