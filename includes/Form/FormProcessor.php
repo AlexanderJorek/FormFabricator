@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -41,6 +41,10 @@ class FormProcessor
     // Sends allowed per IPv6 /48 in 5 minutes, across all forms: generous for one network, and a bound on its rows.
     private const SENDS_PER_PREFIX48 = 200;
 
+    // The submit nonce's action. It names no form: Plugin::ajaxGetToken() reads no request, and a nonce for any form is
+    // anyone's to fetch, so binding one would refuse nothing.
+    public const NONCE_ACTION = 'fabricator_forms_submit';
+
     // The submit button's place in the hidden set of resolveVisibility(); no field id can contain a NUL byte.
     private const SUBMIT_KEY = "\0submit";
 
@@ -54,9 +58,9 @@ class FormProcessor
     public static function handle(): void
     {
         /* ---- Nonce ---- */
-        // Bound to the form it was issued for (Plugin::ajaxGetToken()); nothing else is read before it is verified.
+        // Issued by Plugin::ajaxGetToken(); nothing else is read before it is verified.
         if (!isset($_POST['fabricator_nonce'], $_POST['form_id'])
-            || !wp_verify_nonce(sanitize_key(wp_unslash($_POST['fabricator_nonce'])), 'fabricator_forms_submit_' . absint(wp_unslash($_POST['form_id'])))
+            || !wp_verify_nonce(sanitize_key(wp_unslash($_POST['fabricator_nonce'])), self::NONCE_ACTION)
         ) {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
         }
@@ -66,11 +70,10 @@ class FormProcessor
         }
 
         /* ---- The answers, read once ---- */
-        // Fields read these, never the request, and record each answer as the visitor typed it, trimmed: a sanitizer would
-        // change it ("a<b and c>d" to "ad", "20%AB" to "20"), and a changed answer is a different statement (a mandate's
-        // account holder). What can't be recorded as typed is refused at its field instead (Utils\Text\AnswerText, below).
-        // Nothing is stored, and every place that shows an answer escapes it there.
-        $post  = wp_unslash($_POST);
+        // Fields read these, never the request. An answer is recorded as typed or refused, and front.js refuses what this
+        // sanitizer would change ("<", ">", a percent code such as "%20": Utils\Text\AnswerText, checked again below), so
+        // it changes no answer a visitor sends. Nothing is stored, and every place that shows an answer escapes it there.
+        $post  = map_deep(wp_unslash($_POST), 'sanitize_textarea_field');
         // Each part sanitized for what it is ($_FILES is never slashed). Field ids are saved through sanitize_text_field(),
         // so a key it would change matches no field.
         $files = [];
@@ -90,11 +93,12 @@ class FormProcessor
 
         /* ---- Replay-protection token ---- */
         // Not the nonce, which visitors share. Issued and signed per submit by Plugin::ajaxGetToken().
-        $submission_token = is_string($post['fabricator_submission_token'] ?? null) ? $post['fabricator_submission_token'] : '';
-        if ($submission_token === '' || !\FabricatorForms\Utils\Security\SingleUseToken::verifyIssued($submission_token, $form_id)) {
+        $submission_token = (is_string($_POST['fabricator_submission_token'] ?? null) ? sanitize_text_field(wp_unslash($_POST['fabricator_submission_token'])) : '');
+        if ($submission_token === '' || !\FabricatorForms\Utils\Security\SingleUseToken::verifyIssued($submission_token)) {
             wp_send_json_error(['message' => __('Security check failed.', 'formfabricator')], 403);
         }
-        $claim_key = 'submit_' . md5($submission_token . '_' . $form_id);
+        // One token, one submission, whichever form it was fetched for.
+        $claim_key = 'submit_' . md5($submission_token);
 
         /* ---- Load form ---- */
         $form = FormModel::get($form_id);

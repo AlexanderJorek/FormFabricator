@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['phone'] = function (fieldEl) {
     var inp = fieldEl.querySelector('input[type="tel"]');
     if (!inp || !inp.value.trim()) return null;
     var mode = inp.dataset.phoneMode || '';
@@ -27,4 +28,4 @@ function (fieldEl) {
         if (cmode === 'disallow' &&  inList) return blocked;
     }
     return null;
-}
+};

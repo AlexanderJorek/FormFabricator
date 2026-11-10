@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['radio'] = function (root) {
     /* Radio groups only: CheckboxField.js handles its own "Other" (fields don't depend on another field's script). */
     root.querySelectorAll('.fabricator-radio-group input[value="__other__"]').forEach(function (inp) {
         /* Idempotent: front.js re-runs field inits after every successful submit. */
@@ -17,4 +18,4 @@ function (root) {
         var ownerForm = inp.closest('form');
         if (ownerForm) ownerForm.addEventListener('fabricator:reset', sync);
     });
-}
+};

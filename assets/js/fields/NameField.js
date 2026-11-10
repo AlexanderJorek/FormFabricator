@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['name'] = function (root) {
     /* The salutation as a dropdown drawn by the page, like every other dropdown of the form: a native select's open list
        is drawn by the browser, without the form's border and shadow. The native select stays for the form data. */
     root.querySelectorAll('select.fabricator-name-prefix').forEach(function (native) {
@@ -101,4 +102,4 @@ function (root) {
         if (ownerForm) ownerForm.addEventListener('fabricator:reset', syncDisplay);
         buildOptions();
     });
-}
+};

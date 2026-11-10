@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -160,7 +160,7 @@ class TextareaField extends BaseField
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'textarea-word-limit', 'fn' => self::readFieldAsset('assets/js/fields/TextareaField.textarea-word-limit.js')]];
+        return [['rule' => 'textarea-word-limit', 'asset' => 'assets/js/fields/TextareaField.textarea-word-limit.js']];
     }
 
     /**

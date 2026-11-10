@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['debit-required'] = function (fieldEl) {
     // Required check disguised as a format rule (so per-sub-input error placement works); must honour FabricatorIgnoreRequired manually since it bypasses validatePage()'s required blocks.
     if (window.FabricatorIgnoreRequired) return null;
     var inputs = fieldEl.querySelectorAll('[data-debit-part]');
@@ -50,4 +51,4 @@ function (fieldEl) {
     }
     // Invalid, each message already at its part (validatePage() then writes none of its own).
     return missing ? true : null;
-}
+};

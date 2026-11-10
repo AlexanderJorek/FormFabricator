@@ -25,8 +25,13 @@ final class PreviewTest extends AjaxTestCase
         self::assertTrue($response['success'], 'response: ' . $response['raw'] . ' / died: ' . $response['died']);
         $page = (string) $response['data']['html'];
 
-        foreach (Assets::frontFieldAssets()['globals'] as $name => $literal) {
-            self::assertStringContainsString('window.' . $name . '=' . $literal . ';', $page, "$name as production assembles it");
+        $assets = Assets::frontFieldAssets();
+        foreach ($assets['styles'] as $path) {
+            self::assertMatchesRegularExpression('~<link[^>]+' . preg_quote($path, '~') . '~', $page, "$path as production enqueues it");
+        }
+        foreach ($assets['scripts'] as $path) {
+            self::assertMatchesRegularExpression('~<script[^>]+' . preg_quote($path, '~') . '~', $page, "$path as production enqueues it");
+            self::assertLessThan((int) strpos($page, 'assets/js/front.js'), (int) strpos($page, $path), "$path runs before front.js");
         }
         // The whole localization, not two strings of it: one the old copy left out.
         self::assertStringContainsString('"field_required"', $page);

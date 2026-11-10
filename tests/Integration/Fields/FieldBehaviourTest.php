@@ -1072,7 +1072,7 @@ final class FieldBehaviourTest extends TestCase
             return self::contains($h->render(array_merge($cfg, ['required'=>false]), 'f1'), 'fabricator-required-field');
         });
         $this->check('client empty check: unchecked box counts as empty', function () use ($h) {
-            $fn = (string) ($h->getClientEmptyCheck()['fn'] ?? '');
+            $fn = (string) file_get_contents(\FABRICATOR_FORMS_PATH . $h->clientEmptyCheckAsset());
             return self::contains($fn, ':checked', 'checkbox :checked empty check');
         });
         $this->check('render checked attr for truthy value', fn() => self::contains($h->render($cfg, 'f1', '1'), 'checked'));
@@ -1308,7 +1308,7 @@ final class FieldBehaviourTest extends TestCase
             self::$lastOut = $html;
             return !str_contains($html, '<script>') ? true : 'unescaped script tag in output';
         });
-        $this->check('getClientInit returns non-empty script', fn() => trim($h->getClientInit()) !== '' ? true : 'expected non-empty JS');
+        $this->check('clientInitAsset names a non-empty script', fn() => trim((string) file_get_contents(\FABRICATOR_FORMS_PATH . $h->clientInitAsset())) !== '' ? true : 'expected non-empty JS');
     }
 
     public function testPostData(): void

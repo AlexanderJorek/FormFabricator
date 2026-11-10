@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['time'] = function (root) {
     root.querySelectorAll('.fabricator-field--time input[type="time"]').forEach(function (inp) {
         if (inp._fabricatorTimeInit) return;
         inp._fabricatorTimeInit = true;
@@ -47,4 +48,4 @@ function (root) {
             });
         }
     });
-}
+};

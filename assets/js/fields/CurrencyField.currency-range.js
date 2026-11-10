@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['currency-range'] = function (fieldEl) {
     var inp = fieldEl.querySelector('input[type="number"]');
     if (!inp || inp.value.trim() === '') return null;
     var val = parseFloat(inp.value);
@@ -17,4 +18,4 @@ function (fieldEl) {
         return ((_i18n && _i18n.currency_max) || 'Maximum value: %s').replace('%s', max);
     }
     return null;
-}
+};

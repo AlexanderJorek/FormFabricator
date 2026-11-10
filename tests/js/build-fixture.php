@@ -4,7 +4,8 @@
  * Writes tests/js/.generated/fixture.json: what the PHP side hands front.js, for the Node test suite.
  *
  * - localization: Assets::frontLocalization(), the window.FabricatorForms object.
- * - globals:      Assets::frontFieldAssets()['globals'], every field's validators, empty checks and inits.
+ * - fieldAssets:  Assets::frontFieldAssets(), every field's stylesheet and scripts, which support/page.js runs.
+ * - fieldScripts: what each field type declares its scripts register (FieldAssetsTest's counterpart in the browser).
  * - conditionFixtures: real FormRenderer markup, one field per type conditioned directly and through a group.
  * - parity:       ConditionRule::holds()'s answer for every value × rule value × operator, so the JS
  *                 suite can check front.js decides each one the same way the server does.
@@ -83,7 +84,8 @@ foreach ($serverReads($sanitizeCorpus) as $i => [$asText, $asTextarea]) {
 // What an answer may hold: Utils\Text\AnswerText's verdict on each string, as a one-line and as a multi-line answer, for
 // front.js's answerProblem(). A text input can't hold a line break, so those are checked as a textarea only.
 $answerCorpus = [
-    'Ada Lovelace', '  Ada  ', 'a<b and c>d', '20%AB', 'AT&T R&D', 'Tom & Jerry;', '&foo;', '&amp', 'x&nbsp',
+    'Ada Lovelace', '  Ada  ', 'a<b and c>d', '3 < 5', 'a > b', '<', '20%AB', '%20', 'x%2fy', '50%', '50 % off', '100%ige',
+    '%G1', '%a', 'AT&T R&D', 'Tom & Jerry;', '&foo;', '&amp', 'x&nbsp',
     'Smith &amp; Co', 'caf&#233;', '&#x41;', '&copy; 2026', '&AMP;', "Ada\u{200B}Lovelace", "Ada\u{00AD}", "\u{FEFF}x",
     "\u{202E}abc", "a\u{2066}b", "a\u{061C}b", "a\u{200E}b", "tab\there", "a\u{0007}b", "a\u{007F}b", "a\u{0085}b",
     "a\u{2028}b", "a\u{2029}b", "\u{0645}\u{06CC}\u{200C}\u{062E}\u{0648}\u{0627}\u{0647}\u{0645}",
@@ -447,7 +449,7 @@ $signature      = [
 Brain\Monkey\Functions\when('wp_localize_script')->justReturn(true);
 Brain\Monkey\Functions\when('wp_add_inline_style')->justReturn(true);
 Brain\Monkey\Functions\when('wp_add_inline_script')->justReturn(true);
-// The enqueue render() backs up is the page's business; the suite hands front.js its globals itself (support/page.js).
+// The enqueue render() backs up is the page's business; the suite runs the field scripts itself (support/page.js).
 (new ReflectionProperty(Assets::class, 'front_assets_done'))->setValue(null, true);
 $openSesame = ['match' => 'all', 'rules' => [['field_id' => 'code', 'operator' => 'equals', 'value' => 'open']]];
 $formCases  = [
@@ -656,12 +658,31 @@ $altcha = [
     ],
 ];
 
+// Each script a field type declares, with the window global and key it must register (BaseField::clientInitAsset()).
+$fieldScripts = [];
+foreach (\FabricatorForms\Fields\FieldRegistry::all() as $type => $class) {
+    $handler  = new $class();
+    $declared = [
+        ['FabricatorFieldInits', (string) $type, $handler->clientInitAsset()],
+        ['FabricatorEmptyChecks', (string) $type, $handler->clientEmptyCheckAsset()],
+    ];
+    foreach ($declared as [$global, $key, $asset]) {
+        if ($asset !== '') {
+            $fieldScripts[] = ['type' => $type, 'global' => $global, 'key' => $key, 'asset' => $asset];
+        }
+    }
+    foreach ($handler->getClientValidation() as $rule) {
+        $fieldScripts[] = ['type' => $type, 'global' => 'FabricatorValidators', 'key' => $rule['rule'], 'asset' => $rule['asset']];
+    }
+}
+
 $fixture = [
     'admin'             => $admin,
     'altcha'            => $altcha,
     'forms'             => $forms,
     'localization'      => Assets::frontLocalization(),
-    'globals'           => Assets::frontFieldAssets()['globals'],
+    'fieldAssets'       => Assets::frontFieldAssets(),
+    'fieldScripts'      => $fieldScripts,
     'conditionFixtures' => $conditionFixtures,
     'parity'            => ['scalar' => $scalar, 'array' => $array],
     'cascades'          => $cascades,
@@ -682,5 +703,5 @@ if (!is_dir($dir) && !mkdir($dir, 0777, true)) {
 }
 $json = json_encode($fixture, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 file_put_contents($dir . '/fixture.json', $json . "\n");
-echo 'build-fixture: ' . count($fixture['globals']) . ' globals, ' . count($conditionFixtures) . ' condition fixtures, '
+echo 'build-fixture: ' . count($fixture['fieldAssets']['scripts']) . ' field scripts, ' . count($conditionFixtures) . ' condition fixtures, '
     . (count($scalar) + count($array)) . " parity cases\n";

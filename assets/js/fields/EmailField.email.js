@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['email'] = function (fieldEl) {
     var inp = fieldEl.querySelector('input[type="email"]');
     if (!inp || !inp.value.trim()) return null;
     var v = inp.value.trim().toLowerCase();
@@ -7,4 +8,4 @@ function (fieldEl) {
         return (_i18n && _i18n.email_invalid) || 'Please enter a valid email address.';
     // Allow/block patterns aren't replicated client-side — they can encode internal domain names; server validate() is authoritative.
     return null;
-}
+};

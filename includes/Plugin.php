@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -217,27 +217,21 @@ class Plugin
     }
 
     /**
-     * Mints a fresh nonce/token pair. Writes nothing and is not rate-limited, by design.
+     * Mints a fresh nonce/token pair. Reads no request, writes nothing and is not rate-limited, by design.
      *
-     * A per-address count here would write rows faster than the sweep removes them. The pair sends nothing by itself:
-     * FormProcessor::handle() checks both before its own per-address limit.
+     * Fetched right before a submission, so a page cached for days still sends. A per-address count here would write
+     * rows faster than the sweep removes them. The pair sends nothing by itself: FormProcessor::handle() checks both,
+     * and that the form exists, before its own per-address limit.
      *
      * @return void
      */
     public static function ajaxGetToken(): void
     {
-        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- endpoint mints the nonce/token pair itself, so there is nothing to verify yet (see method docblock).
-        $form_id = isset($_POST['form_id']) ? absint(wp_unslash($_POST['form_id'])) : 0;
-        if (!$form_id || !Form\FormModel::get($form_id)) {
-            wp_send_json_error();
-            return;
-        }
-
         wp_send_json_success(
             [
-            'nonce' => wp_create_nonce('fabricator_forms_submit_' . $form_id),
-            /* Replay protection (the nonce is shared by anonymous visitors), signed and bound to this form. */
-            'token' => Utils\Security\SingleUseToken::issue($form_id),
+            'nonce' => wp_create_nonce(Form\FormProcessor::NONCE_ACTION),
+            /* Replay protection (the nonce is shared by anonymous visitors), signed with its issue time. */
+            'token' => Utils\Security\SingleUseToken::issue(),
             ]
         );
     }

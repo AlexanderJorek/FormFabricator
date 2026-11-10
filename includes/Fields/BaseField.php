@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -28,24 +28,6 @@ defined('ABSPATH') || exit;
  */
 abstract class BaseField
 {
-    // In-memory cache so a field asset file (JS/CSS) is only ever read from disk once per
-    // request, even though multiple fields/requests call getStyles()/getClientInit() etc.
-    private static array $assetCache = [];
-
-    // Reads a field's own JS/CSS asset file instead of embedding it as a PHP string: WordPress.org rejects plugins
-    // that use HEREDOC/NOWDOC, whose contents its sniffers can't check for escaping.
-    protected static function readFieldAsset(string $relativePath): string
-    {
-        if (!isset(self::$assetCache[$relativePath])) {
-            // phpcs:ignore PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystemFunctions -- $relativePath is always a hardcoded literal at each call site, never request input.
-            $path = \FABRICATOR_FORMS_PATH . $relativePath;
-            // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents,PHPCS_SecurityAudit.BadFunctions.FilesystemFunctions.WarnFilesystem -- a local file, not a URL: the plugin's own asset file.
-            $contents = is_readable($path) ? file_get_contents($path) : false;
-            self::$assetCache[$relativePath] = $contents !== false ? rtrim($contents, "\r\n") : '';
-        }
-        return self::$assetCache[$relativePath];
-    }
-
     /**
      * Caps an array-valued raw POST value before sanitizing. Must run BEFORE any recursive-sanitize pass.
      *
@@ -291,7 +273,7 @@ abstract class BaseField
      */
     protected static function otherTextClientRule(): array
     {
-        return ['rule' => 'other-text-word-limit', 'fn' => self::readFieldAsset('assets/js/fields/BaseField.otherTextClientRule.js')];
+        return ['rule' => 'other-text-word-limit', 'asset' => 'assets/js/fields/BaseField.otherTextClientRule.js'];
     }
 
     // Field type slug. Constructors must stay side-effect free (registerDefaults() instantiates all).
@@ -588,42 +570,46 @@ abstract class BaseField
         return (string) $value;
     }
 
-    // Client-side empty-check function; [] uses the generic fallback (first
-    // visible input non-empty). Collected into window.FabricatorEmptyChecks.
-    public function getClientEmptyCheck(): array
+    /*
+     * A field's front-end code and styles are files of their own, never strings in PHP: each method below names one,
+     * relative to the plugin folder, and Assets::addFieldAssets() enqueues it on every page with a form. A script
+     * registers itself in the window global front.js reads, under the key named here (FieldAssetsTest checks it).
+     */
+
+    // The script with the field's blank check for the required check: it registers window.FabricatorEmptyChecks[type],
+    // a function (fieldEl) that returns true while the field is blank. '' uses the generic check (the first visible
+    // input non-empty).
+    public function clientEmptyCheckAsset(): string
     {
-        return [];
+        return '';
     }
 
-    // Client-side validation rules, collected into window.FabricatorValidators.
-    // Required/empty is handled implicitly — only declare FORMAT rules here. Each fn returns null when valid, the
-    // error text, or true when it wrote its message at the part that is wrong itself.
+    // Client-side validation rules: a list of ['rule' => name, 'asset' => script], each script registering
+    // window.FabricatorValidators[name]. Required/empty is handled implicitly — only declare FORMAT rules here. Each
+    // function returns null when valid, the error text, or true when it wrote its message at the part that is wrong
+    // itself.
     public function getClientValidation(): array
     {
         return [];
     }
 
     /**
-     * Returns the client-side initialisation script for this field type.
+     * The field's setup script: it registers window.FabricatorFieldInits[type], a function (root) that front.js calls
+     * with each form's root, and again after every successful submit.
      *
-     * Return a JS function string: function(root) { ... }
-     * Collected by Assets::frontFieldAssets() into window.FabricatorFieldInits.
-     *
-     * @return string
+     * @return string '' when the field has none.
      */
-    public function getClientInit(): string
+    public function clientInitAsset(): string
     {
         return '';
     }
 
     /**
-     * Returns field-specific CSS to inject inline on pages that load this form.
+     * The field's stylesheet, loaded after front.css on every page with a form.
      *
-     * Return raw CSS (no style tags). Empty string = no output.
-     *
-     * @return string
+     * @return string '' when the field has none.
      */
-    public function getStyles(): string
+    public function styleAsset(): string
     {
         return '';
     }

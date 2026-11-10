@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -27,9 +27,11 @@ defined('ABSPATH') || exit;
  * An answer is recorded as the visitor typed it, trimmed of the spaces around it, or refused: nothing in it is removed
  * or replaced, since a changed answer (a mandate's account holder) is a different statement. Refused is what can't be
  * read (invalid UTF-8), what nobody sees (control and format characters: direction controls, zero-width characters, the
- * soft hyphen), line breaks outside a multi-line answer, and HTML character references, which a page or email would show
- * as the character they name. Everything else, "<" and "%" included, is kept: every place that shows an answer escapes
- * it there. front.js runs the same check before sending (answerProblem()).
+ * soft hyphen), line breaks outside a multi-line answer, what WordPress's sanitizer would change ("<", ">" and a percent
+ * code such as "%20"; FormProcessor reads every answer through sanitize_textarea_field()), and HTML character
+ * references, which a page or email would show as the character they name. Everything else is kept, "&" and a "%" on
+ * its own included: every place that shows an answer escapes it there. front.js runs the same check before sending
+ * (answerProblem()), so the sanitizer never changes an answer a visitor sends.
  */
 final class AnswerText
 {
@@ -67,6 +69,19 @@ final class AnswerText
                 /* translators: %s: the character's code point, e.g. "U+200B". */
                 __('This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it.', 'formfabricator'),
                 sprintf('U+%04X', mb_ord($m[0], 'UTF-8'))
+            );
+        }
+        // sanitize_textarea_field() removes what reads as a tag ("<b>…>") and writes a lone "<" as "&lt;"; ">" goes with
+        // it, so the rule is one a visitor can remember.
+        if (preg_match('/[<>]/', $text) === 1) {
+            return __('This answer can\'t hold "<" or ">". Please write it without them.', 'formfabricator');
+        }
+        // It also removes "%" and two hex digits, which reads as a percent-encoded byte.
+        if (preg_match('/%[0-9a-f]{2}/i', $text, $code) === 1) {
+            return sprintf(
+                /* translators: %s: the letters in the answer that read as a character code, e.g. "%20". */
+                __('This answer contains "%s", which would be read as a character code. Please put a space after the percent sign.', 'formfabricator'),
+                $code[0]
             );
         }
         // An email or page shows "&amp;" or "&#65;" as the character it names, not as typed: escaping leaves such a

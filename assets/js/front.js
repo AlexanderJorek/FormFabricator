@@ -21,7 +21,8 @@
     }
 
     /* ── Field-type init functions ───────────────────────────────────────── */
-    /* Populated by Assets::frontFieldAssets() from each field's getClientInit(); front.js needs no field-type knowledge. */
+    /* window.FabricatorFieldInits, filled by each field's own setup script (BaseField::clientInitAsset()), which loads
+       before this one; front.js needs no field-type knowledge. */
 
     /* ── Validator registry ───────────────────────────────────────────────── */
     /* Mirrors each field's PHP validate() — keep both in sync or they'll silently drift. */
@@ -61,6 +62,15 @@
             return (i18n.answer_invisible || 'This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it.')
                 .replace('%s', codePoint(m[0]));
         }
+        /* What the server's sanitizer would change: a tag-like "<…>", a lone "<", a percent code such as "%20". */
+        if (/[<>]/.test(text)) {
+            return i18n.answer_angle || 'This answer can\'t hold "<" or ">". Please write it without them.';
+        }
+        var code = /%[0-9a-f]{2}/i.exec(text);
+        if (code) {
+            return (i18n.answer_percent || 'This answer contains "%s", which would be read as a character code. Please put a space after the percent sign.')
+                .replace('%s', code[0]);
+        }
         var refs = text.match(CHAR_REFERENCE) || [];
         for (var i = 0; i < refs.length; i++) {
             if (namesCharacter(refs[i])) {
@@ -71,15 +81,28 @@
     }
 
     /* The first problem among the field's typed inputs (text boxes and textareas; not a hidden input, a choice or a
-       file), or ''. Field types whose answers aren't typed (BaseField::typedAnswer()) are skipped by the caller. */
+       file) and the input that holds it, or null. Field types whose answers aren't typed (BaseField::typedAnswer())
+       are skipped by the caller. */
     function fieldAnswerProblem(fieldEl, i18n) {
         var inputs = fieldEl.querySelectorAll('textarea, input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="url"], input[type="number"], input[type="search"]');
         for (var i = 0; i < inputs.length; i++) {
             if (inputs[i].disabled) continue;
             var problem = answerProblem(inputs[i].value || '', inputs[i].tagName === 'TEXTAREA', i18n);
-            if (problem) return problem;
+            if (problem) return { message: problem, input: inputs[i] };
         }
-        return '';
+        return null;
+    }
+
+    /* The error slot beside an input, in the same container: a part's own (an expanded Name or Address, a mandate's
+       account details, a signature's place), or a plain field's. null when there is none, and the field's first
+       slot takes the message. */
+    function slotBeside(input) {
+        var container = input.parentNode;
+        if (!container) return null;
+        for (var i = 0; i < container.children.length; i++) {
+            if (container.children[i].matches(ERROR_SLOTS)) return container.children[i];
+        }
+        return null;
     }
 
     function validatePage(scope) {
@@ -118,8 +141,8 @@
             return false;
         }
 
-        var skipTypes      = window.FabricatorSkipValidation || [];
-        var untypedTypes   = window.FabricatorUntypedAnswers || [];
+        var skipTypes      = (window.FabricatorForms || {}).skipValidation || [];
+        var untypedTypes   = (window.FabricatorForms || {}).untypedAnswers || [];
         var ignoreRequired = !!window.FabricatorIgnoreRequired;
         scope.querySelectorAll('.fabricator-field').forEach(function (fieldEl) {
             var type = (fieldEl.className.match(/fabricator-field--(\S+)/) || [])[1] || '';
@@ -154,10 +177,18 @@
 
             /* 3 — What the answer holds: the server refuses the same (Utils\Text\AnswerText) */
             if (untypedTypes.indexOf(type) === -1) {
-                var problem = fieldAnswerProblem(fieldEl, i18n);
-                if (problem) {
+                var found = fieldAnswerProblem(fieldEl, i18n);
+                if (found) {
                     hasInvalid = true;
-                    markError(fieldEl, problem);
+                    /* At the part that holds it: the field's first slot may be another part's (an expanded Name's
+                       salutation). */
+                    var slot = slotBeside(found.input);
+                    if (slot) {
+                        if (!slot.textContent) slot.textContent = found.message;
+                        if (!firstError) firstError = fieldEl;
+                    } else {
+                        markError(fieldEl, found.message);
+                    }
                     return;
                 }
             }
@@ -739,7 +770,7 @@
                 /* Nonce/token fetched fresh here, never rendered into HTML, so a full-page cache can't hand two visitors the same replay token. */
                 fetch(ajaxUrl, {
                     method: 'POST',
-                    body: new URLSearchParams({ action: 'fabricator_forms_get_token', form_id: form.dataset.formId || '' }),
+                    body: new URLSearchParams({ action: 'fabricator_forms_get_token' }),
                     credentials: 'same-origin',
                 })
                 .then(function (r) { return r.json(); })

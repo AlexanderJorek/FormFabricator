@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['captcha'] = function (root) {
     /* The ALTCHA widget reads its texts from $altcha.i18n under its language attribute ("fabricator"). Registers the
        field's translated texts there, over the widget's English ones so a text it adds later still shows. The store is
        reactive: a widget already on the page switches over at once. */
@@ -17,4 +18,4 @@ function (root) {
             window.customElements.whenDefined('altcha-widget').then(function () { register(widget); });
         }
     });
-}
+};

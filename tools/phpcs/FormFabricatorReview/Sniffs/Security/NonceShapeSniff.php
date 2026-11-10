@@ -18,6 +18,7 @@ use PHP_CodeSniffer\Util\Tokens;
 final class NonceShapeSniff implements Sniff
 {
     private const CHECKS = ['wp_verify_nonce', 'check_ajax_referer', 'check_admin_referer'];
+    private const SUPERGLOBALS = ['$_POST', '$_GET', '$_REQUEST', '$_COOKIE', '$_SERVER', '$_FILES', '$_ENV'];
 
     /** Scopes a nonce check may sit in: the handler itself, its class, a try block. */
     private const TOP_LEVEL = [T_CLASS, T_TRAIT, T_ENUM, T_ANON_CLASS, T_FUNCTION, T_CLOSURE, T_TRY, T_NAMESPACE];
@@ -229,6 +230,10 @@ final class NonceShapeSniff implements Sniff
 
     /**
      * add_action('wp_ajax_…' | 'admin_post_…', callback) with a callback in this file: the callback checks a nonce.
+     *
+     * Except a public endpoint that reads no request: a handler the file also registers for the same action's
+     * wp_ajax_nopriv_ hook, with no superglobal in its body, has no input whose origin a nonce could vouch for (the
+     * reviewers flag a handler's input, "no nonce check found validating input origin").
      */
     private function checkHandler(File $file, int $ptr): void
     {
@@ -251,10 +256,17 @@ final class NonceShapeSniff implements Sniff
         if ($declared === null || !isset($tokens[$declared]['scope_opener'], $tokens[$declared]['scope_closer'])) {
             return;
         }
+        $reads = false;
         for ($i = $tokens[$declared]['scope_opener']; $i < $tokens[$declared]['scope_closer']; $i++) {
             if ($tokens[$i]['code'] === T_STRING && in_array(strtolower($tokens[$i]['content']), self::CHECKS, true)) {
                 return;
             }
+            if ($tokens[$i]['code'] === T_VARIABLE && in_array($tokens[$i]['content'], self::SUPERGLOBALS, true)) {
+                $reads = true;
+            }
+        }
+        if (!$reads && $this->isPublic($file, $hook, $function)) {
+            return;
         }
         $file->addError(
             'The %s handler %s() checks no nonce; check it in the handler itself, before it reads input or acts',
@@ -262,6 +274,35 @@ final class NonceShapeSniff implements Sniff
             'HandlerWithoutNonce',
             [$hook, $function]
         );
+    }
+
+    /**
+     * Whether this file registers $function for the wp_ajax_nopriv_ hook of $hook's action too.
+     */
+    private function isPublic(File $file, string $hook, string $function): bool
+    {
+        if (str_starts_with($hook, 'wp_ajax_nopriv_')) {
+            return true;
+        }
+        if (!str_starts_with($hook, 'wp_ajax_')) {
+            return false;
+        }
+        $public = 'wp_ajax_nopriv_' . substr($hook, strlen('wp_ajax_'));
+        $tokens = $file->getTokens();
+        $i      = 0;
+        while (($i = $file->findNext(T_STRING, $i + 1)) !== false) {
+            if (strtolower($tokens[$i]['content']) !== 'add_action' || !Expr::isFunctionCall($file, $i)) {
+                continue;
+            }
+            $args = Expr::args($file, (int) $file->findNext(Tokens::$emptyTokens, $i + 1, null, true));
+            if (count($args) >= 2 && $args[0][1] - $args[0][0] === 1 && $tokens[$args[0][0]]['code'] === T_CONSTANT_ENCAPSED_STRING
+                && Expr::literalText($tokens[$args[0][0]]['content']) === $public
+                && $this->callbackName($file, $args[1]) === $function
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

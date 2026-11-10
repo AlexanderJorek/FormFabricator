@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -201,15 +201,23 @@ class FormSanitizer
 
     /**
      * A value an answer is compared with (an option's value, a rule's value) as the browser posts it: sanitized as text,
-     * then as plain characters, since answers are recorded as typed. sanitize_text_field() writes a lone "<" as "&lt;",
-     * which a form shows and posts as "<". Escaped wherever it is printed.
+     * then as plain characters, since answers are recorded as typed (sanitize_text_field() writes "&" as "&amp;", which a
+     * form shows and posts as "&"). "<", ">" and a percent code such as "%20" are left out: no answer holds one
+     * (Utils\Text\AnswerText), and FormProcessor reads every posted value through sanitize_textarea_field(), which would
+     * change it, so a value with one could never match. Escaped wherever it is printed.
      *
      * @param mixed $raw The saved value.
      * @return string
      */
     private static function answerText(mixed $raw): string
     {
-        return html_entity_decode(\sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($raw)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = html_entity_decode(\sanitize_text_field(\FabricatorForms\Utils\Cast::stringOrDefault($raw)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // Again until none is left: taking out "%4" from "%%41" leaves "%41".
+        do {
+            $before = $text;
+            $text   = (string) preg_replace('/[<>]|%[0-9a-f]{2}/i', '', $text);
+        } while ($text !== $before);
+        return trim($text);
     }
 
     /**
