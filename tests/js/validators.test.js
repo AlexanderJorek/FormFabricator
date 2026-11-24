@@ -117,6 +117,37 @@ test('website-url', () => {
     }
 });
 
+test('website: a pasted address\'s percent codes for non-ASCII characters become the characters', () => {
+    const w = page.window;
+    const form = w.document.createElement('form');
+    form.innerHTML = '<div class="fabricator-field fabricator-field--website"><input type="url" data-validate-url="1"></div>';
+    w.document.body.appendChild(form);
+    w.FabricatorFieldInits.website(form);
+    const inp = form.querySelector('input');
+    const leave = (value) => {
+        inp.value = value;
+        inp.dispatchEvent(new w.Event('change'));
+        return inp.value;
+    };
+    assert.equal(leave('https://de.wikipedia.org/wiki/M%C3%BCnchen'), 'https://de.wikipedia.org/wiki/München');
+    assert.equal(leave('https://x.org/%E6%BC%A2%E5%AD%97?q=%C3%A9t%C3%A9'), 'https://x.org/漢字?q=été');
+    // ASCII codes change what the address means when written out; they stay, and the answer check refuses them.
+    assert.equal(leave('https://x.org/a%2Fb?x=%26y%20z'), 'https://x.org/a%2Fb?x=%26y%20z');
+    assert.equal(leave('https://x.org/%C3'), 'https://x.org/%C3', 'no UTF-8: as it is');
+    assert.equal(leave('https://x.org/%C3%BC%2F'), 'https://x.org/ü%2F');
+    // Enter sends without leaving the field.
+    inp.value = 'https://x.org/%C3%BC';
+    form.dispatchEvent(new w.Event('submit', { cancelable: true }));
+    assert.equal(inp.value, 'https://x.org/ü');
+    w.FabricatorFieldInits.website(form);
+    inp.value = 'https://x.org/%C3%BC';
+    let inputs = 0;
+    inp.addEventListener('input', () => inputs++);
+    inp.dispatchEvent(new w.Event('change'));
+    assert.equal(inputs, 1, 'set up once, however often the init runs; conditions hear the change');
+    form.remove();
+});
+
 test('checkbox-count', () => {
     // CheckboxField::render() writes each message with its plural form already chosen; the validator shows it as is.
     const group = (min, max, checked) => '<div class="fabricator-checkbox-group" data-min-selections="' + min + '" data-max-selections="' + max + '"'

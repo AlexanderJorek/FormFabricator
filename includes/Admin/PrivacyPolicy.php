@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -44,13 +44,13 @@ class PrivacyPolicy
         $langs = ['en' => ['name' => 'English', 'text' => self::plainText('en')]];
         // Asked of WordPress's own registry, which is what loads the translation once the locale is switched: a
         // language pack's .mo or .l10n.php, in WP_LANG_DIR/plugins or wherever a filter puts it.
-        global $wp_textdomain_registry;
-        if (!$wp_textdomain_registry instanceof \WP_Textdomain_Registry) {
+        $registry = $GLOBALS['wp_textdomain_registry'] ?? null;
+        if (!$registry instanceof \WP_Textdomain_Registry) {
             return $langs;
         }
         $seen = [$langs['en']['text'] => true];
         foreach (array_unique(get_available_languages()) as $locale) {
-            if (!is_string($locale) || isset($langs[$locale]) || $wp_textdomain_registry->get('formfabricator', $locale) === false) {
+            if (!is_string($locale) || isset($langs[$locale]) || $registry->get('formfabricator', $locale) === false) {
                 continue;
             }
             $text = self::plainText($locale);

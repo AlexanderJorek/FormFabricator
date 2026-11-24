@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -76,13 +76,13 @@ class UploadField extends BaseField
     ];
 
     /**
-     * Returns field-specific CSS styles.
+     * The field's stylesheet, relative to the plugin folder.
      *
      * @return string
      */
-    public function getStyles(): string
+    public function styleAsset(): string
     {
-        return self::readFieldAsset('assets/css/fields/UploadField.css');
+        return 'assets/css/fields/UploadField.css';
     }
 
     /**
@@ -128,13 +128,13 @@ class UploadField extends BaseField
     }
 
     /**
-     * Returns client-side initialization JavaScript function body.
+     * The field's setup script, relative to the plugin folder: it registers window.FabricatorFieldInits['upload'].
      *
      * @return string
      */
-    public function getClientInit(): string
+    public function clientInitAsset(): string
     {
-        return self::readFieldAsset('assets/js/fields/UploadField.js');
+        return 'assets/js/fields/UploadField.js';
     }
 
     /**

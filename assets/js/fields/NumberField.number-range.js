@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['number-range'] = function (fieldEl) {
     var inp = fieldEl.querySelector('input[type="number"]');
     if (!inp || inp.value.trim() === '') return null;
     var val = parseFloat(inp.value);
@@ -32,4 +33,4 @@ function (fieldEl) {
         return (_i18n && _i18n.number_not_positive_int) || 'Please enter a positive whole number.';
     }
     return null;
-}
+};

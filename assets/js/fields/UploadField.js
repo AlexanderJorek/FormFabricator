@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['upload'] = function (root) {
     root.querySelectorAll('.fabricator-upload-zone').forEach(function (zone) {
         /* Idempotent: front.js re-runs field inits after every successful submit, which stacked drop/change/reset listeners. */
         if (zone._fabricatorUploadInited) return;
@@ -192,4 +193,4 @@ function (root) {
             applyFiles(e.dataTransfer.files);
         });
     });
-}
+};

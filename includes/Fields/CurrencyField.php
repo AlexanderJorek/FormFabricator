@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -50,13 +50,13 @@ class CurrencyField extends BaseField
     }
 
     /**
-     * Returns field-specific CSS styles.
+     * The field's stylesheet, relative to the plugin folder.
      *
      * @return string
      */
-    public function getStyles(): string
+    public function styleAsset(): string
     {
-        return self::readFieldAsset('assets/css/fields/CurrencyField.css');
+        return 'assets/css/fields/CurrencyField.css';
     }
     /**
      * Returns the Font Awesome icon class.
@@ -139,7 +139,7 @@ class CurrencyField extends BaseField
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'currency-range', 'fn' => self::readFieldAsset('assets/js/fields/CurrencyField.currency-range.js')]];
+        return [['rule' => 'currency-range', 'asset' => 'assets/js/fields/CurrencyField.currency-range.js']];
     }
 
     /**

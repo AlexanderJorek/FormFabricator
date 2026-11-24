@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['example'] = function (root) {
     root.querySelectorAll('.fabricator-example-widget').forEach(function (widget) {
         /* Idempotent: front.js re-runs every field init after each successful submit, so without this guard every
            submit would attach one more click handler. */
@@ -8,4 +9,4 @@ function (root) {
             // ... interaction logic
         });
     });
-}
+};

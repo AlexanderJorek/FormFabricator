@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -29,13 +29,13 @@ defined('ABSPATH') || exit;
 class RadioField extends BaseField
 {
     /**
-     * Returns field-specific CSS styles.
+     * The field's stylesheet, relative to the plugin folder.
      *
      * @return string
      */
-    public function getStyles(): string
+    public function styleAsset(): string
     {
-        return self::readFieldAsset('assets/css/fields/RadioField.css');
+        return 'assets/css/fields/RadioField.css';
     }
 
     /**
@@ -77,23 +77,24 @@ class RadioField extends BaseField
     }
 
     /**
-     * Returns client-side initialization JavaScript function body.
+     * The field's setup script, relative to the plugin folder: it registers window.FabricatorFieldInits['radio'].
      *
      * @return string
      */
-    public function getClientInit(): string
+    public function clientInitAsset(): string
     {
-        return self::readFieldAsset('assets/js/fields/RadioField.js');
+        return 'assets/js/fields/RadioField.js';
     }
 
     /**
-     * Returns the client-side empty-check function for required validation.
+     * The script with the field's blank check for the required check, relative to the plugin folder: it registers
+     * window.FabricatorEmptyChecks['radio'].
      *
-     * @return array
+     * @return string
      */
-    public function getClientEmptyCheck(): array
+    public function clientEmptyCheckAsset(): string
     {
-        return ['fn' => "function(f){return !f.querySelector('input[type=\"radio\"]:checked');}"];
+        return 'assets/js/fields/RadioField.emptycheck.js';
     }
 
     /**

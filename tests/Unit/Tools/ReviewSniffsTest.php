@@ -91,6 +91,21 @@ final class ReviewSniffsTest extends TestCase
             'class C { public static function init() { add_action(\'wp_ajax_x\', [self::class, \'h\']); } public static function h() {} }',
             ['NonceShape.HandlerWithoutNonce'],
         ];
+        yield 'a public handler reading no request' => [
+            'class C { public static function init() { add_action(\'wp_ajax_x\', [self::class, \'h\']); '
+                . 'add_action(\'wp_ajax_nopriv_x\', [self::class, \'h\']); } public static function h() { wp_send_json_success(); } }',
+            [],
+        ];
+        yield 'a public handler reading the request' => [
+            'class C { public static function init() { add_action(\'wp_ajax_x\', [self::class, \'h\']); '
+                . 'add_action(\'wp_ajax_nopriv_x\', [self::class, \'h\']); } public static function h() { $a = $_POST; } }',
+            ['NonceShape.HandlerWithoutNonce', 'NonceShape.HandlerWithoutNonce', 'RequestInput.NotSanitizedInPlace'],
+        ];
+        yield 'a logged-in handler reading no request' => [
+            'class C { public static function init() { add_action(\'wp_ajax_x\', [self::class, \'h\']); } '
+                . 'public static function h() { wp_send_json_success(); } }',
+            ['NonceShape.HandlerWithoutNonce'],
+        ];
         yield 'a handler with its nonce'      => [
             'class C { public static function init() { add_action(\'wp_ajax_x\', [self::class, \'h\']); } '
                 . 'public static function h() { check_ajax_referer(\'a\', \'n\'); } }',

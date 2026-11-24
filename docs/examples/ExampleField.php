@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -63,8 +63,10 @@ defined('ABSPATH') || exit;
  * RULES EVERY FIELD FOLLOWS
  * ─────────────────────────
  *   • Field classes never call each other; a helper several fields need goes in includes/Utils.
- *   • No HEREDOC/NOWDOC. CSS and JS go in their own files (assets/css/fields/, assets/js/fields/, named after the
- *     class, e.g. MyField.css or MyField.my-rule.js) and are read with self::readFieldAsset().
+ *   • No HEREDOC/NOWDOC, and no CSS or JS in PHP. They go in their own files (assets/css/fields/, assets/js/fields/,
+ *     named after the class, e.g. MyField.css or MyField.my-rule.js), which the field names by their path and
+ *     Assets enqueues. A script registers its function in the window global front.js reads, under the field's type
+ *     or rule name.
  *   • Prefer a BaseField hook over checking ($field['type'] === '...') elsewhere in the plugin.
  *   • $config is what was saved or imported, not merged with getDefaultConfig(): read every key with a default.
  *   • Strings are English and translated: __('…', 'formfabricator'), with a "// translators:" comment directly above
@@ -74,9 +76,9 @@ defined('ABSPATH') || exit;
  * WHAT TO OVERRIDE, BY NEED
  * ─────────────────────────
  *   Format validation             validate() + getClientValidation()
- *   Interactive widget            getClientInit()
- *   Field-specific CSS            getStyles()
- *   Custom blank check            getClientEmptyCheck()
+ *   Interactive widget            clientInitAsset()
+ *   Field-specific CSS            styleAsset()
+ *   Custom blank check            clientEmptyCheckAsset()
  *   Settings in the builder       getDefaultConfig(), getGeneralSchema(), getAdvancedSchema()
  *   Label-like settings           plainTextConfigKeys() (anything else is sanitized as HTML)
  *   Several inputs or $_FILES     extractValue(), map(), labelsOwnControl(), conditionValue()
@@ -88,8 +90,8 @@ defined('ABSPATH') || exit;
  * FIELD LIFECYCLE
  * ───────────────
  *   Builder               getDefaultConfig(), getGeneralSchema(), getAdvancedSchema(), sanitizeConfigValue()
- *   Page with a form      getStyles(), getClientInit(), getClientEmptyCheck(), getClientValidation() (every field
- *                         type's, inlined by Assets::frontFieldAssets()); enqueueFrontScripts(); render()
+ *   Page with a form      styleAsset(), clientInitAsset(), clientEmptyCheckAsset(), getClientValidation() (every
+ *                         field type's files, enqueued by Assets::frontFieldAssets()); enqueueFrontScripts(); render()
  *   Submission            extractValue() → conditionValue() → validate() → mapNormalized() (→ map()) → pdfData()
  *
  * WHERE TO LOOK
@@ -224,27 +226,28 @@ class ExampleField extends BaseField
     //  STYLES
     // ═══════════════════════════════════════════════════════
     //
-    //  Raw CSS, no <style> tags, from its own file. Every field type's CSS is inlined after front.css on any page
-    //  with a form, so front.css's variables and .fabricator-input rules apply. '' (the default) for none.
+    //  The path of the field's stylesheet, relative to the plugin folder. Every field type's stylesheet loads after
+    //  front.css on any page with a form, so front.css's variables and .fabricator-input rules apply. '' (the
+    //  default) for none.
 
     /**
-     * Field-specific CSS.
+     * The field's stylesheet.
      *
      * @return string
      */
-    public function getStyles(): string
+    public function styleAsset(): string
     {
         return '';
     }
 
     /**
-     * EXAMPLE (unused) — the CSS of the composite layout above.
+     * EXAMPLE (unused) — the stylesheet of the composite layout above.
      *
      * @return string
      */
     private function exampleStylesComposite(): string
     {
-        return self::readFieldAsset('assets/css/fields/ExampleField.stylesComposite.css');
+        return 'assets/css/fields/ExampleField.stylesComposite.css';
     }
 
 
@@ -372,8 +375,8 @@ class ExampleField extends BaseField
     //  CLIENT-SIDE INIT
     // ═══════════════════════════════════════════════════════
     //
-    //  A JS function expression, function (root) { … }, from its own file, collected into
-    //  window.FabricatorFieldInits by field type. front.js calls it with each form's root, and again after every
+    //  The path of a script that registers window.FabricatorFieldInits[type] = function (root) { … } (see
+    //  ExampleField.clientInitClickHandler.js). front.js calls it with each form's root, and again after every
     //  successful send, so it must be idempotent: mark each element once and skip it next time. front.js's own
     //  helpers are not available. Text comes from window.FabricatorForms.i18n (Assets::frontLocalization()), with an
     //  English fallback. '' for none.
@@ -382,11 +385,11 @@ class ExampleField extends BaseField
     //  dispatches fabricator:upload-overflow ({ total, max }) on the <form> (see UploadField.js).
 
     /**
-     * The client-side init function.
+     * The client-side init script.
      *
      * @return string
      */
-    public function getClientInit(): string
+    public function clientInitAsset(): string
     {
         return '';
     }
@@ -398,7 +401,7 @@ class ExampleField extends BaseField
      */
     private function exampleClientInitClickHandler(): string
     {
-        return self::readFieldAsset('assets/js/fields/ExampleField.clientInitClickHandler.js');
+        return 'assets/js/fields/ExampleField.clientInitClickHandler.js';
     }
 
 
@@ -406,32 +409,24 @@ class ExampleField extends BaseField
     //  CLIENT-SIDE CHECKS
     // ═══════════════════════════════════════════════════════
     //
-    //  getClientEmptyCheck(): ['fn' => 'function (fieldEl) { return isBlank; }'], for the required check when
-    //  "blank" isn't "the first visible input is empty". [] uses that fallback.
+    //  clientEmptyCheckAsset(): a script that registers window.FabricatorEmptyChecks[type] = function (fieldEl)
+    //  { return isBlank; }, for the required check when "blank" isn't "the first visible input is empty". '' uses
+    //  that fallback.
     //
-    //  getClientValidation(): a list of ['rule' => name, 'fn' => function (fieldEl)], run only when the field has
-    //  content; fn returns null, the error text, or true once it wrote the message at the part that is wrong itself
+    //  getClientValidation(): a list of ['rule' => name, 'asset' => script], each script registering
+    //  window.FabricatorValidators[name] = function (fieldEl), run only when the field has content; it returns
+    //  null, the error text, or true once it wrote the message at the part that is wrong itself
     //  (a composite field's sub-input). Rule names are global, and the first field to use a name wins,
     //  so prefix them with the type. wrap() lists them in data-validate.
 
     /**
-     * The client-side blank check; [] for the generic one.
+     * The client-side blank check's script; '' for the generic one.
      *
-     * @return array
+     * @return string
      */
-    public function getClientEmptyCheck(): array
+    public function clientEmptyCheckAsset(): string
     {
-        return [];
-    }
-
-    /**
-     * EXAMPLE (unused) — blank while no checkbox is ticked. A one-line function may stay inline.
-     *
-     * @return array
-     */
-    private function exampleClientEmptyCheckCheckboxGroup(): array
-    {
-        return ['fn' => "function(f){ return !f.querySelector('input[type=\"checkbox\"]:checked'); }"];
+        return '';
     }
 
     /**
@@ -442,8 +437,8 @@ class ExampleField extends BaseField
     public function getClientValidation(): array
     {
         return [[
-            'rule' => 'example-zip',
-            'fn'   => self::readFieldAsset('assets/js/fields/ExampleField.clientValidationZip.js'),
+            'rule'  => 'example-zip',
+            'asset' => 'assets/js/fields/ExampleField.clientValidationZip.js',
         ]];
     }
 

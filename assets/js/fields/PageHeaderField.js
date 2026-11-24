@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['page-header'] = function (root) {
     root.querySelectorAll('.fabricator-page-header').forEach(function (headerEl) {
         if (headerEl.dataset.fabricatorStepsInit) return;
         headerEl.dataset.fabricatorStepsInit = '1';
@@ -60,4 +61,4 @@ function (root) {
         });
         update(0, 0);
     });
-}
+};

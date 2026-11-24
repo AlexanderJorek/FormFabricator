@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -44,28 +44,28 @@ class SingleUseToken
     public const CLAIM_TTL = 90000;
 
     /**
-     * Mints a submission token bound to $form_id and its issue time: "<uuid>.<issued>.<hmac>".
+     * Mints a submission token bound to its issue time: "<uuid>.<issued>.<hmac>".
      *
-     * Stateless, so the token endpoint can't grow the options table; only a validated submission claims one.
+     * Stateless, so the token endpoint can't grow the options table; only a validated submission claims one. It names
+     * no form: anyone may fetch a token for any form, so a form binding would refuse nothing an attacker can't get
+     * around, and the endpoint reads no request at all.
      *
-     * @param int $form_id Form the token is valid for.
      * @return string Token for the fabricator_submission_token field.
      */
-    public static function issue(int $form_id): string
+    public static function issue(): string
     {
         $id     = wp_generate_uuid4();
         $issued = time();
-        return $id . '.' . $issued . '.' . self::sign($id, $issued, $form_id);
+        return $id . '.' . $issued . '.' . self::sign($id, $issued);
     }
 
     /**
-     * Checks that a token was issued by issue() for this form and has not expired.
+     * Checks that a token was issued by issue() and has not expired.
      *
-     * @param string $token   Submitted token.
-     * @param int    $form_id Form being submitted.
+     * @param string $token Submitted token.
      * @return bool True for a genuine, unexpired token.
      */
-    public static function verifyIssued(string $token, int $form_id): bool
+    public static function verifyIssued(string $token): bool
     {
         $parts = explode('.', $token);
         if (count($parts) !== 3) {
@@ -83,20 +83,19 @@ class SingleUseToken
         if ($age < -300 || $age > self::ISSUED_MAX_AGE) {
             return false;
         }
-        return hash_equals(self::sign($id, (int) $issued, $form_id), $mac);
+        return hash_equals(self::sign($id, (int) $issued), $mac);
     }
 
     /**
      * HMAC over everything the token binds.
      *
-     * @param string $id      Token uuid.
-     * @param int    $issued  Issue timestamp.
-     * @param int    $form_id Form the token is valid for.
+     * @param string $id     Token uuid.
+     * @param int    $issued Issue timestamp.
      * @return string Hex HMAC-SHA256.
      */
-    private static function sign(string $id, int $issued, int $form_id): string
+    private static function sign(string $id, int $issued): string
     {
-        return hash_hmac('sha256', 'fabricator_submission|' . $form_id . '|' . $id . '|' . $issued, wp_salt('nonce'));
+        return hash_hmac('sha256', 'fabricator_submission|' . $id . '|' . $issued, wp_salt('nonce'));
     }
 
     /**

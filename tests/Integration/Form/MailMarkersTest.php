@@ -81,20 +81,20 @@ final class MailMarkersTest extends AjaxTestCase
         self::assertSame([], self::sentMail());
     }
 
-    public function testALessThanSignReachesTheMailAsTyped(): void
+    public function testAnAmpersandReachesTheMailAsTyped(): void
     {
-        // sanitize_text_field() stores a lone "<" as "&lt;"; the mail must show "<", in both parts, not "&lt;".
+        // Escaped once: the HTML part shows "&amp;", the plain part "&", neither "&amp;amp;".
         $form = $this->createForm(self::FIELDS, [self::notification(['automation_markers' => true])]);
 
-        $r = $this->submit($form, ['name' => 'Price < 100 EUR', 'sign' => 'Ada L.']);
+        $r = $this->submit($form, ['name' => 'Smith & Sons', 'sign' => 'Ada L.']);
 
         self::assertTrue($r['success'], (string) wp_json_encode($r));
         $body  = (string) self::sentMail()[0]->body;
         $plain = substr($body, 0, (int) strpos($body, 'text/html'));
         $html  = substr($body, (int) strpos($body, 'text/html'));
-        self::assertStringContainsString('[FABRICATOR_FIELD_name]Price &lt; 100 EUR[FABRICATOR_FIELD_END]', $html);
-        self::assertStringNotContainsString('&amp;lt;', $html);
-        self::assertStringContainsString('Price < 100 EUR', $plain);
+        self::assertStringContainsString('[FABRICATOR_FIELD_name]Smith &amp; Sons[FABRICATOR_FIELD_END]', $html);
+        self::assertStringNotContainsString('&amp;amp;', $html);
+        self::assertStringContainsString('Smith & Sons', $plain);
     }
 
     private const NAME = [

@@ -1,10 +1,13 @@
 name: Tests
 
-# The release gates from tools/build.php, on every push and pull request, on Linux — TESTING.md §0 asks for a non-Windows
+# The release gates from tools/build.php, on every push to a branch, on Linux — TESTING.md §0 asks for a non-Windows
 # host, since the release build usually runs on Windows and file handling differs between the two.
+# Only pushes: a pull request from this repository shows the checks of its branch's last push, the same commit, so a
+# pull_request trigger would run everything twice. A pull request from a fork is not tested. A tag names a commit its
+# branch push already tested, so tags start nothing either.
 on:
   push:
-  pull_request:
+    branches: ['**']
 
 permissions:
   contents: read
@@ -14,7 +17,7 @@ permissions:
 
 jobs:
   lint:
-    name: phpcs, security sniffs, .pot
+    name: Lint (code style, security, translation template)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -23,16 +26,17 @@ jobs:
           php-version: '8.3'
           extensions: gd, fileinfo, mbstring
           coverage: none
-      - run: composer install --no-interaction --no-progress
-      - name: PSR gate (.phpcs.xml)
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress
+      - name: Code style (.phpcs.xml)
         run: vendor/bin/phpcs -q --runtime-set ignore_warnings_on_exit 1
-      - name: Security gate (.phpcs-security.xml, errors only)
+      - name: Security sniffs (.phpcs-security.xml, errors only)
         run: vendor/bin/phpcs -q -n --standard=.phpcs-security.xml
-      - name: languages/formfabricator.pot is current
+      - name: Translation template is current (languages/formfabricator.pot)
         run: php languages/make-pot.php --check
 
   phpunit:
-    name: unit + perf (PHP ${{ matrix.php }})
+    name: PHP unit and performance tests (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -48,11 +52,13 @@ jobs:
           # covers the other path.
           extensions: gd, fileinfo, mbstring, openssl, zlib, intl
           coverage: none
-      - run: composer install --no-interaction --no-progress
-      - run: vendor/bin/phpunit -c tests/phpunit.xml.dist --testsuite unit,perf
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress
+      - name: Unit and performance tests
+        run: vendor/bin/phpunit -c tests/phpunit.xml.dist --testsuite unit,perf
 
   integration:
-    name: WordPress integration (PHP ${{ matrix.php }}, ${{ matrix.site }})
+    name: WordPress integration tests (PHP ${{ matrix.php }}, ${{ matrix.site == 'multisite' && 'multisite network' || 'single site' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -81,12 +87,14 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: gd, fileinfo, mbstring, openssl, zlib, mysqli, intl
           coverage: none
-      - run: composer install --no-interaction --no-progress
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress
       # Real WordPress (vendor/roots/wordpress-no-content) against this MySQL; every table in it is recreated.
-      - run: vendor/bin/phpunit -c tests/phpunit-integration.xml.dist
+      - name: Integration tests
+        run: vendor/bin/phpunit -c tests/phpunit-integration.xml.dist
 
   js:
-    name: JS suite (Node ${{ matrix.node }})
+    name: JavaScript tests (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -104,12 +112,15 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - run: composer install --no-interaction --no-progress
-      - run: npm ci --no-audit --no-fund
-      - run: npm test
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress
+      - name: Install Node dependencies
+        run: npm ci --no-audit --no-fund
+      - name: JavaScript tests
+        run: npm test
 
   e2e:
-    name: E2E (Chromium, Firefox, WebKit)
+    name: Browser tests (Chromium, Firefox, WebKit)
     # Pinned: Playwright builds its WebKit for named Ubuntu releases, and the one ubuntu-latest moved to (26.04) has
     # none yet, so WebKit can't start there (libicudata.so.74 missing). Move on once a Playwright release supports it.
     runs-on: ubuntu-24.04
@@ -140,8 +151,10 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: composer install --no-interaction --no-progress
-      - run: npm ci --no-audit --no-fund
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress
+      - name: Install Node dependencies
+        run: npm ci --no-audit --no-fund
       # The runner's Google Chrome serves as Chromium (tests/e2e/support/browsers.js); Firefox and WebKit, Safari's
       # engine, are Playwright's own builds, kept between runs for the Playwright version package-lock.json pins.
       - name: Playwright version
@@ -167,10 +180,10 @@ jobs:
             sleep 10
           done
           exit 1
-      - name: Firefox and WebKit
+      - name: Install Firefox and WebKit
         timeout-minutes: 10
         run: npx playwright install firefox webkit
       # The site is installed afresh on this MySQL (tables prefixed e2e_) and served by `php -S`.
-      - name: E2E suite
+      - name: Browser tests
         timeout-minutes: 20
         run: npx playwright test -c tests/e2e

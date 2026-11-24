@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['slider-range'] = function (fieldEl) {
     var wrap = fieldEl.querySelector('.fabricator-slider-wrap');
     if (!wrap) return null;
     var min  = parseFloat(wrap.dataset.min);
@@ -35,4 +36,4 @@ function (fieldEl) {
         if (offStep(val)) return stepMsg;
     }
     return null;
-}
+};

@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -37,13 +37,13 @@ class SignatureField extends BaseField
         . '</svg>';
 
     /**
-     * Returns field-specific CSS styles.
+     * The field's stylesheet, relative to the plugin folder.
      *
      * @return string
      */
-    public function getStyles(): string
+    public function styleAsset(): string
     {
-        return self::readFieldAsset('assets/css/fields/SignatureField.css');
+        return 'assets/css/fields/SignatureField.css';
     }
 
     /**
@@ -85,13 +85,13 @@ class SignatureField extends BaseField
     }
 
     /**
-     * Returns client-side initialization JavaScript function body.
+     * The field's setup script, relative to the plugin folder: it registers window.FabricatorFieldInits['signature'].
      *
      * @return string
      */
-    public function getClientInit(): string
+    public function clientInitAsset(): string
     {
-        return self::readFieldAsset('assets/js/fields/SignatureField.js');
+        return 'assets/js/fields/SignatureField.js';
     }
 
     /**
@@ -101,7 +101,7 @@ class SignatureField extends BaseField
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'signature-place', 'fn' => self::readFieldAsset('assets/js/fields/SignatureField.place.js')]];
+        return [['rule' => 'signature-place', 'asset' => 'assets/js/fields/SignatureField.place.js']];
     }
 
     /**
@@ -299,9 +299,15 @@ class SignatureField extends BaseField
     }
 
     // front.js's generic empty-check ignores type="hidden" inputs, which is all this field has.
-    public function getClientEmptyCheck(): array
+    /**
+     * The script with the field's blank check for the required check, relative to the plugin folder: it registers
+     * window.FabricatorEmptyChecks['signature'].
+     *
+     * @return string
+     */
+    public function clientEmptyCheckAsset(): string
     {
-        return ['fn' => "function(f){var i=f.querySelector('input[type=\"hidden\"]');return !i||i.value==='';}"];
+        return 'assets/js/fields/SignatureField.emptycheck.js';
     }
 
     /**

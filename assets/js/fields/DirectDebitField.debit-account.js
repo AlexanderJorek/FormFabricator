@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['debit-account'] = function (fieldEl) {
     // Mirrors DirectDebitField::checkPart('account'): Bacs 8 digits, ACH 4 to 17, spaces and hyphens ignored.
     var inp = fieldEl.querySelector('.fabricator-debit-account');
     if (!inp || !inp.value.trim()) return null;
@@ -12,4 +13,4 @@ function (fieldEl) {
     if (err && !err.textContent) err.textContent = msg;
     // Invalid, its message already at the part (validatePage() then writes none of its own).
     return true;
-}
+};

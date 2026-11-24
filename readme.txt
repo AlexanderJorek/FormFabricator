@@ -4,7 +4,7 @@ Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -122,6 +122,13 @@ Replaced keys stay on your site, so older PDFs remain checkable. After a server 
 Deactivating keeps everything. Deleting removes all forms, settings, seal keys and stored files for good, so keep your key backup files.
 
 == Changelog ==
+
+= 1.1.2 =
+* Changed: answers can no longer hold "<", ">", or a percent sign followed by two letters or digits that read as a character code (such as "%20"); the form says so at the field before sending. A "%" on its own ("50%", "50 % off") is still fine. This narrows 1.1.1's "answers are recorded exactly as typed": what WordPress's sanitizer would change is now refused instead.
+* Changed: an address pasted into a Website field with percent codes for non-ASCII characters ("…/M%C3%BCnchen", as browsers copy it) is shown with the characters themselves ("…/München").
+* Changed: in the form builder, option values and condition values no longer keep "<", ">" or such percent codes when saved, since no answer can hold them.
+* Changed: a form's field styles and scripts now load as files the browser can cache, instead of being written into every page with a form.
+* Changed: updated the bundled PDF reader (smalot/pdfparser) to 2.13.1.
 
 = 1.1.1 =
 * New: a Signature field records when it was signed ("Signed on", the label is a setting).

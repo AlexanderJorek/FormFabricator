@@ -10,8 +10,8 @@ docs/CONTRIBUTING.md, which applies in full:
 
 @docs/CONTRIBUTING.md
 
-The design decisions listed there under "Front-end assets" (form selections rendering every listed form, inlined field
-assets) are known, accepted trade-offs. Don't re-report them.
+The design decisions listed there under "Front-end assets" (form selections rendering every listed form, every field
+type's files on every form page) are known, accepted trade-offs. Don't re-report them.
 
 Code comments must stand on their own: never cite CLAUDE.md (it is not published) or a version number or past bug in a
 comment. Point to CONTRIBUTING.md only from dev-only files; shipped code states the rule in the comment itself.

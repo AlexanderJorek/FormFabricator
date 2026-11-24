@@ -327,7 +327,7 @@ final class ServerChecksTest extends AjaxTestCase
         \FabricatorForms\Utils\Storage\PrivateDir::removeTree($mail_dir);
         file_put_contents($mail_dir, 'not a folder');
         $form  = $this->createForm([self::uploadField('doc', 'Document')], [self::notification(['attach_uploads' => true])]);
-        $token = SingleUseToken::issue($form);
+        $token = SingleUseToken::issue();
         $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
 
         try {
@@ -371,7 +371,7 @@ final class ServerChecksTest extends AjaxTestCase
         // handler as if the request had died there.
         Overrides::$shutdownFunctions = [];
         $form  = $this->createForm([self::uploadField('doc', 'Document')], [self::notification()]);
-        $token = SingleUseToken::issue($form);
+        $token = SingleUseToken::issue();
         $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
         self::assertTrue($this->submit($form, [], $token)['success']);
         $oom   = ['type' => E_ERROR, 'message' => 'Allowed memory size of 134217728 bytes exhausted (tried to allocate 20480 bytes)'];
@@ -393,7 +393,7 @@ final class ServerChecksTest extends AjaxTestCase
     {
         Overrides::$shutdownFunctions = [];
         $form  = $this->createForm([self::uploadField('doc', 'Document')], [self::notification()]);
-        $token = SingleUseToken::issue($form);
+        $token = SingleUseToken::issue();
         $_FILES = ['doc' => $this->upload('terms.pdf', self::content('pdf'))];
         self::assertTrue($this->submit($form, [], $token)['success']);
         add_filter('wp_fatal_error_handler_enabled', '__return_false');

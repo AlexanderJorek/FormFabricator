@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -55,19 +55,26 @@ class CaptchaField extends BaseField
     }
 
     /**
-     * Hands the ALTCHA widget the field's translated texts.
+     * The field's setup script, relative to the plugin folder: it registers window.FabricatorFieldInits['captcha'],
+     * which hands the ALTCHA widget the field's translated texts.
      *
      * @return string
      */
-    public function getClientInit(): string
+    public function clientInitAsset(): string
     {
-        return self::readFieldAsset('assets/js/fields/CaptchaField.js');
+        return 'assets/js/fields/CaptchaField.js';
     }
 
     // front.js's generic empty-check skips hidden inputs and would read the ALTCHA widget's own checkbox, never empty.
-    public function getClientEmptyCheck(): array
+    /**
+     * The script with the field's blank check for the required check, relative to the plugin folder: it registers
+     * window.FabricatorEmptyChecks['captcha'].
+     *
+     * @return string
+     */
+    public function clientEmptyCheckAsset(): string
     {
-        return ['fn' => self::readFieldAsset('assets/js/fields/CaptchaField.emptycheck.js')];
+        return 'assets/js/fields/CaptchaField.emptycheck.js';
     }
 
     /**

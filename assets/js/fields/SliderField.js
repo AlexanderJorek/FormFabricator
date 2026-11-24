@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['slider'] = function (root) {
     root.querySelectorAll('.fabricator-slider-wrap').forEach(function (wrap) {
         /* Idempotent: front.js re-runs every field init after a successful submit, and a second pass stacked listeners
            whose closures held stale values and fought the current ones on keyboard input. */
@@ -165,4 +166,4 @@ function (root) {
             }
         }
     });
-}
+};

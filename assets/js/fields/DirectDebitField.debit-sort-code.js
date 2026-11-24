@@ -1,4 +1,5 @@
-function (fieldEl) {
+window.FabricatorValidators = window.FabricatorValidators || {};
+window.FabricatorValidators['debit-sort-code'] = function (fieldEl) {
     // Mirrors DirectDebitField::checkPart('sort_code'): six digits, spaces and hyphens ignored.
     var inp = fieldEl.querySelector('.fabricator-debit-sort-code');
     if (!inp || !inp.value.trim()) return null;
@@ -8,4 +9,4 @@ function (fieldEl) {
     if (err && !err.textContent) err.textContent = (_i18n && _i18n.debit_sort_code_invalid) || 'Please enter a valid sort code (6 digits).';
     // Invalid, its message already at the part (validatePage() then writes none of its own).
     return true;
-}
+};

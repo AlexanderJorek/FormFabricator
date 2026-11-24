@@ -1,1 +1,2 @@
-function(){return false;}
+window.FabricatorEmptyChecks = window.FabricatorEmptyChecks || {};
+window.FabricatorEmptyChecks['directdebit'] = function(){return false;};

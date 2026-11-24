@@ -17,8 +17,8 @@
 // phpcs:disable WordPress.PHP.NoSilencedErrors.Discouraged
 // phpcs:disable WordPress.WP.AlternativeFunctions
 
-const FABPC_PLUGIN_CHECK_VERSION = '2.1.0';
-const FABPC_PLUGIN_CHECK_SHA256  = '6ff4bd2145f3befcf907df158cc466b1649dafed5686de8369907403c3013fc4';
+const FABPC_PLUGIN_CHECK_VERSION = '2.2.0';
+const FABPC_PLUGIN_CHECK_SHA256  = 'c9d26a644c4be2f7eb6223e837b2b38a9780a7873e7db30f49507412d541243b';
 const FABPC_WP_CLI_VERSION       = '2.12.0';
 const FABPC_WP_CLI_SHA256        = 'ce34ddd838f7351d6759068d09793f26755463b4a4610a5a5c0a97b68220d85c';
 

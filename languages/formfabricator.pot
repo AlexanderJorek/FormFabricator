@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: FormFabricator 1.1.1\n"
+"Project-Id-Version: FormFabricator 1.1.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/formfabricator\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-31T16:29:51+00:00\n"
+"POT-Creation-Date: 2026-11-10T17:15:46+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: FormFabricator languages/make-pot.php\n"
 "X-Domain: formfabricator\n"
@@ -17,7 +17,7 @@ msgstr ""
 #. Plugin Name of the plugin
 #: formfabricator.php
 #: includes/Admin/FormList.php:91
-#: includes/Plugin.php:257
+#: includes/Plugin.php:251
 msgid "FormFabricator"
 msgstr ""
 
@@ -55,8 +55,8 @@ msgid "Administrators always have full access. User exceptions grant access in a
 msgstr ""
 
 #: includes/Admin/AccessSettings.php:62
-#: includes/Fields/CaptchaField.php:126
-#: includes/Utils/Assets.php:614
+#: includes/Fields/CaptchaField.php:133
+#: includes/Utils/Assets.php:601
 msgid "Loading…"
 msgstr ""
 
@@ -87,7 +87,7 @@ msgstr ""
 #: includes/Admin/SealKeySettings.php:431
 #: includes/Admin/SealKeySettings.php:633
 #: includes/Admin/SealKeySettings.php:673
-#: includes/Fields/CaptchaField.php:121
+#: includes/Fields/CaptchaField.php:128
 msgid "Cancel"
 msgstr ""
 
@@ -107,13 +107,13 @@ msgid "Unknown user (#%d)"
 msgstr ""
 
 #: includes/Admin/AccessSettings.php:174
-#: includes/Admin/FormEditor.php:881
+#: includes/Admin/FormEditor.php:884
 msgid "List"
 msgstr ""
 
 #: includes/Admin/AccessSettings.php:175
 #: includes/Admin/FormList.php:168
-#: includes/Plugin.php:255
+#: includes/Plugin.php:249
 msgid "Forms"
 msgstr ""
 
@@ -128,7 +128,7 @@ msgid "Verifier"
 msgstr ""
 
 #: includes/Admin/AccessSettings.php:178
-#: includes/Admin/FormEditor.php:852
+#: includes/Admin/FormEditor.php:855
 #: includes/Admin/FormSettings.php:81
 #: includes/Admin/FormSettings.php:194
 msgid "Settings"
@@ -184,7 +184,7 @@ msgstr ""
 
 #: includes/Admin/FormEditor.php:71
 #: includes/Admin/FormEditor.php:180
-#: includes/Admin/FormEditor.php:525
+#: includes/Admin/FormEditor.php:528
 #: includes/Utils/Storage/AdminLock.php:73
 msgid "another user"
 msgstr ""
@@ -199,7 +199,7 @@ msgstr ""
 
 #: includes/Admin/FormEditor.php:134
 #: includes/Admin/FormEditor.php:187
-#: includes/Admin/FormEditor.php:802
+#: includes/Admin/FormEditor.php:805
 msgid "New Form"
 msgstr ""
 
@@ -212,16 +212,16 @@ msgid "Permission denied."
 msgstr ""
 
 #: includes/Admin/FormEditor.php:191
-#: includes/Admin/FormEditor.php:803
+#: includes/Admin/FormEditor.php:806
 #: includes/Form/FormRenderer.php:85
-#: includes/Form/FormSanitizer.php:402
+#: includes/Form/FormSanitizer.php:410
 msgid "Submit"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:192
-#: includes/Admin/FormEditor.php:805
-#: includes/Form/FormProcessor.php:123
-#: includes/Form/FormProcessor.php:449
+#: includes/Admin/FormEditor.php:808
+#: includes/Form/FormProcessor.php:127
+#: includes/Form/FormProcessor.php:453
 msgid "Thank you for your submission!"
 msgstr ""
 
@@ -252,14 +252,14 @@ msgstr ""
 
 #: includes/Admin/FormEditor.php:276
 #: includes/Admin/FormEditor.php:277
-#: includes/Admin/FormEditor.php:434
-#: includes/Admin/FormEditor.php:949
-#: includes/Admin/FormEditor.php:1046
+#: includes/Admin/FormEditor.php:437
+#: includes/Admin/FormEditor.php:952
+#: includes/Admin/FormEditor.php:1049
 msgid "Preview"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:283
-#: includes/Admin/VerificationPage.php:2067
+#: includes/Admin/VerificationPage.php:2076
 msgid "Fields"
 msgstr ""
 
@@ -279,1230 +279,1230 @@ msgstr ""
 #: includes/Admin/FormList.php:536
 #: includes/Form/FormModel.php:169
 #: includes/Form/FormModel.php:214
-#: includes/Form/FormProcessor.php:102
+#: includes/Form/FormProcessor.php:106
 msgid "Form not found."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:378
+#: includes/Admin/FormEditor.php:373
 msgid "Ignore required fields"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:458
+#: includes/Admin/FormEditor.php:461
 msgid "Please wait a few minutes before sending another test email."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:464
+#: includes/Admin/FormEditor.php:467
 msgid "Your user account has no valid email address to send the test to."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:477
+#: includes/Admin/FormEditor.php:480
 msgid "The test email could not be sent. Ask the site's administrator to check its mail setup."
 msgstr ""
 
 #. translators: %s: the reason the mail function gave.
-#: includes/Admin/FormEditor.php:481
+#: includes/Admin/FormEditor.php:484
 #, php-format
 msgid "The test email could not be sent: %s"
 msgstr ""
 
 #. translators: %s: the current user's email address.
-#: includes/Admin/FormEditor.php:487
+#: includes/Admin/FormEditor.php:490
 #, php-format
 msgid "Test email sent to %s. If it does not arrive, check the spam folder, then the site's mail setup."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:508
+#: includes/Admin/FormEditor.php:511
 msgid "Invalid form data"
 msgstr ""
 
 #. translators: %s: display name of the user currently editing this form.
-#: includes/Admin/FormEditor.php:524
+#: includes/Admin/FormEditor.php:527
 #, php-format
 msgid "This form is currently locked for editing by %s."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:592
+#: includes/Admin/FormEditor.php:595
 msgid "Form saved."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:601
+#: includes/Admin/FormEditor.php:604
 msgid "This form has no active notification, so visitors cannot send it. Add or enable a notification in the notification settings of this form."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:604
+#: includes/Admin/FormEditor.php:607
 msgid "A Direct Debit Mandate has no mandate text, so visitors cannot give it. Enter the text your bank or payment provider requires in the field's settings."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:621
+#: includes/Admin/FormEditor.php:624
 msgid "Could not save this form — one of the fields may contain content the editor could not process (check any HTML blocks for malformed markup). Please review the fields and try again."
 msgstr ""
 
 #. translators: %s: notification names, comma-separated.
-#: includes/Admin/FormEditor.php:642
+#: includes/Admin/FormEditor.php:645
 #, php-format
 msgid "Content was removed from the message of these notifications because email may not carry it (scripts, embedded content, event handlers, external stylesheets, or tags and styles outside the email-safe set). Check the message: %s."
 msgstr ""
 
 #. translators: %s: notification names, comma-separated.
-#: includes/Admin/FormEditor.php:666
+#: includes/Admin/FormEditor.php:669
 #, php-format
 msgid "Signatures reach recipients only in the attached PDF, if the PDF Layout shows them, or with \"Attach uploaded files\". These notifications have neither, so their email only says a signature is present: %s."
 msgstr ""
 
 #. translators: %s: what the mandate leaves out, comma-separated, e.g. "Creditor name, Mandate reference".
-#: includes/Admin/FormEditor.php:723
+#: includes/Admin/FormEditor.php:726
 #, php-format
 msgid "A Direct Debit Mandate does not name: %s. Visitors give bank details without knowing who collects, and banks cannot use it. Enter them in the field's settings, or ignore this if the mandate text names them."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:756
+#: includes/Admin/FormEditor.php:759
 msgid "A Consent field still shows its placeholder text, which names no purpose and no way to withdraw, so it is not valid consent. Write what the visitor agrees to and how they can withdraw it."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:760
+#: includes/Admin/FormEditor.php:763
 msgid "A Consent field has no text, so the visitor agrees to nothing. Write what the visitor agrees to and how they can withdraw it."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:774
+#: includes/Admin/FormEditor.php:777
 msgid "Notification 1"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:779
-#: includes/Admin/FormEditor.php:810
+#: includes/Admin/FormEditor.php:782
+#: includes/Admin/FormEditor.php:813
 msgid "New Entry: {form_title}"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:781
+#: includes/Admin/FormEditor.php:784
 msgid "A new entry has been received.<br><br>{all_fields}"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:804
+#: includes/Admin/FormEditor.php:807
 #: includes/Form/FormRenderer.php:86
-#: includes/Form/FormSanitizer.php:403
-#: includes/Utils/Assets.php:134
+#: includes/Form/FormSanitizer.php:411
+#: includes/Utils/Assets.php:141
 msgid "Sending…"
 msgstr ""
 
 #. translators: %d: running number of the notification being added.
-#: includes/Admin/FormEditor.php:809
+#: includes/Admin/FormEditor.php:812
 #, php-format
 msgid "Notification %d"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:811
-#: includes/Admin/FormEditor.php:929
+#: includes/Admin/FormEditor.php:814
+#: includes/Admin/FormEditor.php:932
 msgid "Option"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:812
-#: includes/Admin/FormEditor.php:871
-#: includes/Admin/FormEditor.php:930
+#: includes/Admin/FormEditor.php:815
+#: includes/Admin/FormEditor.php:874
+#: includes/Admin/FormEditor.php:933
 msgid "Value"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:813
-#: includes/Admin/FormEditor.php:950
+#: includes/Admin/FormEditor.php:816
+#: includes/Admin/FormEditor.php:953
 msgid "Visual"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:814
-#: includes/Admin/FormEditor.php:948
+#: includes/Admin/FormEditor.php:817
+#: includes/Admin/FormEditor.php:951
 msgid "Code"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:815
+#: includes/Admin/FormEditor.php:818
 msgid "No"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:816
+#: includes/Admin/FormEditor.php:819
 msgid "Yes"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:819
+#: includes/Admin/FormEditor.php:822
 msgid "Unsaved changes"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:820
+#: includes/Admin/FormEditor.php:823
 msgid "This form has unsaved changes. Leave anyway?"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:821
+#: includes/Admin/FormEditor.php:824
 msgid "Stay"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:822
+#: includes/Admin/FormEditor.php:825
 msgid "Leave"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:825
+#: includes/Admin/FormEditor.php:828
 msgid "None"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:826
+#: includes/Admin/FormEditor.php:829
 msgid "Integers only"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:827
+#: includes/Admin/FormEditor.php:830
 msgid "Positive numbers"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:828
+#: includes/Admin/FormEditor.php:831
 msgid "Positive integers"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:831
+#: includes/Admin/FormEditor.php:834
 #: includes/Admin/FormList.php:714
 msgid "is equal to"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:832
+#: includes/Admin/FormEditor.php:835
 #: includes/Admin/FormList.php:715
 msgid "is not equal to"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:833
+#: includes/Admin/FormEditor.php:836
 #: includes/Admin/FormList.php:716
 msgid "contains"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:834
+#: includes/Admin/FormEditor.php:837
 #: includes/Admin/FormList.php:717
 msgid "does not contain"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:835
+#: includes/Admin/FormEditor.php:838
 #: includes/Admin/FormList.php:718
 msgid "is empty"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:836
+#: includes/Admin/FormEditor.php:839
 #: includes/Admin/FormList.php:719
 msgid "is not empty"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:837
+#: includes/Admin/FormEditor.php:840
 #: includes/Admin/FormList.php:720
 msgid "is greater than"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:838
+#: includes/Admin/FormEditor.php:841
 #: includes/Admin/FormList.php:721
 msgid "is less than"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:841
+#: includes/Admin/FormEditor.php:844
 msgid "No fields found."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:842
+#: includes/Admin/FormEditor.php:845
 msgid "No fields yet"
 msgstr ""
 
 #. translators: %s: the "Add field" button's name, shown in bold (substituted client-side).
-#: includes/Admin/FormEditor.php:844
+#: includes/Admin/FormEditor.php:847
 #, php-format
 msgid "Add your first field via %s"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:845
+#: includes/Admin/FormEditor.php:848
 msgid "(no label)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:846
-#: includes/Admin/FormEditor.php:866
+#: includes/Admin/FormEditor.php:849
+#: includes/Admin/FormEditor.php:869
 #: includes/Admin/FormList.php:379
 #: includes/Admin/FormSelectList.php:284
 msgid "Edit"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:847
+#: includes/Admin/FormEditor.php:850
 #: includes/Admin/FormList.php:185
 #: includes/Admin/FormList.php:391
 msgid "Duplicate"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:848
-#: includes/Admin/FormEditor.php:886
+#: includes/Admin/FormEditor.php:851
+#: includes/Admin/FormEditor.php:889
 #: includes/Admin/FormSelectList.php:509
-#: includes/Utils/Assets.php:598
+#: includes/Utils/Assets.php:585
 msgid "Remove"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:849
+#: includes/Admin/FormEditor.php:852
 msgid "copied"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:850
+#: includes/Admin/FormEditor.php:853
 #: includes/Fields/GroupField.php:185
 #: includes/Fields/GroupField.php:286
 msgid "Field group"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:851
+#: includes/Admin/FormEditor.php:854
 msgid "Add fields to group"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:853
+#: includes/Admin/FormEditor.php:856
 msgid "Conditions active"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:856
+#: includes/Admin/FormEditor.php:859
 msgid "Add field"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:857
+#: includes/Admin/FormEditor.php:860
 msgid "Search field type…"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:860
+#: includes/Admin/FormEditor.php:863
 msgid "Field settings"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:861
+#: includes/Admin/FormEditor.php:864
 msgid "Copy field ID"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:862
+#: includes/Admin/FormEditor.php:865
 #: includes/Admin/FormSelectList.php:170
 msgid "General"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:863
+#: includes/Admin/FormEditor.php:866
 #: includes/Fields/FieldRegistry.php:231
 msgid "Advanced"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:864
+#: includes/Admin/FormEditor.php:867
 msgid "Conditions"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:865
-#: includes/Utils/Assets.php:623
+#: includes/Admin/FormEditor.php:868
+#: includes/Utils/Assets.php:610
 msgid "Done"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:867
-#: includes/Admin/FormEditor.php:939
-#: includes/Admin/FormEditor.php:1027
+#: includes/Admin/FormEditor.php:870
+#: includes/Admin/FormEditor.php:942
+#: includes/Admin/FormEditor.php:1030
 #: includes/Admin/FormSelectList.php:187
 #: includes/Admin/FormSelectList.php:506
 msgid "Label"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:868
+#: includes/Admin/FormEditor.php:871
 msgid "Hide label"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:869
+#: includes/Admin/FormEditor.php:872
 msgid "Required field"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:870
+#: includes/Admin/FormEditor.php:873
 msgid "(no other fields)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:872
+#: includes/Admin/FormEditor.php:875
 msgid "Media library"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:873
+#: includes/Admin/FormEditor.php:876
 msgid "Use"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:874
+#: includes/Admin/FormEditor.php:877
 #: includes/Admin/PDFLayoutEditor.php:612
 msgid "Image URL:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:875
+#: includes/Admin/FormEditor.php:878
 msgid "Enter link URL:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:878
+#: includes/Admin/FormEditor.php:881
 #: includes/Admin/PDFLayoutEditor.php:640
 msgid "Bold"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:879
+#: includes/Admin/FormEditor.php:882
 #: includes/Admin/PDFLayoutEditor.php:641
 msgid "Italic"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:880
+#: includes/Admin/FormEditor.php:883
 #: includes/Admin/PDFLayoutEditor.php:642
 msgid "Underline"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:882
+#: includes/Admin/FormEditor.php:885
 msgid "Numbered list"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:883
+#: includes/Admin/FormEditor.php:886
 msgid "Link"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:887
+#: includes/Admin/FormEditor.php:890
 msgid "Whole values"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:888
+#: includes/Admin/FormEditor.php:891
 msgid "Half values"
 msgstr ""
 
 #. translators: %d: page number (substituted client-side).
-#: includes/Admin/FormEditor.php:890
+#: includes/Admin/FormEditor.php:893
 #, php-format
 msgid "Page %d"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:891
+#: includes/Admin/FormEditor.php:894
 msgid "Use in emails:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:892
+#: includes/Admin/FormEditor.php:895
 msgid "Field ID"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:895
+#: includes/Admin/FormEditor.php:898
 msgid "Validation"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:896
+#: includes/Admin/FormEditor.php:899
 msgid "Validation rule"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:897
+#: includes/Admin/FormEditor.php:900
 msgid "Browser autocomplete"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:898
+#: includes/Admin/FormEditor.php:901
 msgid "Enable browser autofill"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:899
+#: includes/Admin/FormEditor.php:902
 msgid "Autocomplete value"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:900
+#: includes/Admin/FormEditor.php:903
 msgid "E.g. \"name\", \"email\", \"tel\". Empty = browser default."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:901
+#: includes/Admin/FormEditor.php:904
 msgid "Appearance"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:902
+#: includes/Admin/FormEditor.php:905
 msgid "CSS class(es)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:903
+#: includes/Admin/FormEditor.php:906
 msgid "Separate multiple classes with spaces."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:906
+#: includes/Admin/FormEditor.php:909
 msgid "Country filter"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:907
+#: includes/Admin/FormEditor.php:910
 msgid "Country list"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:908
+#: includes/Admin/FormEditor.php:911
 #: includes/Fields/EmailField.php:204
 msgid "Off"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:909
+#: includes/Admin/FormEditor.php:912
 #: includes/Fields/EmailField.php:204
 msgid "Allowed"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:910
+#: includes/Admin/FormEditor.php:913
 msgid "Disallowed"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:911
+#: includes/Admin/FormEditor.php:914
 msgid "Format validation"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:912
+#: includes/Admin/FormEditor.php:915
 msgid "Any valid format: min. 7 digits, optionally with + and country code."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:913
+#: includes/Admin/FormEditor.php:916
 msgid "Any"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:914
+#: includes/Admin/FormEditor.php:917
 msgid "Countries"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:915
+#: includes/Admin/FormEditor.php:918
 msgid "Dial codes"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:918
+#: includes/Admin/FormEditor.php:921
 msgid "Show"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:919
+#: includes/Admin/FormEditor.php:922
 msgid "Hide"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:920
+#: includes/Admin/FormEditor.php:923
 msgid "this field when"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:921
+#: includes/Admin/FormEditor.php:924
 msgid "all"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:922
+#: includes/Admin/FormEditor.php:925
 msgid "any"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:923
+#: includes/Admin/FormEditor.php:926
 msgid "of the following conditions match:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:924
+#: includes/Admin/FormEditor.php:927
 msgid "Add condition"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:925
+#: includes/Admin/FormEditor.php:928
 msgid "Remove condition"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:926
+#: includes/Admin/FormEditor.php:929
 msgid "Remove rule"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:927
+#: includes/Admin/FormEditor.php:930
 msgid "Add rule"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:928
+#: includes/Admin/FormEditor.php:931
 msgid "Choose option"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:931
+#: includes/Admin/FormEditor.php:934
 msgid "(no fields)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:934
+#: includes/Admin/FormEditor.php:937
 msgid "Search and add country…"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:935
+#: includes/Admin/FormEditor.php:938
 msgid "Search dial code (+49)…"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:938
+#: includes/Admin/FormEditor.php:941
 msgid "Preselected"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:940
+#: includes/Admin/FormEditor.php:943
 msgid "value"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:941
+#: includes/Admin/FormEditor.php:944
 msgid "Add option"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:944
+#: includes/Admin/FormEditor.php:947
 msgid "Characters"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:945
+#: includes/Admin/FormEditor.php:948
 msgid "Words"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:953
+#: includes/Admin/FormEditor.php:956
 msgid "Format"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:954
+#: includes/Admin/FormEditor.php:957
 msgid "24h"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:955
+#: includes/Admin/FormEditor.php:958
 msgid "12h (AM/PM)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:956
+#: includes/Admin/FormEditor.php:959
 msgid "Prefill now"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:959
+#: includes/Admin/FormEditor.php:962
 msgid "Subfields"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:960
+#: includes/Admin/FormEditor.php:963
 msgid "Enable subfield"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:961
+#: includes/Admin/FormEditor.php:964
 #: includes/Fields/AddressField.php:427
-#: includes/Fields/BaseField.php:699
-#: includes/Fields/NameField.php:451
+#: includes/Fields/BaseField.php:685
+#: includes/Fields/NameField.php:452
 msgid "Placeholder"
 msgstr ""
 
 #. translators: %s: the "Add notification" button's name, shown in bold (substituted client-side).
-#: includes/Admin/FormEditor.php:965
+#: includes/Admin/FormEditor.php:968
 #, php-format
 msgid "No notifications yet. Click %s."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:966
+#: includes/Admin/FormEditor.php:969
 msgid "Add notification"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:967
+#: includes/Admin/FormEditor.php:970
 msgid "Routing active"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:968
+#: includes/Admin/FormEditor.php:971
 msgid "(no name)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:969
+#: includes/Admin/FormEditor.php:972
 msgid "Notification"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:970
+#: includes/Admin/FormEditor.php:973
 msgid "Recipient"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:971
+#: includes/Admin/FormEditor.php:974
 msgid "Content"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:972
+#: includes/Admin/FormEditor.php:975
 msgid "Sender"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:973
+#: includes/Admin/FormEditor.php:976
 msgid "Recipient mode"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:974
+#: includes/Admin/FormEditor.php:977
 msgid "Direct"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:975
+#: includes/Admin/FormEditor.php:978
 msgid "Routing"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:976
+#: includes/Admin/FormEditor.php:979
 msgid "Active"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:977
+#: includes/Admin/FormEditor.php:980
 msgid "All entries are sent to a fixed address."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:978
+#: includes/Admin/FormEditor.php:981
 msgid "The email address is chosen based on field conditions."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:979
+#: includes/Admin/FormEditor.php:982
 msgid "To (email)"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:980
+#: includes/Admin/FormEditor.php:983
 msgid "→ To:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:981
+#: includes/Admin/FormEditor.php:984
 #: includes/Admin/PDFLayoutEditor.php:1026
 #: includes/Fields/EmailField.php:43
 msgid "Email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:982
+#: includes/Admin/FormEditor.php:985
 msgid "Fallback email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:983
+#: includes/Admin/FormEditor.php:986
 msgid "Used when no rule matches"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:984
+#: includes/Admin/FormEditor.php:987
 msgid "Fallback CC"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:985
+#: includes/Admin/FormEditor.php:988
 msgid "Fallback BCC"
 msgstr ""
 
 #. translators: prefix on a routing rule's CC row, matching the "→ To:" arrow above it.
-#: includes/Admin/FormEditor.php:987
+#: includes/Admin/FormEditor.php:990
 msgid "→ Cc:"
 msgstr ""
 
 #. translators: prefix on a routing rule's BCC row, matching the "→ To:" arrow above it.
-#: includes/Admin/FormEditor.php:989
+#: includes/Admin/FormEditor.php:992
 msgid "→ Bcc:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:990
+#: includes/Admin/FormEditor.php:993
 #: includes/Admin/PDFLayoutEditor.php:1038
 msgid "Subject"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:991
+#: includes/Admin/FormEditor.php:994
 #: includes/Admin/PDFLayoutEditor.php:1046
 msgid "Message"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:992
+#: includes/Admin/FormEditor.php:995
 msgid "Attachments"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:993
+#: includes/Admin/FormEditor.php:996
 msgid "Attach generated PDF"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:994
+#: includes/Admin/FormEditor.php:997
 msgid "The completed form is attached as a PDF document."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:995
+#: includes/Admin/FormEditor.php:998
 msgid "Attach uploaded files"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:996
+#: includes/Admin/FormEditor.php:999
 msgid "All file uploads from the form are forwarded as attachments."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:997
+#: includes/Admin/FormEditor.php:1000
 msgid "Automation"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:998
+#: includes/Admin/FormEditor.php:1001
 msgid "Add automation markers"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1000
+#: includes/Admin/FormEditor.php:1003
 msgid "Each answer in the email is written between [FABRICATOR_FIELD_<field id>] and [FABRICATOR_FIELD_END], so a mail parser can find it. Answers containing \"[FABRICATOR_FIELD_\" are then refused."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1001
+#: includes/Admin/FormEditor.php:1004
 msgid "Show the field label with a single field's placeholder"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1003
+#: includes/Admin/FormEditor.php:1006
 msgid "A single field's placeholder in the message, such as {name}, then shows the field's label above its answer, as the list of all fields does. Off, it shows the answer alone, to use within a sentence."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1004
+#: includes/Admin/FormEditor.php:1007
 msgid "Send test email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1005
+#: includes/Admin/FormEditor.php:1008
 msgid "Sends a short email with this sender to your own address."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1006
+#: includes/Admin/FormEditor.php:1009
 msgid "Removed on save: scripts, embedded content (iframe, object, embed), event handlers (onclick and the like), javascript: links, external stylesheets, form actions, and tags or styles outside the email-safe set."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1010
+#: includes/Admin/FormEditor.php:1013
 #: includes/Admin/FormSettings.php:388
 msgid "Sender name"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1011
+#: includes/Admin/FormEditor.php:1014
 msgid "{site_name} for default value"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1012
+#: includes/Admin/FormEditor.php:1015
 msgid "Sender email address"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1013
+#: includes/Admin/FormEditor.php:1016
 msgid "{admin_email}, or a fixed address of this site."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1014
+#: includes/Admin/FormEditor.php:1017
 msgid "A form field cannot be the sender: mail claiming to come from a visitor's address is often discarded by their provider after sending. It will not be saved. Put the field into \"Reply-to email\" instead."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1018
+#: includes/Admin/FormEditor.php:1021
 msgid "Reply-to email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1019
+#: includes/Admin/FormEditor.php:1022
 msgid "Empty = sender email"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1020
+#: includes/Admin/FormEditor.php:1023
 msgid "CC emails"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1021
+#: includes/Admin/FormEditor.php:1024
 msgid "BCC emails"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1022
+#: includes/Admin/FormEditor.php:1025
 msgid "Separate multiple with semicolons"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1025
+#: includes/Admin/FormEditor.php:1028
 msgid "Submit button"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1026
+#: includes/Admin/FormEditor.php:1029
 msgid "Labeling"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1028
+#: includes/Admin/FormEditor.php:1031
 msgid "Visible text of the button"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1029
+#: includes/Admin/FormEditor.php:1032
 msgid "Label while sending"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1030
+#: includes/Admin/FormEditor.php:1033
 msgid "Shown while the submission is in progress"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1031
+#: includes/Admin/FormEditor.php:1034
 msgid "Success message"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1032
+#: includes/Admin/FormEditor.php:1035
 msgid "Message shown after a successful submission"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1033
+#: includes/Admin/FormEditor.php:1036
 msgid "Show button when"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1034
+#: includes/Admin/FormEditor.php:1037
 msgid "of the conditions match:"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1035
+#: includes/Admin/FormEditor.php:1038
 msgid "Configure button"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1036
+#: includes/Admin/FormEditor.php:1039
 msgid "Visibility: conditions active"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1037
+#: includes/Admin/FormEditor.php:1040
 msgid "conditional"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1040
+#: includes/Admin/FormEditor.php:1043
 #: includes/Admin/FormSettings.php:668
 #: includes/Admin/PDFLayoutEditor.php:625
 msgid "Saving…"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1041
+#: includes/Admin/FormEditor.php:1044
 msgid "Saved"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1042
+#: includes/Admin/FormEditor.php:1045
 #: includes/Admin/Notices.php:346
 msgid "Dismiss"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1043
+#: includes/Admin/FormEditor.php:1046
 #: includes/Admin/FormList.php:134
 #: includes/Admin/SealKeySettings.php:737
-#: includes/Admin/VerificationPage.php:4847
-#: includes/Utils/Assets.php:629
+#: includes/Admin/VerificationPage.php:4856
+#: includes/Utils/Assets.php:616
 msgid "Error"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1044
+#: includes/Admin/FormEditor.php:1047
 msgid "Unknown error"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1045
+#: includes/Admin/FormEditor.php:1048
 msgid "Server error"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1047
+#: includes/Admin/FormEditor.php:1050
 msgid "Preview failed."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1048
+#: includes/Admin/FormEditor.php:1051
 msgid "Network error."
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1053
-#: includes/Fields/DirectDebitField.php:1462
+#: includes/Admin/FormEditor.php:1056
+#: includes/Fields/DirectDebitField.php:1463
 msgid "Andorra"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1054
-#: includes/Fields/DirectDebitField.php:1462
+#: includes/Admin/FormEditor.php:1057
+#: includes/Fields/DirectDebitField.php:1463
 msgid "Albania"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1055
-#: includes/Admin/FormEditor.php:1112
-#: includes/Fields/DirectDebitField.php:1462
+#: includes/Admin/FormEditor.php:1058
+#: includes/Admin/FormEditor.php:1115
+#: includes/Fields/DirectDebitField.php:1463
 msgid "Austria"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1056
-#: includes/Admin/FormEditor.php:1105
-#: includes/Fields/DirectDebitField.php:1463
+#: includes/Admin/FormEditor.php:1059
+#: includes/Admin/FormEditor.php:1108
+#: includes/Fields/DirectDebitField.php:1464
 msgid "Belgium"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1057
-#: includes/Admin/FormEditor.php:1153
-#: includes/Fields/DirectDebitField.php:1463
+#: includes/Admin/FormEditor.php:1060
+#: includes/Admin/FormEditor.php:1156
+#: includes/Fields/DirectDebitField.php:1464
 msgid "Bulgaria"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1058
-#: includes/Admin/FormEditor.php:1111
-#: includes/Fields/DirectDebitField.php:1463
+#: includes/Admin/FormEditor.php:1061
+#: includes/Admin/FormEditor.php:1114
+#: includes/Fields/DirectDebitField.php:1464
 msgid "Switzerland"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1059
-#: includes/Admin/FormEditor.php:1151
-#: includes/Fields/DirectDebitField.php:1464
+#: includes/Admin/FormEditor.php:1062
+#: includes/Admin/FormEditor.php:1154
+#: includes/Fields/DirectDebitField.php:1465
 msgid "Cyprus"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1060
-#: includes/Admin/FormEditor.php:1160
-#: includes/Fields/DirectDebitField.php:1464
+#: includes/Admin/FormEditor.php:1063
+#: includes/Admin/FormEditor.php:1163
+#: includes/Fields/DirectDebitField.php:1465
 msgid "Czechia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1061
-#: includes/Admin/FormEditor.php:1118
-#: includes/Fields/DirectDebitField.php:1464
+#: includes/Admin/FormEditor.php:1064
+#: includes/Admin/FormEditor.php:1121
+#: includes/Fields/DirectDebitField.php:1465
 msgid "Germany"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1062
-#: includes/Admin/FormEditor.php:1114
-#: includes/Fields/DirectDebitField.php:1465
+#: includes/Admin/FormEditor.php:1065
+#: includes/Admin/FormEditor.php:1117
+#: includes/Fields/DirectDebitField.php:1466
 msgid "Denmark"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1063
-#: includes/Admin/FormEditor.php:1156
-#: includes/Fields/DirectDebitField.php:1465
+#: includes/Admin/FormEditor.php:1066
+#: includes/Admin/FormEditor.php:1159
+#: includes/Fields/DirectDebitField.php:1466
 msgid "Estonia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1064
-#: includes/Admin/FormEditor.php:1107
-#: includes/Fields/DirectDebitField.php:1465
+#: includes/Admin/FormEditor.php:1067
+#: includes/Admin/FormEditor.php:1110
+#: includes/Fields/DirectDebitField.php:1466
 msgid "Spain"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1065
-#: includes/Admin/FormEditor.php:1152
-#: includes/Fields/DirectDebitField.php:1466
+#: includes/Admin/FormEditor.php:1068
+#: includes/Admin/FormEditor.php:1155
+#: includes/Fields/DirectDebitField.php:1467
 msgid "Finland"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1066
-#: includes/Admin/FormEditor.php:1106
-#: includes/Fields/DirectDebitField.php:1466
+#: includes/Admin/FormEditor.php:1069
+#: includes/Admin/FormEditor.php:1109
+#: includes/Fields/DirectDebitField.php:1467
 msgid "France"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1067
-#: includes/Admin/FormEditor.php:1113
-#: includes/Fields/DirectDebitField.php:1466
+#: includes/Admin/FormEditor.php:1070
+#: includes/Admin/FormEditor.php:1116
+#: includes/Fields/DirectDebitField.php:1467
 msgid "United Kingdom"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1068
-#: includes/Fields/DirectDebitField.php:1467
+#: includes/Admin/FormEditor.php:1071
+#: includes/Fields/DirectDebitField.php:1468
 msgid "Gibraltar"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1069
-#: includes/Admin/FormEditor.php:1103
-#: includes/Fields/DirectDebitField.php:1467
+#: includes/Admin/FormEditor.php:1072
+#: includes/Admin/FormEditor.php:1106
+#: includes/Fields/DirectDebitField.php:1468
 msgid "Greece"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1070
-#: includes/Admin/FormEditor.php:1158
-#: includes/Fields/DirectDebitField.php:1467
+#: includes/Admin/FormEditor.php:1073
+#: includes/Admin/FormEditor.php:1161
+#: includes/Fields/DirectDebitField.php:1468
 msgid "Croatia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1071
-#: includes/Admin/FormEditor.php:1108
-#: includes/Fields/DirectDebitField.php:1468
+#: includes/Admin/FormEditor.php:1074
+#: includes/Admin/FormEditor.php:1111
+#: includes/Fields/DirectDebitField.php:1469
 msgid "Hungary"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1072
-#: includes/Admin/FormEditor.php:1148
-#: includes/Fields/DirectDebitField.php:1468
+#: includes/Admin/FormEditor.php:1075
+#: includes/Admin/FormEditor.php:1151
+#: includes/Fields/DirectDebitField.php:1469
 msgid "Ireland"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1073
-#: includes/Admin/FormEditor.php:1149
-#: includes/Fields/DirectDebitField.php:1468
+#: includes/Admin/FormEditor.php:1076
+#: includes/Admin/FormEditor.php:1152
+#: includes/Fields/DirectDebitField.php:1469
 msgid "Iceland"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1074
-#: includes/Admin/FormEditor.php:1109
-#: includes/Fields/DirectDebitField.php:1469
+#: includes/Admin/FormEditor.php:1077
+#: includes/Admin/FormEditor.php:1112
+#: includes/Fields/DirectDebitField.php:1470
 msgid "Italy"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1075
-#: includes/Admin/FormEditor.php:1162
-#: includes/Fields/DirectDebitField.php:1469
+#: includes/Admin/FormEditor.php:1078
+#: includes/Admin/FormEditor.php:1165
+#: includes/Fields/DirectDebitField.php:1470
 msgid "Liechtenstein"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1076
-#: includes/Admin/FormEditor.php:1154
-#: includes/Fields/DirectDebitField.php:1469
+#: includes/Admin/FormEditor.php:1079
+#: includes/Admin/FormEditor.php:1157
+#: includes/Fields/DirectDebitField.php:1470
 msgid "Lithuania"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1077
-#: includes/Admin/FormEditor.php:1147
-#: includes/Fields/DirectDebitField.php:1470
+#: includes/Admin/FormEditor.php:1080
+#: includes/Admin/FormEditor.php:1150
+#: includes/Fields/DirectDebitField.php:1471
 msgid "Luxembourg"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1078
-#: includes/Admin/FormEditor.php:1155
-#: includes/Fields/DirectDebitField.php:1470
-msgid "Latvia"
-msgstr ""
-
-#: includes/Admin/FormEditor.php:1079
-#: includes/Fields/DirectDebitField.php:1470
-msgid "Monaco"
-msgstr ""
-
-#: includes/Admin/FormEditor.php:1080
-#: includes/Fields/DirectDebitField.php:1471
-msgid "Moldova"
-msgstr ""
-
 #: includes/Admin/FormEditor.php:1081
+#: includes/Admin/FormEditor.php:1158
 #: includes/Fields/DirectDebitField.php:1471
-msgid "Montenegro"
+msgid "Latvia"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1082
 #: includes/Fields/DirectDebitField.php:1471
-msgid "North Macedonia"
+msgid "Monaco"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1083
-#: includes/Admin/FormEditor.php:1150
 #: includes/Fields/DirectDebitField.php:1472
-msgid "Malta"
+msgid "Moldova"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1084
-#: includes/Admin/FormEditor.php:1104
 #: includes/Fields/DirectDebitField.php:1472
-msgid "Netherlands"
+msgid "Montenegro"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1085
-#: includes/Admin/FormEditor.php:1116
 #: includes/Fields/DirectDebitField.php:1472
-msgid "Norway"
+msgid "North Macedonia"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1086
-#: includes/Admin/FormEditor.php:1117
+#: includes/Admin/FormEditor.php:1153
 #: includes/Fields/DirectDebitField.php:1473
-msgid "Poland"
+msgid "Malta"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1087
-#: includes/Admin/FormEditor.php:1146
+#: includes/Admin/FormEditor.php:1107
 #: includes/Fields/DirectDebitField.php:1473
-msgid "Portugal"
+msgid "Netherlands"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1088
-#: includes/Admin/FormEditor.php:1110
+#: includes/Admin/FormEditor.php:1119
 #: includes/Fields/DirectDebitField.php:1473
-msgid "Romania"
+msgid "Norway"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1089
+#: includes/Admin/FormEditor.php:1120
 #: includes/Fields/DirectDebitField.php:1474
-msgid "Serbia"
+msgid "Poland"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1090
-#: includes/Admin/FormEditor.php:1115
+#: includes/Admin/FormEditor.php:1149
 #: includes/Fields/DirectDebitField.php:1474
-msgid "Sweden"
+msgid "Portugal"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1091
-#: includes/Admin/FormEditor.php:1159
+#: includes/Admin/FormEditor.php:1113
 #: includes/Fields/DirectDebitField.php:1474
-msgid "Slovenia"
+msgid "Romania"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1092
-#: includes/Admin/FormEditor.php:1161
 #: includes/Fields/DirectDebitField.php:1475
-msgid "Slovakia"
+msgid "Serbia"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1093
+#: includes/Admin/FormEditor.php:1118
 #: includes/Fields/DirectDebitField.php:1475
-msgid "San Marino"
+msgid "Sweden"
 msgstr ""
 
 #: includes/Admin/FormEditor.php:1094
+#: includes/Admin/FormEditor.php:1162
 #: includes/Fields/DirectDebitField.php:1475
+msgid "Slovenia"
+msgstr ""
+
+#: includes/Admin/FormEditor.php:1095
+#: includes/Admin/FormEditor.php:1164
+#: includes/Fields/DirectDebitField.php:1476
+msgid "Slovakia"
+msgstr ""
+
+#: includes/Admin/FormEditor.php:1096
+#: includes/Fields/DirectDebitField.php:1476
+msgid "San Marino"
+msgstr ""
+
+#: includes/Admin/FormEditor.php:1097
+#: includes/Fields/DirectDebitField.php:1476
 msgid "Vatican City"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1099
+#: includes/Admin/FormEditor.php:1102
 msgid "USA / Canada"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1100
+#: includes/Admin/FormEditor.php:1103
 msgid "Russia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1101
+#: includes/Admin/FormEditor.php:1104
 msgid "Egypt"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1102
+#: includes/Admin/FormEditor.php:1105
 msgid "South Africa"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1119
+#: includes/Admin/FormEditor.php:1122
 msgid "Peru"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1120
+#: includes/Admin/FormEditor.php:1123
 msgid "Mexico"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1121
+#: includes/Admin/FormEditor.php:1124
 msgid "Argentina"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1122
+#: includes/Admin/FormEditor.php:1125
 msgid "Brazil"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1123
+#: includes/Admin/FormEditor.php:1126
 msgid "Chile"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1124
+#: includes/Admin/FormEditor.php:1127
 msgid "Colombia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1125
+#: includes/Admin/FormEditor.php:1128
 msgid "Australia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1126
+#: includes/Admin/FormEditor.php:1129
 msgid "Indonesia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1127
+#: includes/Admin/FormEditor.php:1130
 msgid "Philippines"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1128
+#: includes/Admin/FormEditor.php:1131
 msgid "New Zealand"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1129
+#: includes/Admin/FormEditor.php:1132
 msgid "Singapore"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1130
+#: includes/Admin/FormEditor.php:1133
 msgid "Thailand"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1131
+#: includes/Admin/FormEditor.php:1134
 msgid "Japan"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1132
+#: includes/Admin/FormEditor.php:1135
 msgid "South Korea"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1133
+#: includes/Admin/FormEditor.php:1136
 msgid "Vietnam"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1134
+#: includes/Admin/FormEditor.php:1137
 msgid "China"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1135
+#: includes/Admin/FormEditor.php:1138
 msgid "Turkey"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1136
+#: includes/Admin/FormEditor.php:1139
 msgid "India"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1137
+#: includes/Admin/FormEditor.php:1140
 msgid "Pakistan"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1138
+#: includes/Admin/FormEditor.php:1141
 msgid "Sri Lanka"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1139
+#: includes/Admin/FormEditor.php:1142
 msgid "Iran"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1140
+#: includes/Admin/FormEditor.php:1143
 msgid "Morocco"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1141
+#: includes/Admin/FormEditor.php:1144
 msgid "Algeria"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1142
+#: includes/Admin/FormEditor.php:1145
 msgid "Tunisia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1143
+#: includes/Admin/FormEditor.php:1146
 msgid "Gambia"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1144
+#: includes/Admin/FormEditor.php:1147
 msgid "Nigeria"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1145
+#: includes/Admin/FormEditor.php:1148
 msgid "Kenya"
 msgstr ""
 
-#: includes/Admin/FormEditor.php:1157
+#: includes/Admin/FormEditor.php:1160
 msgid "Ukraine"
 msgstr ""
 
@@ -1680,7 +1680,7 @@ msgstr ""
 #: includes/Admin/FormSettings.php:569
 #: includes/Admin/PDFLayoutEditor.php:552
 #: includes/Admin/SealKeySettings.php:549
-#: includes/Admin/VerificationPage.php:711
+#: includes/Admin/VerificationPage.php:720
 msgid "Close"
 msgstr ""
 
@@ -1812,18 +1812,18 @@ msgid "Forms in this selection"
 msgstr ""
 
 #: includes/Admin/FormSelectList.php:186
-#: includes/Admin/VerificationPage.php:2062
-#: includes/Plugin.php:258
+#: includes/Admin/VerificationPage.php:2071
+#: includes/Plugin.php:252
 msgid "Form"
 msgstr ""
 
 #: includes/Admin/FormSelectList.php:188
 #: includes/Admin/FormSelectList.php:507
-#: includes/Fields/BaseField.php:704
-#: includes/Fields/CheckboxField.php:367
+#: includes/Fields/BaseField.php:690
+#: includes/Fields/CheckboxField.php:368
 #: includes/Fields/DateField.php:340
 #: includes/Fields/GroupField.php:306
-#: includes/Fields/RadioField.php:296
+#: includes/Fields/RadioField.php:297
 #: includes/Fields/SelectField.php:258
 msgid "Description"
 msgstr ""
@@ -2167,7 +2167,7 @@ msgstr ""
 #: includes/Admin/FormSettings.php:666
 #: includes/Admin/PDFLayoutEditor.php:624
 #: includes/Admin/SealKeySettings.php:738
-#: includes/Utils/Assets.php:626
+#: includes/Utils/Assets.php:613
 msgid "Network error"
 msgstr ""
 
@@ -2435,14 +2435,14 @@ msgstr ""
 
 #: includes/Admin/PDFLayoutEditor.php:557
 #: includes/Admin/PDFLayoutEditor.php:664
-#: includes/Admin/VerificationPage.php:4061
+#: includes/Admin/VerificationPage.php:4070
 #: includes/Fields/PostDataField.php:300
 msgid "Title"
 msgstr ""
 
 #: includes/Admin/PDFLayoutEditor.php:559
 #: includes/Admin/PDFLayoutEditor.php:665
-#: includes/Fields/RatingField.php:327
+#: includes/Fields/RatingField.php:328
 msgid "Image"
 msgstr ""
 
@@ -2517,13 +2517,13 @@ msgstr ""
 
 #: includes/Admin/PDFLayoutEditor.php:622
 #: includes/Admin/PDFLayoutEditor.php:1054
-#: includes/Fields/DirectDebitField.php:240
-#: includes/Fields/DirectDebitField.php:829
-#: includes/Fields/DirectDebitField.php:1252
-#: includes/Fields/DirectDebitField.php:1447
+#: includes/Fields/DirectDebitField.php:241
+#: includes/Fields/DirectDebitField.php:830
+#: includes/Fields/DirectDebitField.php:1253
+#: includes/Fields/DirectDebitField.php:1448
 #: includes/Fields/SignatureField.php:74
 #: includes/Fields/SignatureField.php:211
-#: includes/Fields/SignatureField.php:326
+#: includes/Fields/SignatureField.php:332
 msgid "Signature"
 msgstr ""
 
@@ -2654,8 +2654,8 @@ msgid "This layout leaves signatures out of the PDF. These forms take signatures
 msgstr ""
 
 #: includes/Admin/PDFLayoutEditor.php:743
-#: includes/Admin/VerificationPage.php:487
-#: includes/Admin/VerificationPage.php:659
+#: includes/Admin/VerificationPage.php:496
+#: includes/Admin/VerificationPage.php:668
 #: includes/Form/FormModel.php:117
 msgid "Insufficient permissions."
 msgstr ""
@@ -2687,8 +2687,8 @@ msgid "Here follows another sample paragraph with additional notes, so that the 
 msgstr ""
 
 #: includes/Admin/PDFLayoutEditor.php:1022
-#: includes/Fields/NameField.php:129
-#: includes/Fields/NameField.php:417
+#: includes/Fields/NameField.php:130
+#: includes/Fields/NameField.php:418
 msgid "First name"
 msgstr ""
 
@@ -2697,8 +2697,8 @@ msgid "Jane"
 msgstr ""
 
 #: includes/Admin/PDFLayoutEditor.php:1023
-#: includes/Fields/NameField.php:131
-#: includes/Fields/NameField.php:425
+#: includes/Fields/NameField.php:132
+#: includes/Fields/NameField.php:426
 msgid "Last name"
 msgstr ""
 
@@ -3115,8 +3115,8 @@ msgid "Nothing was changed: FABRICATOR_SEAL_MASTER_KEY in wp-config.php does not
 msgstr ""
 
 #: includes/Admin/SealKeySettings.php:783
-#: includes/Admin/SealKeySettings.php:1086
-#: includes/Admin/SealKeySettings.php:1234
+#: includes/Admin/SealKeySettings.php:1083
+#: includes/Admin/SealKeySettings.php:1231
 msgid "Another change to the seal key is in progress. Nothing was changed; please try again in a moment."
 msgstr ""
 
@@ -3130,7 +3130,7 @@ msgstr ""
 
 #: includes/Admin/SealKeySettings.php:816
 #: includes/Admin/SealKeySettings.php:859
-#: includes/Admin/SealKeySettings.php:1009
+#: includes/Admin/SealKeySettings.php:1006
 msgid "Seal key setup is already complete."
 msgstr ""
 
@@ -3139,7 +3139,7 @@ msgid "FABRICATOR_SEAL_MASTER_KEY is set in wp-config.php, so keys must be store
 msgstr ""
 
 #: includes/Admin/SealKeySettings.php:832
-#: includes/Admin/SealKeySettings.php:979
+#: includes/Admin/SealKeySettings.php:976
 msgid "No pending key download found."
 msgstr ""
 
@@ -3155,1060 +3155,1060 @@ msgstr ""
 msgid "Key encryption is already enabled."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1034
+#: includes/Admin/SealKeySettings.php:1031
 msgid "FABRICATOR_SEAL_MASTER_KEY not found. Please check wp-config.php and try again."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1044
+#: includes/Admin/SealKeySettings.php:1041
 msgid "FABRICATOR_SEAL_MASTER_KEY in wp-config.php must be 64 hexadecimal characters. Please check the line."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1055
+#: includes/Admin/SealKeySettings.php:1052
 msgid "Setup session expired. Please start again."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1063
+#: includes/Admin/SealKeySettings.php:1060
 msgid "The entered master key does not match the expected value. Please check wp-config.php."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1114
+#: includes/Admin/SealKeySettings.php:1111
 msgid "Setup complete, but no download entry found. Please rotate the key to generate a download."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1134
+#: includes/Admin/SealKeySettings.php:1131
 msgid "No content pasted."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1140
+#: includes/Admin/SealKeySettings.php:1137
 msgid "Invalid JSON format."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1148
+#: includes/Admin/SealKeySettings.php:1145
 msgid "Missing required fields: uuid and key."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1152
+#: includes/Admin/SealKeySettings.php:1149
 msgid "UUID has invalid format."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1156
+#: includes/Admin/SealKeySettings.php:1153
 msgid "Key value must be exactly 64 hex characters."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1166
+#: includes/Admin/SealKeySettings.php:1163
 msgid "The fingerprint in this key file does not match its key. The file is damaged or was changed."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1181
-#: includes/Admin/SealKeySettings.php:1192
+#: includes/Admin/SealKeySettings.php:1178
+#: includes/Admin/SealKeySettings.php:1189
 msgid "A seal key with this UUID is already stored."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1207
+#: includes/Admin/SealKeySettings.php:1204
 msgid "Plugin name does not match."
 msgstr ""
 
 #. translators: %s: the plugin field value from the uploaded JSON
-#: includes/Admin/SealKeySettings.php:1210
+#: includes/Admin/SealKeySettings.php:1207
 #, php-format
 msgid "The \"plugin\" field reads \"%s\" — this does not appear to be a key from this plugin."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1213
+#: includes/Admin/SealKeySettings.php:1210
 msgid "Are you sure you want to import this key?"
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1241
+#: includes/Admin/SealKeySettings.php:1238
 msgid "The key could not be imported. Please check the server log."
 msgstr ""
 
-#: includes/Admin/SealKeySettings.php:1244
+#: includes/Admin/SealKeySettings.php:1241
 msgid "Legacy key added successfully."
 msgstr ""
 
 #: includes/Admin/VerificationPage.php:38
-#: includes/Admin/VerificationPage.php:82
-#: includes/Admin/VerificationPage.php:280
+#: includes/Admin/VerificationPage.php:71
+#: includes/Admin/VerificationPage.php:289
 #: includes/Utils/Security/AjaxGuard.php:48
 #: includes/Utils/Text/HttpStatus.php:75
 msgid "Forbidden"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:61
+#: includes/Admin/VerificationPage.php:50
 msgid "Please wait before verifying another PDF."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:71
+#: includes/Admin/VerificationPage.php:60
 msgid "Invalid input: missing token"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:78
+#: includes/Admin/VerificationPage.php:67
 msgid "PDF not found or token expired"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:99
+#: includes/Admin/VerificationPage.php:88
 msgid "Invalid PDF path"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:107
+#: includes/Admin/VerificationPage.php:96
 msgid "File is not a valid PDF"
 msgstr ""
 
 #. translators: %1$s: file size in MB, %2$d: maximum accepted size in MB
-#: includes/Admin/VerificationPage.php:122
+#: includes/Admin/VerificationPage.php:111
 #, php-format
 msgid "PDF too large (%1$s MB). Maximum for verification is %2$d MB."
 msgstr ""
 
 #. translators: %1$d: memory this PDF needs in MB, %2$d: the host's configured budget in MB.
-#: includes/Admin/VerificationPage.php:151
+#: includes/Admin/VerificationPage.php:140
 #, php-format
 msgid "This PDF needs about %1$d MB to verify, more than this site's %2$d MB budget. Raise it with FABRICATOR_MEMORY_BUDGET_MB in wp-config.php."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:155
+#: includes/Admin/VerificationPage.php:144
 msgid "Server busy verifying other PDFs right now."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:451
+#: includes/Admin/VerificationPage.php:460
 msgid "FormFabricator Verification"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:452
-#: includes/Admin/VerificationPage.php:694
+#: includes/Admin/VerificationPage.php:461
+#: includes/Admin/VerificationPage.php:703
 msgid "PDF Verification"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:494
+#: includes/Admin/VerificationPage.php:503
 msgid "Security check failed"
 msgstr ""
 
 #. translators: %d: maximum number of files accepted per upload.
-#: includes/Admin/VerificationPage.php:532
+#: includes/Admin/VerificationPage.php:541
 #, php-format
 msgid "Too many files selected. Only the first %d will be processed."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:549
+#: includes/Admin/VerificationPage.php:558
 msgid "The upload could not be read."
 msgstr ""
 
 #. translators: %d: maximum accepted file size in MB.
-#: includes/Admin/VerificationPage.php:564
+#: includes/Admin/VerificationPage.php:573
 #, php-format
 msgid "The file is larger than the %d MB limit."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:582
-#: includes/Admin/VerificationPage.php:593
-#: includes/Admin/VerificationPage.php:1047
+#: includes/Admin/VerificationPage.php:591
+#: includes/Admin/VerificationPage.php:602
+#: includes/Admin/VerificationPage.php:1056
 msgid "This file is not a PDF."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:604
+#: includes/Admin/VerificationPage.php:613
 msgid "The file name does not end in .pdf."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:695
+#: includes/Admin/VerificationPage.php:704
 msgid "Upload one or more generated PDFs to verify their embedded seal and check for tampering."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:697
-#: includes/Admin/VerificationPage.php:715
+#: includes/Admin/VerificationPage.php:706
+#: includes/Admin/VerificationPage.php:724
 msgid "Drag & drop PDF files here"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:698
-#: includes/Admin/VerificationPage.php:716
+#: includes/Admin/VerificationPage.php:707
+#: includes/Admin/VerificationPage.php:725
 msgid "or click to select"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:704
-#: includes/Admin/VerificationPage.php:721
+#: includes/Admin/VerificationPage.php:713
+#: includes/Admin/VerificationPage.php:730
 msgid "Verify PDFs"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:712
-#: includes/Admin/VerificationPage.php:725
+#: includes/Admin/VerificationPage.php:721
+#: includes/Admin/VerificationPage.php:734
 msgid "Scan more PDFs"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:713
+#: includes/Admin/VerificationPage.php:722
 msgid "Add more PDFs to verify."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:730
+#: includes/Admin/VerificationPage.php:739
 msgid "Uploading…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:731
+#: includes/Admin/VerificationPage.php:740
 msgid "Please keep this page open — this can take a while for large files."
 msgstr ""
 
 #. translators: %d: how many different object types the check lists at most.
-#: includes/Admin/VerificationPage.php:866
+#: includes/Admin/VerificationPage.php:875
 #, php-format
 msgid "(more than %d different object types)"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:991
+#: includes/Admin/VerificationPage.php:1000
 msgid "Parsing PDF…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1039
+#: includes/Admin/VerificationPage.php:1048
 msgid "The upload did not complete."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1056
+#: includes/Admin/VerificationPage.php:1065
 msgid "Byte scan: searching for seal…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1063
+#: includes/Admin/VerificationPage.php:1072
 msgid "The file could not be read."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1081
-#: includes/Admin/VerificationPage.php:4217
+#: includes/Admin/VerificationPage.php:1090
+#: includes/Admin/VerificationPage.php:4226
 msgid "This file has far more parts than any document this plugin creates and was not read."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1090
+#: includes/Admin/VerificationPage.php:1099
 msgid "This PDF has no FormFabricator seal, so there is nothing to check it against."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1183
+#: includes/Admin/VerificationPage.php:1192
 msgid "Seal found — reconstructing payload…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1188
+#: includes/Admin/VerificationPage.php:1197
 msgid "HMAC check…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1420
+#: includes/Admin/VerificationPage.php:1429
 msgid "PDF Structure"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1421
-#: includes/Admin/VerificationPage.php:1433
-#: includes/Admin/VerificationPage.php:1457
-#: includes/Admin/VerificationPage.php:1483
-#: includes/Admin/VerificationPage.php:1977
-#: includes/Admin/VerificationPage.php:2497
-#: includes/Admin/VerificationPage.php:4829
+#: includes/Admin/VerificationPage.php:1430
+#: includes/Admin/VerificationPage.php:1442
+#: includes/Admin/VerificationPage.php:1466
+#: includes/Admin/VerificationPage.php:1492
+#: includes/Admin/VerificationPage.php:1986
+#: includes/Admin/VerificationPage.php:2506
+#: includes/Admin/VerificationPage.php:4838
 msgid "FAIL"
 msgstr ""
 
 #. translators: %s: the literal PDF end-of-file marker "%%EOF".
-#: includes/Admin/VerificationPage.php:1430
+#: includes/Admin/VerificationPage.php:1439
 #, php-format
 msgid "%s count"
 msgstr ""
 
 #. translators: %1$d: number of end-of-file markers found, %2$d: number expected.
-#: includes/Admin/VerificationPage.php:1432
+#: includes/Admin/VerificationPage.php:1441
 #, php-format
 msgid "%1$d (expected: %2$d)"
 msgstr ""
 
 #. translators: %s: the literal PDF "%%EOF" end-of-file marker, wrapped in <code>
-#: includes/Admin/VerificationPage.php:1438
+#: includes/Admin/VerificationPage.php:1447
 #, php-format
 msgid "A valid PDF has exactly <strong>one</strong> %s marker. Each extra marker signals that content was <strong>appended after the original cross-reference table</strong> was written. This is the standard technique for a <strong>PDF shadow attack / incremental update</strong>: an attacker appends new objects that override visible content while leaving the original seal intact."
 msgstr ""
 
 #. translators: %s: comma-separated PDF object numbers.
-#: includes/Admin/VerificationPage.php:1452
+#: includes/Admin/VerificationPage.php:1461
 #, php-format
 msgid "points elsewhere for object %s"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1453
+#: includes/Admin/VerificationPage.php:1462
 msgid "not readable"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1455
+#: includes/Admin/VerificationPage.php:1464
 msgid "Cross-reference table"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1463
+#: includes/Admin/VerificationPage.php:1472
 msgid "A PDF reader finds every part of the document through its cross-reference table. This file has none that can be read, so nothing shows that a reader displays the parts that were checked."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1465
+#: includes/Admin/VerificationPage.php:1474
 msgid "A PDF reader finds every part of the document through its cross-reference table. Here the table points to another copy of these parts than the one that was checked: a second copy, placed for a reader to display instead of the sealed content."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1475
+#: includes/Admin/VerificationPage.php:1484
 msgid "Disguised name"
 msgstr ""
 
 #. translators: %1$s: the name as written in the file, e.g. "/Ann#6Fts"; %2$s: as a viewer reads it, e.g. "/Annots"; %3$s: what that part does.
-#: includes/Admin/VerificationPage.php:1478
+#: includes/Admin/VerificationPage.php:1487
 #, php-format
 msgid "%1$s, which a viewer reads as %2$s: %3$s"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1488
+#: includes/Admin/VerificationPage.php:1497
 msgid "Something was added to this file after it was sealed and written so that the checks above do not recognize it, while a PDF viewer does and shows it: for instance a box or text drawn over a page. Whatever you see in this file beyond the sealed answers is not part of the original. This plugin never writes names this way."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1507
+#: includes/Admin/VerificationPage.php:1516
 msgid "annotations, boxes, notes or links drawn on top of the pages"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1508
+#: includes/Admin/VerificationPage.php:1517
 msgid "what a page draws"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1509
+#: includes/Admin/VerificationPage.php:1518
 msgid "an image or a drawing placed on a page"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1511
+#: includes/Admin/VerificationPage.php:1520
 msgid "a font"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1513
+#: includes/Admin/VerificationPage.php:1522
 msgid "an action the viewer carries out, such as opening a link or running a script"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1514
+#: includes/Admin/VerificationPage.php:1523
 msgid "fillable form fields"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1515
+#: includes/Admin/VerificationPage.php:1524
 msgid "the pages and their size"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1517
+#: includes/Admin/VerificationPage.php:1526
 msgid "the document information"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1518
+#: includes/Admin/VerificationPage.php:1527
 msgid "a part of the document's structure"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1539
-#: includes/Admin/VerificationPage.php:1590
-#: includes/Admin/VerificationPage.php:1715
-#: includes/Admin/VerificationPage.php:1860
-#: includes/Admin/VerificationPage.php:2433
-#: includes/Admin/VerificationPage.php:2456
-#: includes/Admin/VerificationPage.php:2501
+#: includes/Admin/VerificationPage.php:1548
+#: includes/Admin/VerificationPage.php:1599
+#: includes/Admin/VerificationPage.php:1724
+#: includes/Admin/VerificationPage.php:1869
+#: includes/Admin/VerificationPage.php:2442
+#: includes/Admin/VerificationPage.php:2465
+#: includes/Admin/VerificationPage.php:2510
 msgid "Seal"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1545
+#: includes/Admin/VerificationPage.php:1554
 msgid "HMAC valid: the seal holds exactly what was signed when the PDF was made."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1546
+#: includes/Admin/VerificationPage.php:1555
 msgid "HMAC not checked: no key on this site matches the seal, so nothing shows it was signed here."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1547
+#: includes/Admin/VerificationPage.php:1556
 msgid "HMAC mismatch: the seal was changed after it was signed, or signed with another key. Nothing it records can be trusted."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1562
+#: includes/Admin/VerificationPage.php:1571
 msgid "missing from rebuild"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1571
+#: includes/Admin/VerificationPage.php:1580
 msgid "added by rebuild"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1578
+#: includes/Admin/VerificationPage.php:1587
 msgid "Keys differing between seal and rebuild:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1582
+#: includes/Admin/VerificationPage.php:1591
 msgid "The seal is complete: every entry the check reads is present and well-formed. Whether it is genuine is the HMAC's verdict above."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1591
+#: includes/Admin/VerificationPage.php:1600
 msgid "Rebuilt"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1605
+#: includes/Admin/VerificationPage.php:1614
 msgid "Differences"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1639
+#: includes/Admin/VerificationPage.php:1648
 msgid "Checking fields…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1673
+#: includes/Admin/VerificationPage.php:1682
 msgid "Unknown field"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1675
-#: includes/Admin/VerificationPage.php:3874
-#: includes/Admin/VerificationPage.php:4176
+#: includes/Admin/VerificationPage.php:1684
+#: includes/Admin/VerificationPage.php:3883
+#: includes/Admin/VerificationPage.php:4185
 msgid "NOT IN SEAL"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1703
-#: includes/Admin/VerificationPage.php:2409
-#: includes/Admin/VerificationPage.php:3573
-#: includes/Admin/VerificationPage.php:3674
-#: includes/Admin/VerificationPage.php:4105
+#: includes/Admin/VerificationPage.php:1712
+#: includes/Admin/VerificationPage.php:2418
+#: includes/Admin/VerificationPage.php:3582
+#: includes/Admin/VerificationPage.php:3683
+#: includes/Admin/VerificationPage.php:4114
 msgid "MATCH"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1703
-#: includes/Admin/VerificationPage.php:2508
-#: includes/Admin/VerificationPage.php:3573
-#: includes/Admin/VerificationPage.php:4105
-#: includes/Admin/VerificationPage.php:4582
+#: includes/Admin/VerificationPage.php:1712
+#: includes/Admin/VerificationPage.php:2517
+#: includes/Admin/VerificationPage.php:3582
+#: includes/Admin/VerificationPage.php:4114
+#: includes/Admin/VerificationPage.php:4591
 msgid "MISMATCH"
 msgstr ""
 
 #. translators: %d: the field's position in the seal.
-#: includes/Admin/VerificationPage.php:1705
-#: includes/Admin/VerificationPage.php:1748
+#: includes/Admin/VerificationPage.php:1714
+#: includes/Admin/VerificationPage.php:1757
 #, php-format
 msgid "Field #%d"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1719
-#: includes/Admin/VerificationPage.php:1862
-#: includes/Admin/VerificationPage.php:2504
+#: includes/Admin/VerificationPage.php:1728
+#: includes/Admin/VerificationPage.php:1871
+#: includes/Admin/VerificationPage.php:2513
 msgid "PDF"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1750
-#: includes/Admin/VerificationPage.php:2450
-#: includes/Admin/VerificationPage.php:3880
+#: includes/Admin/VerificationPage.php:1759
+#: includes/Admin/VerificationPage.php:2459
+#: includes/Admin/VerificationPage.php:3889
 msgid "MISSING FROM PDF"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1761
+#: includes/Admin/VerificationPage.php:1770
 msgid "Field Content"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1834
+#: includes/Admin/VerificationPage.php:1843
 msgid "The words are the same; the difference lies in characters that do not show as words."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1848
+#: includes/Admin/VerificationPage.php:1857
 msgid "(nothing)"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1867
+#: includes/Admin/VerificationPage.php:1876
 msgid "…and further changes after these."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:1976
+#: includes/Admin/VerificationPage.php:1985
 msgid "Seal Blocks"
 msgstr ""
 
 #. translators: %d: number of seal blocks found in the PDF (should be exactly 1).
-#: includes/Admin/VerificationPage.php:1988
+#: includes/Admin/VerificationPage.php:1997
 #, php-format
 msgid "%d seal block found — exactly 1 is expected."
 msgid_plural "%d seal blocks found — exactly 1 is expected."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/Admin/VerificationPage.php:1992
+#: includes/Admin/VerificationPage.php:2001
 msgid "Any extra seal block is proof of tampering regardless of its HMAC status."
 msgstr ""
 
 #. translators: %d: number of the seal block the checks read.
-#: includes/Admin/VerificationPage.php:1999
+#: includes/Admin/VerificationPage.php:2008
 #, php-format
 msgid "The checks above read seal #%d, the last one in the document's text."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2013
+#: includes/Admin/VerificationPage.php:2022
 msgid "The seal is implausibly large and was rejected."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2018
+#: includes/Admin/VerificationPage.php:2027
 msgid "The seal could not be base64-decoded."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2022
+#: includes/Admin/VerificationPage.php:2031
 msgid "The seal data is not valid JSON."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2031
+#: includes/Admin/VerificationPage.php:2040
 msgid "The seal check could not be completed."
 msgstr ""
 
 #. translators: %d: position of this seal among the seals found in the document.
-#: includes/Admin/VerificationPage.php:2041
+#: includes/Admin/VerificationPage.php:2050
 #, php-format
 msgid "Seal #%d"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2043
+#: includes/Admin/VerificationPage.php:2052
 msgid "AUTHENTIC"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2043
+#: includes/Admin/VerificationPage.php:2052
 msgid "FORGED / INVALID"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2049
+#: includes/Admin/VerificationPage.php:2058
 msgid "Base64:"
 msgstr ""
 
 #. translators: %1$s: form name, %2$s: form ID, both as recorded in the seal.
-#: includes/Admin/VerificationPage.php:2064
+#: includes/Admin/VerificationPage.php:2073
 #, php-format
 msgid "%1$s (ID: %2$s)"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2065
+#: includes/Admin/VerificationPage.php:2074
 msgid "Generated"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2069
+#: includes/Admin/VerificationPage.php:2078
 msgid "Pages"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2077
+#: includes/Admin/VerificationPage.php:2086
 msgid "Seal content"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2104
+#: includes/Admin/VerificationPage.php:2113
 msgid "Checking annotations…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2116
-#: includes/Admin/VerificationPage.php:4576
+#: includes/Admin/VerificationPage.php:2125
+#: includes/Admin/VerificationPage.php:4585
 msgid "Annotations"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2270
+#: includes/Admin/VerificationPage.php:2279
 msgid "The page's list of annotations cannot be read. A viewer may still show what it names."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2274
+#: includes/Admin/VerificationPage.php:2283
 msgid "The seal lists this link fewer times than the PDF has it."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2275
+#: includes/Admin/VerificationPage.php:2284
 msgid "The seal lists no link to this target: the link was changed or added."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2280
+#: includes/Admin/VerificationPage.php:2289
 msgid "An annotation of no stated type. This plugin adds no annotations but invisible links."
 msgstr ""
 
 #. translators: %s: the annotation's PDF type, e.g. "FreeText".
-#: includes/Admin/VerificationPage.php:2283
+#: includes/Admin/VerificationPage.php:2292
 #, php-format
 msgid "A %s annotation, drawn on the page. This plugin adds no annotations but invisible links."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2290
+#: includes/Admin/VerificationPage.php:2299
 msgid "This link draws its own appearance. The links this plugin writes draw nothing."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2293
+#: includes/Admin/VerificationPage.php:2302
 msgid "This link has a visible border. The links this plugin writes are invisible."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2295
+#: includes/Admin/VerificationPage.php:2304
 msgid "This link has no target this plugin writes (an address or a place in the document)."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2409
+#: includes/Admin/VerificationPage.php:2418
 msgid "UNMATCHED"
 msgstr ""
 
 #. translators: %d: the annotation's position in the list.
-#: includes/Admin/VerificationPage.php:2414
+#: includes/Admin/VerificationPage.php:2423
 #, php-format
 msgid "Annotation #%d — a list of annotations that cannot be read"
 msgstr ""
 
 #. translators: %d: the annotation's position in the list.
-#: includes/Admin/VerificationPage.php:2417
+#: includes/Admin/VerificationPage.php:2426
 #, php-format
 msgid "Annotation #%d — no type given"
 msgstr ""
 
 #. translators: %1$d: the annotation's position, %2$s: its PDF type, e.g. "Link" or "FreeText".
-#: includes/Admin/VerificationPage.php:2420
+#: includes/Admin/VerificationPage.php:2429
 #, php-format
 msgid "Annotation #%1$d — %2$s"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2429
-#: includes/Admin/VerificationPage.php:2453
+#: includes/Admin/VerificationPage.php:2438
+#: includes/Admin/VerificationPage.php:2462
 msgid "PDF content"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2449
+#: includes/Admin/VerificationPage.php:2458
 msgid "Sealed link"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2455
+#: includes/Admin/VerificationPage.php:2464
 msgid "No link to this target: it was removed, or changed into one listed above."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2462
+#: includes/Admin/VerificationPage.php:2471
 msgid "No annotations found in PDF."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2489
+#: includes/Admin/VerificationPage.php:2498
 msgid "Checking page count…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2495
+#: includes/Admin/VerificationPage.php:2504
 msgid "Page Count"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2497
-#: includes/Admin/VerificationPage.php:4829
+#: includes/Admin/VerificationPage.php:2506
+#: includes/Admin/VerificationPage.php:4838
 msgid "PASS"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2510
-#: includes/Admin/VerificationPage.php:3842
-#: includes/Admin/VerificationPage.php:4455
+#: includes/Admin/VerificationPage.php:2519
+#: includes/Admin/VerificationPage.php:3851
+#: includes/Admin/VerificationPage.php:4464
 msgid "OK"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2533
+#: includes/Admin/VerificationPage.php:2542
 msgid "Checking images…"
 msgstr ""
 
 #. translators: 1: number of sealed images no longer present, 2: number of images appearing more often than sealed.
-#: includes/Admin/VerificationPage.php:2613
+#: includes/Admin/VerificationPage.php:2622
 #, php-format
 msgid "Image inventory does not match the seal — %1$d missing, %2$d duplicated"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2627
+#: includes/Admin/VerificationPage.php:2636
 msgid "Image Hashes"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2837
+#: includes/Admin/VerificationPage.php:2846
 msgid "[XObject Scan] No XObjects found."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2960
+#: includes/Admin/VerificationPage.php:2969
 msgid "The image stream could not be decoded."
 msgstr ""
 
 #. translators: %d: verification size limit in megapixels.
-#: includes/Admin/VerificationPage.php:2965
+#: includes/Admin/VerificationPage.php:2974
 #, php-format
 msgid "The image exceeds the %d-megapixel verification size limit for this image type and was skipped. This is a size cap, not evidence of tampering."
 msgstr ""
 
 #. translators: %1$s: image width, %2$s: image height, as read from the PDF.
-#: includes/Admin/VerificationPage.php:2970
+#: includes/Admin/VerificationPage.php:2979
 #, php-format
 msgid "Invalid dimensions (%1$s×%2$s)"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:2973
+#: includes/Admin/VerificationPage.php:2982
 msgid "The image is a mask."
 msgstr ""
 
 #. translators: %s: PDF colour space name, e.g. DeviceN.
-#: includes/Admin/VerificationPage.php:2977
-#: includes/Admin/VerificationPage.php:3134
+#: includes/Admin/VerificationPage.php:2986
+#: includes/Admin/VerificationPage.php:3143
 #, php-format
 msgid "Unsupported colour space: %s"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3011
-#: includes/Admin/VerificationPage.php:4997
+#: includes/Admin/VerificationPage.php:3020
+#: includes/Admin/VerificationPage.php:5006
 msgid "Unreadable XObject"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3023
-#: includes/Admin/VerificationPage.php:5008
+#: includes/Admin/VerificationPage.php:3032
+#: includes/Admin/VerificationPage.php:5017
 msgid "The image could not be recreated from its stream and counts as a mismatch."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3031
+#: includes/Admin/VerificationPage.php:3040
 msgid "Image metadata:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3032
+#: includes/Admin/VerificationPage.php:3041
 msgid "Filters:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3033
-#: includes/Admin/VerificationPage.php:5016
+#: includes/Admin/VerificationPage.php:3042
+#: includes/Admin/VerificationPage.php:5025
 msgid "Width x Height:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3034
+#: includes/Admin/VerificationPage.php:3043
 msgid "BitsPerComponent:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3035
-#: includes/Admin/VerificationPage.php:5015
+#: includes/Admin/VerificationPage.php:3044
+#: includes/Admin/VerificationPage.php:5024
 msgid "ColorSpace:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3036
+#: includes/Admin/VerificationPage.php:3045
 msgid "Channels:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3037
+#: includes/Admin/VerificationPage.php:3046
 msgid "ImageMask:"
 msgstr ""
 
 #. translators: %d: decoded image size in bytes.
-#: includes/Admin/VerificationPage.php:3040
+#: includes/Admin/VerificationPage.php:3049
 #, php-format
 msgid "%d byte"
 msgid_plural "%d bytes"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/Admin/VerificationPage.php:3041
+#: includes/Admin/VerificationPage.php:3050
 msgid "n/a"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3042
+#: includes/Admin/VerificationPage.php:3051
 msgid "Decoded size:"
 msgstr ""
 
 #. translators: %s: PDF colour space name the palette is based on, e.g. DeviceCMYK.
-#: includes/Admin/VerificationPage.php:3092
+#: includes/Admin/VerificationPage.php:3101
 #, php-format
 msgid "Unsupported base colour space for an indexed image: %s"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3580
+#: includes/Admin/VerificationPage.php:3589
 msgid "[Image could not be rendered]"
 msgstr ""
 
 #. translators: %1$s: colour space such as "DeviceRGB", %2$d: width, %3$d: height in pixels, %4$d: colour channels, %5$s: byte count.
-#: includes/Admin/VerificationPage.php:3584
+#: includes/Admin/VerificationPage.php:3593
 #, php-format
 msgid "%1$s · %2$d × %3$d px · %4$d channels · %5$s bytes decoded"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3595
+#: includes/Admin/VerificationPage.php:3604
 msgid "The seal lists no images."
 msgstr ""
 
 #. translators: %d: how many image hashes the seal lists.
-#: includes/Admin/VerificationPage.php:3598
+#: includes/Admin/VerificationPage.php:3607
 #, php-format
 msgid "The seal lists %d image hash, and not this one:"
 msgid_plural "The seal lists %d image hashes, and not this one:"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/Admin/VerificationPage.php:3626
+#: includes/Admin/VerificationPage.php:3635
 msgid "Checking content streams…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3633
+#: includes/Admin/VerificationPage.php:3642
 msgid "The seal lists no content streams, so the page content cannot be checked."
 msgstr ""
 
 #. translators: %1$d: content streams recorded in the seal, %2$d: content streams found in the PDF
-#: includes/Admin/VerificationPage.php:3657
+#: includes/Admin/VerificationPage.php:3666
 #, php-format
 msgid "Streams in seal: %1$d · verifiable in PDF: %2$d"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3667
+#: includes/Admin/VerificationPage.php:3676
 msgid "UNRECOGNISED"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3669
+#: includes/Admin/VerificationPage.php:3678
 msgid "not in seal"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3674
+#: includes/Admin/VerificationPage.php:3683
 msgid "SEAL PAGE"
 msgstr ""
 
 #. translators: %d: PDF object number of the stream.
-#: includes/Admin/VerificationPage.php:3682
+#: includes/Admin/VerificationPage.php:3691
 #, php-format
 msgid "Content stream %d is too large to verify."
 msgstr ""
 
 #. translators: %d: PDF object number of the stream.
-#: includes/Admin/VerificationPage.php:3684
+#: includes/Admin/VerificationPage.php:3693
 #, php-format
 msgid "Stream %d carries a seal marker outside the seal page: injected content."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3685
+#: includes/Admin/VerificationPage.php:3694
 msgid "No content stream on the last page carries the seal."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3686
+#: includes/Admin/VerificationPage.php:3695
 msgid "The seal page contains content that is not in the seal."
 msgstr ""
 
 #. translators: %d: number of sealed content streams missing from the PDF.
-#: includes/Admin/VerificationPage.php:3688
+#: includes/Admin/VerificationPage.php:3697
 #, php-format
 msgid "%d sealed content stream is missing from the PDF."
 msgid_plural "%d sealed content streams are missing from the PDF."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/Admin/VerificationPage.php:3689
+#: includes/Admin/VerificationPage.php:3698
 msgid "Content streams do not match the seal."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3701
+#: includes/Admin/VerificationPage.php:3710
 msgid "Seal-page content stream not found"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3707
+#: includes/Admin/VerificationPage.php:3716
 msgid "Text on the seal page does not match the seal"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3713
+#: includes/Admin/VerificationPage.php:3722
 msgid "Seal-page text matches the seal"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3719
+#: includes/Admin/VerificationPage.php:3728
 msgid "All streams accounted for"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3728
+#: includes/Admin/VerificationPage.php:3737
 msgid "Content Streams"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3759
+#: includes/Admin/VerificationPage.php:3768
 msgid "Checking fonts…"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3845
+#: includes/Admin/VerificationPage.php:3854
 msgid "UNDECLARED"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3848
+#: includes/Admin/VerificationPage.php:3857
 msgid "UNUSED"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3867
+#: includes/Admin/VerificationPage.php:3876
 msgid "The font names match the seal, but an embedded font file does not. A changed font file can draw other shapes for the same letters, so the page may show something other than the text it holds."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3875
+#: includes/Admin/VerificationPage.php:3884
 msgid "Embedded font file the seal does not list"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3881
+#: includes/Admin/VerificationPage.php:3890
 msgid "Sealed font file no longer in the PDF"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3890
+#: includes/Admin/VerificationPage.php:3899
 msgid "All fonts match the seal"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3899
-#: includes/Admin/VerificationPage.php:4601
+#: includes/Admin/VerificationPage.php:3908
+#: includes/Admin/VerificationPage.php:4610
 msgid "Fonts"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:3988
-#: includes/Admin/VerificationPage.php:4610
+#: includes/Admin/VerificationPage.php:3997
+#: includes/Admin/VerificationPage.php:4619
 msgid "PDF Objects"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4002
+#: includes/Admin/VerificationPage.php:4011
 msgid "No unexpected PDF objects detected."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4062
+#: includes/Admin/VerificationPage.php:4071
 #: includes/Fields/PostDataField.php:300
 msgid "Author"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4063
+#: includes/Admin/VerificationPage.php:4072
 msgid "Creator"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4064
+#: includes/Admin/VerificationPage.php:4073
 msgid "Producer"
 msgstr ""
 
 #. translators: 1: earliest accepted date and time, 2: latest accepted date and time.
-#: includes/Admin/VerificationPage.php:4079
+#: includes/Admin/VerificationPage.php:4088
 #, php-format
 msgid "between %1$s and %2$s"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4083
+#: includes/Admin/VerificationPage.php:4092
 msgid "Creation date"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4083
+#: includes/Admin/VerificationPage.php:4092
 msgid "Modification date"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4096
-#: includes/Admin/VerificationPage.php:4618
+#: includes/Admin/VerificationPage.php:4105
+#: includes/Admin/VerificationPage.php:4627
 msgid "PDF Metadata"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4108
+#: includes/Admin/VerificationPage.php:4117
 msgid "(empty)"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4109
+#: includes/Admin/VerificationPage.php:4118
 msgid "expected:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4159
+#: includes/Admin/VerificationPage.php:4168
 msgid "Stream Fingerprint"
 msgstr ""
 
 #. translators: %d: how many compressed parts of the file the seal has no fingerprint for.
-#: includes/Admin/VerificationPage.php:4165
+#: includes/Admin/VerificationPage.php:4174
 #, php-format
 msgid "%d compressed part of this file (a font, an image or other embedded data) has no fingerprint in the seal: it was added or changed after the PDF was made. The rows above name what kind of part it is where they can."
 msgid_plural "%d compressed parts of this file (fonts, images or other embedded data) have no fingerprint in the seal: they were added or changed after the PDF was made. The rows above name what kind of part they are where they can."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/Admin/VerificationPage.php:4202
+#: includes/Admin/VerificationPage.php:4211
 msgid "This file is damaged or incomplete, so its content could not be read. A PDF from this plugin reads in full: ask for the original file."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4204
+#: includes/Admin/VerificationPage.php:4213
 msgid "PDF parsing took too long and was stopped for safety. Please try a smaller or simpler PDF."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4206
+#: includes/Admin/VerificationPage.php:4215
 msgid "No FormFabricator seal found. Please only upload original documents."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4208
+#: includes/Admin/VerificationPage.php:4217
 msgid "The seal in the document is corrupted and cannot be read."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4210
+#: includes/Admin/VerificationPage.php:4219
 msgid "The seal in the document is unusually large — file rejected."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4212
+#: includes/Admin/VerificationPage.php:4221
 msgid "The PDF structure is invalid or the document is encrypted."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4214
+#: includes/Admin/VerificationPage.php:4223
 msgid "An embedded image in the document has invalid color data and could not be processed."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4240
+#: includes/Admin/VerificationPage.php:4249
 msgid "An internal error stopped the check; the file itself may be fine. The details were written to the PHP error log."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4277
+#: includes/Admin/VerificationPage.php:4286
 msgid "Not Verifiable"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4278
+#: includes/Admin/VerificationPage.php:4287
 msgid "Key Unreadable"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4285
+#: includes/Admin/VerificationPage.php:4294
 msgid "Modified"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4292
+#: includes/Admin/VerificationPage.php:4301
 msgid "Compromised Key"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4299
+#: includes/Admin/VerificationPage.php:4308
 msgid "Rotated Key"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4306
-#: includes/Admin/VerificationPage.php:4649
+#: includes/Admin/VerificationPage.php:4315
+#: includes/Admin/VerificationPage.php:4658
 msgid "Authentic"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4333
-#: includes/Admin/VerificationPage.php:4550
+#: includes/Admin/VerificationPage.php:4342
+#: includes/Admin/VerificationPage.php:4559
 msgid "Legacy"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4458
-#: includes/Admin/VerificationPage.php:4521
+#: includes/Admin/VerificationPage.php:4467
+#: includes/Admin/VerificationPage.php:4530
 msgid "Show details"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4472
 #: includes/Admin/VerificationPage.php:4481
 #: includes/Admin/VerificationPage.php:4490
+#: includes/Admin/VerificationPage.php:4499
 msgid "PDF structure"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4473
+#: includes/Admin/VerificationPage.php:4482
 msgid "Incremental update detected"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4482
+#: includes/Admin/VerificationPage.php:4491
 msgid "Objects defined twice — a viewer may show other content than was checked"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4491
+#: includes/Admin/VerificationPage.php:4500
 msgid "Disguised additions — a viewer may show content the checks cannot see"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4499
+#: includes/Admin/VerificationPage.php:4508
 msgid "Seal integrity"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4500
+#: includes/Admin/VerificationPage.php:4509
 msgid "More than one seal block — the document has been tampered with"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4516
+#: includes/Admin/VerificationPage.php:4525
 msgid "NOT VERIFIABLE — no key on this site matches this seal; do not treat the document as authentic"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4517
+#: includes/Admin/VerificationPage.php:4526
 msgid "NOT CHECKED — the signing key exists but could not be decrypted"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4523
-#: includes/Admin/VerificationPage.php:4530
+#: includes/Admin/VerificationPage.php:4532
+#: includes/Admin/VerificationPage.php:4539
 msgid "Cryptographic seal (HMAC)"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4529
+#: includes/Admin/VerificationPage.php:4538
 msgid "MISMATCH — document may have been tampered with"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4539
-#: includes/Admin/VerificationPage.php:4547
+#: includes/Admin/VerificationPage.php:4548
 #: includes/Admin/VerificationPage.php:4556
+#: includes/Admin/VerificationPage.php:4565
 msgid "Seal key"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4542
+#: includes/Admin/VerificationPage.php:4551
 msgid "COMPROMISED — manual verification strongly recommended"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4551
+#: includes/Admin/VerificationPage.php:4560
 msgid "Manually imported key"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4559
+#: includes/Admin/VerificationPage.php:4568
 msgid "Signed with a rotated (older) key"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4567
+#: includes/Admin/VerificationPage.php:4576
 msgid "Visual field content"
 msgstr ""
 
 #. translators: %d: number of visible form fields whose content no longer matches the seal.
-#: includes/Admin/VerificationPage.php:4569
+#: includes/Admin/VerificationPage.php:4578
 #, php-format
 msgid "%d field does not match the seal"
 msgid_plural "%d fields do not match the seal"
@@ -4216,125 +4216,125 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of annotations, or sealed links, that don't match between PDF and seal.
-#: includes/Admin/VerificationPage.php:4578
+#: includes/Admin/VerificationPage.php:4587
 #, php-format
 msgid "%d link or annotation does not match the seal"
 msgid_plural "%d links or annotations do not match the seal"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/Admin/VerificationPage.php:4582
+#: includes/Admin/VerificationPage.php:4591
 msgid "Page count"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4586
+#: includes/Admin/VerificationPage.php:4595
 msgid "Image hashes"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4587
+#: includes/Admin/VerificationPage.php:4596
 msgid "MISMATCH — image content changed"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4594
+#: includes/Admin/VerificationPage.php:4603
 msgid "Page content integrity"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4595
+#: includes/Admin/VerificationPage.php:4604
 msgid "Page content was modified or added"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4603
+#: includes/Admin/VerificationPage.php:4612
 msgid "An embedded font file differs from the seal"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4604
+#: includes/Admin/VerificationPage.php:4613
 msgid "Undeclared or missing fonts detected"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4611
+#: includes/Admin/VerificationPage.php:4620
 msgid "Unexpected object types detected"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4619
+#: includes/Admin/VerificationPage.php:4628
 msgid "Document information differs from the seal, or its dates from the time it was made"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4627
+#: includes/Admin/VerificationPage.php:4636
 msgid "Stream fingerprint"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4628
+#: includes/Admin/VerificationPage.php:4637
 msgid "A compressed stream was added or modified"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4638
+#: includes/Admin/VerificationPage.php:4647
 msgid "NOT VERIFIABLE — signing key could not be decrypted"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4643
+#: includes/Admin/VerificationPage.php:4652
 msgid "NOT VERIFIABLE — unknown signing key, do not treat as authentic"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4648
+#: includes/Admin/VerificationPage.php:4657
 msgid "MODIFIED or INVALID"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4654
+#: includes/Admin/VerificationPage.php:4663
 msgid "Document ID:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4662
+#: includes/Admin/VerificationPage.php:4671
 msgid "Check"
 msgstr ""
 
 #. translators: %s: key path inside the seal payload, e.g. fields.3.value.
-#: includes/Admin/VerificationPage.php:4788
+#: includes/Admin/VerificationPage.php:4797
 #, php-format
 msgid "Missing in the seal: %s"
 msgstr ""
 
 #. translators: %s: key path inside the seal payload, e.g. fields.3.value.
-#: includes/Admin/VerificationPage.php:4794
+#: includes/Admin/VerificationPage.php:4803
 #, php-format
 msgid "Missing in the rebuilt data: %s"
 msgstr ""
 
 #. translators: %s: key path inside the seal payload, e.g. fields.3.value.
-#: includes/Admin/VerificationPage.php:4803
+#: includes/Admin/VerificationPage.php:4812
 #, php-format
 msgid "Type mismatch at %s"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4804
-#: includes/Admin/VerificationPage.php:4810
+#: includes/Admin/VerificationPage.php:4813
+#: includes/Admin/VerificationPage.php:4819
 msgid "Seal:"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4805
-#: includes/Admin/VerificationPage.php:4811
+#: includes/Admin/VerificationPage.php:4814
+#: includes/Admin/VerificationPage.php:4820
 msgid "Rebuilt:"
 msgstr ""
 
 #. translators: %s: key path inside the seal payload, e.g. fields.3.value.
-#: includes/Admin/VerificationPage.php:4809
+#: includes/Admin/VerificationPage.php:4818
 #, php-format
 msgid "Mismatch at %s"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:4847
+#: includes/Admin/VerificationPage.php:4856
 msgid "Not checked"
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:5030
+#: includes/Admin/VerificationPage.php:5039
 msgid "These parts are compressed in a way FormFabricator never uses, so they were not unpacked. The file was not created by this site or was changed afterwards."
 msgstr ""
 
-#: includes/Admin/VerificationPage.php:5031
+#: includes/Admin/VerificationPage.php:5040
 msgid "These parts are too large to unpack within the memory reserved for this check, so they were not read."
 msgstr ""
 
 #. translators: %d: number of further parts that were not unpacked.
-#: includes/Admin/VerificationPage.php:5047
+#: includes/Admin/VerificationPage.php:5056
 #, php-format
 msgid "… and %d more part."
 msgid_plural "… and %d more parts."
@@ -4342,25 +4342,25 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: PDF object number, 2: image width in pixels, 3: image height in pixels.
-#: includes/Admin/VerificationPage.php:5062
+#: includes/Admin/VerificationPage.php:5071
 #, php-format
 msgid "Image in object %1$s (%2$d × %3$d pixels)"
 msgstr ""
 
 #. translators: %s: PDF object number.
-#: includes/Admin/VerificationPage.php:5064
+#: includes/Admin/VerificationPage.php:5073
 #, php-format
 msgid "Image in object %s"
 msgstr ""
 
 #. translators: 1: PDF object number, 2: the object's PDF type, e.g. "XObject Form".
-#: includes/Admin/VerificationPage.php:5069
+#: includes/Admin/VerificationPage.php:5078
 #, php-format
 msgid "Object %1$s (%2$s)"
 msgstr ""
 
 #. translators: %s: PDF object number.
-#: includes/Admin/VerificationPage.php:5071
+#: includes/Admin/VerificationPage.php:5080
 #, php-format
 msgid "Object %s"
 msgstr ""
@@ -4400,8 +4400,8 @@ msgstr ""
 #: includes/Fields/AddressField.php:242
 #: includes/Fields/AddressField.php:274
 #: includes/Fields/DateField.php:260
-#: includes/Fields/NameField.php:278
-#: includes/Fields/NameField.php:319
+#: includes/Fields/NameField.php:279
+#: includes/Fields/NameField.php:320
 #, php-format
 msgid "%s: Required field."
 msgstr ""
@@ -4409,24 +4409,24 @@ msgstr ""
 #: includes/Fields/AddressField.php:291
 #: includes/Fields/AddressField.php:296
 #: includes/Fields/AddressField.php:313
-#: includes/Fields/BaseField.php:586
-#: includes/Fields/CheckboxField.php:297
+#: includes/Fields/BaseField.php:568
+#: includes/Fields/CheckboxField.php:298
 #: includes/Fields/CurrencyField.php:155
 #: includes/Fields/DateField.php:305
-#: includes/Fields/DirectDebitField.php:781
-#: includes/Fields/DirectDebitField.php:819
-#: includes/Fields/DirectDebitField.php:844
-#: includes/Fields/NameField.php:336
-#: includes/Fields/NameField.php:344
+#: includes/Fields/DirectDebitField.php:782
+#: includes/Fields/DirectDebitField.php:820
+#: includes/Fields/DirectDebitField.php:845
+#: includes/Fields/NameField.php:337
+#: includes/Fields/NameField.php:345
 #: includes/Fields/PostDataField.php:217
-#: includes/Fields/RadioField.php:239
-#: includes/Fields/RatingField.php:264
+#: includes/Fields/RadioField.php:240
+#: includes/Fields/RatingField.php:265
 #: includes/Fields/SelectField.php:147
-#: includes/Fields/SignatureField.php:384
-#: includes/Fields/SignatureField.php:398
-#: includes/Fields/SliderField.php:316
-#: includes/Fields/SliderField.php:321
-#: includes/Fields/SliderField.php:323
+#: includes/Fields/SignatureField.php:390
+#: includes/Fields/SignatureField.php:404
+#: includes/Fields/SliderField.php:317
+#: includes/Fields/SliderField.php:322
+#: includes/Fields/SliderField.php:324
 #: includes/Fields/UploadField.php:454
 #: includes/Fields/UploadField.php:539
 msgid "[No entry]"
@@ -4437,49 +4437,49 @@ msgid "Apartment, floor, c/o ..."
 msgstr ""
 
 #: includes/Fields/AddressField.php:419
-#: includes/Fields/NameField.php:443
-#: includes/Fields/SliderField.php:401
+#: includes/Fields/NameField.php:444
+#: includes/Fields/SliderField.php:402
 msgid "Mode"
 msgstr ""
 
 #: includes/Fields/AddressField.php:420
-#: includes/Fields/NameField.php:444
+#: includes/Fields/NameField.php:445
 msgid "Simple"
 msgstr ""
 
 #: includes/Fields/AddressField.php:421
-#: includes/Fields/NameField.php:445
+#: includes/Fields/NameField.php:446
 msgid "Extended"
 msgstr ""
 
 #: includes/Fields/AddressField.php:433
-#: includes/Fields/NameField.php:457
+#: includes/Fields/NameField.php:458
 msgid "Hint text"
 msgstr ""
 
 #: includes/Fields/AddressField.php:439
-#: includes/Fields/NameField.php:463
+#: includes/Fields/NameField.php:464
 msgid "Sub-fields"
 msgstr ""
 
 #. translators: %1$d: maximum character count allowed, %2$d: current character count.
-#: includes/Fields/BaseField.php:139
-#: includes/Fields/BaseField.php:156
+#: includes/Fields/BaseField.php:121
+#: includes/Fields/BaseField.php:138
 #, php-format
 msgid "Please enter at most %1$d characters for \"Other\" (currently: %2$d)."
 msgstr ""
 
 #. translators: %1$d: maximum word count allowed, %2$d: current word count.
 #. translators: %1$d: maximum word count allowed, %2$d: current word count (both substituted client-side).
-#: includes/Fields/BaseField.php:149
-#: includes/Utils/Assets.php:196
+#: includes/Fields/BaseField.php:131
+#: includes/Utils/Assets.php:206
 #, php-format
 msgid "Please enter at most %1$d words for \"Other\" (currently: %2$d)."
 msgstr ""
 
 #. translators: %1$d: absolute maximum character count allowed, %2$d: current character count.
 #. translators: %1$d: maximum character count allowed, %2$d: current character count.
-#: includes/Fields/BaseField.php:183
+#: includes/Fields/BaseField.php:165
 #: includes/Fields/TextField.php:111
 #: includes/Fields/TextareaField.php:150
 #, php-format
@@ -4487,121 +4487,121 @@ msgid "Please enter at most %1$d characters (currently: %2$d)."
 msgstr ""
 
 #. translators: %s: the name the visitor typed as their signature.
-#: includes/Fields/BaseField.php:218
+#: includes/Fields/BaseField.php:200
 #, php-format
 msgid "%s (signed by typing the name)"
 msgstr ""
 
-#: includes/Fields/BaseField.php:575
-#: includes/Fields/CheckboxField.php:243
-#: includes/Fields/RadioField.php:207
+#: includes/Fields/BaseField.php:557
+#: includes/Fields/CheckboxField.php:244
+#: includes/Fields/RadioField.php:208
 #: includes/Fields/SelectField.php:188
 msgid "Field"
 msgstr ""
 
 #. translators: %s: field label.
-#: includes/Fields/BaseField.php:577
-#: includes/Fields/DirectDebitField.php:707
-#: includes/Fields/RadioField.php:209
-#: includes/Fields/RatingField.php:236
+#: includes/Fields/BaseField.php:559
+#: includes/Fields/DirectDebitField.php:708
+#: includes/Fields/RadioField.php:210
+#: includes/Fields/RatingField.php:237
 #: includes/Fields/SelectField.php:190
 #: includes/Fields/SignatureField.php:172
-#: includes/Fields/SignatureField.php:328
-#: includes/Form/FormProcessor.php:260
+#: includes/Fields/SignatureField.php:334
+#: includes/Form/FormProcessor.php:264
 #, php-format
 msgid "%s is a required field."
 msgstr ""
 
 #: includes/Fields/CaptchaField.php:44
-#: includes/Fields/CaptchaField.php:323
+#: includes/Fields/CaptchaField.php:330
 msgid "CAPTCHA"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:90
+#: includes/Fields/CaptchaField.php:97
 msgid "reCAPTCHA: Please enter the site key in the plugin settings."
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:91
-#: includes/Form/FormProcessor.php:112
+#: includes/Fields/CaptchaField.php:98
+#: includes/Form/FormProcessor.php:116
 msgid "This form cannot be sent at the moment. Please try again later."
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:99
+#: includes/Fields/CaptchaField.php:106
 msgid "Load CAPTCHA"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:102
+#: includes/Fields/CaptchaField.php:109
 msgid "This loads a script from Google (reCAPTCHA) once activated."
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:122
+#: includes/Fields/CaptchaField.php:129
 msgid "Verification failed. Try again later."
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:123
+#: includes/Fields/CaptchaField.php:130
 msgid "Verification expired. Try again."
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:125
+#: includes/Fields/CaptchaField.php:132
 msgid "I'm not a robot"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:127
+#: includes/Fields/CaptchaField.php:134
 msgid "Reload"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:128
+#: includes/Fields/CaptchaField.php:135
 msgid "Verify"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:129
+#: includes/Fields/CaptchaField.php:136
 msgid "Verification required!"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:130
+#: includes/Fields/CaptchaField.php:137
 msgid "Verified"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:131
+#: includes/Fields/CaptchaField.php:138
 msgid "Verifying…"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:132
+#: includes/Fields/CaptchaField.php:139
 msgid "Verifying… please wait."
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:198
-#: includes/Fields/CaptchaField.php:202
-#: includes/Fields/CaptchaField.php:249
-#: includes/Fields/CaptchaField.php:260
+#: includes/Fields/CaptchaField.php:205
+#: includes/Fields/CaptchaField.php:209
+#: includes/Fields/CaptchaField.php:256
+#: includes/Fields/CaptchaField.php:267
 msgid "Please confirm the CAPTCHA."
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:244
+#: includes/Fields/CaptchaField.php:251
 msgid "CAPTCHA verification could not be completed. Please try again."
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:312
+#: includes/Fields/CaptchaField.php:319
 msgid "[CAPTCHA confirmed]"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:343
+#: includes/Fields/CaptchaField.php:350
 msgid "Provider"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:345
+#: includes/Fields/CaptchaField.php:352
 msgid "ALTCHA (on this site)"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:345
+#: includes/Fields/CaptchaField.php:352
 msgid "reCAPTCHA (Google)"
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:352
+#: includes/Fields/CaptchaField.php:359
 msgid "Checked on this site: the visitor's browser solves a small calculation. No third party is involved, and nothing is stored about the visitor. Needs HTTPS: browsers allow the calculation only on secure pages."
 msgstr ""
 
-#: includes/Fields/CaptchaField.php:364
+#: includes/Fields/CaptchaField.php:371
 msgid "The visitor's browser connects to Google (reCAPTCHA) when the CAPTCHA loads, so Google sees their IP address. Once the rest of the form is valid, this site sends the CAPTCHA answer to Google. Say so in your privacy policy."
 msgstr ""
 
@@ -4610,8 +4610,8 @@ msgid "Checkboxes"
 msgstr ""
 
 #. translators: %d: minimum number of options that must be selected.
-#: includes/Fields/CheckboxField.php:152
-#: includes/Fields/CheckboxField.php:256
+#: includes/Fields/CheckboxField.php:153
+#: includes/Fields/CheckboxField.php:257
 #, php-format
 msgid "Please select at least %d option."
 msgid_plural "Please select at least %d options."
@@ -4619,141 +4619,141 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: maximum number of options that may be selected.
-#: includes/Fields/CheckboxField.php:157
-#: includes/Fields/CheckboxField.php:260
+#: includes/Fields/CheckboxField.php:158
+#: includes/Fields/CheckboxField.php:261
 #, php-format
 msgid "Please select at most %d option."
 msgid_plural "Please select at most %d options."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/Fields/CheckboxField.php:183
-#: includes/Fields/RadioField.php:147
+#: includes/Fields/CheckboxField.php:184
+#: includes/Fields/RadioField.php:148
 #: includes/Fields/SelectField.php:118
 msgid "Other…"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:186
-#: includes/Fields/RadioField.php:152
+#: includes/Fields/CheckboxField.php:187
+#: includes/Fields/RadioField.php:153
 #: includes/Fields/SelectField.php:124
 msgid "Please specify"
 msgstr ""
 
 #. translators: %s: field label.
-#: includes/Fields/CheckboxField.php:245
+#: includes/Fields/CheckboxField.php:246
 #, php-format
 msgid "%s: Please select at least one option."
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:270
-#: includes/Fields/CheckboxField.php:280
-#: includes/Fields/RadioField.php:201
-#: includes/Fields/RadioField.php:219
+#: includes/Fields/CheckboxField.php:271
+#: includes/Fields/CheckboxField.php:281
+#: includes/Fields/RadioField.php:202
+#: includes/Fields/RadioField.php:220
 #: includes/Fields/SelectField.php:182
 #: includes/Fields/SelectField.php:200
 msgid "Please select a valid option."
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:304
-#: includes/Fields/RadioField.php:243
+#: includes/Fields/CheckboxField.php:305
+#: includes/Fields/RadioField.php:244
 #: includes/Fields/SelectField.php:151
 msgid "Other"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:305
-#: includes/Fields/RadioField.php:244
+#: includes/Fields/CheckboxField.php:306
+#: includes/Fields/RadioField.php:245
 #: includes/Fields/SelectField.php:152
 msgid "[Other]"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:359
-#: includes/Fields/FieldRegistry.php:232
-#: includes/Fields/RadioField.php:288
-msgid "Layout"
-msgstr ""
-
 #: includes/Fields/CheckboxField.php:360
+#: includes/Fields/FieldRegistry.php:232
 #: includes/Fields/RadioField.php:289
-msgid "Vertical"
+msgid "Layout"
 msgstr ""
 
 #: includes/Fields/CheckboxField.php:361
 #: includes/Fields/RadioField.php:290
+msgid "Vertical"
+msgstr ""
+
+#: includes/Fields/CheckboxField.php:362
+#: includes/Fields/RadioField.php:291
 msgid "Horizontal"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:372
-#: includes/Fields/RadioField.php:301
+#: includes/Fields/CheckboxField.php:373
+#: includes/Fields/RadioField.php:302
 #: includes/Fields/SelectField.php:263
 msgid "Show \"Other\" option"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:378
-#: includes/Fields/RadioField.php:307
+#: includes/Fields/CheckboxField.php:379
+#: includes/Fields/RadioField.php:308
 #: includes/Fields/SelectField.php:269
 msgid "\"Other\" text limit"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:385
-#: includes/Fields/RadioField.php:314
+#: includes/Fields/CheckboxField.php:386
+#: includes/Fields/RadioField.php:315
 #: includes/Fields/SelectField.php:276
 msgid "Options"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:390
+#: includes/Fields/CheckboxField.php:391
 msgid "Min. selection"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:391
+#: includes/Fields/CheckboxField.php:392
 msgid "Empty = not required"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:396
+#: includes/Fields/CheckboxField.php:397
 msgid "Max. selection"
 msgstr ""
 
-#: includes/Fields/CheckboxField.php:397
+#: includes/Fields/CheckboxField.php:398
 msgid "Empty = unlimited"
 msgstr ""
 
 #: includes/Fields/ConsentField.php:76
-#: includes/Fields/ConsentField.php:130
+#: includes/Fields/ConsentField.php:131
 msgid "Consent"
 msgstr ""
 
 #. translators: %s: field label.
-#: includes/Fields/ConsentField.php:132
+#: includes/Fields/ConsentField.php:133
 #, php-format
 msgid "%s is required."
 msgstr ""
 
-#: includes/Fields/ConsentField.php:147
+#: includes/Fields/ConsentField.php:148
 msgid "Not agreed"
 msgstr ""
 
 #. translators: %1$s: consent text shown to the user, %2$s: agreement timestamp.
-#: includes/Fields/ConsentField.php:153
+#: includes/Fields/ConsentField.php:154
 #, php-format
 msgid "Agreed to \"%1$s\" on %2$s"
 msgstr ""
 
-#: includes/Fields/ConsentField.php:239
+#: includes/Fields/ConsentField.php:240
 msgid "I agree to the terms."
 msgstr ""
 
-#: includes/Fields/ConsentField.php:253
+#: includes/Fields/ConsentField.php:254
 msgid "Consent text"
 msgstr ""
 
-#: includes/Fields/ConsentField.php:256
+#: includes/Fields/ConsentField.php:257
 msgid "Be specific about what the visitor is agreeing to (e.g. name the processing purpose) — a generic phrase like \"I agree to the terms\" is not valid, informed consent under GDPR."
 msgstr ""
 
-#: includes/Fields/ConsentField.php:262
+#: includes/Fields/ConsentField.php:263
 msgid "Make it required only if what the form does cannot work without it; consent demanded for anything else is not freely given."
 msgstr ""
 
-#: includes/Fields/ConsentField.php:268
+#: includes/Fields/ConsentField.php:269
 msgid "Also say how the visitor can withdraw their consent, e.g. \"You can withdraw it at any time by emailing …\"."
 msgstr ""
 
@@ -4763,12 +4763,12 @@ msgid "Currency"
 msgstr ""
 
 #: includes/Fields/CurrencyField.php:117
-#: includes/Utils/Assets.php:200
+#: includes/Utils/Assets.php:210
 msgid "Please enter a valid amount."
 msgstr ""
 
 #: includes/Fields/CurrencyField.php:122
-#: includes/Utils/Assets.php:201
+#: includes/Utils/Assets.php:211
 msgid "Please enter an amount with at most two decimal places."
 msgstr ""
 
@@ -4776,11 +4776,11 @@ msgstr ""
 #. translators: %s: minimum allowed value (substituted client-side).
 #: includes/Fields/CurrencyField.php:126
 #: includes/Fields/NumberField.php:146
-#: includes/Fields/SliderField.php:210
-#: includes/Fields/SliderField.php:240
-#: includes/Utils/Assets.php:188
-#: includes/Utils/Assets.php:203
-#: includes/Utils/Assets.php:215
+#: includes/Fields/SliderField.php:211
+#: includes/Fields/SliderField.php:241
+#: includes/Utils/Assets.php:198
+#: includes/Utils/Assets.php:213
+#: includes/Utils/Assets.php:225
 #, php-format
 msgid "Minimum value: %s"
 msgstr ""
@@ -4789,18 +4789,18 @@ msgstr ""
 #. translators: %s: maximum allowed value (substituted client-side).
 #: includes/Fields/CurrencyField.php:130
 #: includes/Fields/NumberField.php:150
-#: includes/Fields/SliderField.php:214
-#: includes/Fields/SliderField.php:244
-#: includes/Utils/Assets.php:190
-#: includes/Utils/Assets.php:205
-#: includes/Utils/Assets.php:217
+#: includes/Fields/SliderField.php:215
+#: includes/Fields/SliderField.php:245
+#: includes/Utils/Assets.php:200
+#: includes/Utils/Assets.php:215
+#: includes/Utils/Assets.php:227
 #, php-format
 msgid "Maximum value: %s"
 msgstr ""
 
 #: includes/Fields/CurrencyField.php:203
 #: includes/Fields/NumberField.php:218
-#: includes/Fields/SliderField.php:408
+#: includes/Fields/SliderField.php:409
 msgid "Minimum value"
 msgstr ""
 
@@ -4810,7 +4810,7 @@ msgstr ""
 
 #: includes/Fields/CurrencyField.php:209
 #: includes/Fields/NumberField.php:223
-#: includes/Fields/SliderField.php:413
+#: includes/Fields/SliderField.php:414
 msgid "Maximum value"
 msgstr ""
 
@@ -4837,13 +4837,13 @@ msgstr ""
 #. translators: %s: expected date pattern, e.g. DD.MM.YYYY.
 #. translators: %s: expected date pattern, e.g. DD.MM.YYYY (substituted client-side).
 #: includes/Fields/DateField.php:268
-#: includes/Utils/Assets.php:208
+#: includes/Utils/Assets.php:218
 #, php-format
 msgid "Please enter a date in %s format."
 msgstr ""
 
 #: includes/Fields/DateField.php:272
-#: includes/Utils/Assets.php:209
+#: includes/Utils/Assets.php:219
 msgid "Please enter a valid date."
 msgstr ""
 
@@ -4879,562 +4879,562 @@ msgstr ""
 msgid "Latest allowed date (in the date format above)"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:171
-#: includes/Fields/DirectDebitField.php:1198
+#: includes/Fields/DirectDebitField.php:172
+#: includes/Fields/DirectDebitField.php:1199
 msgid "Direct Debit Mandate"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:248
+#: includes/Fields/DirectDebitField.php:249
 msgid "Direct Debit Mandate: enter the mandate text in this field's settings. Until then, visitors cannot give a mandate here."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:249
-#: includes/Fields/DirectDebitField.php:583
+#: includes/Fields/DirectDebitField.php:250
+#: includes/Fields/DirectDebitField.php:584
 msgid "Direct debits cannot be set up with this form at the moment."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:274
-#: includes/Fields/DirectDebitField.php:1248
+#: includes/Fields/DirectDebitField.php:275
+#: includes/Fields/DirectDebitField.php:1249
 msgid "assigned when the form is sent"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:290
-#: includes/Fields/DirectDebitField.php:1254
+#: includes/Fields/DirectDebitField.php:291
+#: includes/Fields/DirectDebitField.php:1255
 #: includes/Fields/SignatureField.php:215
 msgid "Clear signature"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:307
-#: includes/Fields/DirectDebitField.php:1257
+#: includes/Fields/DirectDebitField.php:308
+#: includes/Fields/DirectDebitField.php:1258
 #: includes/Fields/SignatureField.php:212
 msgid "Your full name"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:324
-#: includes/Fields/DirectDebitField.php:1253
+#: includes/Fields/DirectDebitField.php:325
+#: includes/Fields/DirectDebitField.php:1254
 #: includes/Fields/SignatureField.php:217
 msgid "Sign here"
-msgstr ""
-
-#: includes/Fields/DirectDebitField.php:326
-#: includes/Fields/DirectDebitField.php:1255
-#: includes/Fields/SignatureField.php:218
-msgid "Type your name instead"
 msgstr ""
 
 #: includes/Fields/DirectDebitField.php:327
 #: includes/Fields/DirectDebitField.php:1256
 #: includes/Fields/SignatureField.php:218
+msgid "Type your name instead"
+msgstr ""
+
+#: includes/Fields/DirectDebitField.php:328
+#: includes/Fields/DirectDebitField.php:1257
+#: includes/Fields/SignatureField.php:218
 msgid "Draw instead"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:375
-#: includes/Fields/DirectDebitField.php:1249
+#: includes/Fields/DirectDebitField.php:376
+#: includes/Fields/DirectDebitField.php:1250
 msgid "Please choose"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:559
-#: includes/Fields/SignatureField.php:319
+#: includes/Fields/DirectDebitField.php:560
+#: includes/Fields/SignatureField.php:325
 msgid "Signature data is too large."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:565
+#: includes/Fields/DirectDebitField.php:566
 msgid "Direct debit details are missing."
 msgstr ""
 
 #. translators: %s: two-letter IBAN country code, e.g. "CH".
-#: includes/Fields/DirectDebitField.php:595
-#: includes/Utils/Assets.php:172
+#: includes/Fields/DirectDebitField.php:596
+#: includes/Utils/Assets.php:182
 #, php-format
 msgid "The BIC is needed for IBANs from %s."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:606
+#: includes/Fields/DirectDebitField.php:607
 msgid "Signature is a required field."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:612
-#: includes/Fields/SignatureField.php:347
+#: includes/Fields/DirectDebitField.php:613
+#: includes/Fields/SignatureField.php:353
 msgid "The signature could not be read. Please sign again."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:635
-#: includes/Utils/Assets.php:164
+#: includes/Fields/DirectDebitField.php:636
+#: includes/Utils/Assets.php:174
 msgid "Please enter a valid BIC."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:638
-#: includes/Utils/Assets.php:166
+#: includes/Fields/DirectDebitField.php:639
+#: includes/Utils/Assets.php:176
 msgid "Please enter a valid sort code (6 digits)."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:641
-#: includes/Utils/Assets.php:167
+#: includes/Fields/DirectDebitField.php:642
+#: includes/Utils/Assets.php:177
 msgid "Please enter a valid routing number."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:645
-#: includes/Utils/Assets.php:168
+#: includes/Fields/DirectDebitField.php:646
+#: includes/Utils/Assets.php:178
 msgid "Please enter a valid account number (8 digits)."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:648
-#: includes/Utils/Assets.php:169
+#: includes/Fields/DirectDebitField.php:649
+#: includes/Utils/Assets.php:179
 msgid "Please enter a valid account number (4 to 17 digits)."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:651
-#: includes/Fields/DirectDebitField.php:714
-#: includes/Utils/Assets.php:176
+#: includes/Fields/DirectDebitField.php:652
+#: includes/Fields/DirectDebitField.php:715
+#: includes/Utils/Assets.php:186
 msgid "Please choose the account type."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:669
-#: includes/Fields/DirectDebitField.php:675
-#: includes/Fields/DirectDebitField.php:678
+#: includes/Fields/DirectDebitField.php:670
+#: includes/Fields/DirectDebitField.php:676
+#: includes/Fields/DirectDebitField.php:679
 msgid "Please enter a valid IBAN."
 msgstr ""
 
 #. translators: %s: two-letter IBAN country code.
-#: includes/Fields/DirectDebitField.php:691
+#: includes/Fields/DirectDebitField.php:692
 #, php-format
 msgid "IBANs from country \"%s\" are not allowed."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:710
+#: includes/Fields/DirectDebitField.php:711
 msgid "IBAN is a required field."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:711
+#: includes/Fields/DirectDebitField.php:712
 msgid "Sort code is a required field."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:712
+#: includes/Fields/DirectDebitField.php:713
 msgid "Routing number is a required field."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:713
+#: includes/Fields/DirectDebitField.php:714
 msgid "Account number is a required field."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:715
+#: includes/Fields/DirectDebitField.php:716
 msgid "Account holder is a required field."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:824
-#: includes/Fields/DirectDebitField.php:1227
+#: includes/Fields/DirectDebitField.php:825
+#: includes/Fields/DirectDebitField.php:1228
 msgid "Date of signing"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:844
-#: includes/Fields/SignatureField.php:384
+#: includes/Fields/DirectDebitField.php:845
+#: includes/Fields/SignatureField.php:390
 msgid "[Signature present]"
 msgstr ""
 
 #. translators: %s: the mandate's title, e.g. "SEPA Direct Debit Mandate".
 #. translators: %s: the group's label.
 #. translators: %s: the title above a signature (or the field's label).
-#: includes/Fields/DirectDebitField.php:851
+#: includes/Fields/DirectDebitField.php:852
 #: includes/Fields/GroupField.php:170
-#: includes/Fields/SignatureField.php:423
+#: includes/Fields/SignatureField.php:429
 #, php-format
 msgid "End of %s"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:958
-#: includes/Fields/DirectDebitField.php:1229
-#: includes/Fields/DirectDebitField.php:1309
+#: includes/Fields/DirectDebitField.php:959
+#: includes/Fields/DirectDebitField.php:1230
+#: includes/Fields/DirectDebitField.php:1310
 msgid "Creditor"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:962
-#: includes/Fields/DirectDebitField.php:1231
-#: includes/Fields/DirectDebitField.php:1311
+#: includes/Fields/DirectDebitField.php:963
+#: includes/Fields/DirectDebitField.php:1232
+#: includes/Fields/DirectDebitField.php:1312
 msgid "Creditor address"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:969
-#: includes/Fields/DirectDebitField.php:1233
-#: includes/Fields/DirectDebitField.php:1318
-msgid "Type of payment"
-msgstr ""
-
-#: includes/Fields/DirectDebitField.php:984
+#: includes/Fields/DirectDebitField.php:970
 #: includes/Fields/DirectDebitField.php:1234
-msgid "Recurrent payment"
+#: includes/Fields/DirectDebitField.php:1319
+msgid "Type of payment"
 msgstr ""
 
 #: includes/Fields/DirectDebitField.php:985
 #: includes/Fields/DirectDebitField.php:1235
+msgid "Recurrent payment"
+msgstr ""
+
+#: includes/Fields/DirectDebitField.php:986
+#: includes/Fields/DirectDebitField.php:1236
 msgid "One-off payment"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1036
-#: includes/Fields/DirectDebitField.php:1310
+#: includes/Fields/DirectDebitField.php:1037
+#: includes/Fields/DirectDebitField.php:1311
 msgid "Creditor name"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1080
+#: includes/Fields/DirectDebitField.php:1081
 msgid "Direct Debit Instruction"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1081
+#: includes/Fields/DirectDebitField.php:1082
 msgid "ACH Debit Authorization"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1082
+#: includes/Fields/DirectDebitField.php:1083
 msgid "SEPA Direct Debit Mandate"
-msgstr ""
-
-#: includes/Fields/DirectDebitField.php:1107
-#: includes/Fields/DirectDebitField.php:1250
-msgid "Checking"
 msgstr ""
 
 #: includes/Fields/DirectDebitField.php:1108
 #: includes/Fields/DirectDebitField.php:1251
+msgid "Checking"
+msgstr ""
+
+#: includes/Fields/DirectDebitField.php:1109
+#: includes/Fields/DirectDebitField.php:1252
 msgid "Savings"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1145
+#: includes/Fields/DirectDebitField.php:1146
 msgid "Service user number"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1146
-#: includes/Fields/DirectDebitField.php:1314
+#: includes/Fields/DirectDebitField.php:1147
+#: includes/Fields/DirectDebitField.php:1315
 msgid "Company ID"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1147
+#: includes/Fields/DirectDebitField.php:1148
 msgid "Creditor identification number"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1160
+#: includes/Fields/DirectDebitField.php:1161
 msgid "Reference"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1161
+#: includes/Fields/DirectDebitField.php:1162
 msgid "Authorization reference"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1162
-#: includes/Fields/DirectDebitField.php:1328
+#: includes/Fields/DirectDebitField.php:1163
+#: includes/Fields/DirectDebitField.php:1329
 msgid "Mandate reference"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1175
+#: includes/Fields/DirectDebitField.php:1176
 msgid "IBAN:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1176
+#: includes/Fields/DirectDebitField.php:1177
 msgid "BIC:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1177
+#: includes/Fields/DirectDebitField.php:1178
 msgid "Sort code:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1178
+#: includes/Fields/DirectDebitField.php:1179
 msgid "Routing number:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1179
+#: includes/Fields/DirectDebitField.php:1180
 msgid "Account number:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1180
+#: includes/Fields/DirectDebitField.php:1181
 msgid "Account type:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1181
+#: includes/Fields/DirectDebitField.php:1182
 msgid "Street and number:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1182
+#: includes/Fields/DirectDebitField.php:1183
 msgid "Postal code:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1183
+#: includes/Fields/DirectDebitField.php:1184
 msgid "City:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1184
+#: includes/Fields/DirectDebitField.php:1185
 msgid "Country:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1185
+#: includes/Fields/DirectDebitField.php:1186
 #: includes/Fields/SignatureField.php:160
-#: includes/Fields/SignatureField.php:503
+#: includes/Fields/SignatureField.php:509
 msgid "Place of signing:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1186
+#: includes/Fields/DirectDebitField.php:1187
 msgid "Account holder:"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1279
+#: includes/Fields/DirectDebitField.php:1280
 msgid "Scheme"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1281
+#: includes/Fields/DirectDebitField.php:1282
 msgid "Bacs (UK)"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1281
+#: includes/Fields/DirectDebitField.php:1282
 msgid "ACH (US)"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1289
+#: includes/Fields/DirectDebitField.php:1290
 msgid "FormFabricator ships no wording for Bacs. Enter the instruction text and the Direct Debit Guarantee as your bank or payment provider requires them."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1295
+#: includes/Fields/DirectDebitField.php:1296
 msgid "FormFabricator ships no wording for ACH. Enter the authorization text your bank or payment provider requires."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1298
+#: includes/Fields/DirectDebitField.php:1299
 msgid "Mandate"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1303
+#: includes/Fields/DirectDebitField.php:1304
 msgid "Mandate title"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1304
+#: includes/Fields/DirectDebitField.php:1305
 msgid "Mandate text (HTML allowed)"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1305
-#: includes/Fields/SignatureField.php:523
+#: includes/Fields/DirectDebitField.php:1306
+#: includes/Fields/SignatureField.php:529
 msgid "Hint text (fine print, HTML allowed)"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1310
 #: includes/Fields/DirectDebitField.php:1311
+#: includes/Fields/DirectDebitField.php:1312
 msgid "Empty: not shown."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1312
+#: includes/Fields/DirectDebitField.php:1313
 msgid "Creditor ID"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1313
+#: includes/Fields/DirectDebitField.php:1314
 msgid "Service user number (SUN)"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1320
+#: includes/Fields/DirectDebitField.php:1321
 msgid "Not stated"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1320
+#: includes/Fields/DirectDebitField.php:1321
 msgid "Recurrent"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1320
+#: includes/Fields/DirectDebitField.php:1321
 msgid "One-off"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1330
+#: includes/Fields/DirectDebitField.php:1331
 msgid "Own text"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1330
+#: includes/Fields/DirectDebitField.php:1331
 msgctxt "mandate reference made per mandate"
 msgid "Generated"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1337
+#: includes/Fields/DirectDebitField.php:1338
 msgid "Reference text"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1338
+#: includes/Fields/DirectDebitField.php:1339
 msgid "Shown and recorded as typed, e.g. \"Your membership number\". Empty: no reference line."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1344
+#: includes/Fields/DirectDebitField.php:1345
 msgid "Mandate reference prefix"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1346
+#: includes/Fields/DirectDebitField.php:1347
 msgid "Each mandate gets its own reference: this prefix, the date and a random part. Up to 15 characters of the SEPA set (letters, digits, spaces, / ? : ( ) . , ' + -); accents are dropped, other characters left out."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1352
+#: includes/Fields/DirectDebitField.php:1353
 msgid "Shown in place of the reference before sending"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1353
+#: includes/Fields/DirectDebitField.php:1354
 msgid "The visitor learns the reference only from an email: put {ID_ref}, with this field's ID for ID, into a notification sent to them."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1358
+#: includes/Fields/DirectDebitField.php:1359
 msgid "Debtor details"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1360
+#: includes/Fields/DirectDebitField.php:1361
 msgid "A mandate also names the debtor's address and where it was signed; for IBANs from outside the EEA, such as Swiss or British ones, banks need the address. Switch these on unless the form asks elsewhere."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1365
+#: includes/Fields/DirectDebitField.php:1366
 msgid "A mandate also names the debtor's address and where it was signed. Switch these on unless the form asks elsewhere."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1369
+#: includes/Fields/DirectDebitField.php:1370
 msgid "Ask for the debtor's address"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1370
-#: includes/Fields/SignatureField.php:524
+#: includes/Fields/DirectDebitField.php:1371
+#: includes/Fields/SignatureField.php:530
 msgid "Ask for the place of signing"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1383
+#: includes/Fields/DirectDebitField.php:1384
 msgid "Street label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1384
+#: includes/Fields/DirectDebitField.php:1385
 msgid "Postal code label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1385
+#: includes/Fields/DirectDebitField.php:1386
 msgid "City label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1386
+#: includes/Fields/DirectDebitField.php:1387
 msgid "Country label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1387
+#: includes/Fields/DirectDebitField.php:1388
 msgid "Place of signing label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1403
+#: includes/Fields/DirectDebitField.php:1404
 msgid "Labels"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1404
+#: includes/Fields/DirectDebitField.php:1405
 msgid "IBAN label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1405
+#: includes/Fields/DirectDebitField.php:1406
 msgid "BIC label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1406
+#: includes/Fields/DirectDebitField.php:1407
 msgid "Sort code label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1407
+#: includes/Fields/DirectDebitField.php:1408
 msgid "Routing number label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1408
+#: includes/Fields/DirectDebitField.php:1409
 msgid "Account number label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1409
+#: includes/Fields/DirectDebitField.php:1410
 msgid "Account type label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1410
+#: includes/Fields/DirectDebitField.php:1411
 msgid "Account type: empty choice"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1411
+#: includes/Fields/DirectDebitField.php:1412
 msgid "Account type: checking"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1412
+#: includes/Fields/DirectDebitField.php:1413
 msgid "Account type: savings"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1413
+#: includes/Fields/DirectDebitField.php:1414
 msgid "Account holder label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1419
+#: includes/Fields/DirectDebitField.php:1420
 msgid "Date of signing label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1420
+#: includes/Fields/DirectDebitField.php:1421
 msgid "Label of the creditor name"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1421
+#: includes/Fields/DirectDebitField.php:1422
 msgid "Label of the creditor address"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1424
+#: includes/Fields/DirectDebitField.php:1425
 msgid "Label of the creditor line"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1425
+#: includes/Fields/DirectDebitField.php:1426
 msgid "Label of the reference line"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1428
+#: includes/Fields/DirectDebitField.php:1429
 msgid "Label of the payment type"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1429
+#: includes/Fields/DirectDebitField.php:1430
 msgid "Text for recurrent payments"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1430
+#: includes/Fields/DirectDebitField.php:1431
 msgid "Text for a one-off payment"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1431
+#: includes/Fields/DirectDebitField.php:1432
 msgid "Signature label"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1432
+#: includes/Fields/DirectDebitField.php:1433
 msgid "Signature hint"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1433
+#: includes/Fields/DirectDebitField.php:1434
 msgid "Clear button"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1434
+#: includes/Fields/DirectDebitField.php:1435
 msgid "Button to type the name instead"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1435
+#: includes/Fields/DirectDebitField.php:1436
 msgid "Button to draw instead"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1436
+#: includes/Fields/DirectDebitField.php:1437
 msgid "Label of the typed name"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1441
+#: includes/Fields/DirectDebitField.php:1442
 msgid "Placeholder country (IBAN format)"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1448
+#: includes/Fields/DirectDebitField.php:1449
 msgid "Signature height (px)"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1449
-#: includes/Fields/SignatureField.php:544
+#: includes/Fields/DirectDebitField.php:1450
+#: includes/Fields/SignatureField.php:550
 msgid "Stroke width"
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1492
+#: includes/Fields/DirectDebitField.php:1493
 msgid "I hereby authorize the creditor to collect payments from my account by direct debit. At the same time, I instruct my bank to honor the direct debits drawn by the creditor on my account."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1496
+#: includes/Fields/DirectDebitField.php:1497
 msgid "If my account does not have sufficient funds, my bank is under no obligation to honor the direct debit. Partial payments will not be made under the direct debit scheme. I bear the costs of the returned direct debit."
 msgstr ""
 
-#: includes/Fields/DirectDebitField.php:1509
+#: includes/Fields/DirectDebitField.php:1510
 msgid "Note: I can request a refund of the debited amount within eight weeks, starting from the debit date. The terms agreed with my bank apply."
 msgstr ""
 
 #: includes/Fields/EmailField.php:109
-#: includes/Utils/Assets.php:211
+#: includes/Utils/Assets.php:221
 msgid "Please enter a valid email address."
 msgstr ""
 
@@ -5481,8 +5481,8 @@ msgid "GDPR Checkbox"
 msgstr ""
 
 #: includes/Fields/GdprField.php:137
-#: includes/Fields/GdprField.php:213
-#: includes/Fields/GdprField.php:237
+#: includes/Fields/GdprField.php:214
+#: includes/Fields/GdprField.php:238
 msgid "Privacy policy"
 msgstr ""
 
@@ -5492,25 +5492,25 @@ msgstr ""
 msgid "I have read and acknowledge the %s."
 msgstr ""
 
-#: includes/Fields/GdprField.php:194
+#: includes/Fields/GdprField.php:195
 msgid "Please read and acknowledge the privacy policy."
 msgstr ""
 
-#: includes/Fields/GdprField.php:209
+#: includes/Fields/GdprField.php:210
 msgid "Privacy notice not acknowledged"
 msgstr ""
 
 #. translators: %1$s: privacy policy link text, %2$s: privacy policy URL, %3$s: acknowledgment timestamp.
-#: includes/Fields/GdprField.php:218
+#: includes/Fields/GdprField.php:219
 #, php-format
 msgid "Acknowledged \"%1$s\" (%2$s) on %3$s"
 msgstr ""
 
-#: includes/Fields/GdprField.php:253
+#: includes/Fields/GdprField.php:254
 msgid "Privacy URL"
 msgstr ""
 
-#: includes/Fields/GdprField.php:258
+#: includes/Fields/GdprField.php:259
 msgid "Privacy link text"
 msgstr ""
 
@@ -5544,29 +5544,29 @@ msgid "Images, videos or other content from another site are fetched by every vi
 msgstr ""
 
 #: includes/Fields/NameField.php:65
-#: includes/Fields/NameField.php:276
+#: includes/Fields/NameField.php:277
 msgid "Name"
 msgstr ""
 
-#: includes/Fields/NameField.php:128
-#: includes/Fields/NameField.php:413
+#: includes/Fields/NameField.php:129
+#: includes/Fields/NameField.php:414
 msgid "Salutation"
 msgstr ""
 
-#: includes/Fields/NameField.php:130
-#: includes/Fields/NameField.php:421
+#: includes/Fields/NameField.php:131
+#: includes/Fields/NameField.php:422
 msgid "Middle name"
 msgstr ""
 
-#: includes/Fields/NameField.php:146
+#: includes/Fields/NameField.php:147
 msgid "Mr."
 msgstr ""
 
-#: includes/Fields/NameField.php:147
+#: includes/Fields/NameField.php:148
 msgid "Ms."
 msgstr ""
 
-#: includes/Fields/NameField.php:148
+#: includes/Fields/NameField.php:149
 msgid "Diverse"
 msgstr ""
 
@@ -5577,35 +5577,35 @@ msgstr ""
 #. translators: %s: step size.
 #. translators: %s: step size (substituted client-side).
 #: includes/Fields/NumberField.php:116
-#: includes/Fields/SliderField.php:218
-#: includes/Fields/SliderField.php:248
-#: includes/Utils/Assets.php:222
+#: includes/Fields/SliderField.php:219
+#: includes/Fields/SliderField.php:249
+#: includes/Utils/Assets.php:232
 #, php-format
 msgid "Please enter a value in steps of %s."
 msgstr ""
 
 #: includes/Fields/NumberField.php:142
-#: includes/Utils/Assets.php:213
+#: includes/Utils/Assets.php:223
 msgid "Please enter a valid number."
 msgstr ""
 
 #: includes/Fields/NumberField.php:161
-#: includes/Utils/Assets.php:218
+#: includes/Utils/Assets.php:228
 msgid "Please enter a whole number."
 msgstr ""
 
 #: includes/Fields/NumberField.php:166
-#: includes/Utils/Assets.php:219
+#: includes/Utils/Assets.php:229
 msgid "Please enter a positive number."
 msgstr ""
 
 #: includes/Fields/NumberField.php:171
-#: includes/Utils/Assets.php:220
+#: includes/Utils/Assets.php:230
 msgid "Please enter a positive whole number."
 msgstr ""
 
 #: includes/Fields/NumberField.php:228
-#: includes/Fields/SliderField.php:418
+#: includes/Fields/SliderField.php:419
 msgid "Step size"
 msgstr ""
 
@@ -5633,48 +5633,48 @@ msgid "Next button"
 msgstr ""
 
 #: includes/Fields/PageHeaderField.php:51
-#: includes/Fields/PageHeaderField.php:171
+#: includes/Fields/PageHeaderField.php:176
 msgid "Page step bar"
 msgstr ""
 
-#: includes/Fields/PageHeaderField.php:190
+#: includes/Fields/PageHeaderField.php:195
 msgid "Shows one step for every page break after this field."
 msgstr ""
 
-#: includes/Fields/PageHeaderField.php:195
+#: includes/Fields/PageHeaderField.php:200
 msgid "Step labels"
 msgstr ""
 
-#: includes/Fields/PageHeaderField.php:196
+#: includes/Fields/PageHeaderField.php:201
 msgid "Numbers only"
 msgstr ""
 
-#: includes/Fields/PageHeaderField.php:197
+#: includes/Fields/PageHeaderField.php:202
 msgid "Numbers + names"
 msgstr ""
 
-#: includes/Fields/PageHeaderField.php:203
+#: includes/Fields/PageHeaderField.php:208
 msgid "Page names"
 msgstr ""
 
-#: includes/Fields/PageHeaderField.php:204
+#: includes/Fields/PageHeaderField.php:209
 msgid "One field per page, in order. Leave a name blank to show just the number for that page."
 msgstr ""
 
 #: includes/Fields/PhoneField.php:121
 #: includes/Fields/PhoneField.php:131
-#: includes/Utils/Assets.php:180
+#: includes/Utils/Assets.php:190
 msgid "Please enter a valid phone number."
 msgstr ""
 
 #: includes/Fields/PhoneField.php:127
-#: includes/Utils/Assets.php:181
+#: includes/Utils/Assets.php:191
 msgid "Please enter the number with international prefix (+...)."
 msgstr ""
 
 #: includes/Fields/PhoneField.php:158
 #: includes/Fields/PhoneField.php:161
-#: includes/Utils/Assets.php:182
+#: includes/Utils/Assets.php:192
 msgid "This phone number is not allowed for your country."
 msgstr ""
 
@@ -5700,65 +5700,65 @@ msgid "Radio"
 msgstr ""
 
 #: includes/Fields/RatingField.php:76
-#: includes/Fields/RatingField.php:236
+#: includes/Fields/RatingField.php:237
 msgid "Rating"
 msgstr ""
 
 #. translators: %1$s: the rating this choice sets, %2$s: the highest rating.
-#: includes/Fields/RatingField.php:153
-#: includes/Fields/RatingField.php:155
+#: includes/Fields/RatingField.php:154
+#: includes/Fields/RatingField.php:156
 #, php-format
 msgid "%1$s of %2$s"
 msgstr ""
 
-#: includes/Fields/RatingField.php:221
-#: includes/Fields/RatingField.php:248
+#: includes/Fields/RatingField.php:222
+#: includes/Fields/RatingField.php:249
 msgid "Please select a valid rating."
 msgstr ""
 
 #. translators: %s: maximum allowed rating value.
-#: includes/Fields/RatingField.php:242
+#: includes/Fields/RatingField.php:243
 #, php-format
 msgid "Please select a rating between 0 and %s."
 msgstr ""
 
-#: includes/Fields/RatingField.php:300
+#: includes/Fields/RatingField.php:301
 msgid "Number of symbols"
 msgstr ""
 
-#: includes/Fields/RatingField.php:306
+#: includes/Fields/RatingField.php:307
 msgid "Symbol & half values"
 msgstr ""
 
-#: includes/Fields/RatingField.php:310
+#: includes/Fields/RatingField.php:311
 msgid "Star"
 msgstr ""
 
-#: includes/Fields/RatingField.php:311
+#: includes/Fields/RatingField.php:312
 msgid "Heart"
 msgstr ""
 
-#: includes/Fields/RatingField.php:312
+#: includes/Fields/RatingField.php:313
 msgid "Circle"
 msgstr ""
 
-#: includes/Fields/RatingField.php:313
+#: includes/Fields/RatingField.php:314
 msgid "Diamond"
 msgstr ""
 
-#: includes/Fields/RatingField.php:319
+#: includes/Fields/RatingField.php:320
 msgid "Icon source"
 msgstr ""
 
-#: includes/Fields/RatingField.php:320
+#: includes/Fields/RatingField.php:321
 msgid "Preset"
 msgstr ""
 
-#: includes/Fields/RatingField.php:321
+#: includes/Fields/RatingField.php:322
 msgid "Custom image"
 msgstr ""
 
-#: includes/Fields/RatingField.php:330
+#: includes/Fields/RatingField.php:331
 msgid "Square image; for half values the left half is used. An image on another site is fetched by every visitor, which hands that site their IP address — pick one from your Media Library instead."
 msgstr ""
 
@@ -5774,36 +5774,36 @@ msgstr ""
 msgid "Clear"
 msgstr ""
 
-#: includes/Fields/SignatureField.php:443
-#: includes/Fields/SignatureField.php:498
+#: includes/Fields/SignatureField.php:449
+#: includes/Fields/SignatureField.php:504
 msgid "Signed on"
 msgstr ""
 
-#: includes/Fields/SignatureField.php:516
+#: includes/Fields/SignatureField.php:522
 msgid "Title above the signature"
 msgstr ""
 
-#: includes/Fields/SignatureField.php:520
+#: includes/Fields/SignatureField.php:526
 msgid "Text above the signature (HTML allowed)"
 msgstr ""
 
-#: includes/Fields/SignatureField.php:521
+#: includes/Fields/SignatureField.php:527
 msgid "What the visitor signs: shown above the signature pad and recorded with the signature in the email and the PDF. Empty: none."
 msgstr ""
 
-#: includes/Fields/SignatureField.php:539
+#: includes/Fields/SignatureField.php:545
 msgid "Height (px)"
 msgstr ""
 
-#: includes/Fields/SignatureField.php:549
+#: includes/Fields/SignatureField.php:555
 msgid "File format"
 msgstr ""
 
-#: includes/Fields/SignatureField.php:556
+#: includes/Fields/SignatureField.php:562
 msgid "\"Signed on\" label"
 msgstr ""
 
-#: includes/Fields/SignatureField.php:561
+#: includes/Fields/SignatureField.php:567
 msgid "\"Place of signing\" label"
 msgstr ""
 
@@ -5811,22 +5811,22 @@ msgstr ""
 msgid "Slider"
 msgstr ""
 
-#: includes/Fields/SliderField.php:205
-#: includes/Fields/SliderField.php:228
-#: includes/Fields/SliderField.php:235
-#: includes/Utils/Assets.php:184
+#: includes/Fields/SliderField.php:206
+#: includes/Fields/SliderField.php:229
+#: includes/Fields/SliderField.php:236
+#: includes/Utils/Assets.php:194
 msgid "Please enter a valid value."
 msgstr ""
 
-#: includes/Fields/SliderField.php:224
+#: includes/Fields/SliderField.php:225
 msgid "The \"from\" value must not be greater than the \"to\" value."
 msgstr ""
 
-#: includes/Fields/SliderField.php:402
+#: includes/Fields/SliderField.php:403
 msgid "Single"
 msgstr ""
 
-#: includes/Fields/SliderField.php:403
+#: includes/Fields/SliderField.php:404
 msgid "Range"
 msgstr ""
 
@@ -5834,7 +5834,7 @@ msgstr ""
 #. translators: %1$d: maximum word count allowed, %2$d: current word count (both substituted client-side).
 #: includes/Fields/TextField.php:102
 #: includes/Fields/TextareaField.php:141
-#: includes/Utils/Assets.php:193
+#: includes/Utils/Assets.php:203
 #, php-format
 msgid "Please enter at most %1$d words (currently: %2$d)."
 msgstr ""
@@ -6013,13 +6013,13 @@ msgstr ""
 msgid "Website"
 msgstr ""
 
-#: includes/Fields/WebsiteField.php:107
-#: includes/Fields/WebsiteField.php:113
-#: includes/Utils/Assets.php:198
+#: includes/Fields/WebsiteField.php:118
+#: includes/Fields/WebsiteField.php:124
+#: includes/Utils/Assets.php:208
 msgid "Please enter a valid URL (e.g. https://example.com)."
 msgstr ""
 
-#: includes/Fields/WebsiteField.php:142
+#: includes/Fields/WebsiteField.php:153
 msgid "Validate URL format"
 msgstr ""
 
@@ -6033,88 +6033,88 @@ msgstr ""
 msgid "%s (Copy)"
 msgstr ""
 
-#: includes/Form/FormProcessor.php:61
 #: includes/Form/FormProcessor.php:65
-#: includes/Form/FormProcessor.php:95
+#: includes/Form/FormProcessor.php:69
+#: includes/Form/FormProcessor.php:98
 msgid "Security check failed."
 msgstr ""
 
 #. translators: %d: number of minutes until the visitor can submit again
-#: includes/Form/FormProcessor.php:134
+#: includes/Form/FormProcessor.php:138
 #, php-format
 msgid "Too many submissions. Please try again in %d minutes."
 msgstr ""
 
 #. translators: %d: number of seconds until the visitor can submit again
-#: includes/Form/FormProcessor.php:139
+#: includes/Form/FormProcessor.php:143
 #, php-format
 msgid "Too many submissions. Please try again in %d seconds."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:202
+#: includes/Form/FormProcessor.php:206
 msgid "This form cannot be submitted with the answers given."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:309
-#: includes/Form/FormProcessor.php:330
-#: includes/Form/FormProcessor.php:373
-#: includes/Form/FormProcessor.php:413
+#: includes/Form/FormProcessor.php:313
+#: includes/Form/FormProcessor.php:334
+#: includes/Form/FormProcessor.php:377
+#: includes/Form/FormProcessor.php:417
 msgid "Please correct the highlighted fields."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:394
+#: includes/Form/FormProcessor.php:398
 msgid "The server is busy processing other submissions. Please try again in a moment."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:430
+#: includes/Form/FormProcessor.php:434
 msgid "This submission has already been received."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:442
+#: includes/Form/FormProcessor.php:446
 msgid "Your submission could not be delivered. Please try again later."
 msgstr ""
 
 #. translators: 1: file name, 2: the image's megapixels, 3: its file size in MB, 4: largest accepted image in megapixels.
-#: includes/Form/FormProcessor.php:639
+#: includes/Form/FormProcessor.php:643
 #, php-format
 msgid "\"%1$s\" has %2$s megapixels (%3$s MB), but images can have at most %4$s megapixels. Please upload a smaller image."
 msgstr ""
 
 #. translators: 1: image file name, 2: size of all uploaded files together in MB, 3: largest total in MB that fits with this image.
-#: includes/Form/FormProcessor.php:651
+#: includes/Form/FormProcessor.php:655
 #, php-format
 msgid "All files together are %2$s MB, but with \"%1$s\" they can be at most %3$s MB. Please upload smaller files."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:668
+#: includes/Form/FormProcessor.php:672
 msgid "The attached files are too large in total. Please attach fewer or smaller files."
 msgstr ""
 
-#: includes/Form/FormProcessor.php:678
+#: includes/Form/FormProcessor.php:682
 msgid "This form is too large for the server to create its PDF. Please let the site operator know."
 msgstr ""
 
 #. translators: %s: the character's code point, e.g. "U+1F600".
-#: includes/Form/FormProcessor.php:805
+#: includes/Form/FormProcessor.php:809
 #, php-format
 msgid "This answer contains a character the PDF can't show (%s). Please leave it out or write it differently."
 msgstr ""
 
 #. translators: %s: the character sequence that is not allowed, e.g. "---BEGIN-SEAL---".
-#: includes/Form/FormProcessor.php:842
+#: includes/Form/FormProcessor.php:846
 #, php-format
 msgid "This answer contains \"%s\", which the sealed PDF uses for itself. Please remove it."
 msgstr ""
 
 #. translators: %s: the character sequence that is not allowed, "[FABRICATOR_FIELD_".
-#: includes/Form/FormProcessor.php:854
+#: includes/Form/FormProcessor.php:858
 #, php-format
 msgid "This answer contains \"%s\", which the notification email uses to mark answers. Please remove it."
 msgstr ""
 
 #: includes/Form/FormRenderer.php:87
-#: includes/Form/FormSanitizer.php:405
-#: includes/Utils/Assets.php:147
+#: includes/Form/FormSanitizer.php:413
+#: includes/Utils/Assets.php:157
 msgid "Thank you!"
 msgstr ""
 
@@ -6150,181 +6150,194 @@ msgstr ""
 msgid "Form submission"
 msgstr ""
 
-#: includes/Plugin.php:259
+#: includes/Plugin.php:253
 msgid "Add New Form"
 msgstr ""
 
-#: includes/Plugin.php:260
+#: includes/Plugin.php:254
 msgid "Edit Form"
 msgstr ""
 
-#: includes/Utils/Assets.php:135
+#: includes/Utils/Assets.php:142
 msgid "Server error. Please try again."
 msgstr ""
 
-#: includes/Utils/Assets.php:136
+#: includes/Utils/Assets.php:143
 msgid "This field is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:137
+#: includes/Utils/Assets.php:144
 msgid "Please fill in all required fields and correct the invalid entries."
 msgstr ""
 
-#: includes/Utils/Assets.php:138
+#: includes/Utils/Assets.php:145
 msgid "Please fill in all required fields."
 msgstr ""
 
-#: includes/Utils/Assets.php:139
+#: includes/Utils/Assets.php:146
 msgid "Please enter valid data."
 msgstr ""
 
-#: includes/Utils/Assets.php:141
+#: includes/Utils/Assets.php:148
 msgid "Unnamed field"
 msgstr ""
 
-#: includes/Utils/Assets.php:143
-#: includes/Utils/Text/AnswerText.php:64
+#: includes/Utils/Assets.php:150
+#: includes/Utils/Text/AnswerText.php:66
 msgid "This answer can't hold line breaks or tabs. Please write it on one line."
 msgstr ""
 
 #. translators: %s: the character's code point, e.g. "U+200B" (substituted client-side).
 #. translators: %s: the character's code point, e.g. "U+200B".
-#: includes/Utils/Assets.php:145
-#: includes/Utils/Text/AnswerText.php:68
+#: includes/Utils/Assets.php:152
+#: includes/Utils/Text/AnswerText.php:70
 #, php-format
 msgid "This answer contains an invisible character (%s). Please remove it, or type the answer instead of pasting it."
 msgstr ""
 
-#: includes/Utils/Assets.php:146
-#: includes/Utils/Text/AnswerText.php:75
+#: includes/Utils/Assets.php:153
+#: includes/Utils/Text/AnswerText.php:77
+msgid "This answer can't hold \"<\" or \">\". Please write it without them."
+msgstr ""
+
+#. translators: %s: the letters in the answer that read as a character code, e.g. "%20" (substituted client-side).
+#. translators: %s: the letters in the answer that read as a character code, e.g. "%20".
+#: includes/Utils/Assets.php:155
+#: includes/Utils/Text/AnswerText.php:83
+#, php-format
+msgid "This answer contains \"%s\", which would be read as a character code. Please put a space after the percent sign."
+msgstr ""
+
+#: includes/Utils/Assets.php:156
+#: includes/Utils/Text/AnswerText.php:90
 msgid "This answer contains an HTML character reference (such as \"&amp;\"). Please write the character itself."
 msgstr ""
 
-#: includes/Utils/Assets.php:149
+#: includes/Utils/Assets.php:159
 msgid "Could not load CAPTCHA. Please disable content blockers for this site or try another browser."
 msgstr ""
 
 #. translators: %s: file name (substituted client-side). Read out by screen readers for the button that removes the file.
-#: includes/Utils/Assets.php:152
+#: includes/Utils/Assets.php:162
 #, php-format
 msgid "Remove %s"
 msgstr ""
 
 #. translators: %d: maximum number of files allowed (substituted client-side).
-#: includes/Utils/Assets.php:154
+#: includes/Utils/Assets.php:164
 #, php-format
 msgid "Too many files. Maximum %d allowed."
 msgstr ""
 
-#: includes/Utils/Assets.php:155
+#: includes/Utils/Assets.php:165
 msgid "No allowed file types in selection."
 msgstr ""
 
-#: includes/Utils/Assets.php:156
+#: includes/Utils/Assets.php:166
 msgid "1 file was skipped due to file type."
 msgstr ""
 
 #. translators: %d: number of files skipped due to file type (substituted client-side).
-#: includes/Utils/Assets.php:158
+#: includes/Utils/Assets.php:168
 #, php-format
 msgid "%d files were skipped due to file type."
 msgstr ""
 
 #. translators: %1$d: total number of files submitted, %2$d: maximum allowed per submission (both substituted client-side).
-#: includes/Utils/Assets.php:160
+#: includes/Utils/Assets.php:170
 #, php-format
 msgid "Too many files total (%1$d). Max. %2$d per submission."
 msgstr ""
 
-#: includes/Utils/Assets.php:162
+#: includes/Utils/Assets.php:172
 msgid "Invalid IBAN (check digit incorrect)."
 msgstr ""
 
-#: includes/Utils/Assets.php:163
+#: includes/Utils/Assets.php:173
 msgid "Please enter a complete and valid IBAN."
 msgstr ""
 
-#: includes/Utils/Assets.php:165
+#: includes/Utils/Assets.php:175
 msgid "This country is not allowed."
 msgstr ""
 
-#: includes/Utils/Assets.php:170
+#: includes/Utils/Assets.php:180
 msgid "IBAN is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:173
+#: includes/Utils/Assets.php:183
 msgid "Sort code is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:174
+#: includes/Utils/Assets.php:184
 msgid "Routing number is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:175
+#: includes/Utils/Assets.php:185
 msgid "Account number is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:177
+#: includes/Utils/Assets.php:187
 msgid "Account holder is required."
 msgstr ""
 
-#: includes/Utils/Assets.php:178
+#: includes/Utils/Assets.php:188
 msgid "Please sign."
 msgstr ""
 
 #. translators: %1$s: minimum allowed value, %2$s: maximum allowed value (both substituted client-side).
-#: includes/Utils/Assets.php:186
+#: includes/Utils/Assets.php:196
 #, php-format
 msgid "Value outside the allowed range (%1$s–%2$s)."
 msgstr ""
 
-#: includes/Utils/Assets.php:224
+#: includes/Utils/Assets.php:234
 msgid "AM"
 msgstr ""
 
-#: includes/Utils/Assets.php:225
+#: includes/Utils/Assets.php:235
 msgid "PM"
 msgstr ""
 
-#: includes/Utils/Assets.php:615
+#: includes/Utils/Assets.php:602
 msgid "Checking on the server…"
 msgstr ""
 
 #. translators: %1$d: seconds remaining before this PDF's verification request is sent (substituted client-side).
-#: includes/Utils/Assets.php:617
+#: includes/Utils/Assets.php:604
 #, php-format
 msgid "Waiting in queue (%1$ds)…"
 msgstr ""
 
-#: includes/Utils/Assets.php:618
+#: includes/Utils/Assets.php:605
 msgid "Waiting for a free verification slot…"
 msgstr ""
 
-#: includes/Utils/Assets.php:619
+#: includes/Utils/Assets.php:606
 msgid "Rate limited — retrying…"
 msgstr ""
 
 #. translators: %1$d: seconds remaining before the next automatic retry (substituted client-side).
-#: includes/Utils/Assets.php:621
+#: includes/Utils/Assets.php:608
 #, php-format
 msgid "Server busy — retrying in %1$ds…"
 msgstr ""
 
-#: includes/Utils/Assets.php:622
+#: includes/Utils/Assets.php:609
 msgid "Processing response…"
 msgstr ""
 
 #. translators: %s: HTTP status code and its title, e.g. HTTP 500 "Internal Server Error" (substituted client-side).
-#: includes/Utils/Assets.php:625
+#: includes/Utils/Assets.php:612
 #, php-format
 msgid "Server error (%s)"
 msgstr ""
 
-#: includes/Utils/Assets.php:627
+#: includes/Utils/Assets.php:614
 msgid "Unknown server error"
 msgstr ""
 
-#: includes/Utils/Text/AnswerText.php:59
+#: includes/Utils/Text/AnswerText.php:61
 msgid "This answer contains characters that can't be read. Please type it again."
 msgstr ""
 

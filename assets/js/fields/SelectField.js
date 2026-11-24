@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['select'] = function (root) {
     root.querySelectorAll('select.fabricator-select').forEach(function (native) {
         if (native.dataset.fabricatorSelectInit) return;
         native.dataset.fabricatorSelectInit = '1';
@@ -111,4 +112,4 @@ function (root) {
         if (ownerForm) ownerForm.addEventListener('fabricator:reset', syncDisplay);
         buildOptions();
     });
-}
+};

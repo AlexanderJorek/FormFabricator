@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -29,13 +29,13 @@ defined('ABSPATH') || exit;
 class ConsentField extends BaseField
 {
     /**
-     * Returns field-specific CSS styles.
+     * The field's stylesheet, relative to the plugin folder.
      *
      * @return string
      */
-    public function getStyles(): string
+    public function styleAsset(): string
     {
-        return self::readFieldAsset('assets/css/fields/ConsentField.css');
+        return 'assets/css/fields/ConsentField.css';
     }
 
     /**
@@ -108,13 +108,14 @@ class ConsentField extends BaseField
     }
 
     /**
-     * Client-side empty check: an unchecked box is empty (the generic fallback reads its value="1" as filled).
+     * The script with the field's blank check for the required check, relative to the plugin folder: it registers
+     * window.FabricatorEmptyChecks['consent']: an unchecked box is empty (the generic fallback reads its value="1" as filled).
      *
-     * @return array
+     * @return string
      */
-    public function getClientEmptyCheck(): array
+    public function clientEmptyCheckAsset(): string
     {
-        return ['fn' => "function(f){return !f.querySelector('input[type=\"checkbox\"]:checked');}"];
+        return 'assets/js/fields/ConsentField.emptycheck.js';
     }
 
     /**

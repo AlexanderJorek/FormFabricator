@@ -1,4 +1,5 @@
-function (root) {
+window.FabricatorFieldInits = window.FabricatorFieldInits || {};
+window.FabricatorFieldInits['directdebit'] = function (root) {
     // Single source of truth is PHP DirectDebitField::IBAN_LEN, localized into window.FabricatorForms.ibanLen
     // (see Utils/Assets.php, Admin/FormEditor.php) — no separate copy here.
     var IBAN_LEN = (window.FabricatorForms && window.FabricatorForms.ibanLen) || {};
@@ -253,4 +254,4 @@ function (root) {
             }).observe(canvas);
         }
     });
-}
+};

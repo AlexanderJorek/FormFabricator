@@ -3,6 +3,7 @@
 namespace FabricatorForms\Tests\Integration;
 
 use FabricatorForms\Form\FormModel;
+use FabricatorForms\Form\FormProcessor;
 use FabricatorForms\Tests\Integration\Support\PhpUnit10Compat;
 use FabricatorForms\Tests\Support\Overrides;
 use FabricatorForms\Utils\Security\SingleUseToken;
@@ -85,8 +86,8 @@ abstract class AjaxTestCase extends \WP_Ajax_UnitTestCase
         wp_set_current_user(0);
         $_POST = $values + [
             'form_id'                     => (string) $form_id,
-            'fabricator_nonce'            => $nonce ?? wp_create_nonce('fabricator_forms_submit_' . $form_id),
-            'fabricator_submission_token' => $token ?? SingleUseToken::issue($form_id),
+            'fabricator_nonce'            => $nonce ?? wp_create_nonce(FormProcessor::NONCE_ACTION),
+            'fabricator_submission_token' => $token ?? SingleUseToken::issue(),
         ];
         $this->_last_response = '';
         try {

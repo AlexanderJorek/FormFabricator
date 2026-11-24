@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -107,15 +107,16 @@ class DirectDebitField extends BaseField
     }
 
     /**
-     * Returns the client-side empty-check function for the required validator.
+     * The script with the field's blank check for the required check, relative to the plugin folder: it registers
+     * window.FabricatorEmptyChecks['directdebit'].
      *
-     * @return array
+     * @return string
      */
-    public function getClientEmptyCheck(): array
+    public function clientEmptyCheckAsset(): string
     {
         /* Validators must always run so that each account detail and the signature can show their own error
            messages. The debit-required validator handles all required-field checks. */
-        return ['fn' => self::readFieldAsset('assets/js/fields/DirectDebitField.emptycheck.js')];
+        return 'assets/js/fields/DirectDebitField.emptycheck.js';
     }
 
     /**
@@ -128,19 +129,19 @@ class DirectDebitField extends BaseField
     {
         $rules = [];
         foreach (['iban', 'debit-bic', 'debit-sort-code', 'debit-routing', 'debit-account', 'debit-required'] as $rule) {
-            $rules[] = ['rule' => $rule, 'fn' => self::readFieldAsset('assets/js/fields/DirectDebitField.' . $rule . '.js')];
+            $rules[] = ['rule' => $rule, 'asset' => 'assets/js/fields/DirectDebitField.' . $rule . '.js'];
         }
         return $rules;
     }
 
     /**
-     * Returns field-specific CSS styles.
+     * The field's stylesheet, relative to the plugin folder.
      *
      * @return string
      */
-    public function getStyles(): string
+    public function styleAsset(): string
     {
-        return self::readFieldAsset('assets/css/fields/DirectDebitField.css');
+        return 'assets/css/fields/DirectDebitField.css';
     }
 
     /**
@@ -182,13 +183,13 @@ class DirectDebitField extends BaseField
     }
 
     /**
-     * Returns client-side initialization JavaScript function body.
+     * The field's setup script, relative to the plugin folder: it registers window.FabricatorFieldInits['directdebit'].
      *
      * @return string
      */
-    public function getClientInit(): string
+    public function clientInitAsset(): string
     {
-        return self::readFieldAsset('assets/js/fields/DirectDebitField.js');
+        return 'assets/js/fields/DirectDebitField.js';
     }
 
     /**

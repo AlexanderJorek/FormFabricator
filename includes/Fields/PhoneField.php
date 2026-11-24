@@ -10,7 +10,7 @@
  * @author    Alexander Jorek
  * @copyright 2026 Alexander Jorek
  * @license   https://www.gnu.org/licenses/gpl-3.0.html GPL-3.0-or-later
- * @version   1.1.1
+ * @version   1.1.2
  * @link      https://github.com/AlexanderJorek/FormFabricator
  *
  * This program is free software; you can redistribute it and/or
@@ -60,7 +60,7 @@ class PhoneField extends BaseField
      */
     public function getClientValidation(): array
     {
-        return [['rule' => 'phone', 'fn' => self::readFieldAsset('assets/js/fields/PhoneField.phone.js')]];
+        return [['rule' => 'phone', 'asset' => 'assets/js/fields/PhoneField.phone.js']];
     }
 
     /**

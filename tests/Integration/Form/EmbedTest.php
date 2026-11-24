@@ -110,7 +110,9 @@ final class EmbedTest extends TestCase
     {
         do_shortcode('[fabricator_form id="' . $this->form . '"][fabricator_form id="' . $this->form . '"]');
 
-        self::assertSame(1, substr_count($this->printedScripts(), 'window.FabricatorFieldInits='));
+        $printed = $this->printedScripts();
+        self::assertSame(1, substr_count($printed, 'assets/js/front.js'));
+        self::assertSame(1, substr_count($printed, 'assets/js/fields/DateField.js'));
     }
 
     public function testTwoDifferentFormsInASelectionSharingAFieldIdGetDistinctIdsAndLabels(): void
@@ -153,8 +155,8 @@ final class EmbedTest extends TestCase
     }
 
     /**
-     * front.js is enqueued with its localization and every field global, and front.css with the field styles: what a
-     * page needs for the form to work, whichever way it was placed.
+     * front.js is enqueued with its localization and, before it, every field script, and front.css with the field
+     * stylesheets: what a page needs for the form to work, whichever way it was placed.
      */
     private function assertFrontAssetsReady(): void
     {
@@ -163,10 +165,14 @@ final class EmbedTest extends TestCase
         $printed = $this->printedScripts();
         self::assertStringContainsString('assets/js/front.js', $printed);
         self::assertStringContainsString('var FabricatorForms =', $printed, 'the localization');
-        foreach (array_keys(Assets::frontFieldAssets()['globals']) as $global) {
-            self::assertStringContainsString('window.' . $global . '=', $printed, "$global before front.js");
+        $assets = Assets::frontFieldAssets();
+        foreach ($assets['scripts'] as $path) {
+            self::assertStringContainsString($path, $printed);
+            self::assertLessThan((int) strpos($printed, 'assets/js/front.js'), (int) strpos($printed, $path), "$path before front.js");
         }
-        self::assertNotEmpty(wp_styles()->get_data('fabricator-forms-front', 'after'), 'the field styles are inlined');
+        foreach (array_keys($assets['styles']) as $handle) {
+            self::assertTrue(wp_style_is($handle, 'enqueued'), "$handle enqueued");
+        }
     }
 
     private function printedScripts(): string
