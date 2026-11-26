@@ -19,6 +19,9 @@ rem    build -Setup         dev dependencies and test database, then stop
 rem    build -SkipAudit     offline build (any argument skips the menu)
 rem    build -y -SkipAudit  both
 rem
+rem  Menu item 4 publishes the last full build on WordPress.org through SVN
+rem  (tools/svn-release.php, also runnable on its own); it builds nothing.
+rem
 rem  Dev tooling, never shipped: tools/build-config.php leaves this file out
 rem  of the package, and the archive check rejects any .cmd that reaches it.
 rem ===========================================================================
@@ -89,15 +92,17 @@ echo   =============================
 echo     1  Full release build   (all gates, including composer audit)
 echo     2  Offline build        (no network advisory check)
 echo     3  Set up dev tools     (composer install + test database - first run)
+echo     4  Publish on WordPress.org (SVN; after a full build, asks before sending)
 echo     Q  Quit
 echo.
 rem choice.exe rather than `set /p`: it accepts only the keys named in /c, so a
 rem typo, a stray paste or a closed stdin can never reach the branches below as a
 rem value, and there is nothing to re-prompt for.
 where /q choice.exe || goto nochoice
-choice /c 123Q /n /m "Choice (1, 2, 3 or Q): "
+choice /c 1234Q /n /m "Choice (1, 2, 3, 4 or Q): "
 rem `if errorlevel N` is "N or higher", so the keys are tested top down.
-if errorlevel 4 exit /b 0
+if errorlevel 5 exit /b 0
+if errorlevel 4 goto publish
 if errorlevel 3 (
     set "ARGS=--setup"
     goto run
@@ -113,6 +118,14 @@ echo   choice.exe is not available on this machine. Run "build -y" for a full
 echo   release build, "build -SkipAudit" for an offline one, or "build -Setup"
 echo   to install the dev dependencies only.
 exit /b 1
+
+:publish
+echo.
+php "%~dp0tools\svn-release.php"
+set "RC=%ERRORLEVEL%"
+echo.
+pause
+exit /b %RC%
 
 :run
 echo.

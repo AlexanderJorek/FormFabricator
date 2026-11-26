@@ -11,7 +11,8 @@
  *     handVendored: array<int, array{path: string, npm: string, licenses: string[]}>,
  *     keepFonts: string[],
  *     vendorExclude: string[],
- *     reviewExceptions: array<int, array{file: string, sniff: string, code: string, reason: string}>
+ *     reviewExceptions: array<int, array{file: string, sniff: string, code: string, reason: string}>,
+ *     svn: array{url: string, username: string}
  * }
  */
 
@@ -21,7 +22,7 @@ return [
         '.git', '.claude', '.vscode', '.gitignore', '.gitattributes', '.github', '.phpcs.xml', '.phpcs-security.xml',
         '.phpcs-review.xml',
         'build', 'node_modules', 'vendor', 'tools', 'docs', 'tests', 'build.cmd', 'build.sh', 'CLAUDE.md',
-        'package.json', 'package-lock.json',
+        'package.json', 'package-lock.json', '.wordpress-org',
     ],
 
     // Dev-only files inside shipped folders: the translation tools, kept beside the files they write. Other dev-only
@@ -94,5 +95,12 @@ return [
             'code'   => 'esc_attr($fabricator_logo_path)',
             'reason' => 'The PDF template\'s logo, as the header image above.',
         ],
+    ],
+
+    // Where tools/svn-release.php publishes a release: the plugin's repository on WordPress.org, and the account that
+    // may commit to it (case-sensitive; its password is the SVN password set in the wordpress.org profile).
+    'svn' => [
+        'url'      => 'https://plugins.svn.wordpress.org/formfabricator',
+        'username' => 'alexanderjorek',
     ],
 ];

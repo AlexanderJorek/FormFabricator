@@ -20,6 +20,9 @@
 #    ./build.sh --setup        dev dependencies, then stop
 #    ./build.sh --skip-audit   offline build (any argument skips the menu)
 #
+#  Menu item 4 publishes the last full build on WordPress.org through SVN
+#  (tools/svn-release.php, also runnable on its own); it builds nothing.
+#
 #  Dev tooling, never shipped: tools/build-config.php leaves this file out of
 #  the package, and the archive check rejects any .sh that reaches it.
 # =============================================================================
@@ -63,15 +66,17 @@ else
     echo "    1  Full release build   (all gates, including composer audit)"
     echo "    2  Offline build        (no network advisory check)"
     echo "    3  Set up dev tools     (composer install - first run)"
+    echo "    4  Publish on WordPress.org (SVN; after a full build, asks before sending)"
     echo "    Q  Quit"
     echo
     # One key, and only these keys: anything else, or a closed stdin, quits.
-    read -r -n 1 -p "Choice (1, 2, 3 or Q): " choice || choice=q
+    read -r -n 1 -p "Choice (1, 2, 3, 4 or Q): " choice || choice=q
     echo
     case "$choice" in
         1) ;;
         2) args+=(--skip-audit) ;;
         3) args+=(--setup) ;;
+        4) echo; php "$here/tools/svn-release.php"; exit $? ;;
         *) exit 0 ;;
     esac
 fi

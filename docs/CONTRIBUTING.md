@@ -43,6 +43,25 @@ suite; on macOS and Linux, point `WP_TESTS_DB_*` at a database (see [Integration
 | Compile a `.po` to `.mo` | `php languages/compile-mo.php languages/formfabricator-de_DE.po` |
 | Release build (all gates) | `build -y` (Windows), `./build.sh -y` (macOS, Linux), or `php tools/build.php` |
 | Offline release build | `build -SkipAudit`, `./build.sh --skip-audit`, or `php tools/build.php --skip-audit` |
+| Publish the last build on WordPress.org | menu item 4 of `build`/`./build.sh`, or `php tools/svn-release.php` (`--dry-run` only prepares) |
+
+### Releasing on WordPress.org
+
+WordPress.org hosts the plugin in Subversion (SVN), not git: `https://plugins.svn.wordpress.org/formfabricator`.
+`trunk/` holds the newest release's files, `tags/<version>/` a frozen copy of each release (sites download the one
+readme.txt's `Stable tag` names), and `assets/` the plugin page's banner, icon and screenshots, kept here in
+`.wordpress-org/` (dev-only, never in the package). A release, in order:
+
+1. Raise the version (`formfabricator.php` header and `FABRICATOR_FORMS_VERSION`, every file's `@version`,
+   readme.txt's `Stable tag`, a changelog entry and an Upgrade Notice), and commit.
+2. Run the full build (`build -y`): only a build that passed every gate gets published.
+3. Publish it (menu item 4, or `php tools/svn-release.php`). It checks that the build is newer than the last commit,
+   that nothing is uncommitted and that the versions agree, shows what changes on WordPress.org, and sends nothing
+   until the version is typed as confirmation. A version already tagged is never sent again.
+
+It needs the `svn` command (TortoiseSVN with its command line client tools on Windows), and the SVN password set in
+the wordpress.org profile under "Account & Security", which svn asks for once. Its working copy lives outside this
+repository, beside the test database (`%LOCALAPPDATA%\FormFabricator\svn`, or `~/.cache/formfabricator/svn`).
 
 The build is PHP (`tools/build.php`), the same on every system. `build.cmd` and `build.sh` only launch it; run without
 arguments, they show a menu. What the package leaves out, keeps and checks is data in `tools/build-config.php`, which
@@ -88,7 +107,8 @@ uninstall.php           cleanup on uninstall
 docs/                   CONTRIBUTING.md, TESTING.md, HEADER-RENDERING.md (the PDF header builder), and
                         examples/: the example field to copy new fields from  (dev-only)
 tests/                  the test suites and their phpunit*.xml.dist    (dev-only)
-tools/                  the release build, its test database, the review sniffs, and
+.wordpress-org/         the plugin page's banner, icon and screenshots, published as SVN assets/ (dev-only)
+tools/                  the release build, the SVN release, its test database, the review sniffs, and
                         dev-assets/ (the form editor's perf overlay)   (dev-only)
 build.cmd, build.sh     launchers for tools/build.php                  (dev-only)
 ```

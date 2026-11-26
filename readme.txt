@@ -1,5 +1,6 @@
 === FormFabricator ===
 Contributors: alexanderjorek
+Donate link: https://buymeacoffee.com/AlexanderJorek
 Tags: forms, form builder, pdf, gdpr, sepa
 Requires at least: 6.5
 Tested up to: 7.1
@@ -262,3 +263,8 @@ Deactivating keeps everything. Deleting removes all forms, settings, seal keys a
 
 = 1.0.0 =
 * Initial public release.
+
+== Upgrade Notice ==
+
+= 1.1.2 =
+Answers can no longer contain "<", ">" or percent codes such as "%20"; the form says so at the field. A pasted web address is shown with its characters instead of percent codes.
