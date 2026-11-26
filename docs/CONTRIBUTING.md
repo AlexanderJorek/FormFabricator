@@ -44,6 +44,7 @@ suite; on macOS and Linux, point `WP_TESTS_DB_*` at a database (see [Integration
 | Release build (all gates) | `build -y` (Windows), `./build.sh -y` (macOS, Linux), or `php tools/build.php` |
 | Offline release build | `build -SkipAudit`, `./build.sh --skip-audit`, or `php tools/build.php --skip-audit` |
 | Publish the last build on WordPress.org | menu item 4 of `build`/`./build.sh`, or `php tools/svn-release.php` (`--dry-run` only prepares) |
+| Make the plugin page's images again (icon, banner, screenshots) | `php tools/page-assets.php` |
 
 ### Releasing on WordPress.org
 
@@ -58,6 +59,12 @@ readme.txt's `Stable tag` names), and `assets/` the plugin page's banner, icon a
 3. Publish it (menu item 4, or `php tools/svn-release.php`). It checks that the build is newer than the last commit,
    that nothing is uncommitted and that the versions agree, shows what changes on WordPress.org, and sends nothing
    until the version is typed as confirmation. A version already tagged is never sent again.
+
+The page's images are made, not drawn: `php tools/page-assets.php` runs `tests/e2e/page-assets/` on the E2E site (a
+Playwright project only that command starts) and writes them into `.wordpress-org/`. The icon and banner use the admin
+menu's own icon; the four screenshots show a membership application with a SEPA mandate, its PDF (photographed in
+Firefox's PDF viewer) and its verification, captioned in readme.txt's "Screenshots" section in the same order. Run it
+again when those screens change, look at the images, and commit them.
 
 It needs the `svn` command (TortoiseSVN with its command line client tools on Windows), and the SVN password set in
 the wordpress.org profile under "Account & Security", which svn asks for once. Its working copy lives outside this

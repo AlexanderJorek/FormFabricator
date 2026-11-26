@@ -122,6 +122,13 @@ Replaced keys stay on your site, so older PDFs remain checkable. After a server 
 
 Deactivating keeps everything. Deleting removes all forms, settings, seal keys and stored files for good, so keep your key backup files.
 
+== Screenshots ==
+
+1. The form builder: fields are added, arranged and set up by drag and drop.
+2. A form as a visitor fills it in, here with a SEPA direct debit mandate and a drawn signature.
+3. The sealed PDF that comes with the notification email.
+4. The verification page: an uploaded PDF is checked against its seal and shown as unchanged.
+
 == Changelog ==
 
 = 1.1.2 =

@@ -56,7 +56,8 @@ function mailsWithSubject(subject) {
     if (!fs.existsSync(OUTBOX)) {
         return [];
     }
-    return fs.readdirSync(OUTBOX).sort()
+    // The mails only: beside them, files/ holds the attachments' copies.
+    return fs.readdirSync(OUTBOX).filter((f) => f.endsWith('.json')).sort()
         .map((f) => JSON.parse(fs.readFileSync(path.join(OUTBOX, f), 'utf8')))
         .filter((m) => m.subject === subject);
 }

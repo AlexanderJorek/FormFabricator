@@ -5,7 +5,8 @@
  * Description: Test-only stand-ins for what the E2E site has no real counterpart of. Dev-only, never shipped.
  *
  * - Mail: every wp_mail() is written to WP_CONTENT_DIR/e2e-outbox/ as JSON (recipients, subject, body, attachment
- *   names) instead of being sent; the specs read it there (tests/e2e/support/site.js).
+ *   names) instead of being sent, each attachment copied to e2e-outbox/files/; the specs read it there
+ *   (tests/e2e/support/site.js).
  * - reCAPTCHA: Google's siteverify answers "success" for the token "e2e-pass" and "failure" for any other; nothing
  *   leaves the machine.
  * - An admin notice on every screen, as a core update notice would be, for the notice dock checks.
@@ -15,6 +16,16 @@ add_filter('pre_wp_mail', static function ($short_circuit, array $atts) {
     $dir = WP_CONTENT_DIR . '/e2e-outbox';
     if (!is_dir($dir)) {
         mkdir($dir, 0777, true);
+    }
+    // A copy of each attachment, under its own name: the plugin deletes the original once the mail is sent, and the
+    // page-assets run photographs the PDF (tests/e2e/page-assets/).
+    foreach ((array) $atts['attachments'] as $attachment) {
+        if (is_file($attachment)) {
+            if (!is_dir($dir . '/files')) {
+                mkdir($dir . '/files', 0777, true);
+            }
+            copy($attachment, $dir . '/files/' . basename($attachment));
+        }
     }
     $mail = [
         'to'          => array_values((array) $atts['to']),

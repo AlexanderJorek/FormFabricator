@@ -60,5 +60,12 @@ module.exports = defineConfig({
         { name: 'chromium', use: { ...devices['Desktop Chrome'], channel: chromeChannel }, dependencies: ['setup'] },
         { name: 'firefox', use: { ...devices['Desktop Firefox'] }, dependencies: ['setup'] },
         { name: 'webkit', use: { ...devices['Desktop Safari'] }, dependencies: ['setup'] },
+        // The WordPress.org page's images (php tools/page-assets.php): only when asked for, never in a test run.
+        ...(process.env.FABRICATOR_PAGE_ASSETS ? [{
+            name: 'page-assets',
+            testDir: path.join(__dirname, 'page-assets'),
+            use: { ...devices['Desktop Chrome'], channel: chromeChannel },
+            dependencies: ['setup'],
+        }] : []),
     ],
 });
